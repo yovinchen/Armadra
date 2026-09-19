@@ -7,16 +7,27 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { create } from "@armadra/protocol";
 import {
-  GithubCheckSummarySchema,
-  GithubExternalReferenceSchema,
-  GithubIssueSchema,
-  GithubPullRequestSchema,
-  GithubStatusMappingSchema,
-  ResolveGithubRepositoryResponseSchema,
-} from "@armadra/protocol";
-import { HostGithubError } from "@armadra/host-client";
+  GithubApiError,
+  GithubCheckConclusion,
+  GithubIssueState,
+  GithubMergeMethod,
+  GithubPullState,
+  GithubReferenceKind,
+  GithubReferenceTargetKind,
+  GithubReviewState,
+  GithubStatusSource,
+  GithubWriteState,
+  githubCheckRun,
+  githubCheckSummary,
+  githubExternalReference,
+  githubIssue,
+  githubPullRequest,
+  githubRepository,
+  githubStatusGroup,
+  githubStatusMapping,
+  resolveGithubRepositoryResponse,
+} from "../../api/github";
 
 const store = vi.hoisted(() => ({
   panels: { github: "drawer" as "drawer" | "closed" },
@@ -84,61 +95,71 @@ const repository = {
 
 const HEAD_SHA = "b".repeat(40);
 
-const resolved = create(ResolveGithubRepositoryResponseSchema, {
-  repository: { ref: repository, defaultBranch: "main", permission: "write" },
+const resolved = resolveGithubRepositoryResponse({
+  repository: githubRepository({
+    ref: repository,
+    defaultBranch: "main",
+    permission: "write",
+  }),
 });
 
 /** The exact ref the client hands back, message identity included. */
 const ref = resolved.repository!.ref!;
 
-const mapping = create(GithubStatusMappingSchema, {
+const mapping = githubStatusMapping({
   repository,
   revision: 7n,
   groups: [
-    { id: "todo", title: "Todo" },
-    { id: "done", title: "Done" },
+    githubStatusGroup({ id: "todo", title: "Todo" }),
+    githubStatusGroup({ id: "done", title: "Done" }),
   ],
 });
 
-const issue = create(GithubIssueSchema, {
+const issue = githubIssue({
   repository,
   number: 12n,
   title: "Broken import",
-  state: 1,
+  state: GithubIssueState.OPEN,
   statusGroupId: "todo",
   updatedAtUnixMs: 1_788_557_900_000n,
 });
 
-const pull = create(GithubPullRequestSchema, {
+const pull = githubPullRequest({
   repository,
   number: 34n,
   title: "Fix the import",
-  state: 1,
+  state: GithubPullState.OPEN,
   baseRef: "main",
   headRef: "fix/import",
   headSha: HEAD_SHA,
-  allowedMergeMethods: [2],
+  allowedMergeMethods: [GithubMergeMethod.SQUASH],
   additions: 4n,
   deletions: 1n,
   changedFiles: 1n,
 });
 
-const reference = create(GithubExternalReferenceSchema, {
+const reference = githubExternalReference({
   referenceId: "reference-1",
   workspaceId: "workspace-1",
   repository,
-  kind: 1,
+  kind: GithubReferenceKind.ISSUE,
   number: 12n,
-  targetKind: 1,
+  targetKind: GithubReferenceTargetKind.SESSION,
   targetId: "node-1",
   title: "Broken import",
   revision: 2n,
 });
 
-const checks = create(GithubCheckSummarySchema, {
+const checks = githubCheckSummary({
   headSha: HEAD_SHA,
-  rollup: 2,
-  runs: [{ name: "build", app: "actions", conclusion: 2 }],
+  rollup: GithubCheckConclusion.SUCCESS,
+  runs: [
+    githubCheckRun({
+      name: "build",
+      app: "actions",
+      conclusion: GithubCheckConclusion.SUCCESS,
+    }),
+  ],
 });
 
 function client(overrides: Record<string, unknown> = {}) {
@@ -180,11 +201,21 @@ function client(overrides: Record<string, unknown> = {}) {
     })),
     moveIssue: vi.fn(async () => ({
       issue,
-      outcomes: [{ actionId: "a", target: "labels", state: 1, reasonCode: "" }],
+      outcomes: [
+        {
+          actionId: "a",
+          target: "labels",
+          state: GithubWriteState.APPLIED,
+          reasonCode: "",
+        },
+      ],
     })),
     setIssueState: vi.fn(async () => issue),
     mergePull: vi.fn(async () => ({ merged: true, mergeSha: "c".repeat(40) })),
-    submitReview: vi.fn(async () => ({ id: 21n, state: 1 })),
+    submitReview: vi.fn(async () => ({
+      id: 21n,
+      state: GithubReviewState.COMMENTED,
+    })),
     rerunChecks: vi.fn(async () => ({
       outcomes: [],
       reasonCode: "NOT_RERUNNABLE",
@@ -300,7 +331,7 @@ describe("GitHub page availability", () => {
   it("stops at a host mismatch instead of trying the public service", async () => {
     const api = client({
       resolveRepository: vi.fn(async () =>
-        create(ResolveGithubRepositoryResponseSchema, {
+        resolveGithubRepositoryResponse({
           hostMismatch: true,
           reasonCode: "HOST_MISMATCH",
         }),
@@ -353,7 +384,7 @@ describe("issue actions", () => {
       expect(api.setIssueState).toHaveBeenCalledWith({
         repository: ref,
         number: 12n,
-        state: 2,
+        state: GithubIssueState.CLOSED,
         expectedUpdatedAtUnixMs: 1_788_557_900_000n,
       }),
     );
@@ -388,8 +419,9 @@ describe("configuring the status mapping", () => {
   it("refuses to save two groups that claim the same label", async () => {
     const api = client();
     await openEditor(api);
+    // 枚举在线上是名字，下拉框的 value 就是那个名字。
     fireEvent.change(screen.getByLabelText("主来源"), {
-      target: { value: "2" },
+      target: { value: GithubStatusSource.LABEL },
     });
     const labels = await screen.findAllByLabelText("精确标签名");
     expect(labels.length).toBe(2);
@@ -405,8 +437,9 @@ describe("configuring the status mapping", () => {
   it("saves against the revision it read", async () => {
     const api = client();
     await openEditor(api);
+    // 枚举在线上是名字，下拉框的 value 就是那个名字。
     fireEvent.change(screen.getByLabelText("主来源"), {
-      target: { value: "2" },
+      target: { value: GithubStatusSource.LABEL },
     });
     const labels = await screen.findAllByLabelText("精确标签名");
     fireEvent.change(labels[0]!, { target: { value: "todo" } });
@@ -415,10 +448,10 @@ describe("configuring the status mapping", () => {
     await waitFor(() => expect(api.putStatusMapping).toHaveBeenCalled());
     const sent = firstCall<{
       expectedRevision: bigint;
-      mapping: { source: number; groups: { label: string }[] };
+      mapping: { source: string; groups: { label: string }[] };
     }>(api.putStatusMapping);
     expect(sent.expectedRevision).toBe(7n);
-    expect(sent.mapping.source).toBe(2);
+    expect(sent.mapping.source).toBe(GithubStatusSource.LABEL);
     expect(sent.mapping.groups.map((group) => group.label)).toEqual([
       "todo",
       "done",
@@ -428,12 +461,13 @@ describe("configuring the status mapping", () => {
   it("lists the Host's own refusal codes when it rejects the configuration", async () => {
     const api = client({
       putStatusMapping: vi.fn(async () => {
-        throw new HostGithubError("invalid");
+        throw new GithubApiError("invalid");
       }),
     });
     await openEditor(api);
+    // 枚举在线上是名字，下拉框的 value 就是那个名字。
     fireEvent.change(screen.getByLabelText("主来源"), {
-      target: { value: "2" },
+      target: { value: GithubStatusSource.LABEL },
     });
     const labels = await screen.findAllByLabelText("精确标签名");
     fireEvent.change(labels[0]!, { target: { value: "todo" } });
@@ -484,9 +518,9 @@ describe("linking an issue to a session", () => {
     expect(sent.expectedRevision).toBe(0n);
     // The remote title travels with the link so the badge reads offline.
     expect(sent.reference).toMatchObject({
-      kind: 1,
+      kind: GithubReferenceKind.ISSUE,
       number: 12n,
-      targetKind: 1,
+      targetKind: GithubReferenceTargetKind.SESSION,
       targetId: "node-1",
       title: "Broken import",
     });
@@ -495,7 +529,7 @@ describe("linking an issue to a session", () => {
   it("reports a second link of the same pair as already linked", async () => {
     const api = client({
       linkReference: vi.fn(async () => {
-        throw new HostGithubError("conflict");
+        throw new GithubApiError("conflict");
       }),
     });
     await openIssue(api);
@@ -570,8 +604,8 @@ describe("merging a pull request", () => {
         repository: ref,
         number: 34n,
         expectedHeadSha: HEAD_SHA,
-        method: 2,
-        expectedCheckRollup: 2,
+        method: GithubMergeMethod.SQUASH,
+        expectedCheckRollup: GithubCheckConclusion.SUCCESS,
       }),
     );
   });
@@ -742,18 +776,23 @@ describe("inline review comments", () => {
 });
 
 describe("re-running checks", () => {
-  const failing = create(GithubCheckSummarySchema, {
+  const failing = githubCheckSummary({
     headSha: HEAD_SHA,
-    rollup: 3,
+    rollup: GithubCheckConclusion.FAILURE,
     runs: [
-      {
+      githubCheckRun({
         name: "build",
         app: "GitHub Actions",
-        conclusion: 3,
+        conclusion: GithubCheckConclusion.FAILURE,
         rerunnable: true,
         workflowRunId: 77n,
-      },
-      { name: "lint", app: "other", conclusion: 3, rerunnable: false },
+      }),
+      githubCheckRun({
+        name: "lint",
+        app: "other",
+        conclusion: GithubCheckConclusion.FAILURE,
+        rerunnable: false,
+      }),
     ],
   });
 
@@ -770,7 +809,13 @@ describe("re-running checks", () => {
         pollIntervalMs: 60_000n,
       })),
       rerunChecks: vi.fn(async () => ({
-        outcomes: [{ actionId: "rerun:77", target: "workflow_run", state: 1 }],
+        outcomes: [
+          {
+            actionId: "rerun:77",
+            target: "workflow_run",
+            state: GithubWriteState.APPLIED,
+          },
+        ],
         reasonCode: "",
         checks: failing,
       })),
@@ -825,9 +870,9 @@ describe("re-running checks", () => {
 });
 
 describe("cleaning up after a merge", () => {
-  const merged = create(GithubPullRequestSchema, {
+  const merged = githubPullRequest({
     ...pull,
-    state: 3,
+    state: GithubPullState.MERGED,
     mergedAtUnixMs: 1_788_557_900_000n,
   });
   const mergedDetail = {
@@ -887,7 +932,7 @@ describe("cleaning up after a merge", () => {
   });
 
   it("does not offer to delete a fork's branch", async () => {
-    const fork = create(GithubPullRequestSchema, {
+    const fork = githubPullRequest({
       ...merged,
       fromFork: true,
       headRepoFullName: "someone/armadra",

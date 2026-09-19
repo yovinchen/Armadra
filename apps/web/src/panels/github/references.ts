@@ -1,11 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  GithubReferenceKind,
-  type GithubExternalReference,
-} from "@armadra/host-client";
 
 import { useGithubSession } from "@/host/github-session";
 import { githubKeys } from "./queries";
+import { GithubExternalReference, GithubReferenceKind } from "../../api/github";
 
 /**
  * The GitHub items linked to one canvas node.

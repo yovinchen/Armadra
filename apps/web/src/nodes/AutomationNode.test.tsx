@@ -1,8 +1,14 @@
+import {
+  AutomationPlanState,
+  AutomationRunState,
+  automationPlan,
+  automationPlanConfig,
+  automationPlanSnapshot,
+  automationRun,
+} from "../api/automations";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { create } from "@armadra/protocol";
-import { AutomationPlanSnapshotSchema } from "@armadra/protocol";
 import type { CanvasNode } from "@armadra/shared";
 
 const store = vi.hoisted(() => ({
@@ -67,15 +73,18 @@ const node = {
 } as unknown as CanvasNode;
 
 function planSnapshot(overrides: Record<string, unknown> = {}) {
-  return create(AutomationPlanSnapshotSchema, {
-    plan: {
+  return automationPlanSnapshot({
+    plan: automationPlan({
       id: "plan-1",
       configVersion: 2n,
-      state: 2,
+      state: AutomationPlanState.ACTIVE,
       nextDueUnixMs: 1_788_557_900_000n,
-      config: { workspaceId: "workspace-1", title: "每晚构建" },
+      config: automationPlanConfig({
+        workspaceId: "workspace-1",
+        title: "每晚构建",
+      }),
       ...overrides,
-    },
+    }),
     revision: 5n,
     configSha256: new Uint8Array(32).fill(3),
   });
@@ -151,11 +160,11 @@ describe("automation card", () => {
       listRuns: vi.fn(async () => ({
         runs: [
           {
-            run: {
+            run: automationRun({
               id: "run-1",
               planId: "plan-1",
               workspaceId: "workspace-1",
-              state: 5,
+              state: AutomationRunState.DELIVERED,
               dispatchAttempts: 1,
               receiptSequence: 1n,
               scheduledAtUnixMs: 1n,
@@ -164,7 +173,7 @@ describe("automation card", () => {
               deliveryObserved: true,
               misfire: false,
               reasonCode: "",
-            },
+            }),
             revision: 1n,
           },
         ],

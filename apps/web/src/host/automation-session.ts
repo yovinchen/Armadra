@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import {
-  HostAutomationClient,
   type HostIdentityClient,
   type HelloResponse,
   type HostIdentitySession,
 } from "@armadra/host-client";
+
+import { AutomationApi } from "../api/automations";
 
 import { loadHostAddress, probeHostAt as probeHost } from "./connection";
 import {
@@ -41,7 +42,7 @@ export type AutomationSessionState =
   | { status: "blocked"; reason: AutomationBlockReason }
   | {
       status: "ready";
-      client: HostAutomationClient;
+      client: AutomationApi;
       session: HostIdentitySession;
       hello: HelloResponse;
       /** False when the device only holds automation:read for this workspace. */
@@ -171,13 +172,11 @@ export const useAutomationSession = create<AutomationSessionStore>(
           set({ state: { status: "blocked", reason: "noPermission" } });
           return;
         }
-        let automation: HostAutomationClient;
+        // 调用面不再挂在这条会话上：它打的是 core 的 `/api/automations/*`
+        // （R7a）。会话仍然决定**能不能打开这块面板**。
+        let automation: AutomationApi;
         try {
-          automation = new HostAutomationClient({
-            session: client,
-            hostId: hello.hostId,
-            workspaceId,
-          });
+          automation = new AutomationApi({ workspaceId });
         } catch {
           set({ state: { status: "blocked", reason: "noPermission" } });
           return;

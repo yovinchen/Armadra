@@ -1,18 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-import { create, GithubExternalReferenceSchema } from "@armadra/protocol";
-import {
-  GithubReferenceTargetKind,
-  HostGithubError,
-  type GithubReferenceKind,
-  type GithubRepositoryRef,
-  type HostGithubClient,
-} from "@armadra/host-client";
 
 import { gitGateway } from "@/git/gateway";
 import { useGitTarget } from "@/git/target";
 import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { selectClass } from "../git/forms";
+import {
+  GithubApi,
+  GithubApiError,
+  GithubReferenceKind,
+  GithubReferenceTargetKind,
+  GithubRepositoryRef,
+  githubExternalReference,
+} from "../../api/github";
 
 /**
  * What an Issue or pull request can be linked to (Git/GitHub design §7.1).
@@ -165,7 +165,7 @@ export function TargetSelect({
  * is reported as "already linked" rather than as a failure.
  */
 export async function linkReferenceTo(
-  client: HostGithubClient,
+  client: GithubApi,
   input: {
     repository: GithubRepositoryRef;
     kind: GithubReferenceKind;
@@ -177,7 +177,7 @@ export async function linkReferenceTo(
 ): Promise<"linked" | "already"> {
   try {
     await client.linkReference({
-      reference: create(GithubExternalReferenceSchema, {
+      reference: githubExternalReference({
         repository: input.repository,
         kind: input.kind,
         number: input.number,
@@ -189,7 +189,7 @@ export async function linkReferenceTo(
     });
     return "linked";
   } catch (error) {
-    if (error instanceof HostGithubError && error.failure === "conflict")
+    if (error instanceof GithubApiError && error.failure === "conflict")
       return "already";
     throw error;
   }

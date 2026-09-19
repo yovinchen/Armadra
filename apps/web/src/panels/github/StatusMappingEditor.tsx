@@ -2,14 +2,6 @@ import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
-import {
-  GithubIssueState,
-  GithubStatusSource,
-  HostGithubError,
-  type GithubRepositoryRef,
-  type GithubStatusMapping,
-  type HostGithubClient,
-} from "@armadra/host-client";
 
 import { Button } from "@/ui/button";
 import {
@@ -39,9 +31,17 @@ import {
   type StatusMappingDraft,
 } from "./mapping";
 import { githubKeys } from "./queries";
+import {
+  GithubApi,
+  GithubApiError,
+  GithubIssueState,
+  GithubRepositoryRef,
+  GithubStatusMapping,
+  GithubStatusSource,
+} from "../../api/github";
 
 export interface StatusMappingEditorProps {
-  client: HostGithubClient;
+  client: GithubApi;
   repository: GithubRepositoryRef;
   /** The mapping that was read; its revision is what the save is made against. */
   mapping: GithubStatusMapping | undefined;
@@ -102,7 +102,7 @@ export function StatusMappingEditor({
       // permission failure is not a configuration mistake, so the list stays
       // out of the way rather than sending the reader hunting for a typo.
       setRefused(
-        error instanceof HostGithubError && error.failure === "invalid",
+        error instanceof GithubApiError && error.failure === "invalid",
       );
       toast.error(t(failureKey(error)));
     },
@@ -159,7 +159,7 @@ export function StatusMappingEditor({
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,
-                  source: Number(event.target.value) as GithubStatusSource,
+                  source: event.target.value as GithubStatusSource,
                 }))
               }
             >
@@ -308,9 +308,7 @@ export function StatusMappingEditor({
                       disabled={!canWrite}
                       onChange={(event) =>
                         patchGroup(index, {
-                          couplesState: Number(
-                            event.target.value,
-                          ) as GithubIssueState,
+                          couplesState: event.target.value as GithubIssueState,
                         })
                       }
                     >

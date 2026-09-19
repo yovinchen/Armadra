@@ -1,9 +1,11 @@
-import type {
+import type { AutomationScheduleKind } from "@armadra/shared";
+import {
   AutomationPlan,
   AutomationPlanConfig,
+  AutomationPlanState,
   AutomationRun,
-} from "@armadra/host-client";
-import type { AutomationScheduleKind } from "@armadra/shared";
+  AutomationRunState,
+} from "../../api/automations";
 
 /**
  * Display model for the automation page. Everything here is a pure function of
@@ -134,38 +136,56 @@ export function timezoneOptions(): string[] {
 /* --------------------------------- states --------------------------------- */
 
 /** Mirrors AutomationPlanState; index 0 is the unspecified value. */
-export const PLAN_STATES = [
-  "unspecified",
-  "draft",
-  "active",
-  "paused",
-  "expired",
-  "deleted",
-] as const;
+export /**
+ * 枚举值 → 文案键的后缀。
+ *
+ * 0020 之后枚举在线上是**名字**而不是数字，所以这里是一张按名字索引的表，而不
+ * 是一个按序号取的数组：少一项就是一个读不出来的键，而不是一个悄悄错位的标签。
+ */
+const PLAN_STATES: Record<AutomationPlanState, string> = {
+  [AutomationPlanState.UNSPECIFIED]: "unspecified",
+  [AutomationPlanState.DRAFT]: "draft",
+  [AutomationPlanState.ACTIVE]: "active",
+  [AutomationPlanState.PAUSED]: "paused",
+  [AutomationPlanState.EXPIRED]: "expired",
+  [AutomationPlanState.DELETED]: "deleted",
+};
 
-/** Mirrors AutomationRunState. */
-export const RUN_STATES = [
-  "unspecified",
-  "due",
-  "claimed",
-  "waitingTarget",
-  "dispatching",
-  "delivered",
-  "running",
-  "succeeded",
-  "failed",
-  "cancelled",
-  "skipped",
-  "expired",
-  "unknown",
-] as const;
+const RUN_STATES: Record<AutomationRunState, string> = {
+  [AutomationRunState.UNSPECIFIED]: "unspecified",
+  [AutomationRunState.DUE]: "due",
+  [AutomationRunState.CLAIMED]: "claimed",
+  [AutomationRunState.WAITING_TARGET]: "waitingTarget",
+  [AutomationRunState.DISPATCHING]: "dispatching",
+  [AutomationRunState.DELIVERED]: "delivered",
+  [AutomationRunState.RUNNING]: "running",
+  [AutomationRunState.SUCCEEDED]: "succeeded",
+  [AutomationRunState.FAILED]: "failed",
+  [AutomationRunState.CANCELLED]: "cancelled",
+  [AutomationRunState.SKIPPED]: "skipped",
+  [AutomationRunState.EXPIRED]: "expired",
+  [AutomationRunState.UNKNOWN]: "unknown",
+};
+
+/** 已经有结论的那几档。收据到了之后，只有它们算「落定」。 */
+const SETTLED = new Set<AutomationRunState>([
+  AutomationRunState.SUCCEEDED,
+  AutomationRunState.FAILED,
+  AutomationRunState.CANCELLED,
+  AutomationRunState.SKIPPED,
+  AutomationRunState.EXPIRED,
+]);
 
 export function planStateKey(plan: AutomationPlan | undefined): string {
-  return `automation.planState.${PLAN_STATES[plan?.state ?? 0] ?? "unspecified"}`;
+  return `automation.planState.${
+    PLAN_STATES[plan?.state ?? AutomationPlanState.UNSPECIFIED] ?? "unspecified"
+  }`;
 }
 
 export function runStateKey(run: AutomationRun | undefined): string {
-  return `automation.runState.${RUN_STATES[run?.state ?? 0] ?? "unspecified"}`;
+  return `automation.runState.${
+    RUN_STATES[run?.state ?? AutomationRunState.UNSPECIFIED] ?? "unspecified"
+  }`;
 }
 
 /**
@@ -177,7 +197,7 @@ export type ReceiptPhase = "none" | "queued" | "delivered" | "settled";
 export function receiptPhase(run: AutomationRun | undefined): ReceiptPhase {
   if (!run) return "none";
   if (run.receiptSequence > 0n) {
-    return run.state >= 7 && run.state <= 11 ? "settled" : "delivered";
+    return SETTLED.has(run.state) ? "settled" : "delivered";
   }
   if (run.deliveryObserved) return "delivered";
   return run.dispatchAttempts > 0 ? "queued" : "none";
@@ -185,7 +205,7 @@ export function receiptPhase(run: AutomationRun | undefined): ReceiptPhase {
 
 /** Runs whose outcome nobody has established; never shown as success. */
 export function unresolved(run: AutomationRun | undefined): boolean {
-  return run?.state === 12;
+  return run?.state === AutomationRunState.UNKNOWN;
 }
 
 export function needsAttention(plan: AutomationPlan | undefined): boolean {

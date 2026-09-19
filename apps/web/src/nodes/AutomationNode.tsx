@@ -1,3 +1,4 @@
+import { AutomationPlanState } from "../api/automations";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, ListOrdered, Pause, Play } from "lucide-react";
@@ -88,7 +89,7 @@ export function AutomationNode({ id, node, selected }: NodeBodyProps) {
         <ListOrdered />
       </IconButton>
       {/* 无权限或读不到计划时不给假按钮：按钮直接不渲染。 */}
-      {canManage && snapshot && plan?.state === 2 && (
+      {canManage && snapshot && plan?.state === AutomationPlanState.ACTIVE && (
         <IconButton
           label={t("automation.pause")}
           onClick={() => openAutomationPanel(plan.id)}
@@ -96,7 +97,7 @@ export function AutomationNode({ id, node, selected }: NodeBodyProps) {
           <Pause />
         </IconButton>
       )}
-      {canManage && snapshot && plan?.state !== 2 && (
+      {canManage && snapshot && plan?.state !== AutomationPlanState.ACTIVE && (
         <IconButton
           label={t("automation.activate")}
           onClick={() => openAutomationPanel(plan?.id ?? null)}

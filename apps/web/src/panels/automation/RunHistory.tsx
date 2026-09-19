@@ -1,8 +1,4 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
-import type {
-  AutomationPlanSnapshot,
-  HostAutomationClient,
-} from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -16,9 +12,10 @@ import {
 import { useT } from "@/app/preferences-store";
 import { instant, reasonLabel, receiptPhase, runStateKey } from "./model";
 import { automationKeys, runPage } from "./queries";
+import { AutomationApi, AutomationPlanSnapshot } from "../../api/automations";
 
 export interface RunHistoryProps {
-  client: HostAutomationClient;
+  client: AutomationApi;
   workspaceId: string;
   plans: AutomationPlanSnapshot[];
   planId: string | null;

@@ -1,7 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { GithubPullRequest } from "@armadra/host-client";
 
 import { gitGateway } from "@/git/gateway";
 import { useGitTarget } from "@/git/target";
@@ -12,6 +11,7 @@ import { Field } from "../git/forms";
 import { invalidateGitQueries } from "../git/queries";
 import { createWorktreeAction, localBranch } from "../git/worktree";
 import { suggestedHeadRef } from "./model";
+import { GithubPullRequest } from "../../api/github";
 
 /**
  * Checking a pull request out locally, through the same Runtime operation the

@@ -1,11 +1,10 @@
-import type { GithubPullRequest } from "@armadra/host-client";
-
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { useT } from "@/app/preferences-store";
 import { Freshness } from "./Freshness";
 import { instant, pullStateKey, shortSha } from "./model";
 import type { PullPage } from "./queries";
+import { GithubPullRequest } from "../../api/github";
 
 export interface PullListProps {
   page: PullPage;

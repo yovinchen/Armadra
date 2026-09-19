@@ -1,13 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type {
+import {
+  GithubApi,
   GithubIssue,
   GithubIssueFilter,
   GithubPullFilter,
   GithubPullRequest,
   GithubRateLimit,
   GithubRepositoryRef,
-  HostGithubClient,
-} from "@armadra/host-client";
+} from "../../api/github";
 
 /**
  * Query keys and paging for the GitHub page.
@@ -118,13 +118,13 @@ export interface PullPage extends ListMeta {
 }
 
 export async function allIssues(
-  client: HostGithubClient,
+  client: GithubApi,
   repository: GithubRepositoryRef,
   filter: GithubIssueFilter | undefined,
 ): Promise<IssuePage> {
   const issues: GithubIssue[] = [];
   let cursor = "";
-  let last: Awaited<ReturnType<HostGithubClient["listIssues"]>> | null = null;
+  let last: Awaited<ReturnType<GithubApi["listIssues"]>> | null = null;
   let truncated = false;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await client.listIssues({
@@ -150,13 +150,13 @@ export async function allIssues(
 }
 
 export async function allPulls(
-  client: HostGithubClient,
+  client: GithubApi,
   repository: GithubRepositoryRef,
   filter: GithubPullFilter | undefined,
 ): Promise<PullPage> {
   const pulls: GithubPullRequest[] = [];
   let cursor = "";
-  let last: Awaited<ReturnType<HostGithubClient["listPulls"]>> | null = null;
+  let last: Awaited<ReturnType<GithubApi["listPulls"]>> | null = null;
   let truncated = false;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await client.listPulls({

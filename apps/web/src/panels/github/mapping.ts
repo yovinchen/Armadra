@@ -1,15 +1,12 @@
 import {
-  create,
-  GithubStateCouplingSchema,
-  GithubStatusGroupSchema,
-  GithubStatusMappingSchema,
-} from "@armadra/protocol";
-import {
   GithubIssueState,
+  GithubRepositoryRef,
+  GithubStatusMapping,
   GithubStatusSource,
-  type GithubRepositoryRef,
-  type GithubStatusMapping,
-} from "@armadra/host-client";
+  githubStateCoupling,
+  githubStatusGroup,
+  githubStatusMapping,
+} from "../../api/github";
 
 /**
  * The editable form of one repository's status mapping (Git/GitHub design §7.2).
@@ -142,7 +139,7 @@ export function mappingFromDraft(
   const groups = none
     ? []
     : draft.groups.map((group) =>
-        create(GithubStatusGroupSchema, {
+        githubStatusGroup({
           id: group.id.trim(),
           title: group.title.trim(),
           label: label ? group.label.trim() : "",
@@ -160,10 +157,8 @@ export function mappingFromDraft(
         ] as const
       )
         .filter(([, groupId]) => groupId && ids.has(groupId))
-        .map(([state, groupId]) =>
-          create(GithubStateCouplingSchema, { state, groupId }),
-        );
-  return create(GithubStatusMappingSchema, {
+        .map(([state, groupId]) => githubStateCoupling({ state, groupId }));
+  return githubStatusMapping({
     repository,
     source: draft.source,
     projectId: project ? draft.projectId.trim() : "",

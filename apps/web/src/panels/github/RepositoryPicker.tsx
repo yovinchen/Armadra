@@ -1,11 +1,11 @@
 import * as React from "react";
-import type { ResolveGithubRepositoryResponse } from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { useT } from "@/app/preferences-store";
 import { Field } from "../git/forms";
+import { ResolveGithubRepositoryResponse } from "../../api/github";
 
 export interface RepositoryPickerProps {
   remoteUrl: string;

@@ -7,12 +7,18 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { create } from "@armadra/protocol";
-import {
-  AutomationPlanSnapshotSchema,
-  AutomationRunSnapshotSchema,
-} from "@armadra/protocol";
 import type { CanvasNode } from "@armadra/shared";
+import {
+  AutomationApiError,
+  AutomationPlanState,
+  AutomationRunState,
+  automationPlan,
+  automationPlanConfig,
+  automationPlanSnapshot,
+  automationRun,
+  automationRunSnapshot,
+  automationTarget,
+} from "../../api/automations";
 
 const store = vi.hoisted(() => ({
   panels: { automation: "drawer" as "drawer" | "closed" },
@@ -48,31 +54,33 @@ vi.mock("@/canvas/placement", () => ({
 }));
 
 import { AutomationDrawer, failureKey } from "./AutomationDrawer";
-import { HostAutomationError } from "@armadra/host-client";
 import { useAutomationFocus } from "./open";
 
 const digest = new Uint8Array(32).fill(3);
 
 function planSnapshot(overrides: Record<string, unknown> = {}) {
-  return create(AutomationPlanSnapshotSchema, {
-    plan: {
+  return automationPlanSnapshot({
+    plan: automationPlan({
       id: "plan-1",
       configVersion: 2n,
-      state: 2,
+      state: AutomationPlanState.ACTIVE,
       nextDueUnixMs: 1_788_557_900_000n,
-      config: {
+      config: automationPlanConfig({
         workspaceId: "workspace-1",
         title: "每晚构建",
-        target: { executionHostId: "a".repeat(32), sessionId: "session-1" },
+        target: automationTarget({
+          executionHostId: "a".repeat(32),
+          sessionId: "session-1",
+        }),
         schedule: {
           kind: {
             case: "cron",
             value: { expression: "0 3 * * *", timezone: "Asia/Shanghai" },
           },
         },
-      },
+      }),
       ...overrides,
-    },
+    }),
     revision: 5n,
     configSha256: digest,
   });
@@ -92,30 +100,36 @@ function client(overrides: Record<string, unknown> = {}) {
       hasMore: false,
     })),
     activatePlan: vi.fn(async () => planSnapshot()),
-    pausePlan: vi.fn(async () => planSnapshot({ state: 3 })),
+    pausePlan: vi.fn(async () =>
+      planSnapshot({ state: AutomationPlanState.PAUSED }),
+    ),
     runNow: vi.fn(async () =>
-      create(AutomationRunSnapshotSchema, {
-        run: { id: "run-1", planId: "plan-1", workspaceId: "workspace-1" },
+      automationRunSnapshot({
+        run: automationRun({
+          id: "run-1",
+          planId: "plan-1",
+          workspaceId: "workspace-1",
+        }),
         revision: 1n,
       }),
     ),
     definePlan: vi.fn(async () => planSnapshot()),
     defineCommandSession: vi.fn(async () => ({ sessionId: "session-1" })),
-    planPayload: vi.fn(async () => new TextEncoder().encode("每晚构建一次")),
+    planPayload: vi.fn(async () => "每晚构建一次"),
     ...overrides,
   };
 }
 
 /** One run snapshot, so a paged history has something distinguishable in it. */
 function runSnapshot(id: string, scheduledAt: bigint) {
-  return create(AutomationRunSnapshotSchema, {
-    run: {
+  return automationRunSnapshot({
+    run: automationRun({
       id,
       planId: "plan-1",
       workspaceId: "workspace-1",
       scheduledAtUnixMs: scheduledAt,
-      state: 7,
-    },
+      state: AutomationRunState.SUCCEEDED,
+    }),
     revision: 1n,
   });
 }
@@ -414,7 +428,8 @@ describe("editing a plan", () => {
     // The exact revision the row displayed, so a save that raced another
     // device is refused rather than overwriting it.
     expect(request.expectedRevision).toBe(5n);
-    expect(new TextDecoder().decode(request.payload)).toBe("换一句提示词");
+    // 载荷在线上就是原文（R7a）。
+    expect(request.payload).toBe("换一句提示词");
     // The schedule the plan already had is re-sent, not a fresh default.
     expect(request.config.schedule?.kind?.case).toBe("cron");
     expect(request.config.title).toBe("每晚构建");
@@ -463,17 +478,17 @@ describe("editing a plan", () => {
 
 describe("failure messages", () => {
   it("maps each failure onto the repair the user has to make", () => {
-    expect(failureKey(new HostAutomationError("conflict"))).toBe(
+    expect(failureKey(new AutomationApiError("conflict"))).toBe(
       "automation.error.conflict",
     );
-    expect(failureKey(new HostAutomationError("permission"))).toBe(
+    expect(failureKey(new AutomationApiError("permission"))).toBe(
       "automation.error.permission",
     );
     expect(failureKey(new Error("boom"))).toBe("automation.error.network");
   });
 
   it("never tells the user to just retry a mutation with an unknown result", () => {
-    expect(failureKey(new HostAutomationError("network", true))).toBe(
+    expect(failureKey(new AutomationApiError("network", true))).toBe(
       "automation.error.unknownOutcome",
     );
   });

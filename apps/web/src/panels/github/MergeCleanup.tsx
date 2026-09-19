@@ -1,12 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type {
-  DeleteGithubBranchResponse,
-  GithubPullRequest,
-  GithubRepositoryRef,
-  HostGithubClient,
-} from "@armadra/host-client";
 
 import {
   AlertDialog,
@@ -26,9 +20,16 @@ import { boundFrameForPath } from "@/canvas/frame-binding";
 import { invalidateGitQueries } from "../git/queries";
 import { failureKey, shortSha } from "./model";
 import { githubKeys } from "./queries";
+import {
+  DeleteGithubBranchResponse,
+  GithubApi,
+  GithubPullRequest,
+  GithubPullState,
+  GithubRepositoryRef,
+} from "../../api/github";
 
 export interface MergeCleanupProps {
-  client: HostGithubClient;
+  client: GithubApi;
   workspaceId: string;
   repository: GithubRepositoryRef;
   pull: GithubPullRequest;
@@ -74,7 +75,7 @@ export function MergeCleanup({
   // Cleanup is only a question once the pull request is merged, so the
   // worktree list is only read then: an unmerged pull request must not make
   // the panel walk the repository for a section nobody is going to see.
-  const merged = canWrite && pull.state === 3;
+  const merged = canWrite && pull.state === GithubPullState.MERGED;
   const worktrees = useQuery({
     queryKey: ["git-repository-worktrees", workspaceId, "."],
     queryFn: ({ signal }) =>

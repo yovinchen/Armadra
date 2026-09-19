@@ -1,9 +1,4 @@
 import * as React from "react";
-import type {
-  GithubPullFile,
-  GithubReviewComment,
-  GithubReviewCommentDraft,
-} from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -17,6 +12,11 @@ import {
   parsePatch,
   type CommentAnchor,
 } from "./diff";
+import {
+  GithubPullFile,
+  GithubReviewComment,
+  GithubReviewCommentDraft,
+} from "../../api/github";
 
 export interface DiffReviewProps {
   files: readonly GithubPullFile[];
@@ -179,8 +179,6 @@ function FileDiff({
                             className="rounded-[var(--r-control)] px-1 text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-accent"
                             onClick={() =>
                               onDraft(key!, {
-                                $typeName:
-                                  "armadra.v1.GithubReviewCommentDraft",
                                 path: anchor.path,
                                 line: BigInt(anchor.line),
                                 side: anchor.side,

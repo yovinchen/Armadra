@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import {
-  HostGithubClient,
   type HostIdentityClient,
-  type GithubCredentialStatus,
   type HelloResponse,
   type HostIdentitySession,
 } from "@armadra/host-client";
+
+import { GithubApi, type GithubCredentialStatus } from "../api/github";
 
 import { loadHostAddress, probeHostAt as probeHost } from "./connection";
 import {
@@ -44,7 +44,7 @@ export type GithubSessionState =
   | { status: "blocked"; reason: GithubBlockReason }
   | {
       status: "ready";
-      client: HostGithubClient;
+      client: GithubApi;
       session: HostIdentitySession;
       hello: HelloResponse;
       /** False when the device only holds github:read for this workspace. */
@@ -62,7 +62,7 @@ export interface GithubSessionStore {
    * able to configure a credential precisely when there is none, which is the
    * case the page itself reports as `noCredential`.
    */
-  client: HostGithubClient | null;
+  client: GithubApi | null;
   address: string;
   /** Opens (or reuses) the session for one workspace; the newest call wins. */
   connect: (workspaceId: string | null) => Promise<void>;
@@ -181,13 +181,11 @@ export const useGithubSession = create<GithubSessionStore>((set, get) => {
         set({ state: { status: "blocked", reason: "noPermission" } });
         return;
       }
-      let github: HostGithubClient;
+      // 调用面不再挂在这条会话上：它打的是 core 的 `/api/github/*`（R7a）。
+      // 会话仍然决定**能不能打开这块面板**——能力、授权位与那次配对都在它身上。
+      let github: GithubApi;
       try {
-        github = new HostGithubClient({
-          session: client,
-          hostId: hello.hostId,
-          workspaceId,
-        });
+        github = new GithubApi({ workspaceId });
       } catch {
         set({ state: { status: "blocked", reason: "noPermission" } });
         return;

@@ -2,12 +2,6 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RotateCw, X } from "lucide-react";
-import {
-  GithubIssueState,
-  GithubReferenceKind,
-  type GithubIssue,
-  type GithubPullRequest,
-} from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -39,6 +33,12 @@ import { linkReferenceTo } from "./link-targets";
 import { failureKey, pollInterval, writeStateKey } from "./model";
 import { useGithubFocus, type GithubTab } from "./open";
 import { allIssues, allPulls, githubKeys } from "./queries";
+import {
+  GithubIssue,
+  GithubIssueState,
+  GithubPullRequest,
+  GithubReferenceKind,
+} from "../../api/github";
 
 /**
  * 右侧工作面板的「GitHub」页（Git/GitHub 设计 §1，画布平台设计 §4）。

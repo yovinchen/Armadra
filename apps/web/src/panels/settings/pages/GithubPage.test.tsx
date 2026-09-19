@@ -7,7 +7,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { create, GithubCredentialStatusSchema } from "@armadra/protocol";
+import {
+  GithubCredentialSource,
+  GithubSecretStore,
+  githubCredentialStatus,
+} from "../../../api/github";
 
 const store = vi.hoisted(() => ({
   workspace: { id: "workspace-1", rootPath: "/tmp" },
@@ -37,9 +41,9 @@ vi.mock("../../../host/github-session", () => {
 import { GithubPage } from "./GithubPage";
 
 /** A status that would echo a token back if the page ever trusted one. */
-const status = create(GithubCredentialStatusSchema, {
-  source: 3,
-  store: 3,
+const status = githubCredentialStatus({
+  source: GithubCredentialSource.TOKEN_REF,
+  store: GithubSecretStore.FILE_FALLBACK,
   available: true,
   apiBase: "https://api.github.com",
   accountLogin: "octocat",
@@ -54,9 +58,9 @@ function client(overrides: Record<string, unknown> = {}) {
     getCredential: vi.fn(async () => status),
     configureCredential: vi.fn(async () => status),
     revokeCredential: vi.fn(async () =>
-      create(GithubCredentialStatusSchema, {
-        source: 1,
-        store: 1,
+      githubCredentialStatus({
+        source: GithubCredentialSource.NONE,
+        store: GithubSecretStore.NONE,
         available: false,
         apiBase: "https://api.github.com",
         reasonCode: "NO_CREDENTIAL",
@@ -108,9 +112,9 @@ describe("GitHub credential settings", () => {
     renderPage(
       client({
         getCredential: vi.fn(async () =>
-          create(GithubCredentialStatusSchema, {
-            source: 1,
-            store: 1,
+          githubCredentialStatus({
+            source: GithubCredentialSource.NONE,
+            store: GithubSecretStore.NONE,
             available: false,
             apiBase: "https://api.github.com",
             reasonCode: "GH_CLI_NOT_LOGGED_IN",
@@ -129,7 +133,7 @@ describe("GitHub credential settings", () => {
     await screen.findByText("octocat");
     // The stored source is TOKEN_REF, but nothing pre-fills the field.
     fireEvent.change(document.querySelector("select") as HTMLSelectElement, {
-      target: { value: "3" },
+      target: { value: GithubCredentialSource.TOKEN_REF },
     });
     const field = tokenField();
     expect(field.type).toBe("password");
@@ -139,7 +143,7 @@ describe("GitHub credential settings", () => {
     fireEvent.click(screen.getByText("保存"));
     await waitFor(() =>
       expect(api.configureCredential).toHaveBeenCalledWith({
-        source: 3,
+        source: GithubCredentialSource.TOKEN_REF,
         token: "ghp_secret",
         apiBase: undefined,
         expectedRevision: 3n,

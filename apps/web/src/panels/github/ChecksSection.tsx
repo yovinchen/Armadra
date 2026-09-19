@@ -1,21 +1,23 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type {
-  GithubCheckSummary,
-  GithubRepositoryRef,
-  HostGithubClient,
-  RerunGithubChecksResponse,
-} from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { useT } from "@/app/preferences-store";
 import { checkConclusionKey, failureKey } from "./model";
 import { githubKeys } from "./queries";
+import {
+  GithubApi,
+  GithubCheckConclusion,
+  GithubCheckSummary,
+  GithubRepositoryRef,
+  GithubWriteState,
+  RerunGithubChecksResponse,
+} from "../../api/github";
 
 export interface ChecksSectionProps {
-  client: HostGithubClient;
+  client: GithubApi;
   repository: GithubRepositoryRef;
   number: bigint;
   headSha: string;
@@ -67,7 +69,10 @@ export function ChecksSection({
   // Only a run that did not succeed is worth restarting, and only one the
   // remote said can be.
   const restartable = runs.filter(
-    (run) => run.rerunnable && run.conclusion !== 2 && run.conclusion !== 1,
+    (run) =>
+      run.rerunnable &&
+      run.conclusion !== GithubCheckConclusion.SUCCESS &&
+      run.conclusion !== GithubCheckConclusion.PENDING,
   );
 
   return (
@@ -99,19 +104,21 @@ export function ChecksSection({
                   没有 rerun 接口的 check 不画按钮：一个点了什么都不会发生的
                   「重跑」比没有按钮更糟。
                 */}
-                {canWrite && run.rerunnable && run.conclusion !== 2 && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="min-h-8 shrink-0"
-                    data-slot="github-rerun"
-                    data-check={run.name}
-                    disabled={busy || rerun.isPending || !headSha}
-                    onClick={() => rerun.mutate(run.name)}
-                  >
-                    {t("github.checks.rerun")}
-                  </Button>
-                )}
+                {canWrite &&
+                  run.rerunnable &&
+                  run.conclusion !== GithubCheckConclusion.SUCCESS && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="min-h-8 shrink-0"
+                      data-slot="github-rerun"
+                      data-check={run.name}
+                      disabled={busy || rerun.isPending || !headSha}
+                      onClick={() => rerun.mutate(run.name)}
+                    >
+                      {t("github.checks.rerun")}
+                    </Button>
+                  )}
               </li>
             ))}
           </ul>
@@ -147,14 +154,18 @@ export function ChecksSection({
             ? `${t("github.checks.notRerun")} · ${outcome.reasonCode}`
             : t("github.checks.rerunRequested", {
                 count: String(
-                  outcome.outcomes.filter((entry) => entry.state === 1).length,
+                  outcome.outcomes.filter(
+                    (entry) => entry.state === GithubWriteState.APPLIED,
+                  ).length,
                 ),
               })}
           {/*
             结果没读到的那一条单独说：它可能已经排上了，重发一次就是第二条
             流水线，所以界面不提供「再试一次」。
           */}
-          {outcome.outcomes.some((entry) => entry.state === 2)
+          {outcome.outcomes.some(
+            (entry) => entry.state === GithubWriteState.PENDING,
+          )
             ? ` · ${t("github.checks.rerunUnknown")}`
             : ""}
         </p>

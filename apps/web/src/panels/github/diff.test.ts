@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { create } from "@armadra/protocol";
-import { GithubReviewCommentSchema } from "@armadra/protocol";
 
 import {
   anchorFor,
@@ -9,6 +7,7 @@ import {
   commentsByAnchor,
   parsePatch,
 } from "./diff";
+import { githubReviewComment } from "../../api/github";
 
 /**
  * 行内评论的位置只来自 hunk 头算出来的行号。这份测试钉的是「算不出来就不给
@@ -101,7 +100,7 @@ describe("anchorFor", () => {
 
 describe("commentsByAnchor", () => {
   const comment = (overrides: Record<string, unknown>) =>
-    create(GithubReviewCommentSchema, {
+    githubReviewComment({
       id: 1n,
       path: "a.go",
       line: 11n,

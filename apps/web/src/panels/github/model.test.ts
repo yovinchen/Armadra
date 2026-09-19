@@ -1,11 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { create } from "@armadra/protocol";
-import {
-  GithubIssueSchema,
-  GithubPullRequestSchema,
-  GithubStatusMappingSchema,
-} from "@armadra/protocol";
-import { HostGithubError } from "@armadra/host-client";
 
 import {
   MAX_POLL_MS,
@@ -16,6 +9,13 @@ import {
   pollInterval,
   suggestedHeadRef,
 } from "./model";
+import {
+  GithubApiError,
+  githubIssue,
+  githubPullRequest,
+  githubStatusGroup,
+  githubStatusMapping,
+} from "../../api/github";
 
 const repository = {
   owner: "armadra",
@@ -25,7 +25,7 @@ const repository = {
 };
 
 function issue(number: number, statusGroupId = "") {
-  return create(GithubIssueSchema, {
+  return githubIssue({
     repository,
     number: BigInt(number),
     title: `issue ${number}`,
@@ -34,12 +34,12 @@ function issue(number: number, statusGroupId = "") {
   });
 }
 
-const mapping = create(GithubStatusMappingSchema, {
+const mapping = githubStatusMapping({
   repository,
   revision: 4n,
   groups: [
-    { id: "todo", title: "Todo" },
-    { id: "done", title: "Done" },
+    githubStatusGroup({ id: "todo", title: "Todo" }),
+    githubStatusGroup({ id: "done", title: "Done" }),
   ],
 });
 
@@ -79,7 +79,7 @@ describe("polling", () => {
 
 describe("local checkout naming", () => {
   const pull = (fromFork: boolean, headRef: string) =>
-    create(GithubPullRequestSchema, {
+    githubPullRequest({
       repository,
       number: 42n,
       headRef,
@@ -97,14 +97,14 @@ describe("local checkout naming", () => {
 
 describe("failures and reason codes", () => {
   it("names the repair for each client failure", () => {
-    expect(failureKey(new HostGithubError("conflict"))).toBe(
+    expect(failureKey(new GithubApiError("conflict"))).toBe(
       "github.error.conflict",
     );
     expect(failureKey(new Error("boom"))).toBe("github.error.network");
   });
 
   it("never tells the user to just retry a write whose result is unknown", () => {
-    expect(failureKey(new HostGithubError("network", true))).toBe(
+    expect(failureKey(new GithubApiError("network", true))).toBe(
       "github.error.unknownOutcome",
     );
   });

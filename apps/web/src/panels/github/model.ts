@@ -1,18 +1,18 @@
 import {
+  GithubApiError,
   GithubCheckConclusion,
   GithubCredentialSource,
+  GithubIssue,
   GithubIssueState,
   GithubMergeMethod,
+  GithubPullRequest,
   GithubPullState,
   GithubReviewState,
   GithubSecretStore,
+  GithubStatusGroup,
+  GithubStatusMapping,
   GithubWriteState,
-  HostGithubError,
-  type GithubIssue,
-  type GithubPullRequest,
-  type GithubStatusGroup,
-  type GithubStatusMapping,
-} from "@armadra/host-client";
+} from "../../api/github";
 
 /**
  * Display model for the GitHub page. Everything here is a pure function of
@@ -25,7 +25,7 @@ import {
 
 /** Turns a client failure into the one sentence that says what to do next. */
 export function failureKey(error: unknown): string {
-  if (!(error instanceof HostGithubError)) return "github.error.network";
+  if (!(error instanceof GithubApiError)) return "github.error.network";
   if (error.outcomeUnknown) return "github.error.unknownOutcome";
   return `github.error.${error.failure}`;
 }

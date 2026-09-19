@@ -1,10 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { create } from "@armadra/protocol";
-import {
-  AutomationPlanSchema,
-  AutomationPlanConfigSchema,
-  AutomationRunSchema,
-} from "@armadra/protocol";
 
 import {
   digestLabel,
@@ -20,9 +14,16 @@ import {
   validCron,
   validTimezone,
 } from "./model";
+import {
+  AutomationPlanState,
+  AutomationRunState,
+  automationPlan,
+  automationPlanConfig,
+  automationRun,
+} from "../../api/automations";
 
 function config(kind: Record<string, unknown>) {
-  return create(AutomationPlanConfigSchema, { schedule: { kind } } as never);
+  return automationPlanConfig({ schedule: { kind } } as never);
 }
 
 describe("schedule shape", () => {
@@ -51,7 +52,7 @@ describe("schedule shape", () => {
         config({ case: "loopAfterCompletion", value: { delayMs: 1n } }),
       ),
     ).toBe("loop");
-    expect(scheduleKind(create(AutomationPlanConfigSchema, {}))).toBeNull();
+    expect(scheduleKind(automationPlanConfig({}))).toBeNull();
     expect(scheduleKind(undefined)).toBeNull();
   });
 });
@@ -111,41 +112,43 @@ describe("timezones", () => {
 
 describe("state labels", () => {
   it("maps plan and run states onto translation keys", () => {
-    expect(planStateKey(create(AutomationPlanSchema, { state: 2 }))).toBe(
-      "automation.planState.active",
-    );
+    expect(
+      planStateKey(automationPlan({ state: AutomationPlanState.ACTIVE })),
+    ).toBe("automation.planState.active");
     expect(planStateKey(undefined)).toBe("automation.planState.unspecified");
-    expect(runStateKey(create(AutomationRunSchema, { state: 7 }))).toBe(
-      "automation.runState.succeeded",
-    );
-    expect(runStateKey(create(AutomationRunSchema, { state: 12 }))).toBe(
-      "automation.runState.unknown",
-    );
+    expect(
+      runStateKey(automationRun({ state: AutomationRunState.SUCCEEDED })),
+    ).toBe("automation.runState.succeeded");
+    expect(
+      runStateKey(automationRun({ state: AutomationRunState.UNKNOWN })),
+    ).toBe("automation.runState.unknown");
   });
 
   it("keeps an unknown outcome separate from a finished one", () => {
-    expect(unresolved(create(AutomationRunSchema, { state: 12 }))).toBe(true);
-    expect(unresolved(create(AutomationRunSchema, { state: 7 }))).toBe(false);
+    expect(
+      unresolved(automationRun({ state: AutomationRunState.UNKNOWN })),
+    ).toBe(true);
+    expect(
+      unresolved(automationRun({ state: AutomationRunState.SUCCEEDED })),
+    ).toBe(false);
   });
 
   it("reads the needs-attention marker straight from the Host", () => {
-    expect(
-      needsAttention(create(AutomationPlanSchema, { needsAttention: true })),
-    ).toBe(true);
-    expect(needsAttention(create(AutomationPlanSchema, {}))).toBe(false);
+    expect(needsAttention(automationPlan({ needsAttention: true }))).toBe(true);
+    expect(needsAttention(automationPlan({}))).toBe(false);
   });
 });
 
 describe("receipt phase", () => {
   it("never reports delivered input as finished work", () => {
-    const delivered = create(AutomationRunSchema, {
-      state: 5,
+    const delivered = automationRun({
+      state: AutomationRunState.DELIVERED,
       dispatchAttempts: 1,
       receiptSequence: 1n,
     });
     expect(receiptPhase(delivered)).toBe("delivered");
-    const settled = create(AutomationRunSchema, {
-      state: 7,
+    const settled = automationRun({
+      state: AutomationRunState.SUCCEEDED,
       dispatchAttempts: 1,
       receiptSequence: 2n,
     });
@@ -155,12 +158,18 @@ describe("receipt phase", () => {
   it("separates a queued attempt from one with no attempt at all", () => {
     expect(
       receiptPhase(
-        create(AutomationRunSchema, { state: 1, dispatchAttempts: 0 }),
+        automationRun({
+          state: AutomationRunState.DUE,
+          dispatchAttempts: 0,
+        }),
       ),
     ).toBe("none");
     expect(
       receiptPhase(
-        create(AutomationRunSchema, { state: 4, dispatchAttempts: 1 }),
+        automationRun({
+          state: AutomationRunState.DISPATCHING,
+          dispatchAttempts: 1,
+        }),
       ),
     ).toBe("queued");
   });
@@ -168,8 +177,8 @@ describe("receipt phase", () => {
   it("keeps observed delivery visible even without a receipt sequence", () => {
     expect(
       receiptPhase(
-        create(AutomationRunSchema, {
-          state: 12,
+        automationRun({
+          state: AutomationRunState.UNKNOWN,
           dispatchAttempts: 1,
           deliveryObserved: true,
         }),

@@ -2,10 +2,6 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RotateCw, X } from "lucide-react";
-import {
-  HostAutomationError,
-  type AutomationPlanSnapshot,
-} from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -24,11 +20,14 @@ import { RunHistory } from "./RunHistory";
 import { useAutomationFocus } from "./open";
 import { allPlans, automationKeys } from "./queries";
 import { scheduleKind } from "./model";
+import {
+  AutomationApiError,
+  AutomationPlanSnapshot,
+} from "../../api/automations";
 
 /** Turns a client failure into the one sentence that says what to do next. */
 export function failureKey(error: unknown): string {
-  if (!(error instanceof HostAutomationError))
-    return "automation.error.network";
+  if (!(error instanceof AutomationApiError)) return "automation.error.network";
   if (error.outcomeUnknown) return "automation.error.unknownOutcome";
   return `automation.error.${error.failure}`;
 }

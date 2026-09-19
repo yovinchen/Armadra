@@ -1,11 +1,5 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  AutomationCommandSession,
-  AutomationPlanConfig,
-  CommandLaunchSpec,
-  HostAutomationClient,
-} from "@armadra/host-client";
 import type { AutomationScheduleKind, NativeRecurrence } from "@armadra/shared";
 
 import { Button } from "@/ui/button";
@@ -33,6 +27,13 @@ import {
   wizardStateFromConfig,
   type WizardState,
 } from "./wizard";
+import {
+  AutomationApi,
+  AutomationCommandSession,
+  AutomationCommandSessionState,
+  AutomationPlanConfig,
+  CommandLaunchSpec,
+} from "../../api/automations";
 
 /** A command session the form asks the panel to freeze before saving the plan. */
 export interface NewSessionRequest {
@@ -44,7 +45,8 @@ export interface NewSessionRequest {
 export interface CreatePlanRequest {
   planId: string;
   config: AutomationPlanConfig;
-  payload: Uint8Array;
+  /** 冻结的 stdin / prompt。原文，不是字节（R7a）。 */
+  payload: string;
   session?: NewSessionRequest;
   /**
    * Zero creates. Any other value edits the plan at exactly that revision, so
@@ -85,7 +87,7 @@ export interface EditPlanTarget {
 }
 
 export interface CreatePlanFormProps {
-  client: HostAutomationClient;
+  client: AutomationApi;
   /** This Host's own id; a plan may only target the Host it is defined on. */
   hostId: string;
   workspaceId: string;
@@ -177,7 +179,8 @@ export function CreatePlanForm({
     loadedPayload.current = true;
     setState((current) => ({
       ...current,
-      payload: new TextDecoder().decode(stored.data),
+      // 载荷在线上就是原文（R7a），不再是一段要解码的字节。
+      payload: stored.data,
     }));
   }, [edit, stored.data]);
   const [targetKind, setTargetKind] = React.useState<"command" | "agent">(
@@ -215,7 +218,10 @@ export function CreatePlanForm({
     retry: false,
   });
   const ready = React.useMemo(
-    () => (sessions.data ?? []).filter((session) => session.state === 1),
+    () =>
+      (sessions.data ?? []).filter(
+        (session) => session.state === AutomationCommandSessionState.READY,
+      ),
     [sessions.data],
   );
   React.useEffect(() => {
@@ -270,7 +276,7 @@ export function CreatePlanForm({
       onCreate({
         planId: edit.planId,
         config: config.config,
-        payload: new TextEncoder().encode(state.payload),
+        payload: state.payload,
         expectedRevision: edit.expectedRevision,
       });
       return;
@@ -296,7 +302,7 @@ export function CreatePlanForm({
       onCreate({
         planId: randomId("plan"),
         config: config.config,
-        payload: new TextEncoder().encode(state.payload),
+        payload: state.payload,
         expectedRevision: 0n,
       });
       return;
@@ -342,7 +348,7 @@ export function CreatePlanForm({
     onCreate({
       planId: randomId("plan"),
       config: config.config,
-      payload: new TextEncoder().encode(state.payload),
+      payload: state.payload,
       expectedRevision: 0n,
       ...(session ? { session } : {}),
     });

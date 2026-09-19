@@ -1,5 +1,4 @@
 import * as React from "react";
-import type { AutomationPlanSnapshot } from "@armadra/host-client";
 
 import {
   AlertDialog,
@@ -15,6 +14,10 @@ import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { useT } from "@/app/preferences-store";
 import { digestLabel, instant, planStateKey, scheduleKind } from "./model";
+import {
+  AutomationPlanState,
+  type AutomationPlanSnapshot,
+} from "../../api/automations";
 
 export interface PlanRowProps {
   snapshot: AutomationPlanSnapshot;
@@ -33,7 +36,7 @@ export interface PlanRowProps {
   onDisableAndDetach: () => void;
 }
 
-const ACTIVE = 2;
+const ACTIVE = AutomationPlanState.ACTIVE;
 
 /**
  * 计划列表里的一行。

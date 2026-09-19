@@ -1,4 +1,4 @@
-import type { GithubPullFile, GithubReviewComment } from "@armadra/host-client";
+import { GithubPullFile, GithubReviewComment } from "../../api/github";
 
 /**
  * 把 GitHub 返回的 unified diff 拆成可以逐行评论的行（Git/GitHub 设计 §8
