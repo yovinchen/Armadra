@@ -39,6 +39,7 @@ import { install as installRemote } from "./remote";
 import { install as installTerminals } from "./terminal/install";
 import { install as installAgents } from "./agent";
 import { install as installBrowser } from "./browser";
+import { install as installSchedule } from "./schedule";
 
 /**
  * The core process.
@@ -126,6 +127,8 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // `installSettings` assembled, and it starts nothing until it is asked to.
   installRemote,
   installTerminals,
+  // 调度在终端之后：一次投递要往 pane 里写，而那个桥是终端域装好之后才有的。
+  installSchedule,
   // Language servers after settings (the probe cache and the overrides live in
   // that document) and after events (a hub publishes its status the moment it
   // starts). It starts nothing until a session is opened.
