@@ -13,6 +13,12 @@ import {
 } from "../shared/ipc";
 import { dataDir } from "../shell-core/paths";
 import { DEFAULT_DEV_RENDERER_URL } from "../shell-core/window-rules";
+import {
+  iconPath,
+  setAboutPanel,
+  setApplicationName,
+  setDockIcon,
+} from "./branding";
 import { HOST_ENDPOINT, configFromEnvironment } from "./host";
 import { deviceName, issueNativeTicket } from "./host/ticket";
 import {
@@ -374,8 +380,23 @@ async function start(): Promise<void> {
   void loadRenderer(createMainWindow());
 }
 
+// Must run before `app.whenReady()` resolves: Electron reads the process
+// name for the Dock and the menu bar at ready time, so a call placed inside
+// the callback below is already too late and the Dock keeps showing
+// "Electron" for the rest of the run.
+setApplicationName();
+
 app.whenReady().then(() => {
   traceLifecycle("ready");
+  // Development only — a packaged build's Dock icon and About panel icon
+  // come from electron-builder's `mac.icon`, already inside the bundle;
+  // `build/icons/` itself is not.
+  if (development) {
+    setDockIcon();
+    setAboutPanel(iconPath());
+  } else {
+    setAboutPanel();
+  }
   void start();
   traceLifecycle("enter event loop");
 

@@ -58,7 +58,15 @@ function template(locale: ShellLocale): MenuItemConstructorOptions[] {
     //
     // The default File menu is deliberately NOT here: its only item is Close
     // Window on ⌘W, and that chord is claimed by the intercept above.
-    return [{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }];
+    // `label` is explicit rather than left to `role: "appMenu"`'s own
+    // default: that default reads `app.name` at menu-build time too, but
+    // naming it here is the one place a reviewer can see the first menu is
+    // tied to `branding.ts`'s `APP_NAME` rather than trusting it silently.
+    return [
+      { role: "appMenu", label: app.name },
+      { role: "editMenu" },
+      { role: "windowMenu" },
+    ];
   }
   return [
     {

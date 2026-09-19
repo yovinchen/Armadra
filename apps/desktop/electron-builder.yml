@@ -82,6 +82,13 @@ mac:
     # succeeds at the same instant (docs/research/nodeterm/process-model-and-platform.md §4,
     # nodeterm issue #589). Reviewed allowlist enforced by `build/info-plist.test.ts`.
     NSLocalNetworkUsageDescription: "Armadra 的 Runtime 与已连接的 Agent CLI 需要访问本机局域网内的设备与服务。"
+    # The name macOS shows under the Dock icon, in Spotlight and in the Force
+    # Quit list — distinct from `CFBundleName` (electron-builder derives that
+    # from `productName` above), which is the shorter internal name the
+    # system falls back to when this key is absent. Without it a build whose
+    # `productName` ever needs a short/long split would silently show the
+    # short form everywhere a user actually reads the app's name.
+    CFBundleDisplayName: Armadra
   target:
     - target: dmg
       arch: [arm64, x64]
