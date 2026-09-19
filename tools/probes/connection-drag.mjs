@@ -5,7 +5,7 @@
 // 失败时把当时的判定材料一并记下来：按下那一刻指针底下是什么元素、松手那一刻
 // 指针底下是什么元素、React Flow 有没有认为「连线正在进行」。
 //
-// 跑的是真实的一整条链路：临时数据目录里的 Rust Runtime、一个临时工作空间、
+// 跑的是真实的一整条链路：临时数据目录里的 core、一个临时工作空间、
 // Vite 开发服务器，以及新 profile 的无头 Chrome，页面是应用自己的首页（靠
 // `?workspace=…&board=…` 深链直接落到那块画布上，见 `app/use-board-sync.ts`）。
 //
@@ -14,7 +14,7 @@
 // 凭据或任何远端。
 //
 // 用法（仓库根目录）：
-//   CARGO_TARGET_DIR=$PWD/target cargo build -p armadra-runtime
+//   pnpm --filter @armadra/desktop build
 //   node tools/probes/connection-drag.mjs [输出目录] [次数]
 //
 // 产物：<输出目录>/result.json，以及第一次失败时的 failure.png。
@@ -96,28 +96,27 @@ async function main() {
 
   /* -------------------------------- Runtime ------------------------------ */
 
-  const binary = join(
-    process.env.CARGO_TARGET_DIR ?? join(root, "target"),
-    "debug",
-    process.platform === "win32" ? "armadra-runtime.exe" : "armadra-runtime",
-  );
+  const binary = join(root, "apps/desktop/out/core/main.js");
   if (!existsSync(binary))
     throw new Error(
-      `Runtime 未构建：${binary}。先跑 CARGO_TARGET_DIR=$PWD/target cargo build -p armadra-runtime`,
+      `core 未构建：${binary}。先跑 pnpm --filter @armadra/desktop build`,
     );
   const data = join(workspace, "runtime");
   mkdirSync(data, { recursive: true });
   const environment = {
     ...process.env,
     ARMADRA_DATA_DIR: data,
-    ARMADRA_DATABASE_URL: `sqlite://${join(data, "canvas.db")}?mode=rwc`,
-    RUST_LOG: process.env.RUST_LOG ?? "warn",
+    ARMADRA_LOG: process.env.ARMADRA_LOG ?? "warn",
   };
-  const runtime = spawn(binary, ["--listen", "tcp:127.0.0.1:0"], {
-    cwd: root,
-    stdio: ["ignore", "ignore", "pipe"],
-    env: environment,
-  });
+  const runtime = spawn(
+    process.execPath,
+    [binary, "--listen", "tcp:127.0.0.1:0", "--data-dir", data],
+    {
+      cwd: root,
+      stdio: ["ignore", "ignore", "pipe"],
+      env: environment,
+    },
+  );
   cleanups.push(() => runtime.kill("SIGKILL"));
   let diagnostics = "";
   runtime.stderr.on("data", (chunk) => {
@@ -127,7 +126,7 @@ async function main() {
   let origin = "";
   for (let attempt = 0; attempt < 300 && !origin; attempt += 1) {
     if (runtime.exitCode !== null)
-      throw new Error(`Runtime 退出：${diagnostics}`);
+      throw new Error(`core 退出：${diagnostics}`);
     try {
       origin = JSON.parse(readFileSync(endpoints, "utf8")).runtime.http;
     } catch {
@@ -135,8 +134,8 @@ async function main() {
     }
   }
   if (!(await fetch(new URL("/api/health", origin))).ok)
-    throw new Error("Runtime 健康检查失败");
-  step("Runtime 已启动", origin);
+    throw new Error("core 健康检查失败");
+  step("core 已启动", origin);
 
   const api = async (path, init) => {
     const answer = await fetch(new URL(path, origin), {

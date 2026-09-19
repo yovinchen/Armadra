@@ -18,7 +18,6 @@ export const RULES = [
   "root-allowlist",
   "file-size",
   "migrations",
-  "proto-coverage",
 ];
 
 // ------------------------------------------------------------------ helpers
@@ -287,34 +286,15 @@ function checkFileSize(context, problems) {
   }
 }
 
-/**
- * 迁移编号必须从 1 起连续。并行批次会提前分配编号，尚未合入的那一个登记在
- * `reserved` 里：它只占位参与连续性检查，对应文件必须还不存在——否则占位就
- * 成了「谁都可以跳号」的口子。
- */
-function checkMigrationNumbers(label, numbers, reserved, problems) {
-  const present = new Set(numbers);
-  for (const number of reserved) {
-    if (present.has(number)) {
-      problems.push(`预留的迁移编号已经被占用：${label} ${number}`);
-    }
-  }
-  [...numbers, ...reserved]
+/** 迁移编号必须从 1 起连续。 */
+function checkMigrationNumbers(label, numbers, problems) {
+  [...numbers]
     .sort((left, right) => left - right)
     .forEach((value, index) => {
       if (value !== index + 1) {
         problems.push(`迁移编号不连续：${label} 第 ${index + 1} 个为 ${value}`);
       }
     });
-}
-
-/** Host 的 schema 是 Go 里的字符串常量，按常量名当作编号迁移读取。 */
-function goSchemaConstants(text, pattern) {
-  const source = new RegExp(`${pattern}\\s*=\\s*\`([\\s\\S]*?)\``, "g");
-  const found = new Map();
-  let match;
-  while ((match = source.exec(text)) !== null) found.set(match[1], match[2]);
-  return found;
 }
 
 function checkMigrations(context, problems) {
@@ -329,40 +309,20 @@ function checkMigrations(context, problems) {
   for (const source of rule.sources ?? []) {
     const recorded = lock[source.path] ?? {};
     const actual = new Map();
-    if (source.kind === "directory") {
-      const base = join(context.root, source.path);
-      if (!existsSync(base)) {
-        problems.push(`迁移目录缺失：${source.path}`);
-        continue;
-      }
-      for (const name of readdirSync(base).sort()) {
-        if (!name.endsWith(".sql")) continue;
-        actual.set(name, sha256(readFileSync(join(base, name))));
-      }
-      checkMigrationNumbers(
-        source.path,
-        [...actual.keys()].map((name) => Number.parseInt(name.slice(0, 4), 10)),
-        source.reserved ?? [],
-        problems,
-      );
-    } else {
-      const text = readIfPresent(context.root, source.path);
-      if (text === null) {
-        problems.push(`迁移来源缺失：${source.path}`);
-        continue;
-      }
-      const constants = goSchemaConstants(text, source.pattern);
-      for (const [key, body] of constants)
-        actual.set(key, sha256(Buffer.from(body)));
-      checkMigrationNumbers(
-        source.path,
-        [...constants.keys()].map((key) =>
-          Number.parseInt(key.replace(/\D+/g, ""), 10),
-        ),
-        source.reserved ?? [],
-        problems,
-      );
+    const base = join(context.root, source.path);
+    if (!existsSync(base)) {
+      problems.push(`迁移目录缺失：${source.path}`);
+      continue;
     }
+    for (const name of readdirSync(base).sort()) {
+      if (!name.endsWith(".sql")) continue;
+      actual.set(name, sha256(readFileSync(join(base, name))));
+    }
+    checkMigrationNumbers(
+      source.path,
+      [...actual.keys()].map((name) => Number.parseInt(name.slice(0, 4), 10)),
+      problems,
+    );
     for (const [name, digest] of actual) {
       const expected = recorded[name];
       if (expected === undefined) {
@@ -381,67 +341,6 @@ function checkMigrations(context, problems) {
   }
 }
 
-function readAll(root, directory, suffix) {
-  const base = join(root, directory);
-  if (!existsSync(base)) return "";
-  return readdirSync(base)
-    .filter((name) => name.endsWith(suffix))
-    .sort()
-    .map((name) => readFileSync(join(base, name), "utf8"))
-    .join("\n");
-}
-
-function checkProtoCoverage(context, problems) {
-  const rule = context.rules.proto;
-  if (!rule) return;
-  const schemaDir = join(context.root, rule.schemas);
-  if (!existsSync(schemaDir)) {
-    problems.push(`协议目录缺失：${rule.schemas}`);
-    return;
-  }
-  const go = readAll(context.root, rule.goTests, "_test.go");
-  const rust = readAll(context.root, rule.rustTests, ".rs");
-  const typescript = readAll(context.root, rule.tsTests, ".ts");
-  // Go 契约测试把 fixture 名映射到消息，是三端 fixture 的唯一产地。
-  const fixtures = new Map();
-  const pair = /"([a-z0-9_]+)"\s*:\s*&pb\.(\w+)\{/g;
-  let match;
-  while ((match = pair.exec(go)) !== null) fixtures.set(match[1], match[2]);
-  for (const name of readdirSync(schemaDir).sort()) {
-    if (!name.endsWith(".proto")) continue;
-    const path = `${rule.schemas}/${name}`;
-    const text = readFileSync(join(schemaDir, name), "utf8");
-    const messages = [...text.matchAll(/^message\s+(\w+)/gm)].map(
-      (hit) => hit[1],
-    );
-    if (messages.length === 0) {
-      problems.push(`协议文件没有顶层消息：${path}`);
-      continue;
-    }
-    const owned = messages.filter((message) =>
-      [...fixtures.values()].includes(message),
-    );
-    const withFixture = [...fixtures.entries()].filter(
-      ([fixture, message]) =>
-        owned.includes(message) &&
-        existsSync(join(context.root, rule.fixtures, `${fixture}.hex`)),
-    );
-    if (withFixture.length === 0) {
-      problems.push(`协议文件缺少 ${rule.fixtures} 样例：${path}`);
-    }
-    const inRust = messages.some((message) =>
-      new RegExp(`\\b${message}\\b`).test(rust),
-    );
-    const inTypescript = messages.some((message) =>
-      new RegExp(`\\b${message}Schema\\b`).test(typescript),
-    );
-    if (owned.length === 0)
-      problems.push(`协议文件未被 Go 契约测试引用：${path}`);
-    if (!inRust) problems.push(`协议文件未被 Rust 契约测试引用：${path}`);
-    if (!inTypescript) problems.push(`协议文件未被 TS 契约测试引用：${path}`);
-  }
-}
-
 const CHECKS = {
   "docs-index": checkDocsIndex,
   links: checkLinks,
@@ -450,7 +349,6 @@ const CHECKS = {
   "root-allowlist": checkRootAllowlist,
   "file-size": checkFileSize,
   migrations: checkMigrations,
-  "proto-coverage": checkProtoCoverage,
 };
 
 /** 对一个仓库根跑规则，返回问题列表；空列表表示通过。 */

@@ -8,21 +8,17 @@
     ".prettierignore",
     "AGENTS.md",
     "CLAUDE.md",
-    "Cargo.lock",
-    "Cargo.toml",
     "LICENSE",
     "README.md",
     "apps",
     "armadra.sh",
     "assets",
-    "crates",
     "docs",
     "migrations.lock",
     "package.json",
     "packages",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
-    "proto",
     "repo.rules.json",
     "tools",
     "tsconfig.base.json"
@@ -30,10 +26,8 @@
   "blacklist": [
     "output/",
     "dist/",
-    "target/",
     "out/",
     "apps/desktop/release/",
-    "apps/desktop/resources/",
     ".idea/",
     ".playwright-cli/",
     "*.db",
@@ -50,10 +44,8 @@
       "*.md",
       "apps/",
       "assets/",
-      "crates/",
       "docs/",
       "packages/",
-      "proto/",
       "tools/"
     ],
     "exclude": [".claude/"]
@@ -63,17 +55,12 @@
       "directory": "packages",
       "manifest": "package.json",
       "prefix": "@armadra/"
-    },
-    {
-      "directory": "crates",
-      "manifest": "Cargo.toml",
-      "prefix": "armadra-"
     }
   ],
   "fileSize": {
     "max": 1500,
-    "roots": ["apps", "crates", "packages", "tools"],
-    "extensions": [".rs", ".ts", ".tsx", ".go", ".mjs", ".js"],
+    "roots": ["apps", "packages", "tools"],
+    "extensions": [".ts", ".tsx", ".mjs", ".js"],
     "excludeSegments": ["/gen/", "/node_modules/"],
     "exemptions": []
   },
@@ -86,12 +73,5 @@
         "kind": "directory"
       }
     ]
-  },
-  "proto": {
-    "schemas": "proto/armadra/v1",
-    "fixtures": "proto/fixtures",
-    "goTests": "apps/host/gen/armadra/v1",
-    "rustTests": "crates/protocol/tests",
-    "tsTests": "packages/protocol/test"
   }
 }

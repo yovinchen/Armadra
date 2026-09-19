@@ -50,7 +50,6 @@ test("导出的规则名与实现一一对应", () => {
     "links",
     "migrations",
     "naming",
-    "proto-coverage",
     "root-allowlist",
   ]);
   assert.throws(
@@ -146,25 +145,28 @@ test("blacklist：黑名单文件一旦被跟踪就报告", () => {
 test("naming：目录名必须等于包名去掉前缀，豁免到期后报告", () => {
   const root = repo({
     "packages/shared/package.json": '{ "name": "@armadra/shared" }',
-    "packages/protocol-ts/package.json": '{ "name": "@armadra/protocol" }',
-    "crates/hook/Cargo.toml": '[package]\nname = "armadra-hook"\n',
+    "packages/shared-ts/package.json": '{ "name": "@armadra/extras" }',
+    "apps/shell/package.json": '{ "name": "@armadra/desktop" }',
   });
   const base = [
     { directory: "packages", manifest: "package.json", prefix: "@armadra/" },
-    { directory: "crates", manifest: "Cargo.toml", prefix: "armadra-" },
+    { directory: "apps", manifest: "package.json", prefix: "@armadra/" },
   ];
   assert.deepEqual(run(root, { naming: base }, ["naming"], []), [
-    "目录名与包名不一致：packages/protocol-ts 应为 packages/protocol（@armadra/protocol）",
+    "目录名与包名不一致：packages/shared-ts 应为 packages/extras（@armadra/extras）",
+    "目录名与包名不一致：apps/shell 应为 apps/desktop（@armadra/desktop）",
   ]);
   const exempted = structuredClone(base);
   exempted[0].exemptions = [
-    { directory: "packages/protocol-ts", note: "待改名" },
+    { directory: "packages/shared-ts", note: "待改名" },
   ];
+  exempted[1].exemptions = [{ directory: "apps/shell", note: "待改名" }];
   assert.deepEqual(run(root, { naming: exempted }, ["naming"], []), []);
   const stale = structuredClone(exempted);
-  stale[1].exemptions = [{ directory: "crates/armadra-hook", note: "已改完" }];
+  stale[1].exemptions = [{ directory: "apps/desktop", note: "已改完" }];
   assert.deepEqual(run(root, { naming: stale }, ["naming"], []), [
-    "改名豁免已过期，可从 repo.rules.json 移除：crates/armadra-hook",
+    "目录名与包名不一致：apps/shell 应为 apps/desktop（@armadra/desktop）",
+    "改名豁免已过期，可从 repo.rules.json 移除：apps/desktop",
   ]);
 });
 
@@ -250,27 +252,17 @@ test("file-size：超限文件必须登记豁免，且只允许变小", () => {
 test("migrations：编号连续、已发布文件 sha256 不变", () => {
   const first = "create table a(id);\n";
   const second = "create table b(id);\n";
-  const schema = "package storage\n\nconst schemaV1 = `create table c(id);`\n";
   const root = repo({
     "db/0001_a.sql": first,
     "db/0002_b.sql": second,
-    "host/schema.go": schema,
     "migrations.lock": JSON.stringify({
       db: { "0001_a.sql": sha256(first), "0002_b.sql": sha256(second) },
-      "host/schema.go": { schemaV1: sha256("create table c(id);") },
     }),
   });
   const rules = {
     migrations: {
       lock: "migrations.lock",
-      sources: [
-        { path: "db", kind: "directory" },
-        {
-          path: "host/schema.go",
-          kind: "go-constants",
-          pattern: "const (schemaV\\d+)",
-        },
-      ],
+      sources: [{ path: "db", kind: "directory" }],
     },
   };
   assert.deepEqual(run(root, rules, ["migrations"], []), []);
@@ -278,10 +270,8 @@ test("migrations：编号连续、已发布文件 sha256 不变", () => {
   const drifted = repo({
     "db/0001_a.sql": first,
     "db/0003_c.sql": second,
-    "host/schema.go": schema,
     "migrations.lock": JSON.stringify({
       db: { "0001_a.sql": sha256("已改动\n") },
-      "host/schema.go": { schemaV1: sha256("create table c(id);") },
     }),
   });
   const problems = run(drifted, rules, ["migrations"], []);
@@ -289,81 +279,6 @@ test("migrations：编号连续、已发布文件 sha256 不变", () => {
     "迁移编号不连续：db 第 2 个为 3",
     "已发布迁移被改动：db/0001_a.sql",
     `新迁移未登记到 migrations.lock：db/0003_c.sql（sha256 ${sha256(second)}）`,
-  ]);
-});
-
-test("migrations：预留编号占位参与连续性，但不能已经有文件", () => {
-  const first = "create table a(id);\n";
-  const third = "create table c(id);\n";
-  const tree = {
-    "db/0001_a.sql": first,
-    "db/0003_c.sql": third,
-    "migrations.lock": JSON.stringify({
-      db: { "0001_a.sql": sha256(first), "0003_c.sql": sha256(third) },
-    }),
-  };
-  const rules = {
-    migrations: {
-      lock: "migrations.lock",
-      sources: [{ path: "db", kind: "directory", reserved: [2] }],
-    },
-  };
-  assert.deepEqual(run(repo(tree), rules, ["migrations"], []), []);
-
-  // 预留的编号一旦真的落了文件，占位就失效：它必须先从规则里删掉。
-  const claimed = repo({
-    ...tree,
-    "db/0002_b.sql": "create table b(id);\n",
-    "migrations.lock": JSON.stringify({
-      db: {
-        "0001_a.sql": sha256(first),
-        "0002_b.sql": sha256("create table b(id);\n"),
-        "0003_c.sql": sha256(third),
-      },
-    }),
-  });
-  assert.deepEqual(run(claimed, rules, ["migrations"], []), [
-    "预留的迁移编号已经被占用：db 2",
-    "迁移编号不连续：db 第 3 个为 2",
-    "迁移编号不连续：db 第 4 个为 3",
-  ]);
-});
-
-test("proto-coverage：每个 .proto 至少一个 fixture 与三端契约测试引用", () => {
-  const tree = {
-    "proto/v1/hello.proto":
-      'syntax = "proto3";\nmessage Hello { string id = 1; }\n',
-    "proto/fixtures/hello.hex": "00\n",
-    "go/hello_contract_test.go": '"hello": &pb.Hello{Id: "x"},\n',
-    "rust/contract.rs": "use Hello;\n",
-    "ts/contract.test.ts": "import { HelloSchema } from '@armadra/protocol';\n",
-  };
-  const rules = {
-    proto: {
-      schemas: "proto/v1",
-      fixtures: "proto/fixtures",
-      goTests: "go",
-      rustTests: "rust",
-      tsTests: "ts",
-    },
-  };
-  assert.deepEqual(run(repo(tree), rules, ["proto-coverage"], []), []);
-
-  const missing = repo({
-    ...tree,
-    "proto/v1/lonely.proto":
-      'syntax = "proto3";\nmessage Lonely { string id = 1; }\n',
-  });
-  assert.deepEqual(run(missing, rules, ["proto-coverage"], []), [
-    "协议文件缺少 proto/fixtures 样例：proto/v1/lonely.proto",
-    "协议文件未被 Go 契约测试引用：proto/v1/lonely.proto",
-    "协议文件未被 Rust 契约测试引用：proto/v1/lonely.proto",
-    "协议文件未被 TS 契约测试引用：proto/v1/lonely.proto",
-  ]);
-
-  delete tree["proto/fixtures/hello.hex"];
-  assert.deepEqual(run(repo(tree), rules, ["proto-coverage"], []), [
-    "协议文件缺少 proto/fixtures 样例：proto/v1/hello.proto",
   ]);
 });
 
