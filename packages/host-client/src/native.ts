@@ -1,6 +1,6 @@
 import { HostIdentityError } from "./identity.js";
 
-export { NATIVE_PAGE_ORIGINS, isNativePageOrigin } from "./origins.js";
+export { isNativePageOrigin } from "./origins.js";
 
 export interface HostNativeCredentialsOptions {
   /**

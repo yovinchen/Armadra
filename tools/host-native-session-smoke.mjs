@@ -6,11 +6,10 @@
 // same ticket, that the ticket cannot be spent twice, and that nothing
 // authenticates on the native origin without a bearer.
 //
-// A shell origin is no longer one fixed spelling: the Electron shell serves
-// its page over loopback HTTP on a kernel-assigned port
-// (docs/design/electron-migration.md §2.1), so the same ticket flow is proved
-// a second time for `http://127.0.0.1:NNNN`, over raw requests because the
-// host-client transport still spells out the Tauri origins.
+// A shell origin is not a fixed spelling: the shell serves its page over
+// loopback HTTP on a kernel-assigned port (docs/design/electron-migration.md
+// §2.1), so the flow is proved a second time on a DIFFERENT loopback port,
+// over raw requests — nothing here may depend on one particular port.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -37,13 +36,12 @@ const binary = join(
   "native-session-smoke",
   process.platform === "win32" ? "armadra-host.exe" : "armadra-host",
 );
-const NATIVE = "tauri://localhost";
 // A real browser origin: off this machine, so never a shell origin however
-// explicitly it is allowed. A loopback HTTP origin is a shell origin now.
+// explicitly it is allowed. A loopback HTTP origin is a shell origin.
 const BROWSER = "https://armadra.example";
 const MEDIA = "application/x-protobuf";
 
-/** The port the Electron shell's static server would have been given. */
+/** A port the shell's static server could have been given by the kernel. */
 async function freeLoopbackOrigin() {
   const probe = createServer();
   const port = await new Promise((resolve, reject) => {
@@ -53,7 +51,9 @@ async function freeLoopbackOrigin() {
   await new Promise((resolve) => probe.close(resolve));
   return `http://127.0.0.1:${port}`;
 }
-const ELECTRON = await freeLoopbackOrigin();
+const NATIVE = await freeLoopbackOrigin();
+/** A second shell origin: the same rule on a different kernel-assigned port. */
+const SECOND = await freeLoopbackOrigin();
 
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
@@ -83,7 +83,7 @@ async function startHost() {
       "--allow-origin",
       NATIVE,
       "--allow-origin",
-      ELECTRON,
+      SECOND,
       "--allow-origin",
       BROWSER,
     ],
@@ -174,9 +174,9 @@ try {
   const browserHello = await hello(BROWSER);
   assert.ok(!browserHello.capabilities.includes("identity.native-session.v1"));
   assert.ok(!browserHello.capabilities.includes("settings.documents.v1"));
-  // The Electron shell's loopback HTTP origin is offered the same surfaces as
-  // the Tauri one, and still never the cookie session.
-  const electronHello = await hello(ELECTRON);
+  // A second loopback HTTP origin is offered the same surfaces, and still
+  // never the cookie session: the rule is not tied to one port.
+  const electronHello = await hello(SECOND);
   assert.ok(electronHello.capabilities.includes("identity.native-session.v1"));
   assert.ok(electronHello.capabilities.includes("settings.documents.v1"));
   assert.ok(
@@ -329,15 +329,14 @@ try {
   assert.ok(!credentials.signedIn);
   assert.equal(await rawCurrent(NATIVE, lastAccess), 401);
 
-  // 8. The Electron shape: the very same flow on the shell's loopback HTTP
-  //    origin, with no custom scheme anywhere. Raw requests, because the
-  //    host-client transport still spells out the Tauri origins.
-  const electronTicket = JSON.parse(mint(ELECTRON));
-  assert.equal(electronTicket.origin, ELECTRON);
+  // 8. The same flow on a second shell origin, over raw requests: a shell
+  //    origin is any loopback HTTP origin the operator allowed, not one port.
+  const electronTicket = JSON.parse(mint(SECOND));
+  assert.equal(electronTicket.origin, SECOND);
   const stolen = await rawPair(BROWSER, electronTicket);
   assert.equal(stolen.status, 403);
   assert.equal(stolen.code, "PERMISSION_DENIED");
-  const electronPair = await rawPair(ELECTRON, electronTicket);
+  const electronPair = await rawPair(SECOND, electronTicket);
   assert.equal(electronPair.status, 200);
   assert.equal(electronPair.cookies.length, 0);
   const electronSession = fromBinary(
@@ -347,17 +346,17 @@ try {
   assert.equal(electronSession.device.displayName, "本机桌面");
   const electronAccess = electronSession.native?.accessToken ?? "";
   assert.ok(electronAccess);
-  assert.equal(await rawCurrent(ELECTRON, electronAccess), 200);
-  assert.equal(await rawCurrent(ELECTRON, ""), 401);
+  assert.equal(await rawCurrent(SECOND, electronAccess), 200);
+  assert.equal(await rawCurrent(SECOND, ""), 401);
   // The session is bound to its origin, and the browser origin is still
   // stopped at the gate.
   assert.equal(await rawCurrent(NATIVE, electronAccess), 401);
   assert.equal(await rawCurrent(BROWSER, electronAccess), 403);
   // The ticket was consumed by the one origin that could spend it.
-  assert.equal((await rawPair(ELECTRON, electronTicket)).status, 401);
+  assert.equal((await rawPair(SECOND, electronTicket)).status, 401);
 
   console.log(
-    "PASS: shell origin (Tauri scheme and loopback HTTP) + control-channel ticket → bearer session → ListDevices; browser origin refused the same ticket; ticket single-use; no bearer, no session; logout revokes.",
+    "PASS: shell origin (loopback HTTP, two different ports) + control-channel ticket → bearer session → ListDevices; browser origin refused the same ticket; ticket single-use; no bearer, no session; logout revokes.",
   );
 } finally {
   await stopHost();

@@ -20,10 +20,9 @@
   <body>
     <div id="root"></div>
     <!--
-      `data-tauri` 由桌面壳注入（src-tauri/src/main.rs 的 on_page_load），
-      不写在这里：CSP 是 `default-src 'self'`，内联脚本会被挡掉，而 webview 的
-      `eval` 不受 CSP 约束、且每次页面加载都会重新打上。浏览器里没有这个属性，
-      侧栏回退成纯色 `--panel`（见 styles/tokens.css 末尾的 html[data-tauri]）。
+      `data-desktop` 由桌面壳的 preload 在页面脚本之前打上，不写在这里：CSP 是
+      `default-src 'self'`，内联脚本会被挡掉。浏览器里没有这个属性，侧栏回退成
+      纯色 `--panel`（见 styles/tokens.css 末尾的 html[data-desktop]）。
     -->
     <script type="module" src="/src/main.tsx"></script>
   </body>

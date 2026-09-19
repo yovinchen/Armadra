@@ -59,7 +59,7 @@ afterEach(() => {
   activate.mockReset();
 });
 
-describe("Windows Tauri internal pointer drag", () => {
+describe("Windows internal pointer drag", () => {
   it("uses a threshold, sends one typed drop and suppresses the trailing click", () => {
     render(<Fixture />);
     const source = screen.getByRole("button", { name: "file" });

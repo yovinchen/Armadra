@@ -40,7 +40,7 @@ import {
 
 /* ------------------------------ 纯分流函数 -------------------------------- */
 
-/** 有真实路径时按扩展名认图片（Tauri 的拖放只给路径，没有 MIME）。 */
+/** 有真实路径时按扩展名认图片（OS 拖放只给路径，没有 MIME）。 */
 export const IMAGE_EXTENSIONS: ReadonlySet<string> = new Set([
   "png",
   "jpg",
@@ -91,7 +91,7 @@ export function routeFile(file: { name: string; type: string }): FileRoute {
 }
 
 /**
- * Tauri 给的真实路径走哪条路。目录 → `files` 节点，其余 → `editor` 节点。
+ * OS 拖放给的真实路径走哪条路。目录 → `files` 节点，其余 → `editor` 节点。
  *
  * 图片不走这里：它们在 `addNodeForPath` 里被 `importAsset` 截胡，变成 image
  * shape（§8 Phase 3 / asset-import）。

@@ -1,14 +1,3 @@
-/**
- * The fixed page origins a packaged Tauri shell presents: its own scheme on
- * macOS / Linux and the two WebView2 spellings on Windows. They go away with
- * that shell (docs/design/electron-migration.md §2.1, W5).
- */
-export const NATIVE_PAGE_ORIGINS = [
-  "tauri://localhost",
-  "http://tauri.localhost",
-  "https://tauri.localhost",
-] as const;
-
 /** Loopback as the Host reads it: `localhost`, `::1`, or any `127.0.0.0/8`. */
 function loopbackHost(hostname: string): boolean {
   return (
@@ -22,10 +11,10 @@ function loopbackHost(hostname: string): boolean {
  * Whether a page origin is one a desktop shell presents, and therefore one the
  * native session transport (docs/design/host-native-session.md §3) is for.
  *
- * Two shapes: the Tauri spellings above, and any loopback HTTP origin — the
- * Electron shell serves its page from a static server on a kernel-assigned
- * port, so there is no constant left to compare against. What makes a loopback
- * HTTP origin a shell origin is that nothing off this machine can be behind it.
+ * One shape: any loopback HTTP origin. The shell serves its page from a static
+ * server on a kernel-assigned port, so there is no constant to compare
+ * against; what makes a loopback HTTP origin a shell origin is that nothing
+ * off this machine can be behind it.
  *
  * This is a spelling check, not an authorization, and it is deliberately the
  * same rule the Host applies in `apps/host/internal/server/native.go`. An
@@ -35,7 +24,6 @@ function loopbackHost(hostname: string): boolean {
  */
 export function isNativePageOrigin(origin: string | undefined): boolean {
   if (typeof origin !== "string" || origin === "") return false;
-  if ((NATIVE_PAGE_ORIGINS as readonly string[]).includes(origin)) return true;
   let url: URL;
   try {
     url = new URL(origin);

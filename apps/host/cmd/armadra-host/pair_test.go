@@ -156,9 +156,8 @@ func TestPlainHTTPHostRefusesBrowserPairing(t *testing.T) {
 		t.Fatal("HTTP-only Host issued unusable cookie credentials")
 	}
 	// A desktop shell origin the operator did not allow is not an audience
-	// either: the ticket could never be spent on this listener. That holds
-	// for both shell shapes — the Tauri scheme and a loopback HTTP origin.
-	for _, origin := range []string{"tauri://localhost", "http://127.0.0.1:54321"} {
+	// either: the ticket could never be spent on this listener.
+	for _, origin := range []string{"http://127.0.0.1:54321", "http://localhost:61000"} {
 		if _, err := pairProcess(t, []string{"pair", "--data-dir", c.dataDir, "--origin", origin, "--device-name", "本机桌面"}); err == nil {
 			t.Fatalf("HTTP-only Host issued a native ticket for %s, an origin it does not serve", origin)
 		}
@@ -169,7 +168,7 @@ func TestPlainHTTPHostRefusesBrowserPairing(t *testing.T) {
 // mints native tickets for it, and the ticket buys a bearer session over that
 // same listener (docs/design/host-native-session.md §2).
 func TestPlainHTTPHostPairsTheAllowedNativeOrigin(t *testing.T) {
-	c, err := parseConfig([]string{"serve", "--data-dir", t.TempDir(), "--listen", "127.0.0.1:0", "--allow-origin", "tauri://localhost", "--allow-origin", "https://armadra.example"})
+	c, err := parseConfig([]string{"serve", "--data-dir", t.TempDir(), "--listen", "127.0.0.1:0", "--allow-origin", "http://127.0.0.1:54321", "--allow-origin", "https://armadra.example"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,12 +176,12 @@ func TestPlainHTTPHostPairsTheAllowedNativeOrigin(t *testing.T) {
 	if _, err := pairProcess(t, []string{"pair", "--data-dir", c.dataDir, "--origin", "https://armadra.example", "--device-name", "browser"}); err == nil {
 		t.Fatal("plain Host issued a ticket to a browser origin")
 	}
-	wire, err := pairProcess(t, []string{"pair", "--data-dir", c.dataDir, "--origin", "tauri://localhost", "--device-name", "本机桌面", "--output", "protobuf"})
+	wire, err := pairProcess(t, []string{"pair", "--data-dir", c.dataDir, "--origin", "http://127.0.0.1:54321", "--device-name", "本机桌面", "--output", "protobuf"})
 	if err != nil {
 		t.Fatal("native pair subprocess failed")
 	}
 	ticket := new(pb.BootstrapTicketResponse)
-	if proto.Unmarshal(wire, ticket) != nil || ticket.HostId != status.HostId || ticket.HostInstanceId != status.HostInstanceId || ticket.Origin != "tauri://localhost" || ticket.Ticket == "" {
+	if proto.Unmarshal(wire, ticket) != nil || ticket.HostId != status.HostId || ticket.HostInstanceId != status.HostInstanceId || ticket.Origin != "http://127.0.0.1:54321" || ticket.Ticket == "" {
 		t.Fatal("CLI returned an invalid native ticket")
 	}
 	client := &http.Client{Timeout: 3 * time.Second}
@@ -207,18 +206,18 @@ func TestPlainHTTPHostPairsTheAllowedNativeOrigin(t *testing.T) {
 	if code, _ := request("https://armadra.example", "Pair", pair, ""); code != 403 {
 		t.Fatalf("browser origin spent a native ticket: %d", code)
 	}
-	code, body := request("tauri://localhost", "Pair", pair, "")
+	code, body := request("http://127.0.0.1:54321", "Pair", pair, "")
 	session := new(pb.AuthenticatedSession)
 	if code != 200 || proto.Unmarshal(body, session) != nil || session.Native == nil || session.Device.DisplayName != "本机桌面" {
 		t.Fatalf("native origin could not consume the CLI ticket: %d", code)
 	}
-	if code, _ = request("tauri://localhost", "Pair", pair, ""); code != 401 {
+	if code, _ = request("http://127.0.0.1:54321", "Pair", pair, ""); code != 401 {
 		t.Fatalf("ticket was consumable twice: %d", code)
 	}
-	if code, _ = request("tauri://localhost", "Current", &pb.CurrentSessionRequest{}, session.Native.AccessToken); code != 200 {
+	if code, _ = request("http://127.0.0.1:54321", "Current", &pb.CurrentSessionRequest{}, session.Native.AccessToken); code != 200 {
 		t.Fatalf("bearer did not restore the native session: %d", code)
 	}
-	if code, _ = request("tauri://localhost", "Current", &pb.CurrentSessionRequest{}, ""); code != 401 {
+	if code, _ = request("http://127.0.0.1:54321", "Current", &pb.CurrentSessionRequest{}, ""); code != 401 {
 		t.Fatalf("a native request without a bearer authenticated: %d", code)
 	}
 }

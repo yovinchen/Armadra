@@ -466,9 +466,9 @@ func serveHost(parent context.Context, c config) (err error) {
 				// Host — a desktop shell origin the operator allowed, which
 				// the shell then trades for a bearer session over that
 				// listener (docs/design/host-native-session.md §2). A shell
-				// origin is a Tauri scheme or a loopback HTTP origin; a plain
-				// Host still refuses every origin off this machine, because
-				// it could never set their cookies.
+				// origin is a loopback HTTP origin; a plain Host still refuses
+				// every origin off this machine, because it could never set
+				// their cookies.
 				native := c.publicOrigin == "" && listener != nil && server.NativeOrigin(request.Origin) && slices.Contains(c.origins, request.Origin)
 				if !native && (c.publicOrigin == "" || request.Origin != c.publicOrigin) {
 					return nil, auth.ErrPermission

@@ -8,7 +8,7 @@
  * halves (`desktop-bridge-shell.d.ts`, `desktop-bridge-updates.d.ts`) — a declaration for a method the
  * preload does not expose is worse than no declaration, because it typechecks.
  *
- * The bridge is absent in a browser and in the Tauri shell, so every field is
+ * The bridge is absent in a browser, so every field is
  * reached through an optional chain and every caller has a fallback.
  */
 

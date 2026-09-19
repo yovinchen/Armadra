@@ -44,8 +44,8 @@ try {
 
 ## 原生传输
 
-`HostIdentityClient` 默认是浏览器 Cookie 传输：基址必须是 HTTPS 且与页面同源。打包桌面壳的页面来源
-（`tauri://localhost`、`http(s)://tauri.localhost`）传 `transport: { kind: "native", credentials }`：
+`HostIdentityClient` 默认是浏览器 Cookie 传输：基址必须是 HTTPS 且与页面同源。桌面壳的页面来源
+（壳静态服务的回环 HTTP 来源）传 `transport: { kind: "native", credentials }`：
 只接受回环 HTTP 基址 + 原生页面来源这一种组合，access / refresh 以 `Authorization: Bearer` 发送、
 `credentials: "omit"`，并放在一份共享的 `HostNativeCredentials` 里（页面内存，不落存储）。
 多个客户端共用同一份凭据时经它的串行队列排队，轮转不会互相作废；`resume()` 在没有凭据或凭据被

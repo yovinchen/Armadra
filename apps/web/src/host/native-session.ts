@@ -6,8 +6,6 @@ import {
   type HostIdentityClientOptions,
 } from "@armadra/host-client";
 
-import { isTauri } from "../platform";
-
 /**
  * 页面拿 Host 会话的共用判定（桌面壳原生 Host 会话 §4.3）。
  *
@@ -16,11 +14,10 @@ import { isTauri } from "../platform";
  * `Authorization: Bearer`、凭据只在页面内存里；票据由壳经 OS 私有控制通道
  * 取得，页面只能要一张票，要不到配对本身。
  *
- * 「在壳里」= 有壳的桥（Electron 的 `window.armadra` 或 Tauri 的 IPC），
- * 且页面来源是壳能呈现的来源（`isNativePageOrigin`：三个 Tauri 拼写 ∪
- * 回环 HTTP）。Electron 壳的静态服务端口由内核分配，所以来源判定不可能是
- * 常量；Cookie 不按端口隔离（electron-migration §2.1），这正是票据链必须
- * 保留、而不是换成 Cookie 会话的原因。
+ * 「在壳里」= 有壳的桥（`window.armadra.identity`），且页面来源是壳能呈现的
+ * 来源（`isNativePageOrigin`：回环 HTTP）。壳的静态服务端口由内核分配，所以
+ * 来源判定不可能是常量；Cookie 不按端口隔离（electron-migration §2.1），这
+ * 正是票据链必须保留、而不是换成 Cookie 会话的原因。
  *
  * 九个需要会话的模块都从这里拿判定、能力名和客户端，所以「壳内要不要
  * 自动登录」只在这一处决定。
@@ -35,7 +32,7 @@ export const NATIVE_SESSION_CAPABILITY = "identity.native-session.v1";
 export type HostSessionBlock = "tlsRequired" | "sameOrigin";
 
 /**
- * 壳取票失败的原因。前五个是壳报的稳定标记（两种壳同一套），
+ * 壳取票失败的原因。前五个是壳报的稳定标记，
  * `shellUnavailable` 是页面这边的：不在壳里、通道不存在或返回了认不出的东西。
  */
 export const NATIVE_SESSION_FAILURES = [
@@ -65,8 +62,8 @@ export interface NativeTicket {
 }
 
 /**
- * 页面来源，按 Host 在 `Origin` 头里看到的拼法。`URL.origin` 对 `tauri:`
- * 这种非特殊 scheme 是 `"null"`，所以从 protocol 和 host 拼。
+ * 页面来源，按 Host 在 `Origin` 头里看到的拼法。`URL.origin` 对非特殊 scheme
+ * 是 `"null"`，所以在那种情况下从 protocol 和 host 拼。
  */
 export function pageOrigin(): string | undefined {
   const location = globalThis.location;
@@ -77,7 +74,7 @@ export function pageOrigin(): string | undefined {
   return undefined;
 }
 
-/** Electron 壳的取票桥；不在 Electron 壳里是 `undefined`。 */
+/** 壳的取票桥；不在壳里是 `undefined`。 */
 function ticketBridge(): { ticket(): Promise<unknown> } | undefined {
   const identity = globalThis.window?.armadra?.identity;
   return typeof identity?.ticket === "function" ? identity : undefined;
@@ -90,8 +87,7 @@ function ticketBridge(): { ticket(): Promise<unknown> } | undefined {
  * 拿不到票），光有壳也不够（壳的开发模式可能把页面指向别处）。
  */
 export function isNativeShell(): boolean {
-  const inShell = isTauri() || ticketBridge() !== undefined;
-  return inShell && isNativePageOrigin(pageOrigin());
+  return ticketBridge() !== undefined && isNativePageOrigin(pageOrigin());
 }
 
 function loopbackHost(hostname: string): boolean {
@@ -112,8 +108,8 @@ export function hostSessionBlock(address: string): HostSessionBlock | null {
   }
   if (isNativeShell()) {
     if (url.protocol === "http:" && loopbackHost(url.hostname)) return null;
-    // 壳里配了一个远端地址：HTTPS 同源在 tauri:// 页面上不可能成立，
-    // 明说而不是假装能登录。
+    // 壳里配了一个远端地址：页面自己停在回环 HTTP 来源上，HTTPS 同源不可能
+    // 成立，明说而不是假装能登录。
     return url.protocol === "https:" ? "sameOrigin" : "tlsRequired";
   }
   if (url.protocol !== "https:") return "tlsRequired";
@@ -187,21 +183,17 @@ function validTicket(value: unknown): value is NativeTicket {
 /**
  * 向壳要一张一次性票据。
  *
- * 两种壳各有自己的通道，失败原因是同一套稳定标记，i18n 键因此不变：
- *   Electron  `window.armadra.identity.ticket()`，拒绝是返回值里的
- *             `{ ok: false, error: { code } }`——Electron 会把 `handle` 的
- *             拒绝压成一句话，结构留不下来。
- *   Tauri     `invoke("host_native_ticket")`，拒绝带 `reason`。
+ * 通道是 `window.armadra.identity.ticket()`，拒绝是返回值里的
+ * `{ ok: false, error: { code } }`——Electron 会把 `handle` 的拒绝压成一句话，
+ * 结构留不下来，所以拒绝走返回值而不是异常。
  *
  * 认不出的东西一律 `shellUnavailable`。票据不进日志、不进存储，原样交给
  * `pair()`。
  */
 export async function fetchNativeTicket(): Promise<string> {
-  if (!isNativeShell()) throw new HostNativeSessionError("shellUnavailable");
-  const bridge = ticketBridge();
-  const ticket = bridge
-    ? await ticketFromBridge(bridge)
-    : await ticketFromTauri();
+  const bridge = isNativeShell() ? ticketBridge() : undefined;
+  if (!bridge) throw new HostNativeSessionError("shellUnavailable");
+  const ticket = await ticketFromBridge(bridge);
   if (!validTicket(ticket)) throw new HostNativeSessionError("malformed");
   return JSON.stringify(ticket);
 }
@@ -225,26 +217,6 @@ async function ticketFromBridge(bridge: {
   if (result.ok === true) return result.ticket;
   const code = result.error?.code;
   throw new HostNativeSessionError(isFailure(code) ? code : "shellUnavailable");
-}
-
-async function ticketFromTauri(): Promise<unknown> {
-  let invoke: typeof import("@tauri-apps/api/core").invoke;
-  try {
-    ({ invoke } = await import("@tauri-apps/api/core"));
-  } catch {
-    throw new HostNativeSessionError("shellUnavailable");
-  }
-  try {
-    return await invoke("host_native_ticket");
-  } catch (cause) {
-    const reason =
-      cause && typeof cause === "object"
-        ? (cause as { reason?: unknown }).reason
-        : undefined;
-    throw new HostNativeSessionError(
-      isFailure(reason) ? reason : "shellUnavailable",
-    );
-  }
 }
 
 /** 壳取票失败对应的文案键；不是壳的失败返回 `null`。 */

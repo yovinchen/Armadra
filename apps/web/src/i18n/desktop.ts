@@ -6,7 +6,7 @@ import type { MessageModule } from "./index";
  * 这个模块的读者不止页面——Electron 主进程**直接 import 这个文件**
  * （`apps/desktop/src/main/tray.ts`、`menu.ts`），经 `app:locale` 选一种语言
  * 取词。迁移设计 §2.3 的最后一条要的就是这个：壳里原本硬编码在
- * `src-tauri/src/usage.rs`、`updates/notify.rs` 里的中英两套串搬到这里来，
+ * 旧壳的 Rust 源码里硬编码的中英两套串搬到这里来，
  * 壳不再有自己的第二份消息目录。
  *
  * 因此这个文件只允许 `import type`：主进程的 bundle 会把它整个打进去，

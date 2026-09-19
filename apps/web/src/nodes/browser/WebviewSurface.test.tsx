@@ -42,7 +42,6 @@ vi.mock("@/store/canvas-store", () => {
 
 vi.mock("@/platform", () => ({
   openExternal: vi.fn(),
-  isTauri: vi.fn(() => false),
   pickFiles: vi.fn(async () => [] as string[]),
 }));
 

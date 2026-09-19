@@ -6,20 +6,17 @@
  * installer, so it says so rather than pretending: the settings page then
  * shows the Host's answer and how to install by hand.
  *
- * There are two desktop shells during the migration, and this module is where
- * the page stops caring which one it is running in. Electron is asked through
- * `window.armadra.updates` (the preload bridge, typed in
- * `../platform/desktop-bridge-updates.d.ts`); Tauri is asked through `invoke`,
- * unchanged. Both answer the same eleven states with the same tokens — the
- * state machine was ported rather than re-designed — so nothing below the
- * transport, and nothing in `state.ts`, changes with the shell.
+ * The shell is asked through `window.armadra.updates` (the preload bridge,
+ * typed in `../platform/desktop-bridge-updates.d.ts`). It answers the eleven
+ * states with the tokens `state.ts` already knew: the state machine was ported
+ * from the shell this one replaced rather than re-designed, so nothing below
+ * the transport changed with it.
  *
  * The shell owns the state; this module never keeps one of its own. A page that
  * cached the answer would keep rendering "downloading" after the shell had
  * already failed, which is exactly the kind of claim this feature must not
  * make.
  */
-import { isTauri } from "../platform";
 
 /** The eleven states of design §4.1, as the shell tags them. */
 export type ShellUpdateState =
@@ -124,39 +121,28 @@ function electron(): ArmadraUpdatesBridge | null {
   return window.armadra?.updates ?? null;
 }
 
-/** Whether a desktop shell of either kind is listening. */
+/** Whether a desktop shell is listening. */
 export function hasShellUpdater(): boolean {
-  return electron() !== null || isTauri();
+  return electron() !== null;
 }
 
 /**
- * One call to whichever shell is there.
+ * One call to the shell.
  *
- * `ask` is the Electron half and `command` the Tauri one; both are given so
- * the two spellings of a single operation stay in one place instead of in two
- * parallel modules that drift. `null` means "there is no shell to ask", which
- * every caller below turns into `UNSUPPORTED_HERE` — never into an answer.
+ * `name` only ever names the operation in a console error; the call itself is
+ * `ask`. `null` means "there is no shell to ask", which every caller below
+ * turns into `UNSUPPORTED_HERE` — never into an answer.
  */
 async function shellCall<T>(
   ask: (updates: ArmadraUpdatesBridge) => Promise<unknown>,
-  command: string,
-  args?: unknown,
+  name: string,
 ): Promise<T | null> {
   const bridge = electron();
-  if (bridge !== null) {
-    try {
-      return (await ask(bridge)) as T;
-    } catch (cause) {
-      console.error(`${command} failed`, cause);
-      return null;
-    }
-  }
-  if (!isTauri()) return null;
+  if (bridge === null) return null;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    return (await invoke(command, args as never)) as T;
+    return (await ask(bridge)) as T;
   } catch (cause) {
-    console.error(`${command} failed`, cause);
+    console.error(`${name} failed`, cause);
     return null;
   }
 }
@@ -179,7 +165,6 @@ export async function shellCheck(
     (await shellCall<ShellUpdateState>(
       (updates) => updates.check(verdict),
       "updates_check",
-      { verdict },
     )) ?? UNSUPPORTED_HERE
   );
 }
@@ -197,9 +182,9 @@ export async function shellDismiss(): Promise<ShellUpdateState> {
 /**
  * Stops the transfer in flight and goes back to the offer.
  *
- * The bytes are discarded rather than kept: Tauri cannot resume, so a partial
- * package is not a head start on anything — it is a file that would have to be
- * fetched again in full.
+ * The bytes are discarded rather than kept: the transfer cannot resume, so a
+ * partial package is not a head start on anything — it is a file that would
+ * have to be fetched again in full.
  */
 export async function shellCancel(): Promise<ShellUpdateState> {
   return (
@@ -260,10 +245,8 @@ export function onShellProgress(
   callback: (progress: ShellProgress) => void,
 ): () => void {
   const bridge = electron();
-  if (bridge !== null) {
-    return bridge.onProgress((progress) => callback(progress as ShellProgress));
-  }
-  return onTauriEvent("updates://progress", callback);
+  if (bridge === null) return () => undefined;
+  return bridge.onProgress((progress) => callback(progress as ShellProgress));
 }
 
 /**
@@ -271,37 +254,14 @@ export function onShellProgress(
  * and the notification come from. The page uses it to re-read the state after
  * an `autoDownload` transfer nobody was watching.
  *
- * The Electron shell keeps `autoDownload` off, so no transfer finishes that
- * the page did not ask for and there is nothing to be told about: the IPC
- * table of migration design §2.2 declares no `updates:staged`, and this
- * subscription is a no-op there rather than a channel invented to fill it.
- * The shell's own tray subscribes in the main process instead
- * (`installUpdates(...).onStaged`).
+ * The shell keeps `autoDownload` off, so no transfer finishes that the page did
+ * not ask for and there is nothing to be told about: the IPC table of migration
+ * design §2.2 declares no `updates:staged`, and this subscription is a no-op
+ * rather than a channel invented to fill it. The shell's own tray subscribes in
+ * the main process instead (`installUpdates(...).onStaged`).
  */
 export function onShellStaged(
-  callback: (staged: ShellStaged) => void,
+  _callback: (staged: ShellStaged) => void,
 ): () => void {
-  if (electron() !== null) return () => undefined;
-  return onTauriEvent("updates://staged", callback);
-}
-
-function onTauriEvent<T>(name: string, callback: (payload: T) => void) {
-  if (!isTauri()) return () => undefined;
-  let unlisten: (() => void) | null = null;
-  let cancelled = false;
-  void (async () => {
-    try {
-      const { listen } = await import("@tauri-apps/api/event");
-      const stop = await listen<T>(name, (event) => callback(event.payload));
-      if (cancelled) stop();
-      else unlisten = stop;
-    } catch (cause) {
-      console.error(`listening to ${name} failed`, cause);
-    }
-  })();
-  return () => {
-    cancelled = true;
-    unlisten?.();
-    unlisten = null;
-  };
+  return () => undefined;
 }

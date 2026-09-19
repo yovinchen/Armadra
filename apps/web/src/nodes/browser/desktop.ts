@@ -3,12 +3,12 @@
  *
  * 壳的 preload 是页面能拿到 `window.armadra` 的唯一来源（`apps/desktop/src/
  * preload/index.ts`），所以它在不在就是「宿主有没有 `<webview>`」的充要条件。
- * W5 会把 `isTauri()` 的 14 个调用点一起换成统一的 `isDesktop()`；在那之前这
+ * W5 已经把所有调用点统一成 `isDesktop()`；在此之前这
  * 个判定只服务浏览器节点，**故意**留在本目录里而不是 `@/platform`——W3.5 之
  * 前旧的 screencast 路径是唯一回退，两条路必须能各自独立地开关。
  */
 
-/** 壳在不在。浏览器、Node 测试环境与 Tauri 壳都是 false。 */
+/** 壳在不在。浏览器与 Node 测试环境都是 false。 */
 export function isDesktopShell(): boolean {
   return (
     typeof window !== "undefined" &&

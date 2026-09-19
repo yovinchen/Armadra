@@ -6,7 +6,7 @@ import { BROWSER_DISCARD_MS, shouldDiscard } from "./discard";
 
 describe("isDesktopShell", () => {
   it("是 false，除非 preload 把 window.armadra 装上去了", () => {
-    // jsdom 里没有壳。这一条同时钉住「浏览器与 Tauri 壳走旧路径」：判定为假
+    // jsdom 里没有壳。这一条同时钉住「浏览器走旧路径」：判定为假
     // 时 `BrowserNode` 一个 `<webview>` 都不渲染。
     expect(isDesktopShell()).toBe(false);
     (window as unknown as { armadra?: unknown }).armadra = {};

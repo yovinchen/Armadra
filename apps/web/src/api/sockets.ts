@@ -4,15 +4,15 @@ import { RUNTIME_URL, query } from "./request";
 /* ------------------------------- WebSocket URL ---------------------------- */
 
 /**
- * WebSocket 的基址不一定等于 HTTP 的基址：打包桌面壳里 HTTP 走 `armadra://`
- * 自定义协议，而 ws 只能走壳开的回环转发端口（roadmap §4.4）。端口每次启动随机，
- * 所以由 {@link initRuntimeSockets} 在建立任何 socket 之前问一次壳。
+ * WebSocket 的基址不一定等于 HTTP 的基址：桌面壳里 Runtime 的端口由内核分配，
+ * 两个基址都由壳在页面加载前一并给出（electron-migration §2.1）。由
+ * {@link initRuntimeSockets} 在建立任何 socket 之前定下来。
  */
 let socketBase = RUNTIME_URL;
 
-/** 应用启动时调用一次；失败时保持 HTTP 基址，浏览器模式下二者本来就相同。 */
+/** 应用启动时调用一次；壳之外保持 HTTP 基址，二者本来就相同。 */
 export async function initRuntimeSockets(): Promise<string> {
-  socketBase = await resolveSocketBase(RUNTIME_URL);
+  socketBase = resolveSocketBase(RUNTIME_URL);
   return socketBase;
 }
 

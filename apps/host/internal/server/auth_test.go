@@ -262,7 +262,7 @@ func TestAuthRejectsWrongOriginAuthorityAndPlainHTTP(t *testing.T) {
 
 func TestMetadataAllowlistCannotEnableCrossOriginAuthentication(t *testing.T) {
 	f := newAuthFixture(t)
-	for _, other := range []string{"https://other.example", "http://localhost:1420", "tauri://localhost"} {
+	for _, other := range []string{"https://other.example", "http://localhost:1420", "http://127.0.0.1:54321"} {
 		handler, err := NewHandlerWithOptions(Identity{HostID: authHost, InstanceID: authInstance}, Options{Identity: f.identity, PublicOrigin: f.origin, AllowedOrigins: []string{other}})
 		if err != nil {
 			t.Fatal(err)

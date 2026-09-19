@@ -1,10 +1,10 @@
 /**
- * 和弦写法 → Tauri accelerator。
+ * 和弦写法 → `shortcuts:apply` 线上的 accelerator 写法。
  *
  * 系统热键由操作系统注册，而系统不认识这套键位表的写法，所以中间必须有一次
  * 翻译。两边的差别不大但都不能错：
  *
- * | 这里            | Tauri accelerator |
+ * | 这里            | accelerator       |
  * | --------------- | ----------------- |
  * | `Mod`           | `CmdOrCtrl`       |
  * | `Alt` / `Option`| `Alt`             |
@@ -13,8 +13,9 @@
  * | `k`             | `KeyK`… 不，`K`   |
  *
  * 一条翻不出来的和弦返回 `null` 而不是一个「差不多」的串：装错一个全局热键
- * 是从整台机器上抢走一个组合键，宁可不装。壳那边（`src/shortcuts.rs`）会再
- * 解析一次，两道判定的样本在 `tests/shortcuts.rs` 里对齐。
+ * 是从整台机器上抢走一个组合键，宁可不装。壳那边
+ * （`apps/desktop/src/shell-core/accelerator.ts`）把剩下的差异补完，两道判定
+ * 的样本在 `apps/desktop/src/shell-core/shortcut-rules.test.ts` 里对齐。
  */
 
 /**

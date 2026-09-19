@@ -3,11 +3,10 @@ import { dragRegionProps } from "./window-region";
 
 /**
  * 全局顶部拖拽条：窗口最上面这 44px 就是标题栏，空白处按住能拖走整个窗口
- * （macOS 上双击还原 / 最大化，由 Tauri 自己接管）。
+ * （macOS 上双击还原 / 最大化，由壳自己接管）。
  *
- * 它是一个**空**的铺满元素——Tauri 的 `data-tauri-drag-region` 只认元素自己
- * 身上的 mousedown，而 Electron 的 `-webkit-app-region: drag` 会往下继承，
- * 两头都要求这里不放任何子节点。具体挂什么由 `dragRegionProps()` 按壳决定。启动页、画布 + 侧栏展开、侧栏收起
+ * 它是一个**空**的铺满元素——`-webkit-app-region: drag` 会往下继承，任何子节点
+ * 都会跟着变成拖拽区。具体挂什么由 `dragRegionProps()` 决定。启动页、画布 + 侧栏展开、侧栏收起
  * 三种状态下都渲染同一条，左上角红绿灯右侧、侧栏顶栏、画布上方那 44px
  * 于是处处可拖。
  *

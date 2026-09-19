@@ -37,7 +37,7 @@ export type UpdatesViewState =
  * What a person may do from here. The page renders these in order.
  *
  * "cancel" stops a transfer by dropping the future the updater is running in —
- * Tauri hands out no abort handle, so that is the whole of the mechanism. It
+ * the updater hands out no abort handle, so that is the whole of the mechanism. It
  * really does stop the bytes arriving, and it really does throw them away:
  * there is no resume, so the button says "cancel", not "pause".
  */

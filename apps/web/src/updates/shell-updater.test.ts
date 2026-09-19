@@ -79,13 +79,10 @@ beforeEach(() => {
   progressListener = null;
   unsubscribed = 0;
   expose(null);
-  // No Tauri either, unless a test says otherwise.
-  Reflect.deleteProperty(globalThis as object, "__TAURI_INTERNALS__");
 });
 
 afterEach(() => {
   expose(null);
-  Reflect.deleteProperty(globalThis as object, "__TAURI_INTERNALS__");
   vi.restoreAllMocks();
 });
 
@@ -130,7 +127,7 @@ it("the electron shell answers all seven commands through window.armadra", async
     "install",
     "restartReport",
   ]);
-  // The verdict travels as one argument, not as Tauri's `{ verdict }` wrapper.
+  // The verdict travels as one argument, not wrapped in an object.
   expect(calls[1]?.[1]).toEqual(verdict());
 });
 
@@ -169,24 +166,4 @@ it("the staged announcement is not a renderer channel in electron", () => {
     throw new Error("nothing should announce here");
   });
   expect(stop()).toBeUndefined();
-});
-
-it("tauri is still asked by command name when there is no bridge", async () => {
-  Object.defineProperty(globalThis, "__TAURI_INTERNALS__", {
-    value: {},
-    configurable: true,
-    writable: true,
-  });
-  const invoked: [string, unknown][] = [];
-  vi.doMock("@tauri-apps/api/core", () => ({
-    invoke: async (command: string, args: unknown) => {
-      invoked.push([command, args]);
-      return { state: "idle" };
-    },
-  }));
-
-  expect(hasShellUpdater()).toBe(true);
-  expect(await shellCheck(verdict())).toEqual({ state: "idle" });
-  expect(invoked).toEqual([["updates_check", { verdict: verdict() }]]);
-  vi.doUnmock("@tauri-apps/api/core");
 });

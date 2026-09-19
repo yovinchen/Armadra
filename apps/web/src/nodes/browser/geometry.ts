@@ -94,7 +94,6 @@ export function bandwidthClass(
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
     hostname === "[::1]" ||
-    hostname === "tauri.localhost" ||
     hostname === "";
   return loopback ? "lan" : "wan";
 }
