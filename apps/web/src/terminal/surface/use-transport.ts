@@ -134,9 +134,15 @@ export function useTerminalTransport(
             exitCode,
             binding: null,
           });
-          useCanvasStore.getState().updateNodeData(nodeId, {
-            lastExitCode: exitCode,
-          });
+          // 与会话 id 同理（`use-session.ts`）：退出码要存盘，但它是进程报上来
+          // 的，不是用户改的，不进撤销栈。
+          useCanvasStore
+            .getState()
+            .updateNodeData(
+              nodeId,
+              { lastExitCode: exitCode },
+              { history: "ignore" },
+            );
         },
         onWarning: (message) => {
           if (!disposed) patch({ error: message });

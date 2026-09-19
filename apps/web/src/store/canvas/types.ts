@@ -139,7 +139,19 @@ export interface CanvasActions {
     id: string,
     patch: Partial<Omit<CanvasNode, "id" | "type" | "data">>,
   ) => void;
-  updateNodeData: (id: string, patch: Partial<CanvasNodeData>) => void;
+  /**
+   * 节点数据的浅合并。
+   *
+   * `options` 交给 `commit()`：运行期记账（会话 id、上一次退出码）传
+   * `history: "ignore"`——它们是终端连上来的副产物，不是用户的编辑。不这么写
+   * 的话，开一块三十个终端的板子要按三十次 ⌘Z 才碰得到自己的第一次改动
+   * （`docs/status/canvas-performance-baseline.md` §4 实测）。
+   */
+  updateNodeData: (
+    id: string,
+    patch: Partial<CanvasNodeData>,
+    options?: CommitOptions,
+  ) => void;
   /** 节点标签（画布卡片上的 chip）。 */
   setNodeLabels: (id: string, labels: string[]) => void;
   /** 节点批注（头部「评论」）。 */

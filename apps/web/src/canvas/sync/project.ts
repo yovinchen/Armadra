@@ -227,6 +227,11 @@ export function projectNodes(
   drafts: DraftMap,
   selection: Selection = EMPTY_SELECTION,
 ): CanvasFlowNode[] {
+  // TEMP-PROBE
+  const probe = ((globalThis as any).__armadraCounters ??= {});
+  probe.projectNodes = (probe.projectNodes ?? 0) + 1;
+  probe.projectedNodes =
+    (probe.projectedNodes ?? 0) + (document?.nodes.length ?? 0);
   const nodes = document?.nodes ?? [];
   const groups: CanvasFlowNode[] = [];
   const rest: CanvasFlowNode[] = [];

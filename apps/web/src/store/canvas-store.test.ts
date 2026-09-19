@@ -411,6 +411,20 @@ describe("updateNode / updateNodeData", () => {
     expect(byId(a.id)?.data).toEqual({ kind: "sticky", content: "写点什么" });
   });
 
+  it("运行期记账走 history:ignore，不进撤销栈但照样置 dirty", () => {
+    const a = makeNode("terminal", { data: { kind: "terminal" } });
+    load([a]);
+    state().updateNodeData(a.id, { sessionId: "s-1" } as never, {
+      history: "ignore",
+    });
+    expect(byId(a.id)?.data).toMatchObject({ sessionId: "s-1" });
+    // 存得下来（保存靠 dirty），但 ⌘Z 撤不到它——开一块三十个终端的板子不该
+    // 在撤销栈里先垫三十条会话记账。
+    expect(state().saveState).toBe("dirty");
+    state().undo();
+    expect(byId(a.id)?.data).toMatchObject({ sessionId: "s-1" });
+  });
+
   it("id 不存在时不产生新状态", () => {
     const a = makeNode("sticky");
     load([a]);
