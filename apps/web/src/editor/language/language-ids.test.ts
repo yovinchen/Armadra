@@ -8,8 +8,11 @@ import {
   languageIdFor,
 } from "./language-ids";
 
-/** vitest 在 `apps/web` 里跑，所以从它的工作目录出发找 Runtime 的候选表。 */
-const REGISTRY = resolve(process.cwd(), "../runtime/src/language/registry.rs");
+/** vitest 在 `apps/web` 里跑，所以从它的工作目录出发找 core 的候选表。 */
+const REGISTRY = resolve(
+  process.cwd(),
+  "../desktop/src/core/language/registry.ts",
+);
 
 describe("language ids", () => {
   it("names the language of a path and answers null for anything else", () => {
@@ -30,15 +33,16 @@ describe("language ids", () => {
   });
 
   /**
-   * 这张表和 Runtime 的候选表必须逐条对上。不一致的后果不是编译错误，而是
+   * 这张表和 core 的候选表必须逐条对上。不一致的后果不是编译错误，而是
    * 「打开了一条永远不会有诊断的会话」——Web 按一个 languageId 开会话，
-   * Runtime 按另一个找 server（语言服务设计 §4.2）。
+   * core 按另一个找 server（语言服务设计 §4.2）。读源码而不是 import：web
+   * 的类型检查与打包都不该把 core 拉进来。
    */
-  it("covers exactly the languages and extensions the runtime registry lists", () => {
+  it("covers exactly the languages and extensions the core registry lists", () => {
     const source = readFileSync(REGISTRY, "utf8");
     const rust = [
       ...source.matchAll(
-        /language_id:\s*"([^"]+)",\s*\n\s*extensions:\s*&\[([^\]]*)\]/g,
+        /languageId:\s*"([^"]+)",\s*\n\s*extensions:\s*\[([^\]]*)\]/g,
       ),
     ].map(([, languageId, extensions]) => ({
       languageId,
@@ -54,9 +58,13 @@ describe("language ids", () => {
       expect(entry.extensions).toEqual([...LANGUAGE_EXTENSIONS[index]![1]]);
     }
 
-    const names = [...source.matchAll(/\("([^"]+)",\s*"([^"]+)"\)/g)].map(
-      ([, file, languageId]) => [file, languageId],
-    );
+    // 只读 `FILE_NAMES` 那一段：`["py", "pyi"]` 这样的扩展名对形状一样。
+    const block = source.slice(source.indexOf("const FILE_NAMES"));
+    const names = [
+      ...block
+        .slice(0, block.indexOf("];"))
+        .matchAll(/\["([^"]+)",\s*"([^"]+)"\]/g),
+    ].map(([, file, languageId]) => [file, languageId]);
     expect(names).toEqual(
       LANGUAGE_FILE_NAMES.map(([file, languageId]) => [file, languageId]),
     );
