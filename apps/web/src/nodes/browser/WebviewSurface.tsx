@@ -5,12 +5,15 @@ import { IconButton } from "@/ui/icon-button";
 import { Input } from "@/ui/input";
 import { openExternal } from "@/platform";
 import { useCanvasStore } from "@/store/canvas-store";
+import { useReactFlow } from "@xyflow/react";
 import { useT } from "@/app/preferences-store";
 import { useKeybindings } from "@/keybindings";
 
 import { NodeShell } from "../NodeShell";
 import type { NodeBodyProps } from "../registry";
 import { browserPartition } from "./desktop";
+import { control, isDriven, useDrive } from "./drive";
+import { LeaseBadge } from "./Lease";
 import { useIsGhost } from "./pool";
 import { WebviewGuest } from "./WebviewGuest";
 import { WebviewTabs } from "./WebviewTabs";
@@ -49,6 +52,22 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
   const tabs = useWebviewTabs(url);
   const [address, setAddress] = React.useState(url);
   const guestRefs = React.useRef(new Map<string, WebviewElement | null>());
+
+  /* ------------------------------ 驱动通道 ------------------------------- */
+  /**
+   * 主进程能做的到不了标签，所以标签这三件事是被**请求**的，不是被执行的。
+   * 动词回的是自己重测的标签表，所以请求落没落地看得出来，不需要回执。
+   */
+  const lease = useDrive(id, {
+    onSwitchTab: (tabId) => tabs.select(tabId),
+    onOpenTab: (next) => tabs.open(next),
+    onCloseTab: (tabId) => tabs.close(tabId),
+  });
+  const driven = isDriven(lease);
+  const [leaseBusy, setLeaseBusy] = React.useState(false);
+  const flow = useReactFlow();
+  // 画布缩放，只服务右键菜单的坐标换算。跟着渲染走就够——缩放变化必然重渲。
+  const zoom = flow.getZoom();
 
   // 地址栏跟着活动标签走；人正在里面打字时不抢（焦点在 input 上就不动）。
   const addressRef = React.useRef<HTMLInputElement | null>(null);
@@ -117,9 +136,36 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
     { scopes: ["browser"], target: keyboardRoot },
   );
 
+  /**
+   * Stop 一路走到 Runtime 的租约状态机，不在这里停。
+   *
+   * 只隐藏徽标是 Critical 级 bug：那会留下一个仍然 attach 着的 debugger 和一
+   * 个用户以为已经收回的页面。撤销的两件事（丢所有权 + detach）都在远端，这
+   * 里只是按钮。
+   */
+  async function handControl(action: "takeover" | "release") {
+    setLeaseBusy(true);
+    try {
+      await control(id, action);
+    } finally {
+      setLeaseBusy(false);
+    }
+  }
+
   const active = tabs.active;
   const headerActions = (
     <>
+      {/*
+        徽标**无条件显示**，没有关掉它的设置，也不打算加：用户不能凭偏好变成
+        驱动盲。租约空闲时它说的是「没有人在操作」。
+      */}
+      <LeaseBadge
+        lease={lease}
+        deviceId="local"
+        busy={leaseBusy}
+        onTakeover={() => void handControl("takeover")}
+        onHandback={() => void handControl("release")}
+      />
       <IconButton
         label={t("browser.back")}
         disabled={!active.canGoBack}
@@ -187,11 +233,13 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
               style={tab.id === tabs.activeId ? undefined : { display: "none" }}
             >
               <WebviewGuest
+                nodeId={id}
+                zoom={zoom}
                 tab={tab}
                 partition={partition}
                 hidden={ghost || tab.id !== tabs.activeId}
                 ghost={ghost}
-                driven={false}
+                driven={driven}
                 onPatch={(change) => tabs.patch(tab.id, change)}
                 onNavigate={(next) => {
                   if (tab.id === tabs.activeId) persist(next);

@@ -50,6 +50,13 @@ export interface BrowserWiring {
 export async function installBrowser(dataDir: string): Promise<BrowserWiring> {
   configureStaging(dataDir);
   server = await startDriveServer(runVerb, (notice, nodeId, detail) => {
+    if (notice === "lease") {
+      // Straight through to the node's badge. The shell does not decide who
+      // holds a lease and does not cache one; it carries the Runtime's answer
+      // to the only process that can draw it.
+      tellRenderer({ kind: "lease", nodeId, lease: detail });
+      return;
+    }
     if (notice !== "revoke") return;
     const reason =
       typeof detail === "object" && detail !== null && "reason" in detail

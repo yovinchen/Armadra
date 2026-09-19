@@ -245,6 +245,7 @@ async fn via_shell(
         &service.sessions,
         &state.pool,
         &state.events,
+        service.client.clone(),
         &target.id,
         &target.workspace_id,
         url,

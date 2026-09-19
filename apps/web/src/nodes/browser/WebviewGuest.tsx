@@ -3,6 +3,7 @@ import * as React from "react";
 import { useT } from "@/app/preferences-store";
 
 import { BROWSER_DISCARD_MS, DISCARD_TICK_MS, shouldDiscard } from "./discard";
+import { registerGuest, reportView } from "./drive";
 import type { WebviewElement, WebviewNavigationEvent } from "./webview";
 import { allowGuestNavigation } from "./webview";
 import type { WebviewTab } from "./webview-tabs";
@@ -26,6 +27,10 @@ import type { WebviewTab } from "./webview-tabs";
  */
 
 export interface WebviewGuestProps {
+  /** 这个 guest 属于哪个画布节点。主进程用它把动词路由到这里。 */
+  nodeId: string;
+  /** 画布缩放。只用来把右键菜单的宿主坐标换算回 guest 视口坐标。 */
+  zoom: number;
   tab: WebviewTab;
   /** 创建时定一次、永不变更（探针 C）。 */
   partition: string;
@@ -33,7 +38,10 @@ export interface WebviewGuestProps {
   hidden: boolean;
   /** ghost：属于另一个工作空间／被折叠掉的节点。不回写任何事实。 */
   ghost: boolean;
-  /** Agent 正在驱动。W3.3 之前恒为 false；留着是为了让回收规则不必改。 */
+  /**
+   * Agent 正在驱动（W3.4 接通）。回收在这时被抑制：回收会销毁目标，表单、
+   * 滚动、登录后的 SPA 状态全丢，上一次 read 拿到的 ref 全部静默失效。
+   */
   driven: boolean;
   /** 元素句柄回传：工具栏的后退/前进/刷新直接调 guest 的方法。 */
   onElement(element: WebviewElement | null): void;
@@ -45,6 +53,8 @@ export interface WebviewGuestProps {
 }
 
 export function WebviewGuest({
+  nodeId,
+  zoom,
   tab,
   partition,
   hidden,
@@ -170,6 +180,66 @@ export function WebviewGuest({
       guest.removeEventListener("new-window", onNewWindow);
     };
   }, [discarded]);
+
+  /* ------------------------------ guest 注册 ----------------------------- */
+  /**
+   * `dom-ready` 之前 `getWebContentsId()` 还不存在，所以注册挂在这个事件上
+   * （[浏览器节点] §3.1）。
+   *
+   * 页面报的那个 id 主进程**不信**：它会核对 `getType() === 'webview'` 再收
+   * 下。少了那道核对，这个调用就等于「把 debugger attach 到渲染进程说的任何
+   * 东西上」，包括渲染进程自己那一个。
+   *
+   * `active` 跟着「是不是当前标签」走，并在切换时重新注册：动词永远只驱动节
+   * 点的活动画布标签，主进程靠这一位判断哪个是。ghost（属于另一个工作空间或
+   * 被折叠掉）永远不是活动标签——那是一个没人在看的页面。
+   */
+  const activeTab = !hidden && !ghost;
+  React.useEffect(() => {
+    const guest = ref.current;
+    if (!guest || discarded) return;
+    let release: (() => void) | null = null;
+    const announce = () => {
+      if (typeof guest.getWebContentsId !== "function") return;
+      const webContentsId = guest.getWebContentsId();
+      if (!webContentsId) return;
+      const box = guest.getBoundingClientRect();
+      release?.();
+      release = registerGuest({
+        webContentsId,
+        nodeId,
+        tabId: tab.id,
+        surface: "canvas",
+        active: activeTab,
+        hostX: box.x,
+        hostY: box.y,
+      });
+    };
+    guest.addEventListener("dom-ready", announce);
+    // Already ready when this effect re-runs for a tab that merely changed
+    // hands: `dom-ready` has been and gone, and waiting for another one would
+    // leave the node undrivable until it navigated.
+    announce();
+    return () => {
+      guest.removeEventListener("dom-ready", announce);
+      release?.();
+    };
+  }, [nodeId, tab.id, activeTab, discarded]);
+
+  /**
+   * 几何与缩放。主进程算不出来——React Flow 的 transform 在页面里。
+   * 它需要这两样把右键菜单的宿主窗口坐标换算回 guest 视口坐标：zoom = 2 时
+   * 实测差 282 px，不是取整能糊过去的量（webview-probe §4）。
+   */
+  React.useEffect(() => {
+    const guest = ref.current;
+    if (!guest || discarded || !activeTab) return;
+    const box = guest.getBoundingClientRect();
+    if (typeof guest.getWebContentsId !== "function") return;
+    const webContentsId = guest.getWebContentsId();
+    if (!webContentsId) return;
+    reportView({ webContentsId, hostX: box.x, hostY: box.y, zoom });
+  }, [zoom, activeTab, discarded, tab.src]);
 
   /* -------------------------------- 回收 --------------------------------- */
   const hiddenSinceRef = React.useRef<number | null>(
