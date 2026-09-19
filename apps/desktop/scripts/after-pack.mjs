@@ -2,15 +2,17 @@
  * electron-builder `afterPack` hook: puts the staged sidecar binaries into the
  * unpacked app's resources directory ourselves, with a retry.
  *
- * They used to travel as `extraResources`. On the Windows CI runners
- * electron-builder's own copy of them failed with `EBUSY: resource busy or
- * locked` — a different binary each run, still after the real-time scanner
- * was switched off, and while a rename probe a moment earlier found nothing
- * holding the file. Whatever holds it does so briefly, and electron-builder
- * copies once and gives up. This copies the same files to the same place,
- * but tries again for a bounded while before it gives up; when it does give
- * up it names the processes that have the file mapped, so the failure says
- * its cause.
+ * They — and the `out/` bundles (`bundleResources()`) — used to travel as
+ * `extraResources`. On the Windows CI runners electron-builder's own copy of
+ * them failed with `EBUSY: resource busy or locked` — a different file each
+ * run (a Rust binary, the Go binary, then a freshly built `host.cjs`), still
+ * after the real-time scanner was switched off, and while a rename probe a
+ * moment earlier found nothing holding the file. Whatever holds it does so
+ * briefly, and electron-builder copies once and gives up. This copies the
+ * same files to the same places, but tries again for a bounded while before
+ * it gives up; when it does give up it names the processes that have the
+ * file mapped, so the failure says its cause. Nothing of ours is left to
+ * `extraResources`, so the one-shot copy has nothing left to trip on.
  *
  * `afterPack` runs before signing on every platform (app-builder-lib's
  * `doPack` emits it, then `doSignAfterPack`), so a binary placed here is
@@ -21,7 +23,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { goTarget } from "./sidecar-targets.mjs";
+import { bundleResources, goTarget } from "./sidecar-targets.mjs";
 import { binariesFor } from "./stage-binaries.mjs";
 
 const app = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -116,24 +118,43 @@ export function copyWithRetry(
   }
 }
 
+/**
+ * Everything this hook places for a target: the staged binaries under their
+ * plain names, then the `out/` bundles at the paths the launchers name.
+ */
+export function placements(triple) {
+  const { extension } = goTarget(triple);
+  return [
+    ...binariesFor(triple).map((binary) => ({
+      from: join("resources", `${binary}${extension}`),
+      to: `${binary}${extension}`,
+      executable: true,
+    })),
+    ...bundleResources(triple).map((bundle) => ({
+      from: bundle.from,
+      to: bundle.to,
+      executable: false,
+    })),
+  ];
+}
+
 export default async function afterPack(context) {
   const platformName = context.electronPlatformName;
   const archName = ARCH_NAMES[context.arch] ?? process.arch;
   const triple = tripleFor(platformName, archName);
-  const { extension } = goTarget(triple);
   const resourcesDir = context.packager.getResourcesDir(context.appOutDir);
-  mkdirSync(resourcesDir, { recursive: true });
-  for (const binary of binariesFor(triple)) {
-    const name = `${binary}${extension}`;
-    const source = join(app, "resources", name);
+  for (const placement of placements(triple)) {
+    const source = join(app, placement.from);
     if (!existsSync(source)) {
       throw new Error(
-        `after-pack: ${source} is not staged; scripts/stage-binaries.mjs runs before packaging`,
+        `after-pack: ${source} is missing; stage-binaries.mjs and the electron-vite build run before packaging`,
       );
     }
-    const destination = join(resourcesDir, name);
+    const destination = join(resourcesDir, placement.to);
+    mkdirSync(dirname(destination), { recursive: true });
     copyWithRetry(source, destination);
-    if (platformName !== "win32") chmodSync(destination, 0o755);
-    console.log(`after-pack: placed ${name}`);
+    if (placement.executable && platformName !== "win32")
+      chmodSync(destination, 0o755);
+    console.log(`after-pack: placed ${placement.to}`);
   }
 }

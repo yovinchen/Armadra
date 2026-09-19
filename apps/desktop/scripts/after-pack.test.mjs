@@ -1,7 +1,9 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { copyWithRetry, tripleFor } from "./after-pack.mjs";
+import { copyWithRetry, placements, tripleFor } from "./after-pack.mjs";
+import { bundleResources } from "./sidecar-targets.mjs";
+import { binariesFor } from "./stage-binaries.mjs";
 
 test("every packaged platform/arch pair maps to the triple stage-binaries used", () => {
   assert.equal(tripleFor("darwin", "arm64"), "aarch64-apple-darwin");
@@ -65,4 +67,24 @@ test("an error that is not a sharing violation is not retried", () => {
     /gone/,
   );
   assert.equal(calls, 1);
+});
+
+test("a target's placements are its staged binaries plus its out/ bundles, nothing else", () => {
+  for (const triple of [
+    "x86_64-pc-windows-msvc",
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+  ]) {
+    const placed = placements(triple);
+    const binaries = placed.filter((p) => p.executable).map((p) => p.to);
+    const ext = triple.includes("windows") ? ".exe" : "";
+    assert.deepEqual(
+      binaries,
+      binariesFor(triple).map((b) => `${b}${ext}`),
+    );
+    assert.deepEqual(
+      placed.filter((p) => !p.executable).map((p) => `${p.from} -> ${p.to}`),
+      bundleResources(triple).map((b) => `${b.from} -> ${b.to}`),
+    );
+  }
 });

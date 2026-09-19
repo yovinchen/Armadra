@@ -46,14 +46,14 @@ export function rustSidecars(triple) {
 }
 
 /**
- * The electron-vite bundles a given target ships through `extraResources`.
+ * The electron-vite bundles a given target ships, placed by `after-pack.mjs`.
  *
  * Not binaries, and therefore not `stage-binaries.mjs`' business: they are
  * produced by `pnpm --filter @armadra/desktop build` into `out/` and copied
  * from there verbatim. They are listed here, beside `rustSidecars()`, because
  * the question they answer is the same one — *what does this platform's
  * bundle have to contain* — and because a list nothing checks drifts.
- * `sidecar-targets.test.mjs` holds this against `electron-builder.yml`.
+ * `sidecar-targets.test.mjs` holds this against `after-pack.mjs`.
  *
  * `out/session-host/host.cjs` is Windows-only for the same reason
  * `armadra-session-host` is: ConPTY sessions have to outlive the shell there,
@@ -92,9 +92,9 @@ export function targetDirectory(repository, env = {}) {
 /**
  * Where a built binary is, as Cargo and `go build` leave it.
  *
- * There is no second, staged location: electron-builder's `extraResources`
- * copies files verbatim, so `stage-binaries.mjs` reads straight from here into
- * `apps/desktop/resources/` under the binary's plain name.
+ * There is one staged location: `stage-binaries.mjs` reads straight from here
+ * into `apps/desktop/resources/` under the binary's plain name, and
+ * `after-pack.mjs` copies that into the bundle.
  */
 export function sidecarPaths({
   repository,
