@@ -10,7 +10,7 @@ import {
   minNodeSize,
   nodeMeta,
 } from "./registry";
-import { HEADER_HEIGHT, NODE_BORDER_WIDTH } from "./geometry";
+import { HEADER_HEIGHT, NODE_BORDER_WIDTH, TERMINAL_PADDING } from "./geometry";
 import { COLLAPSED_HEIGHT as STORED_COLLAPSED_HEIGHT } from "../store/defaults";
 
 /** 计划书 §3.4 的尺寸表，逐字抄一遍作为回归基线。 */
@@ -88,6 +88,21 @@ describe("node registry", () => {
     expect(HEADER_HEIGHT).toBe(30);
     expect(COLLAPSED_HEIGHT).toBe(HEADER_HEIGHT + NODE_BORDER_WIDTH * 2);
     expect(STORED_COLLAPSED_HEIGHT).toBe(COLLAPSED_HEIGHT);
+  });
+
+  /**
+   * 外壳吃掉的像素（契约 §3.4，2026-09-19）。一个默认终端 960×600 里，
+   * 头部 + 边框 + 内边距横向只拿走 10px、纵向 40px，剩下的全是 xterm 的。
+   */
+  it("leaves a 960×600 terminal 950×560 of content", () => {
+    const { width, height } = NODE_META.terminal.defaultSize;
+    expect(TERMINAL_PADDING).toBe(4);
+    const content = {
+      width: width - NODE_BORDER_WIDTH * 2 - TERMINAL_PADDING * 2,
+      height:
+        height - NODE_BORDER_WIDTH * 2 - HEADER_HEIGHT - TERMINAL_PADDING * 2,
+    };
+    expect(content).toEqual({ width: 950, height: 560 });
   });
 
   it("has a translatable label key and an icon for every type", () => {
