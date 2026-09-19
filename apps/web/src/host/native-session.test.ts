@@ -56,7 +56,7 @@ function browser(origin = "https://host.test") {
 /** The Electron shell: no Tauri IPC, a preload bridge, a loopback origin. */
 function electron(origin = "http://127.0.0.1:54321") {
   browser(origin);
-  (window as Window & { armadra?: unknown }).armadra = {
+  (window as unknown as { armadra?: unknown }).armadra = {
     transport: { endpoints: vi.fn(), endpointsSync: vi.fn() },
     identity: { ticket: mocks.bridgeTicket },
   };
