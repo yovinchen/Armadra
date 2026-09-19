@@ -25,9 +25,16 @@ import {
  *   * **不删原库**。搬完把 `host.db` 改名 `host.db.absorbed-<ts>`，Go Host 下次
  *     就找不到它、也不会变成第二个写者，而人还能把它拿回去。
  *
- * 搬的是 R1 的五张身份表，加上 R4 的自动化域；其余域的表由各自的迁移和搬运
- * 处理。
+ * 搬的是 R1 的五张身份表，加上 R4 的自动化域与 R5 的三张 `github_*`；其余域的
+ * 表由各自的迁移和搬运处理。
  *
+ * GitHub 那三张跟着同一趟走，理由和 `host_id` 一样：`github_config` 记的是这台
+ * 机器选了哪个凭据来源、密钥存在哪个引用名下，而令牌本身在 OS 钥匙串里，还在
+ * 原地。不搬这一行，令牌还在钥匙串里躺着但没有人再指向它——用户看到的是「未
+ * 配置」，然后被要求重新粘一次已经存在的令牌。`github_references` 同理：那些
+ * 连接是人手工连出来的，重建不了。
+ */
+
  * ## 自动化的两半
  *
  * 一半是**同名同列的表**（载荷、授权记录、命令根与命令会话），和身份表一样逐列
@@ -58,6 +65,10 @@ export const ABSORBED_TABLES = [
   "automation_grants",
   "command_roots",
   "command_sessions",
+  // GitHub 三张之间没有外键，排在最后；`store_meta` 的 `host_id` 已经先到位。
+  "github_config",
+  "github_status_mappings",
+  "github_references",
 ] as const;
 
 /** 由 `legacy.entities` 投影出来的表。空判断把它们也算上。 */

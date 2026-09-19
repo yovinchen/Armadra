@@ -22,6 +22,7 @@ import { install as installEvents } from "./events";
 import { NO_HOOK_SERVICE } from "./http/health";
 import { install as installFiles } from "./files/routes";
 import { install as installImports } from "./imports/routes";
+import { install as installGithub } from "./github";
 import { CoreServer } from "./http/server";
 import { VERSION, announcement, instanceId } from "./instance";
 import { install as installSettings } from "./settings";
@@ -118,6 +119,9 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installSettings,
   installUsage,
   installIdentity,
+  // GitHub after identity: its two faces authenticate every call against the
+  // identity store, and it reads `store_meta.host_id` at assembly time.
+  installGithub,
   // Agents before terminals: the collaboration verbs and the context-usage
   // cache have to exist before a PTY can report into them, and the terminal
   // domain hands its bridge back through `agent/setTerminalBridge`.
