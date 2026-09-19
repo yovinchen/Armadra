@@ -335,6 +335,19 @@ jobs:
             printf 'CSC_KEY_PASSWORD=%s\n' "${WINDOWS_CERT_PASSWORD:-}"
           } >> "$GITHUB_ENV"
 
+      # Windows runner 的实时扫描会把刚写出的 Go 可执行文件占住几秒到几十秒，
+      # electron-builder 复制 extraResources 时就撞上 EBUSY（stage-binaries 的
+      # 等待只能证明「此刻能打开」，挡不住之后的再次扫描）。把两处产物目录排除
+      # 出扫描范围，比在复制处重试可靠；runner 是一次性的，排除项随之作废。
+      - name: 让扫描器放过打包目录
+        if: startsWith(matrix.target, 'windows-')
+        shell: pwsh
+        run: |
+          $desktop = Join-Path $env:GITHUB_WORKSPACE 'apps\desktop'
+          Add-MpPreference -ExclusionPath (Join-Path $desktop 'resources')
+          Add-MpPreference -ExclusionPath (Join-Path $desktop 'release')
+          Add-MpPreference -ExclusionPath (Join-Path $env:GITHUB_WORKSPACE 'target')
+
       # `dist` 只复制、不构建（stage-binaries.mjs），所以受管二进制要先在这里
       # 产出。每个 runner 都是自己那一行目标的本机，所以两条都不带 `--target`：
       # 带了就会落到 `target/<triple>/release`，而 stage-binaries 按本机布局
