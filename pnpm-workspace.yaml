@@ -1,6 +1,7 @@
 packages:
   - apps/web
   - apps/desktop
+  - apps/server
   - packages/*
 
 allowBuilds:

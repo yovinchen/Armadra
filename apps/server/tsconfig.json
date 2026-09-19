@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node", "vitest/globals"],
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "allowJs": false
+  },
+  "include": ["src/**/*.ts", "vitest.config.mts"],
+  "exclude": ["node_modules", "out"]
+}
