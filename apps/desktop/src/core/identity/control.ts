@@ -2,6 +2,7 @@ import { type Server, createServer } from "node:http";
 import { join } from "node:path";
 import { type ListenSpec, bind, release } from "../listen";
 import { IdentityError, identityFailure } from "./errors";
+import { nativeOrigin } from "./origin";
 import { allScopes } from "./scopes";
 import type { IdentityService } from "./service";
 import { validName } from "./tokens";
@@ -114,7 +115,10 @@ async function handle(
       !input ||
       typeof input.origin !== "string" ||
       typeof input.deviceName !== "string" ||
-      !validName(input.deviceName)
+      !validName(input.deviceName) ||
+      // 这条通道只给桌面壳签票，壳的来源永远是回环明文 HTTP。别的来源（比如
+      // R6 的服务器壳要给手机配对的那种）走的是另一条路，不是这里。
+      !nativeOrigin(input.origin)
     ) {
       throw new IdentityError("invalid");
     }

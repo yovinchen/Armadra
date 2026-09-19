@@ -20,7 +20,7 @@ import {
   setDockIcon,
 } from "./branding";
 import { HOST_ENDPOINT, configFromEnvironment } from "./host";
-import { deviceName, issueNativeTicket } from "./host/ticket";
+import { deviceName, issueCoreTicket, issueNativeTicket } from "./host/ticket";
 import {
   DesktopLifecycle,
   quitFailureDialog,
@@ -30,6 +30,7 @@ import {
   RuntimeProcess,
   externalRuntimeBase,
   ownedRuntimeAddress,
+  coreImplementation,
   setPackagedShell,
   startsHost,
   waitForRuntime,
@@ -243,6 +244,23 @@ function hostBase(): string {
  * for, carried in the result.
  */
 async function nativeTicket(): Promise<NativeTicketAnswer> {
+  // `ARMADRA_CORE=ts` 里没有 Host 可以调：票由 core 的私有通道直接签（设计
+  // D6）。取票的规则一个字没变——来源仍是壳自己的页面来源，票仍是一次性的，
+  // 页面拿到的仍然只是一张票，而不是配对本身。
+  if (coreImplementation() === "ts") {
+    try {
+      return {
+        ok: true,
+        ticket: await issueCoreTicket({
+          dataDir: dataDir(),
+          origin: page?.origin ?? "",
+          deviceName: deviceName(app.getLocale()),
+        }),
+      };
+    } catch (thrown) {
+      return ticketRefusal(thrown);
+    }
+  }
   const config = lifecycle.hostLaunchConfig();
   if (config === null)
     return { ok: false, error: ipcError("hostUnavailable", "no Host") };
@@ -256,17 +274,23 @@ async function nativeTicket(): Promise<NativeTicketAnswer> {
       ),
     };
   } catch (thrown) {
-    // Only the stable reason travels. Whatever the CLI wrote was already
-    // dropped in `issueNativeTicket`; nothing here may add it back.
-    const reason =
-      thrown instanceof Error && "reason" in thrown
-        ? String((thrown as { reason: unknown }).reason)
-        : "cliFailed";
-    return {
-      ok: false,
-      error: ipcError(reason, `no native session ticket (${reason})`),
-    };
+    return ticketRefusal(thrown);
   }
+}
+
+/**
+ * Only the stable reason travels. Whatever the CLI or the core wrote was
+ * already dropped where it was read; nothing here may add it back.
+ */
+function ticketRefusal(thrown: unknown): NativeTicketAnswer {
+  const reason =
+    thrown instanceof Error && "reason" in thrown
+      ? String((thrown as { reason: unknown }).reason)
+      : "cliFailed";
+  return {
+    ok: false,
+    error: ipcError(reason, `no native session ticket (${reason})`),
+  };
 }
 
 /* ------------------------------- the quit path ---------------------------- */
