@@ -64,6 +64,7 @@
 | [平台实施记录](status/platform-implementation-status.md) | 阶段状态、需求核对与验证证据                             |
 | [功能预期总表](status/feature-roadmap.md)                | 已交付与待实现功能全表、多仓库 Git、用量看板、资源监控   |
 | [画布性能基线](status/canvas-performance-baseline.md)    | 30 个终端 + 真实会话的 fps / 帧时 / 重渲组件数，改动前后 |
+| [Electron 迁移复查](status/electron-migration-review.md) | 换壳后功能总表逐行核查、UI 死角、文档漂移与测试盲区      |
 
 ## contracts/ 实施契约
 
