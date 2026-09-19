@@ -347,6 +347,14 @@ jobs:
           Add-MpPreference -ExclusionPath (Join-Path $desktop 'resources')
           Add-MpPreference -ExclusionPath (Join-Path $desktop 'release')
           Add-MpPreference -ExclusionPath (Join-Path $env:GITHUB_WORKSPACE 'target')
+          # 路径排除过后 EBUSY 仍然出现在另一个二进制上，所以把实时监控整个
+          # 关掉；篡改保护拦下时只记一句，不让这一步失败。
+          try {
+            Set-MpPreference -DisableRealtimeMonitoring $true
+            Write-Host "实时监控已关闭"
+          } catch {
+            Write-Host "::warning::无法关闭实时监控：$($_.Exception.Message)"
+          }
 
       # `dist` 只复制、不构建（stage-binaries.mjs），所以受管二进制要先在这里
       # 产出。每个 runner 都是自己那一行目标的本机，所以两条都不带 `--target`：

@@ -149,6 +149,16 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
 
+# The deb/rpm defaults spell the file from the package *name*, and ours is
+# scoped: `@armadra/desktop_0.1.0_amd64.deb` is a path into a directory that
+# does not exist, and fpm stops there. `${arch}` is electron-builder's token
+# (`x64` / `arm64`), which tools/release/stage-desktop.mjs reads the same way
+# it reads the AppImage's.
+deb:
+  artifactName: ${productName}_${version}_${arch}.${ext}
+rpm:
+  artifactName: ${productName}-${version}.${arch}.${ext}
+
 linux:
   icon: build/icons/icon.png
   category: Development

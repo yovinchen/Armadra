@@ -71,10 +71,49 @@ export function mergeConfig(base, override) {
 }
 
 /** The electron-builder configuration this run packages with: the checked-in file, the signing plan's override, and — for a local build — the disabled-updates marker. */
+/**
+ * The architecture this run packages for: the host's, unless
+ * `ARMADRA_DIST_ARCH` says otherwise.
+ *
+ * `electron-builder.yml` lists both architectures under every target so the
+ * file documents what a release ships, but a single run must build one: the
+ * `arch` argument to `createTargets` does not override a per-target list, and
+ * the second architecture then rebuilds node-pty as a cross-compile (`-m64`
+ * on an arm64 runner, the x64 MSBuild on Windows-on-ARM) and fails. Each CI
+ * matrix row is one architecture, so each packages exactly its own.
+ */
+export function distArch(env = process.env) {
+  const wanted = env.ARMADRA_DIST_ARCH ?? process.arch;
+  if (wanted !== "x64" && wanted !== "arm64") {
+    throw new Error(`ARMADRA_DIST_ARCH must be x64 or arm64, not ${wanted}`);
+  }
+  return wanted;
+}
+
+function restrictArch(config, arch) {
+  const result = { ...config };
+  for (const platform of ["mac", "win", "linux"]) {
+    const section = config[platform];
+    if (!section || !Array.isArray(section.target)) continue;
+    result[platform] = {
+      ...section,
+      target: section.target.map((entry) =>
+        typeof entry === "string"
+          ? { target: entry, arch: [arch] }
+          : { ...entry, arch: [arch] },
+      ),
+    };
+  }
+  return result;
+}
+
 export function resolveConfig({ env = process.env, local = true } = {}) {
   const base = load(readFileSync(join(app, "electron-builder.yml"), "utf8"));
   const plan = signingPlan({ env });
-  let config = mergeConfig(base, configOverride(plan, env));
+  let config = restrictArch(
+    mergeConfig(base, configOverride(plan, env)),
+    distArch(env),
+  );
   if (local) {
     config = mergeConfig(config, {
       extraMetadata: { armadraUpdates: "disabled" },
@@ -121,7 +160,7 @@ export async function dist({ env = process.env, local = true } = {}) {
     // `target` list in electron-builder.yml, which is the one whose
     // correspondence with tools/release/artifacts.mjs is tested. Host arch
     // only — a local build packages what it can run.
-    targets: createTargets([Platform.current()], null, process.arch),
+    targets: createTargets([Platform.current()], null, distArch(env)),
     config,
   });
   for (const artifact of artifacts) console.log(`Built: ${artifact}`);
