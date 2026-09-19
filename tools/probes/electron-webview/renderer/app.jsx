@@ -32,7 +32,7 @@ function WebviewNode({ id, data }) {
     const host = hostRef.current;
     if (!host || host.firstChild) return;
     // Create the element imperatively and set `src` as an attribute: React must
-    // never own this node, and navigation is src-driven (nodeterm §2.4).
+    // never own this node, and navigation is src-driven (Armadra browser lifecycle invariant).
     const el = document.createElement("webview");
     el.setAttribute(
       "src",
@@ -78,7 +78,7 @@ function WebviewNode({ id, data }) {
       >
         {data.tag}
       </div>
-      {/* nodrag nowheel, no hover-guard overlay, no mask — exactly nodeterm §2.2 */}
+      {/* nodrag nowheel, no hover-guard overlay, no mask — Armadra probes native guest hit testing directly */}
       <div
         ref={hostRef}
         className="nodrag nowheel"

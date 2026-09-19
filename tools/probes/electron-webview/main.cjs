@@ -2,8 +2,8 @@
 /*
  * W3.0 go/no-go probe — Electron main process.
  *
- * Runs the six acceptance items from docs/research/nodeterm/browser-node.md §6
- * batch 0 with zero human interaction, writes out/result.json and exits with a
+ * Runs the six acceptance items from docs/design/electron-migration.md W3.0
+ * with zero human interaction, writes out/result.json and exits with a
  * non-zero code when items 3 or 6 (the no-go gates) fail.
  *
  *   node build.mjs && electron . --probe        # headless-ish, writes out/

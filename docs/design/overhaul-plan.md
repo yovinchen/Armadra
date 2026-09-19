@@ -15,7 +15,7 @@
 | U5  | 名称与 logo 全部替换；侧栏头部对齐                                                                                                                        | §4 P1（品牌与头部）                                                  |
 | U6  | 剩余 Rust 与 Go 全部改为 TypeScript：**一个核心，两种壳**                                                                                                 | §4 P3（设计见 [typescript-core.md](typescript-core.md)）             |
 | U7  | 推送仓库并进行多端编译                                                                                                                                    | §4 P4                                                                |
-| R1  | **项目与一切内容里不得出现所研究的第三方参考项目的名字**（含文档、注释、提交信息、研究材料）。唯一例外：hook 修复逻辑里必须匹配的用户磁盘旧路径字面量     | §4 P4 清洗批；所有 Agent 提示词写明                                  |
+| R1  | **项目与一切内容统一采用 Armadra 自己的表述**（含文档、注释、提交信息、研究材料）。唯一例外：hook 修复逻辑里必须匹配的用户磁盘旧路径字面量                | §4 P4 清洗批；所有 Agent 提示词写明                                  |
 | R2  | 画布修改经 `canvas-store`；文案在 i18n；只用现有 shadcn 组件；Runtime JSON camelCase、错误 `{ code, message }`；迁移编号只增、未知库拒绝启动（AGENTS.md） | 各批验收                                                             |
 
 ## 2. 现状（`359058afd`）
@@ -50,7 +50,7 @@ apps/server      无窗口壳：node:http + ws + HTTPS + 单 owner 认证，托�
 | P1.1 品牌与头部     | 开发模式 `app.setName`/Dock 图标/About；`electron-builder.yml` 品牌字段测试；侧栏头部三按钮同尺寸同基线、macOS 红绿灯留白、`no-drag`                                                                                    | desktop/web 测试绿；CDP 截图核对                             |
 | P1.2 节点尺寸与密度 | browser 1280×800、terminal 960×600、editor 960×640、diff 1200×700、files 360×640、sticky 280×220；新建后相机对准到 1.0；头部 40→32、终端内边距 8→4、工具栏 28；终端默认字号 12                                          | `registry.test.ts` 与契约 §3.4 表一致；vitest 断言；CDP 截图 |
 | P1.3 Mermaid 导入   | flowchart/graph → 原生几何 + 文字 + 连线（dagre 布局，可编辑，一步撤销）；其他图类型 → SVG 图片回退；入口：对话框（输入+预览）、粘贴识别、`.mmd` 拖入；`securityLevel: strict`、`htmlLabels: false`；mermaid 独立 chunk | 三种 fixture 纯函数测试；构建 chunk 体积；`pnpm check`       |
-| P1.4 功能复查       | 对照功能总表逐行核查（仍成立/回退/断裂/未验证）、UI 死角、文档漂移、IPC 占位、测试盲区、Top 15 修复项、参考项目名命中清单                                                                                               | `docs/status/electron-migration-review.md`                   |
+| P1.4 功能复查       | 对照功能总表逐行核查（仍成立/回退/断裂/未验证）、UI 死角、文档漂移、IPC 占位、测试盲区、Top 15 修复项、文案清洗清单                                                                                                     | `docs/status/electron-migration-review.md`                   |
 
 ### P2 复查修复
 
@@ -67,12 +67,12 @@ apps/server      无窗口壳：node:http + ws + HTTPS + 单 owner 认证，托�
 
 ### P4 收尾（每轮合入后都做一次的项目，最终一次性收口）
 
-| 项                   | 做法                                                                                                                                                                                                                 |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 参考项目名清洗（R1） | 删除 `docs/research/nodeterm/`；49 个文件里的注释/文档改写为 Armadra 自己的表述；`git grep -in` 命中归零（磁盘字面量例外）；提交信息中的名字用 `git filter-repo --replace-text` 重写后强推（`main` 与 feature 分支） |
-| 文档                 | `guides/architecture.md`、`development.md`、`feature-roadmap.md` §2 技术框架表、`client-platforms.md` 与现状一致；`docs/README.md` 登记                                                                              |
-| 多端编译（U7）       | 推送后触发 `release.yml`：macOS（arm64/x64 dmg+zip）、Windows（nsis+zip）、Linux（AppImage/deb/rpm）；未签名阶段更新器关闭；本地 macOS `dist` 冷启动验收                                                             |
-| 回归                 | `pnpm check`、`pnpm -r test`、`cargo test --workspace`（退役前）、`go -C apps/host test ./...`（退役前）、`pnpm protocol:test`（退役前）                                                                             |
+| 项                     | 做法                                                                                                                                                                                                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Armadra 文案清洗（R1） | 删除已整合结论的七份历史研究材料；49 个文件里的注释/文档改写为 Armadra 自己的表述；`git grep -in` 检查旧名称命中归零（仅代码中的磁盘字面量例外，文档写作「旧版接入残留」）；历史提交信息中的旧名称清洗另行用 `git filter-repo --replace-text` 重写后强推（`main` 与 feature 分支） |
+| 文档                   | `guides/architecture.md`、`development.md`、`feature-roadmap.md` §2 技术框架表、`client-platforms.md` 与现状一致；`docs/README.md` 登记                                                                                                                                            |
+| 多端编译（U7）         | 推送后触发 `release.yml`：macOS（arm64/x64 dmg+zip）、Windows（nsis+zip）、Linux（AppImage/deb/rpm）；未签名阶段更新器关闭；本地 macOS `dist` 冷启动验收                                                                                                                           |
+| 回归                   | `pnpm check`、`pnpm -r test`、`cargo test --workspace`（退役前）、`go -C apps/host test ./...`（退役前）、`pnpm protocol:test`（退役前）                                                                                                                                           |
 
 ## 5. 团队与模型
 
@@ -95,5 +95,5 @@ P4 的清洗与多端编译在 P2 后先做一次（让仓库尽早干净、CI �
 ## 7. 验收总表
 
 - 用户可见：新建浏览器节点即标准浏览器尺寸且 1:1 可用；终端 960×600 下约 120×36；Mermaid 三类样例导入正确；Dock/菜单/About 全是 Armadra；侧栏头部对齐。
-- 仓库：`git grep -in nodeterm` 只剩磁盘字面量；`pnpm check` 全绿；三平台产物在 CI 落地。
+- 仓库：`git grep -in` 检查旧名称仅剩代码中的磁盘字面量，`docs/` 与 `tools/` 无残留；`pnpm check` 全绿；三平台产物在 CI 落地。
 - 架构：P3 结束时仓库里没有 `.rs`、`.go`、`.proto`；一个 core、两种壳；一份数据库与账本。

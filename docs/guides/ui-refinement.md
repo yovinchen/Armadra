@@ -44,4 +44,4 @@ Runtime 的额度刷新串行化并执行 30 秒冷却，后台每 5 分钟查�
 
 自动测试覆盖模型窗口映射、过期与刷新错误、键盘交互、连线端口与预览几何一致、真实 CLI 参数和协作协议边界。真实进程树测试需要允许执行系统 `ps`，沙箱拒绝不等于产品断言失败。
 
-参考：[Impeccable](https://impeccable.style/)、[Codex App 设置](https://developers.openai.com/codex/app/settings/)、本地 nodeterm 的额度查询与节点协作实现。具体 CLI 能力与协议来源见 [协作设计](./agent-collaboration.md)。
+参考：[Impeccable](https://impeccable.style/)、[Codex App 设置](https://developers.openai.com/codex/app/settings/)。Armadra 的额度查询与节点协作实现、具体 CLI 能力与协议来源见 [协作设计](./agent-collaboration.md)。

@@ -2,7 +2,7 @@
 //
 // 现有基线（`docs/design/canvas-react-flow.md` §6.5）的 30 个终端节点没有会话，
 // 所以量不到用户报的卡顿——卡顿正出在「会话状态跳动 → `updateNodeData` → 换一份
-// document → 全量重投影」这条链上（[画布调研](../../docs/research/nodeterm/canvas-nodes-and-state.md) §7.2）。
+// document → 全量重投影」这条链上（Armadra 画布初步分析；实测修正见 docs/status/canvas-performance-baseline.md §5.2）。
 // 这个脚本把那一列补上：每个终端节点都真的连着一个 Runtime PTY 会话。
 //
 // 量四段：空闲 / 手形平移 / 拖一个节点 / 在一张便签里连续输入 100 字符。

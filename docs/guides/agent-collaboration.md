@@ -70,12 +70,12 @@ Claude Code 的 `--settings <file-or-json>` 官方说明是「load **additional*
 
 ### 旧残留与修复
 
-旧产品名时期留下的东西不会自己消失：指向 `aicc-hook`、`nodeterm`、`.nodeterm` 或某人 `target/debug/` 的 hook 条目；
-技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、`manage-nodeterm-canvas`，以及改版前的
+旧版接入残留不会自己消失：早期 hook 安装路径，以及指向 `aicc-hook` 或某人 `target/debug/` 的 hook 条目；
+技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、早期画布管理技能，以及改版前的
 `armadra-canvas` / `armadra-linked-context`；Codex `hooks.json` 顶层的 `version`——Codex 用 `deny_unknown_fields`
 解析这个文件，多一个陌生键，**整份文件的 hook 全都不跑**，包括用户自己的；还有全局 `AGENTS.md` /
-`CLAUDE.md` 里 `<!-- nodeterm:<名字>:start -->` … `:end -->`（或 `aicc:`）围起来的指令块——两百行教模型去跑
-`nodeterm.sh open-claude …`，那个脚本只会回答「not a nodeterm agent node」，而模型信了指令就不会再找现行技能
+`CLAUDE.md` 里由早期接入标记或 `aicc:` 前缀的 HTML 注释（`start/end`）围起来的指令块——两百行教模型去跑
+旧版画布控制脚本的 `open-claude` 命令，那个脚本只会报「当前会话不是有效的 Agent 节点」，而模型信了指令就不会再找现行技能
 （2026-09-15 用户实测：Codex 在画布里被要求「创建一个 Claude Code」时跑的正是它）。
 
 Runtime 每次启动扫描并在日志里报出来，`GET /api/agents/{id}/integration` 的 `legacy.found` 也带着它，
@@ -88,7 +88,7 @@ Runtime 每次启动扫描并在日志里报出来，`GET /api/agents/{id}/integ
 
 修复之前，这些残留的后果是可以直接观察到的：Codex 启动时报 `failed to parse hooks config … unknown field \`version\``，
 于是没有任何 hook 跑，节点的「会话上下文」全是「未知」（Codex 的占用是按 hook 报来的会话 id 去读转录估算的，
-没有会话 id 就无从估算）；而旧指令块让模型去跑 `nodeterm.sh`。画布启动时若任一 CLI 有残留，顶部会有一条
+没有会话 id 就无从估算）；而旧指令块让模型去跑旧版画布控制脚本。画布启动时若任一 CLI 有残留，顶部会有一条
 通知条指向 设置 → 集成。
 
 ### 各 CLI 的配置目录覆盖
@@ -199,7 +199,7 @@ Armadra 不把一个 Agent 的话打进另一个 Agent 的终端。原有的 `ca
 
 `agent_deliveries` 表因为迁移已发布而保留，Runtime 不再写入；`GET /api/workspaces/{id}/deliveries` 仍能读回历史行与 Host 写的行。
 
-此设计借鉴 nodeterm 的节点身份、作用域与投递门禁原则；独立设计了持久化的拉取协议，将默认协作从终端输入移到应用收件箱，避免把大段协作指令和无关上下文塞进每个 Agent 的会话。
+Armadra 的协作设计以节点身份、作用域与投递门禁为边界，采用持久化的拉取协议，将默认协作从终端输入移到应用收件箱，避免把大段协作指令和无关上下文塞进每个 Agent 的会话。
 
 ## 对话交接
 
