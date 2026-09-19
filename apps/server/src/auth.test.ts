@@ -64,12 +64,7 @@ function headers(extra: Record<string, string> = {}): IncomingHttpHeaders {
 
 describe("认证门", () => {
   it("回环专用面在公网这一侧不存在", () => {
-    for (const path of [
-      "/hook/abc",
-      "/control/x",
-      "/rpc/armadra.v1.X/Y",
-      "/verify",
-    ]) {
+    for (const path of ["/hook/abc", "/control/x", "/verify"]) {
       expect(loopbackOnlyPath(path)).toBe(true);
       expect(
         gate({ method: "GET", path, headers: headers() }, context().value),

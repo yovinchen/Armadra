@@ -61,7 +61,6 @@ export function loopbackOnlyPath(path: string): boolean {
     path.startsWith("/control/") ||
     path.startsWith("/context-link/") ||
     path.startsWith("/browser/") ||
-    path.startsWith("/rpc/") ||
     path === "/verify"
   );
 }
