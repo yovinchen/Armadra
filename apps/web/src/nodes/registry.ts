@@ -74,20 +74,26 @@ const GroupNodeBody: ComponentType<NodeBodyProps> = () => null;
 /**
  * 尺寸表逐字来自计划书 §3.4。改这里之前先改文档——
  * `registry.test.ts` 会逐条比对。
+ *
+ * 2026-09-19 上调了一轮默认尺寸。旧表是按「画布上的一张卡片」定的，于是
+ * 浏览器只有 900×620、终端只有 640×440——两者装下的内容都比一个真窗口少
+ * 一截。现在按**内容自己的标准尺寸**定：浏览器等于一块标准视口 1280×800，
+ * 终端 960×600 在 12px 字号下排得下约 120×36，其余按同一口径跟上。
+ * 最小尺寸跟着抬，是为了让节点缩到最小时仍是「一块能用的内容区」。
  */
 export const NODE_META: Record<CanvasNodeType, NodeMeta> = {
   terminal: {
     labelKey: "node.terminal",
     icon: Terminal,
-    defaultSize: { width: 640, height: 440 },
-    minSize: { width: 260, height: 160 },
+    defaultSize: { width: 960, height: 600 },
+    minSize: { width: 320, height: 200 },
     defaultColor: DEFAULT_NODE_COLOR,
     hasBridgeHandles: true,
   },
   sticky: {
     labelKey: "node.sticky",
     icon: StickyNote,
-    defaultSize: { width: 240, height: 200 },
+    defaultSize: { width: 280, height: 220 },
     minSize: { width: 160, height: 120 },
     defaultColor: STICKY_COLOR,
     hasBridgeHandles: true,
@@ -95,7 +101,7 @@ export const NODE_META: Record<CanvasNodeType, NodeMeta> = {
   group: {
     labelKey: "node.group",
     icon: Group,
-    defaultSize: { width: 520, height: 360 },
+    defaultSize: { width: 800, height: 560 },
     minSize: { width: 200, height: 140 },
     defaultColor: DEFAULT_NODE_COLOR,
     // frame 自己有标签与裁剪，把手在它身上没有意义。
@@ -104,7 +110,7 @@ export const NODE_META: Record<CanvasNodeType, NodeMeta> = {
   editor: {
     labelKey: "node.editor",
     icon: FileCode2,
-    defaultSize: { width: 700, height: 480 },
+    defaultSize: { width: 960, height: 640 },
     minSize: { width: 320, height: 200 },
     defaultColor: DEFAULT_NODE_COLOR,
     hasBridgeHandles: true,
@@ -112,7 +118,7 @@ export const NODE_META: Record<CanvasNodeType, NodeMeta> = {
   diff: {
     labelKey: "node.diff",
     icon: GitCompare,
-    defaultSize: { width: 860, height: 500 },
+    defaultSize: { width: 1200, height: 700 },
     minSize: { width: 420, height: 220 },
     defaultColor: DEFAULT_NODE_COLOR,
     hasBridgeHandles: true,
@@ -120,7 +126,7 @@ export const NODE_META: Record<CanvasNodeType, NodeMeta> = {
   files: {
     labelKey: "node.files",
     icon: FolderTree,
-    defaultSize: { width: 340, height: 460 },
+    defaultSize: { width: 360, height: 640 },
     minSize: { width: 220, height: 160 },
     defaultColor: DEFAULT_NODE_COLOR,
     hasBridgeHandles: true,
@@ -128,8 +134,8 @@ export const NODE_META: Record<CanvasNodeType, NodeMeta> = {
   browser: {
     labelKey: "node.browser",
     icon: Globe,
-    defaultSize: { width: 900, height: 620 },
-    minSize: { width: 360, height: 240 },
+    defaultSize: { width: 1280, height: 800 },
+    minSize: { width: 480, height: 320 },
     defaultColor: DEFAULT_NODE_COLOR,
     hasBridgeHandles: true,
   },

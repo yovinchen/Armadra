@@ -105,11 +105,11 @@ const claude: AgentInfo = {
 /**
  * 菜单拿到的是**中心**锚点，不是左上角（`canvas/placement.ts`）。
  * 替身 registry 把所有类型的默认尺寸都给成 240×200，所以居中之后的左上角
- * 是 `{120-120, 80-100}`；「画框」自带 640×420，另算。
+ * 是 `{120-120, 80-100}`；「画框」自带 1040×720，另算。
  */
 const position: Position = { x: 120, y: 80 };
 const centered = { x: 0, y: -20 };
-const framePosition = { x: -200, y: -130 };
+const framePosition = { x: -400, y: -280 };
 const t = (key: string) => key;
 const ctx = { addNode, position, workspace, agents: [claude] };
 
@@ -248,7 +248,7 @@ describe("buildAddMenu", () => {
     expect(addItems).not.toHaveBeenCalled();
     expect(addNode).toHaveBeenCalledWith("group", {
       position: framePosition,
-      size: { width: 640, height: 420 },
+      size: { width: 1040, height: 720 },
     });
   });
 

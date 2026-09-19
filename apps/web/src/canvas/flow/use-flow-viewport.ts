@@ -109,6 +109,64 @@ export function centerOnNode(nodeId: string): void {
   });
 }
 
+/* ---------------------------- 新建节点后的相机 ---------------------------- */
+
+/**
+ * 新建节点之后把相机抬到 100%（契约 §3.4，2026-09-19）。
+ *
+ * 节点的默认尺寸都是按 100% 设计的——浏览器就是一块 1280×800 的标准视口。
+ * 可用户常常停在 27% 这样的总览缩放上，这时候新建一个节点，得到的是一张
+ * 谁也读不了的缩略图。所以：**只在缩放低于门槛时**才动相机，把它对准这个
+ * 节点并抬到 100%；用户本来就在 50% 以上，说明他正看着某块区域，抢他的
+ * 相机是更坏的事。
+ *
+ * 只在 React Flow **已经量过**这个节点时才动（`getNodesBounds` 给出有效
+ * 矩形）。刚 `addNode` 完那一帧投影还没落地，所以按一张很短的时间表重试；
+ * 量不出来就一次也不动相机，宁可不动也不要对着一个错的矩形居中。
+ */
+export const REVEAL_ZOOM_THRESHOLD = 0.5;
+export const REVEAL_ZOOM = 1;
+/** 等投影落地的重试表（毫秒）；成功一次之后剩下的都空跑。 */
+export const REVEAL_RETRY_DELAYS: readonly number[] = [0, 120, 320];
+
+/** React Flow 量到的节点矩形；没量到（或尺寸不可知）时是 `null`。 */
+function measuredNodeBounds(nodeId: string): Box | null {
+  const flow = getFlow();
+  const node = flow?.getNode(nodeId);
+  if (!node) return null;
+  const rect = getNodesBounds([node]);
+  if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height))
+    return null;
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+}
+
+function centreOnMeasured(nodeId: string): boolean {
+  const flow = getFlow();
+  const rect = measuredNodeBounds(nodeId);
+  if (!flow || !rect) return false;
+  void flow.setCenter(rect.x + rect.width / 2, rect.y + rect.height / 2, {
+    zoom: clampZoom(REVEAL_ZOOM),
+    duration: duration(FIT_DURATION),
+  });
+  return true;
+}
+
+export function revealNewNode(nodeId: string): void {
+  const flow = getFlow();
+  if (!flow) return;
+  if (flow.getViewport().zoom >= REVEAL_ZOOM_THRESHOLD) return;
+  let done = false;
+  const attempt = () => {
+    if (done) return;
+    done = centreOnMeasured(nodeId);
+  };
+  for (const delay of REVEAL_RETRY_DELAYS) {
+    if (delay === 0) attempt();
+    else setTimeout(attempt, delay);
+  }
+}
+
 /**
  * 首次打开一块画布：从没存过视口（或还是默认的 `{0,0,1}`）就按 100% 对齐
  * 内容左上角；存过的视口原样恢复，用户上次停在哪就还在哪。

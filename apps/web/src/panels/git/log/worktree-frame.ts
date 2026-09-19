@@ -25,7 +25,7 @@ import { localBranch } from "../worktree";
  */
 
 /** 绑定 Frame 的默认尺寸：装得下一个默认终端还留出边距。 */
-export const WORKTREE_FRAME_SIZE = { width: 720, height: 560 };
+export const WORKTREE_FRAME_SIZE = { width: 1040, height: 720 };
 
 /** 初始化终端在 Frame 里的落点（相对 Frame 左上角，让开徽章）。 */
 export const INIT_TERMINAL_POSITION = { x: 24, y: 72 };

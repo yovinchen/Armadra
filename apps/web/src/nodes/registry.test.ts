@@ -15,13 +15,13 @@ import { COLLAPSED_HEIGHT as STORED_COLLAPSED_HEIGHT } from "../store/defaults";
 
 /** 计划书 §3.4 的尺寸表，逐字抄一遍作为回归基线。 */
 const EXPECTED = {
-  terminal: { default: [640, 440], min: [260, 160] },
-  sticky: { default: [240, 200], min: [160, 120] },
-  group: { default: [520, 360], min: [200, 140] },
-  editor: { default: [700, 480], min: [320, 200] },
-  diff: { default: [860, 500], min: [420, 220] },
-  files: { default: [340, 460], min: [220, 160] },
-  browser: { default: [900, 620], min: [360, 240] },
+  terminal: { default: [960, 600], min: [320, 200] },
+  sticky: { default: [280, 220], min: [160, 120] },
+  group: { default: [800, 560], min: [200, 140] },
+  editor: { default: [960, 640], min: [320, 200] },
+  diff: { default: [1200, 700], min: [420, 220] },
+  files: { default: [360, 640], min: [220, 160] },
+  browser: { default: [1280, 800], min: [480, 320] },
   automation: { default: [360, 260], min: [260, 180] },
   agentActivity: { default: [340, 240], min: [240, 160] },
 } as const;
@@ -38,6 +38,10 @@ describe("node registry", () => {
       expect(defaultNodeSize(type).width).toBeGreaterThan(0);
       expect(minNodeSize(type).width).toBeGreaterThan(0);
     }
+  });
+
+  it("gives the browser node a standard 1280×800 viewport (§3.4)", () => {
+    expect(NODE_META.browser.defaultSize).toEqual({ width: 1280, height: 800 });
   });
 
   it("matches the §3.4 size table", () => {

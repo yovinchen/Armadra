@@ -26,6 +26,7 @@ import { useCanvasStore } from "../../store/canvas-store";
 import type { Translate } from "../../app/preferences-store";
 import { runCanvasCommand, type CanvasCommandId } from "../commands";
 import { nodeDropPosition } from "../placement";
+import { revealNewNode } from "../flow/use-flow-viewport";
 import { pickFilesForCanvas } from "../dnd/external-content";
 import { addItems, createItemId, select } from "../whiteboard/store";
 import { textItemAt } from "../whiteboard/tools/draft";
@@ -75,8 +76,27 @@ function command(id: CanvasCommandId): () => void {
   };
 }
 
-/** 新建分组的默认尺寸；比一个终端节点稍宽，画进去还有余量。 */
-const FRAME_SIZE = { width: 640, height: 420 };
+/**
+ * 新建 + 需要时把相机抬到 100%（契约 §3.4，2026-09-19）。
+ *
+ * 菜单里每一项都走它，没有一项直接调 `addNode`：默认尺寸是按 100% 设计的，
+ * 而用户常常停在总览缩放上，那时候不抬相机就等于建了一张读不了的缩略图。
+ * 抬不抬由 `revealNewNode` 自己判断（缩放已经够大、或节点还没被量过就不动）。
+ */
+function create(
+  context: AddMenuContext,
+  ...args: Parameters<CanvasActions["addNode"]>
+): string {
+  const id = context.addNode(...args);
+  if (id) revealNewNode(id);
+  return id;
+}
+
+/**
+ * 新建分组的默认尺寸；装得下一个默认终端（960×600）还留出边距，
+ * 与 `panels/git/log/worktree-frame.ts` 的绑定 Frame 同一口径。
+ */
+const FRAME_SIZE = { width: 1040, height: 720 };
 
 /**
  * 「文字」= 一条 `whiteboard.items`（`wb.text`，不进 `nodes` 表）。
@@ -93,10 +113,11 @@ function addTextShape(anchor: Position): void {
 
 /** 「画框」= 分组节点（`nodes` 表里的一行），以锚点为中心摆下。 */
 function addFrameShape(anchor: Position): void {
-  useCanvasStore.getState().addNode("group", {
+  const id = useCanvasStore.getState().addNode("group", {
     position: nodeDropPosition("group", { anchor, size: FRAME_SIZE }),
     size: FRAME_SIZE,
   });
+  if (id) revealNewNode(id);
 }
 
 /**
@@ -112,7 +133,7 @@ export function sshMenuItems(hosts: SshHost[], t: Translate): AddMenuItem[] {
     icon: Network,
     group: "ssh",
     run: (context) => {
-      context.addNode("terminal", {
+      create(context, "terminal", {
         position: nodeDropPosition("terminal", { anchor: context.position }),
         title: host.name,
         data: { kind: "terminal", ssh: { hostId: host.id } },
@@ -148,7 +169,7 @@ export function buildAddMenu(
         toast.error(t("settings.permissionUnsupported"));
         return;
       }
-      context.addNode("terminal", {
+      create(context, "terminal", {
         position: nodeDropPosition("terminal", { anchor: context.position }),
         title: agent.label,
         data: {
@@ -172,7 +193,7 @@ export function buildAddMenu(
       group: "terminal",
       shortcut: "canvas.newTerminal",
       run: (context) => {
-        context.addNode("terminal", {
+        create(context, "terminal", {
           position: nodeDropPosition("terminal", { anchor: context.position }),
         });
       },
@@ -185,7 +206,7 @@ export function buildAddMenu(
       icon: StickyNote,
       group: "content",
       run: (context) => {
-        context.addNode("sticky", {
+        create(context, "sticky", {
           position: nodeDropPosition("sticky", { anchor: context.position }),
         });
       },
@@ -196,7 +217,7 @@ export function buildAddMenu(
       icon: FolderTree,
       group: "content",
       run: (context) => {
-        context.addNode("files", {
+        create(context, "files", {
           position: nodeDropPosition("files", { anchor: context.position }),
           data: { kind: "files", path: context.workspace.rootPath },
         });
@@ -241,7 +262,7 @@ export function buildAddMenu(
       icon: Globe,
       group: "content",
       run: (context) => {
-        context.addNode("browser", {
+        create(context, "browser", {
           position: nodeDropPosition("browser", { anchor: context.position }),
         });
       },
@@ -265,7 +286,7 @@ export function buildAddMenu(
           .getState()
           .document?.nodes.find((node) => node.type === "terminal");
         if (!source) return;
-        context.addNode("agentActivity", {
+        create(context, "agentActivity", {
           position: nodeDropPosition("agentActivity", {
             anchor: context.position,
           }),
