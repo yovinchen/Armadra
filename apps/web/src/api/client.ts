@@ -21,6 +21,8 @@ import { gitApi } from "./git";
 import { gitRepositoryApi } from "./git-repository";
 import { usageApi } from "./usage";
 import { settingsApi } from "./settings";
+import { githubApi } from "./github";
+import { automationsApi } from "./automations";
 
 export {
   RUNTIME_URL,
@@ -37,6 +39,15 @@ export {
   workspaceEventsUrl,
 } from "./sockets";
 export { executionHostRefusal, runtimeSettingsSchema } from "./settings";
+// GitHub 与自动化两块面板的调用面（R7a）。类型与枚举从模块本身导出，这里只把
+// 两个工厂挂进 `runtimeApi`——面板拿到的是一个绑定了工作空间的客户端对象，而不
+// 是一把要在每个调用点重复传工作空间的自由函数。
+export { GithubApi, GithubApiError, classifyGithubFailure } from "./github";
+export {
+  AutomationApi,
+  AutomationApiError,
+  classifyAutomationFailure,
+} from "./automations";
 export type { RuntimeSettings, RuntimeSettingsPatch } from "./settings";
 export { dataBackupSchema, dataInfoSchema } from "./system";
 export type { DataInfo } from "./system";
@@ -57,4 +68,6 @@ export const runtimeApi = {
   ...gitRepositoryApi,
   ...usageApi,
   ...settingsApi,
+  ...githubApi,
+  ...automationsApi,
 };
