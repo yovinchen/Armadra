@@ -1,8 +1,11 @@
+import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CoreContext } from "../main";
 import { fixture, type Fixture } from "../workspaces/fixture";
 import { install as installWorkspaces } from "../workspaces/routes";
 import { install as installCanvas } from "../canvas/routes";
+import { install as installSettings } from "../settings";
+import { install as installRemote } from "../remote";
 import { install } from "./install";
 
 /**
@@ -33,15 +36,33 @@ afterEach(async () => {
 
 let stop: (() => Promise<void>) | undefined;
 
-async function core(): Promise<{ fixture: Fixture; workspaceId: string }> {
+async function core(
+  withRemote = false,
+): Promise<{ fixture: Fixture; workspaceId: string }> {
+  const stops: (() => Promise<void>)[] = [];
   open = fixture([
     installWorkspaces,
     installCanvas,
+    ...(withRemote
+      ? [
+          installSettings,
+          // Before the terminal domain, exactly as `DOMAINS` orders them: the
+          // SSH decorator is built from this domain's askpass service and host
+          // registry, and a terminal domain installed first would find none.
+          (context: CoreContext) => {
+            const remote = installRemote(context);
+            stops.push(() => remote.stop());
+          },
+        ]
+      : []),
     (context: CoreContext) => {
       const domain = install(context, { configured: "direct" });
-      stop = () => domain.stop();
+      stops.push(() => domain.stop());
     },
   ]);
+  stop = async () => {
+    for (const one of stops.reverse()) await one();
+  };
   const created = await open.call("POST", "/api/workspaces", {
     name: "Canvas",
     rootPath: open.directory,
@@ -220,6 +241,79 @@ describeUnix("the terminal routes", () => {
     });
     expect(refused.status).toBe(400);
     expect(refused.body).toMatchObject({ code: "bad_request" });
+  });
+
+  /**
+   * The SSH decorator, through the route that reaches it.
+   *
+   * Only the host id travels; the command line comes from the stored host. The
+   * assertion that matters is the one about the *unknown* id: a "remote"
+   * terminal that quietly runs a local shell is the one outcome that must not
+   * happen, and the decorator refuses rather than falling back.
+   */
+  it("runs `ssh` for a terminal that names a stored host", async () => {
+    const { fixture: core_, workspaceId } = await core(true);
+    await core_.call("PATCH", "/api/settings", {
+      ssh: {
+        hosts: [
+          {
+            id: "box",
+            name: "box",
+            host: "127.0.0.1",
+            user: "nobody",
+            port: 22,
+          },
+        ],
+      },
+    });
+
+    const created = await core_.call("POST", "/api/terminals", {
+      workspaceId,
+      cwd: core_.directory,
+      ssh: { hostId: "box" },
+    });
+    expect(created.status).toBe(200);
+    const session = created.body as {
+      id: string;
+      backend: string;
+      pid: number;
+    };
+    // The row still names the backend that is really behind the session: an
+    // SSH terminal is a normal session whose command happens to be `ssh`.
+    expect(session.backend).toBe("direct");
+
+    // What is actually running under the pty is `ssh`, with the stored host's
+    // destination on its command line — not the shell the request never named.
+    const argv = execFileSync(
+      "ps",
+      ["-o", "args=", "-p", String(session.pid)],
+      {
+        encoding: "utf8",
+      },
+    );
+    expect(argv).toContain("ssh");
+    expect(argv).toContain("nobody@127.0.0.1");
+
+    await core_.call("POST", `/api/terminals/${session.id}/terminate`, {
+      mode: "session",
+    });
+  });
+
+  it("refuses a terminal that names a host nobody stored", async () => {
+    const { fixture: core_, workspaceId } = await core(true);
+    const refused = await core_.call("POST", "/api/terminals", {
+      workspaceId,
+      cwd: core_.directory,
+      ssh: { hostId: "not-configured" },
+    });
+    expect(refused.status).toBe(400);
+    expect((refused.body as { message: string }).message).toContain("SSH host");
+    // And nothing was started: a refused create leaves no row behind.
+    expect(
+      core_.database
+        .prepare("SELECT count(*) AS total FROM terminal_sessions")
+        .get(),
+    ).toMatchObject({ total: 0 });
   });
 
   it("answers 404 for a session nobody created", async () => {

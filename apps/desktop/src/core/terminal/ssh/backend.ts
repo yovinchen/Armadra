@@ -35,9 +35,11 @@
 
 import type { SshHost } from "../../settings/ssh-hosts";
 import {
+  type AdoptableBackend,
   type Attachment,
   type BackendCapabilities,
   type BackendKind,
+  type BackendNotice,
   type BackendRef,
   type ForegroundInfo,
   type SessionKey,
@@ -47,6 +49,7 @@ import {
   type TerminalSpec,
   type TerminateMode,
   TerminalError,
+  isAdoptable,
 } from "../backend";
 import { sshArgv } from "./argv";
 import type { AskpassService } from "./askpass";
@@ -180,7 +183,50 @@ export class SshBackend implements TerminalBackend {
     return this.options.inner.getCapabilities();
   }
 
+  scroll(key: SessionKey, lines: number): Promise<void> {
+    return this.options.inner.scroll(key, lines);
+  }
+
+  destroyByReference(reference: string): Promise<void> {
+    return this.options.inner.destroyByReference(reference);
+  }
+
+  setDormant(key: SessionKey, dormant: boolean): Promise<void> {
+    return this.options.inner.setDormant(key, dormant);
+  }
+
+  notices(listener: (notice: BackendNotice) => void): void {
+    this.options.inner.notices(listener);
+  }
+
+  snapshot(key: SessionKey): string | undefined {
+    return this.options.inner.snapshot?.(key);
+  }
+
+  /**
+   * Adoption is the inner backend's, and it has to travel through the wrapper.
+   *
+   * This class is what the manager holds, so a decorator that quietly did not
+   * forward `adopt` would make the start-up reconciliation skip the backend
+   * entirely — every surviving pane would be settled as `exited` instead of
+   * re-adopted. A backend with nothing to adopt (there is none behind this one
+   * today, but `direct` would be one) answers `undefined` rather than
+   * pretending, exactly as `isAdoptable` describes.
+   */
+  adopt(
+    key: SessionKey,
+    reference: string,
+    generation: number,
+  ): Promise<number | undefined> {
+    const inner = this.options.inner;
+    if (!isAdoptable(inner)) return Promise.resolve(undefined);
+    return inner.adopt(key, reference, generation);
+  }
+
   detachAll(): Promise<void> {
     return this.options.inner.detachAll();
   }
 }
+
+/** The decorator claims `AdoptableBackend` only because it forwards `adopt`. */
+export type SshDecorated = SshBackend & AdoptableBackend;

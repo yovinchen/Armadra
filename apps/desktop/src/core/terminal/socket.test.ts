@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { decodeFrame, encodeFrame, validWriter } from "./socket";
+import type { WebSocket } from "ws";
+import type { Attachment } from "./backend";
+import type { TerminalManager } from "./manager";
+import {
+  decodeFrame,
+  encodeFrame,
+  serveTerminalSocket,
+  validWriter,
+} from "./socket";
 
 /**
  * The wire, as `apps/web/src/terminal/transport.ts` reads it.
@@ -135,5 +143,102 @@ describe("the writer label", () => {
     expect(validWriter("has space")).toBeUndefined();
     expect(validWriter("newline\n")).toBeUndefined();
     expect(validWriter("中文")).toBeUndefined();
+  });
+});
+
+/* ------------------------- the stream that ended -------------------------- */
+
+/**
+ * What a socket owes the page when its output stream ends.
+ *
+ * There are two reasons a stream ends and they call for opposite frames. The
+ * session really finished: `status: exited`, and the row is settled. Or the
+ * session was **recycled** underneath this socket — the recycle destroys the
+ * old pane, which ends exactly this stream while the row is already running
+ * again at the next generation. Telling the page `exited` there would show a
+ * dead terminal for a live one, and settling the row would bury the session
+ * that just replaced it.
+ */
+describe("a stream that ended", () => {
+  function harness(currentGeneration: number) {
+    const sent: Record<string, unknown>[] = [];
+    let closed = false;
+    let exit: ((code: number | undefined) => void) | undefined;
+    const attachment: Attachment = {
+      attachmentId: 1,
+      generation: 1,
+      onData: () => {},
+      onExit: (listener) => {
+        exit = listener;
+      },
+    };
+    const marked: number[] = [];
+    const handlers = new Map<string, () => void>();
+    const manager = {
+      attach: async () => ({
+        attachment,
+        record: { kind: "tmux" },
+        snapshot: undefined,
+      }),
+      acknowledgedInput: () => 0,
+      generation: () => currentGeneration,
+      markExited: (_id: string, code: number | null) => marked.push(code ?? -1),
+      noteOutput: () => {},
+      detached: async () => {},
+    } as unknown as TerminalManager;
+    const connection = {
+      send: (payload: Buffer) =>
+        sent.push(
+          JSON.parse(payload.toString("utf8")) as Record<string, unknown>,
+        ),
+      close: () => {
+        closed = true;
+        handlers.get("close")?.();
+      },
+      on: (event: string, handler: () => void) => {
+        handlers.set(event, handler);
+      },
+    } as unknown as WebSocket;
+    return {
+      sent,
+      marked,
+      manager,
+      connection,
+      closed: () => closed,
+      end: (code: number | undefined) => exit?.(code),
+    };
+  }
+
+  it("reports an exit that really happened", async () => {
+    const socket = harness(1);
+    const served = serveTerminalSocket(socket.connection, {
+      manager: socket.manager,
+      sessionId: "s1",
+      writer: "w",
+    });
+    await Promise.resolve();
+    socket.end(3);
+    await served;
+    expect(socket.sent.at(-1)).toEqual({
+      type: "status",
+      status: "exited",
+      exitCode: 3,
+    });
+    expect(socket.marked).toEqual([3]);
+  });
+
+  it("sends `stale` for a recycle, and settles nothing", async () => {
+    const socket = harness(2);
+    const served = serveTerminalSocket(socket.connection, {
+      manager: socket.manager,
+      sessionId: "s1",
+      writer: "w",
+    });
+    await Promise.resolve();
+    socket.end(undefined);
+    await served;
+    expect(socket.sent.at(-1)).toEqual({ type: "stale", generation: 2 });
+    expect(socket.marked).toEqual([]);
+    expect(socket.closed()).toBe(true);
   });
 });

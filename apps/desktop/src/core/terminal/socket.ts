@@ -272,6 +272,17 @@ export async function serveTerminalSocket(
     attachment.onExit((exitCode) => {
       // The last words before the exit status: flush, then report.
       flush();
+      // The stream ended — but *why* decides what this socket is owed, and
+      // getting it wrong is visible twice over.
+      //
+      // A recycle destroys the old session, which ends exactly this stream
+      // while the row is already running again at the next generation. Sending
+      // `status: exited` there would tell the page its terminal died, and
+      // `markExited` would bury the row of the session that just replaced it.
+      // So a generation that has moved is a `stale`, not an exit.
+      if (announceStale(connection, manager, sessionId, generation, send)) {
+        return;
+      }
       try {
         manager.markExited(sessionId, exitCode ?? null);
       } catch (error) {
