@@ -42,10 +42,12 @@ import {
   type LinkEvent,
   Link,
   endpointFor,
-  resolveHostBinary,
+  hostFlavour,
+  hostLaunch,
   startHost,
   waitForHost,
 } from "./link";
+import { type HelloAuth, ensureKey, signHello } from "./auth";
 
 /**
  * The Windows backend: terminals owned by `armadra-session-host`.
@@ -61,19 +63,26 @@ import {
  *   * `detachAll` closes connections and leaves the host alone. Core shutdown
  *     must not take a user's agents with it; that is the whole point.
  *
- * ## R6 boundary
+ * ## Which host is on the other end (R6d)
  *
- * The host on the other end of this pipe is still the Rust binary. This batch
- * makes the TypeScript core able to **drive** it; R6 replaces the host itself.
- * Two consequences are written down rather than discovered:
+ * Both ends are TypeScript now. The default host is the daemon in
+ * `apps/desktop/src/session-host/`, bundled to `out/session-host/host.cjs`
+ * and started through this process' own executable with
+ * `ELECTRON_RUN_AS_NODE=1`. `ARMADRA_SESSION_HOST=rust` still reaches the
+ * `crates/session-host` binary, which speaks the same wire; R7 deletes it.
  *
- *   * **No machine here can run this.** The protocol, the pipe name and the
- *     gap detector are pure functions in `protocol.ts` and are tested exactly
- *     against the Rust unit tests' vectors; the socket is not tested at all.
- *     `TODO(R6)`: first real-hardware run of create / attach / detach /
- *     re-attach / restart.
- *   * **The server-identity check is missing.** See the note at the top of
- *     `link.ts`. Windows should stay on `ARMADRA_CORE=rust` until R6.
+ * Two facts are written down rather than discovered:
+ *
+ *   * **No machine in this project's CI is a Windows developer machine.** The
+ *     protocol, the pipe name, the replay trimming, the generation fence and
+ *     the handshake are pure functions and are tested exactly; create /
+ *     attach / detach / re-attach / restart against a real ConPTY runs only
+ *     in the Windows CI job (`session-host/windows.integration.test.ts`).
+ *   * **The peer is authenticated, not identified.** `node:net` exposes
+ *     neither the pipe's security descriptor nor the peer's SID, so the DACL
+ *     and the per-connection SID check of the Rust host are replaced by a
+ *     one-time HMAC over a `0600` key file. `auth.ts` states the residual
+ *     risk in full.
  */
 
 /** Everything this core remembers about one host session. */
@@ -154,6 +163,22 @@ export class SessionHostBackend implements AdoptableBackend {
   }
 
   /**
+   * The proof this core presents with every `hello`.
+   *
+   * `undefined` under the Rust host, which has no notion of one and would
+   * ignore the field: sending it there would be harmless but would also make
+   * a missing key file fail a connection that does not need it.
+   *
+   * A **fresh** proof per connection, never a cached one: the nonce is
+   * single-use and the host refuses a repeat, so a cached proof would work
+   * exactly once and then look like an authentication failure.
+   */
+  private proof(): HelloAuth | undefined {
+    if (hostFlavour() === "rust") return undefined;
+    return signHello(ensureKey(this.options.dataDir), this.endpoint());
+  }
+
+  /**
    * The control connection, opened or reopened as needed.
    *
    * Reconnecting is normal — the host may have been upgraded, or this core may
@@ -179,8 +204,7 @@ export class SessionHostBackend implements AdoptableBackend {
     try {
       link = await Link.connect(endpoint, sink);
     } catch (first) {
-      const executable = resolveHostBinary();
-      startHost(executable, this.options.dataDir);
+      startHost(hostLaunch(this.options.dataDir));
       try {
         link = await waitForHost(endpoint, sink, START_TIMEOUT_MS);
       } catch {
@@ -191,6 +215,7 @@ export class SessionHostBackend implements AdoptableBackend {
     }
     const greeting = await link.handshake(
       `armadra-core/${this.options.version}`,
+      this.proof(),
     );
     if (this.instance !== undefined && this.instance !== greeting.instanceId) {
       // The host restarted: everything this core remembered about its sessions
@@ -395,7 +420,10 @@ export class SessionHostBackend implements AdoptableBackend {
         `会话宿主没有在运行：${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    await link.handshake(`armadra-core-attach/${this.options.version}`);
+    await link.handshake(
+      `armadra-core-attach/${this.options.version}`,
+      this.proof(),
+    );
     // Registered before the request goes out, so no frame can arrive unchecked.
     link.expectOutput(generation);
 
