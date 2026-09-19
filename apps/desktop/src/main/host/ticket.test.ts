@@ -12,7 +12,9 @@ import {
 import {
   HOST_ENDPOINT,
   type HostLaunchConfig,
+  resolveBinary,
 } from "../../shell-core/host/config";
+import { runtimeExecutable } from "../runtime-process";
 import {
   NativeTicketError,
   type NativeTicketReason,
@@ -109,6 +111,22 @@ async function reasonOf(work: Promise<unknown>): Promise<string | undefined> {
       : "not-a-ticket-error";
   }
 }
+
+describe("where a packaged shell looks for its Host", () => {
+  it("is the one directory `extraResources` actually stages into", () => {
+    const resources = "/Applications/Armadra.app/Contents/Resources";
+    // The Host and the Runtime must agree: electron-builder stages all four
+    // binaries into `process.resourcesPath`, and resolving one of them beside
+    // `process.execPath` is how a double-clicked application ends up with a
+    // Runtime but no Host.
+    expect(
+      resolveBinary(false, resources, "/repo", undefined, undefined, "darwin"),
+    ).toEqual({ ok: true, binary: join(resources, "armadra-host") });
+    expect(runtimeExecutable(true, {}, resources, "/repo")).toBe(
+      join(resources, "armadra-runtime"),
+    );
+  });
+});
 
 describe("the pair line", () => {
   it("binds the shell's own origin and the device name", () => {

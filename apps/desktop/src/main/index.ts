@@ -24,6 +24,7 @@ import {
   RuntimeProcess,
   externalRuntimeBase,
   ownedRuntimeAddress,
+  setPackagedShell,
   waitForRuntime,
 } from "./runtime-process";
 import { type PageSource, startPageSource } from "./static-server";
@@ -133,11 +134,23 @@ function registerIpc(): void {
  * answer — without the document there is nothing else the page could try.
  */
 function transportEndpoints(): Promise<TransportEndpoints> {
-  return resolveEndpoints(dataDir(), externalRuntimeBase(), HOST_ENDPOINT);
+  return resolveEndpoints(dataDir(), externalRuntimeBase(), hostBase());
 }
 
 function fallbackTransport(): TransportEndpoints {
-  return fallbackEndpoints(externalRuntimeBase(), HOST_ENDPOINT, dataDir());
+  return fallbackEndpoints(externalRuntimeBase(), hostBase(), dataDir());
+}
+
+/**
+ * The Host this shell is talking to. What startup actually observed when there
+ * is one, then what it asked for, then the documented port — a development
+ * shell may have been sent elsewhere, and reporting the constant would send
+ * the page to somebody else's Host.
+ */
+function hostBase(): string {
+  const observed = lifecycle.observedHost()?.httpEndpoint;
+  if (observed) return observed;
+  return lifecycle.hostLaunchConfig()?.expectedHttpEndpoint ?? HOST_ENDPOINT;
 }
 
 /**
@@ -222,6 +235,9 @@ async function requestQuit(): Promise<void> {
  */
 async function start(): Promise<void> {
   traceLifecycle("setup");
+  // Where the managed binaries are is Electron's answer, not an environment
+  // variable's: a double-clicked application inherits nobody's shell.
+  setPackagedShell(app.isPackaged);
   registerIpc();
 
   // The system integration (W2.1). All of it is installed before the window
@@ -238,6 +254,7 @@ async function start(): Promise<void> {
     process.env.ELECTRON_RENDERER_URL,
     app.isPackaged,
     join(__dirname, "../renderer"),
+    process.env.ARMADRA_DESKTOP_EXTERNAL_RENDERER === "1",
   );
   setPageUrl(page.url);
   applyContentSecurityPolicy(page.origin);
