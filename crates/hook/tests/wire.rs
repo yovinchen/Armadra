@@ -102,7 +102,15 @@ fn write_endpoint_file(dir: &Path, port: u16) -> PathBuf {
 }
 
 /// Runs the binary with a clean ARMADRA environment plus `env`.
+///
+/// `ARMADRA_DATA_DIR` always ends up set to a fresh, empty directory (unless
+/// `env` names one explicitly): since W0.3 the client also tries the default
+/// data-directory location as a failover candidate, and without this a test
+/// running on a machine with a real Armadra install would have its "no
+/// endpoint" or "nothing listening" cases silently pick up that real
+/// installation's endpoint file instead.
 fn run(args: &[&str], env: &[(&str, &str)], stdin: &str) -> Output {
+    let isolated_data_dir = tempfile::tempdir().unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_armadra-hook"));
     command.args(args);
     for name in [
@@ -114,9 +122,11 @@ fn run(args: &[&str], env: &[(&str, &str)], stdin: &str) -> Output {
         "ARMADRA_HOOK_DEBUG",
         "ARMADRA_SESSION_ID",
         "ARMADRA_SESSION_GENERATION",
+        "ARMADRA_DATA_DIR",
     ] {
         command.env_remove(name);
     }
+    command.env("ARMADRA_DATA_DIR", isolated_data_dir.path());
     for (name, value) in env {
         command.env(name, value);
     }
@@ -387,6 +397,85 @@ fn hook_mode_fails_open_when_nothing_is_listening() {
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
+}
+
+/// W0.3: `ARMADRA_ENDPOINT_FILE` is missing entirely, but the runtime is
+/// reachable at the well-known default-data-directory location. Candidate 2
+/// (`docs/research/nodeterm/agent-integration.md` §2.5 / §7.1) is what saves
+/// this — before it existed, an unset or stale env var meant `canvas`/hook
+/// reports had nowhere else to look.
+#[test]
+fn control_falls_back_to_the_default_data_directory_when_the_env_file_is_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let (port, requests) = serve_once(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 12\r\n\r\nnode-7 api\n\n",
+    );
+    // Written straight to `dir` — the well-known location under
+    // `ARMADRA_DATA_DIR`, not the (unset) `ARMADRA_ENDPOINT_FILE`.
+    write_endpoint_file(dir.path(), port);
+
+    let output = run(
+        &["canvas", "list"],
+        &[
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_DATA_DIR", dir.path().to_str().unwrap()),
+        ],
+        "",
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let captured = requests
+        .recv_timeout(Duration::from_secs(5))
+        .expect("the default-location candidate was tried");
+    assert_eq!(captured.request_line(), "POST /control/list HTTP/1.1");
+    assert_eq!(
+        captured.header("X-Armadra-Hook-Token").as_deref(),
+        Some("app-token-abc")
+    );
+}
+
+/// A dead `ARMADRA_ENDPOINT_FILE` (the classic "runtime restarted under a
+/// different port" case) must not stop `canvas`/`context` from reaching a
+/// live runtime found via the default-location candidate — only a transport
+/// failure is allowed to advance the search, and a refused connection is
+/// exactly that.
+#[test]
+fn control_moves_past_a_dead_env_file_to_a_live_default_location() {
+    let dir = tempfile::tempdir().unwrap();
+    let dead_port = {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.local_addr().unwrap().port()
+    };
+    let stale_endpoint_dir = tempfile::tempdir().unwrap();
+    let stale_endpoint = write_endpoint_file(stale_endpoint_dir.path(), dead_port);
+
+    let (port, requests) = serve_once(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 12\r\n\r\nnode-7 api\n\n",
+    );
+    write_endpoint_file(dir.path(), port);
+
+    let output = run(
+        &["canvas", "list"],
+        &[
+            ("ARMADRA_NODE_ID", "node-7"),
+            ("ARMADRA_ENDPOINT_FILE", stale_endpoint.to_str().unwrap()),
+            ("ARMADRA_DATA_DIR", dir.path().to_str().unwrap()),
+        ],
+        "",
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let captured = requests
+        .recv_timeout(Duration::from_secs(5))
+        .expect("failover reached the live default-location candidate");
+    assert_eq!(captured.request_line(), "POST /control/list HTTP/1.1");
 }
 
 #[test]

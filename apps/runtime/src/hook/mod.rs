@@ -181,6 +181,51 @@ impl HookService {
         })
     }
 
+    /// Republishes the endpoint file without a socket entry — called when the
+    /// Unix socket listener fails to bind after [`publish_endpoint`] already
+    /// advertised it optimistically (W0.3). Without this, a client would keep
+    /// trying a socket that will never accept a connection instead of falling
+    /// back to the TCP port this run still has, if any.
+    ///
+    /// A hook client only ever moves to its next candidate on a *transport*
+    /// failure (docs/research/nodeterm/agent-integration.md §2.5), so leaving
+    /// a dead socket in the file would not just be slower — every attempt
+    /// against this Runtime would burn its socket-connect budget first.
+    pub fn withdraw_socket(&self) {
+        let port = self.port();
+        let endpoint = Endpoint {
+            port,
+            socket: None,
+            token: self.inner.auth.bearer().to_owned(),
+            node_token_dir: self.node_token_dir(),
+        };
+        if let Err(error) = endpoint.write(&self.endpoint_file()) {
+            tracing::warn!(
+                %error,
+                "could not update the hook endpoint file after a failed socket bind"
+            );
+        }
+        // No port either: this run has no hook surface left to advertise at
+        // all, so the file itself has to go rather than name a dead address.
+        if port.is_none() {
+            self.withdraw();
+        }
+    }
+
+    /// Removes the endpoint file, so a stale terminal's next hook invocation
+    /// reads "no endpoint here" instead of an address this process no longer
+    /// answers on. Called on a clean shutdown and when start-up itself could
+    /// not publish (W0.3 — nodeterm's `stop()`/failed-listen half of the same
+    /// fix, agent-integration.md §2.5 / §8 批 0).
+    pub fn withdraw(&self) {
+        let path = self.endpoint_file();
+        if let Err(error) = std::fs::remove_file(&path)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!(%error, path = %path.display(), "could not remove the hook endpoint file");
+        }
+    }
+
     /// Extra PTY environment for an agent terminal, on top of
     /// [`crate::terminal::agent_environment`] — plan §5.5.
     ///
@@ -313,6 +358,10 @@ pub fn routes() -> Router<AppState> {
 pub fn start(state: AppState, port: Option<u16>) {
     if let Err(error) = state.hooks.publish_endpoint(port) {
         tracing::warn!(%error, "hook clients will not find this runtime");
+        // A stale file from a previous run must not go on describing a
+        // process that never actually started serving hooks (W0.3's "failed
+        // start path" half of the fix).
+        state.hooks.withdraw();
     }
     // The `SSH_ASKPASS` helper needs to reach this Runtime, and the port is
     // only known here. Without it the helper exits non-zero and `ssh` fails
@@ -350,6 +399,11 @@ fn spawn_unix_listener(state: AppState) {
             Ok(listener) => listener,
             Err(error) => {
                 tracing::warn!(%error, path = %path.display(), "could not bind the hook socket");
+                // The endpoint file was already published assuming this bind
+                // would succeed (`publish_endpoint` runs before this task is
+                // even spawned); correct it now rather than leave a dead
+                // socket advertised for the rest of this run (W0.3).
+                state.hooks.withdraw_socket();
                 return;
             }
         };

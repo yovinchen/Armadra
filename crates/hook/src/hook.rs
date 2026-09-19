@@ -14,7 +14,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::{json, Value};
 
-use crate::endpoint::{env_var, is_valid_node_id};
+use crate::endpoint::{env_var, is_valid_node_id, Endpoint};
 use crate::http::{self, Request};
 use crate::{Session, HOOK_PROTOCOL_VERSION, MAX_PAYLOAD_BYTES};
 
@@ -100,12 +100,12 @@ pub fn hook_body(
 }
 
 fn post_hook(session: &Session, agent_id: &str, body: &[u8]) -> Result<u16, String> {
-    let request = Request::post_json(
-        format!("/hook/{}", percent_encode_segment(agent_id)),
-        session.headers(),
-        body.to_vec(),
-    );
-    http::send(&session.endpoint, &request).map(|response| response.status)
+    let path = format!("/hook/{}", percent_encode_segment(agent_id));
+    session
+        .send(|session, candidate| {
+            Request::post_json(path.clone(), session.headers_for(candidate), body.to_vec())
+        })
+        .map(|(response, _)| response.status)
 }
 
 /// Reads stdin with a hard cap, reporting whether anything was dropped.
@@ -182,6 +182,15 @@ fn now_epoch_ms() -> u128 {
         .unwrap_or(0)
 }
 
+/// Unlike [`post_hook`], this cannot hand the failover loop a single
+/// candidate-agnostic closure: the pending request/answer files have to sit
+/// next to whichever candidate's endpoint file actually accepts the report
+/// (`Endpoint::pending_dir`), because that is the directory the *answering*
+/// Runtime watches. So this walks `session.candidates` itself, writing the
+/// pending file fresh for each candidate it tries and removing it the moment
+/// that candidate turns out not to be the live one — only a transport failure
+/// moves on to the next candidate; an HTTP-level rejection is authoritative
+/// and falls back to a plain (non-waiting) report on the spot (§2.5).
 fn run_permission_wait(session: &Session, agent_id: &str, payload: Value, seconds: u32) -> i32 {
     if !is_valid_node_id(&session.node_id) {
         debug("node id is not filesystem safe; skipping permission wait");
@@ -190,34 +199,82 @@ fn run_permission_wait(session: &Session, agent_id: &str, payload: Value, second
         return 0;
     }
 
-    let pending_dir = session.endpoint.pending_dir();
     let pending_id = pending_id(&session.node_id, now_epoch_ms(), process::id());
-    let request_path = pending_dir.join(format!("{pending_id}.json"));
-    let answer_path = pending_dir.join(format!("{pending_id}.answer"));
+    let path = format!("/hook/{}", percent_encode_segment(agent_id));
+    let mut last_error = String::new();
 
-    if let Err(error) = write_request_file(&pending_dir, &request_path, &payload) {
-        // Without the request file the UI has nothing to render, so fall back
-        // to a plain report and let the CLI show its own prompt.
-        debug(&error);
-        let body = hook_body(&session.node_id, &payload, None, None);
-        let _ = post_hook(session, agent_id, &body);
-        return 0;
+    for candidate in &session.candidates {
+        let pending_dir = candidate.pending_dir();
+        let request_path = pending_dir.join(format!("{pending_id}.json"));
+        let answer_path = pending_dir.join(format!("{pending_id}.answer"));
+
+        if let Err(error) = write_request_file(&pending_dir, &request_path, &payload) {
+            debug(&error);
+            last_error = error;
+            continue;
+        }
+
+        let body = hook_body(&session.node_id, &payload, Some(&pending_id), None);
+        let request = Request::post_json(path.clone(), session.headers_for(candidate), body);
+        match http::send(candidate, &request) {
+            Ok(response) if response.status == 204 => {
+                return await_decision(
+                    session,
+                    candidate,
+                    agent_id,
+                    &payload,
+                    &pending_id,
+                    &request_path,
+                    &answer_path,
+                    seconds,
+                );
+            }
+            Ok(_) => {
+                // Reached the runtime and it answered — authoritative, per
+                // §2.5. Fall back to a plain report rather than trying
+                // another candidate that never saw this pending id.
+                let _ = fs::remove_file(&request_path);
+                debug("permission report was rejected by the endpoint");
+                let plain = hook_body(&session.node_id, &payload, None, None);
+                let _ = post_hook(session, agent_id, &plain);
+                return 0;
+            }
+            Err(error) => {
+                // Transport failure: nothing is listening here, so nothing is
+                // watching the pending file we just wrote either.
+                let _ = fs::remove_file(&request_path);
+                last_error = error;
+            }
+        }
     }
+    // Fail open: print nothing and let the CLI fall back to its own
+    // interactive prompt. The runtime sweeps orphaned request files.
+    debug(&last_error);
+    0
+}
 
-    let body = hook_body(&session.node_id, &payload, Some(&pending_id), None);
-    if let Err(error) = post_hook(session, agent_id, &body) {
-        debug(&error);
-        let _ = fs::remove_file(&request_path);
-        return 0;
-    }
-
-    match poll_for_answer(&answer_path, Duration::from_secs(u64::from(seconds))) {
+#[allow(clippy::too_many_arguments)]
+fn await_decision(
+    session: &Session,
+    candidate: &Endpoint,
+    agent_id: &str,
+    payload: &Value,
+    pending_id: &str,
+    request_path: &Path,
+    answer_path: &Path,
+    seconds: u32,
+) -> i32 {
+    match poll_for_answer(answer_path, Duration::from_secs(u64::from(seconds))) {
         Some(decision) => {
-            let _ = fs::remove_file(&answer_path);
-            let _ = fs::remove_file(&request_path);
+            let _ = fs::remove_file(answer_path);
+            let _ = fs::remove_file(request_path);
             // Report in the background: the decision is already made, so the
-            // agent should not wait on the runtime to acknowledge it.
-            let reported = report_answered(session, agent_id, &payload, &pending_id, decision);
+            // agent should not wait on the runtime to acknowledge it. Reported
+            // on the same candidate the request went to — not a fresh
+            // failover search — because that is the Runtime that holds the
+            // pending record this answers.
+            let reported =
+                report_answered(session, candidate, agent_id, payload, pending_id, decision);
             let mut stdout = io::stdout().lock();
             let _ = stdout.write_all(decision.output().as_bytes());
             let _ = stdout.write_all(b"\n");
@@ -227,8 +284,6 @@ fn run_permission_wait(session: &Session, agent_id: &str, payload: Value, second
             0
         }
         None => {
-            // Fail open: print nothing and let the CLI fall back to its own
-            // interactive prompt. The runtime sweeps orphaned request files.
             debug("permission wait timed out");
             0
         }
@@ -290,6 +345,7 @@ fn poll_for_answer(path: &Path, budget: Duration) -> Option<Decision> {
 /// POST finishes; the caller caps how long it is willing to wait.
 fn report_answered(
     session: &Session,
+    candidate: &Endpoint,
     agent_id: &str,
     payload: &Value,
     pending_id: &str,
@@ -301,8 +357,8 @@ fn report_answered(
         Some(pending_id),
         Some(decision.as_str()),
     );
-    let endpoint = session.endpoint.clone();
-    let headers = session.headers();
+    let endpoint = candidate.clone();
+    let headers = session.headers_for(candidate);
     let path = format!("/hook/{}", percent_encode_segment(agent_id));
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {

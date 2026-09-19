@@ -210,9 +210,15 @@ fn request(path: &str, args: Map<String, Value>) -> i32 {
         Err(error) => return fail(&error),
     };
     let body = control_body(&session.node_id, args);
-    let request = Request::post_json(path.to_string(), session.headers(), body);
-    match http::send(&session.endpoint, &request) {
-        Ok(response) if response.is_success() => {
+    let outcome = session.send(|session, candidate| {
+        Request::post_json(
+            path.to_string(),
+            session.headers_for(candidate),
+            body.clone(),
+        )
+    });
+    match outcome {
+        Ok((response, _)) if response.is_success() => {
             let text = render(&response);
             if !text.is_empty() {
                 let mut stdout = std::io::stdout().lock();
@@ -224,7 +230,7 @@ fn request(path: &str, args: Map<String, Value>) -> i32 {
             }
             0
         }
-        Ok(response) => fail(&render_error(&response)),
+        Ok((response, _)) => fail(&render_error(&response)),
         Err(error) => fail(&error),
     }
 }
