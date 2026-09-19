@@ -202,7 +202,14 @@ export class ServerProcess {
     } catch {
       return "spawnFailed";
     }
-    if (child.pid === undefined) return "spawnFailed";
+    if (child.pid === undefined) {
+      // A spawn that failed asynchronously (ENOENT is the usual one) emits
+      // `error` on a child nothing is listening to, and an unhandled `error`
+      // event is a process-level throw. The handler goes on before the early
+      // return, not only inside the constructor.
+      child.on("error", () => {});
+      return "spawnFailed";
+    }
     return new ServerProcess(child, onEvent);
   }
 
