@@ -6,6 +6,7 @@ import { useCanvasStore } from "../store/canvas-store";
 import { AboutPage } from "./settings/pages/AboutPage";
 import { AccountPage } from "./settings/pages/AccountPage";
 import { AgentPage } from "./settings/pages/AgentPage";
+import { BrowserPage } from "./settings/pages/BrowserPage";
 import { DataPage } from "./settings/pages/DataPage";
 import { GeneralPage } from "./settings/pages/GeneralPage";
 import { GithubPage } from "./settings/pages/GithubPage";
@@ -23,7 +24,6 @@ import { subpageTitleKey } from "./settings/subpage";
 import { SettingsWriteGuard } from "./settings/WriteGuard";
 import {
   DEFAULT_SETTINGS_SECTION,
-  SETTINGS_SECTIONS,
   groupSections,
   isSettingsSectionId,
   settingsSection,
@@ -43,6 +43,7 @@ const SECTION_PAGES: Record<string, () => React.ReactElement> = {
   host: HostPage,
   github: GithubPage,
   terminal: TerminalPage,
+  browser: BrowserPage,
   workspace: WorkspacePage,
   ssh: SshPage,
   executionHosts: ExecutionHostsPage,
@@ -99,7 +100,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
     : DEFAULT_SETTINGS_SECTION;
   const section = settingsSection(active);
   const Page = SECTION_PAGES[active] ?? GeneralPage;
-  const groups = React.useMemo(() => groupSections(SETTINGS_SECTIONS), []);
+  const groups = React.useMemo(() => groupSections(), []);
 
   return (
     <div className="settings-layout flex h-full min-h-0 flex-row">

@@ -1,8 +1,8 @@
 import * as React from "react";
 
-import { useT } from "@/app/preferences-store";
+import { useBrowserPreferences, useT } from "@/app/preferences-store";
 
-import { BROWSER_DISCARD_MS, DISCARD_TICK_MS, shouldDiscard } from "./discard";
+import { DISCARD_TICK_MS, discardSettings, shouldDiscard } from "./discard";
 import { registerGuest, reportView } from "./drive";
 import type { WebviewElement, WebviewNavigationEvent } from "./webview";
 import { allowGuestNavigation } from "./webview";
@@ -89,6 +89,8 @@ export function WebviewGuest({
   onOpenTab,
 }: WebviewGuestProps) {
   const t = useT();
+  // 提示里那个分钟数要跟着设置走，所以这一项订阅；判定本身在定时器里重读。
+  const discardMinutes = useBrowserPreferences().discardMinutes;
   const ref = React.useRef<WebviewElement | null>(null);
   /** 回收后重放用的地址。永远是 guest 真正停在的那一页。 */
   const locationRef = React.useRef(tab.src);
@@ -295,9 +297,9 @@ export function WebviewGuest({
       if (since === null) return;
       if (
         !shouldDiscard({
-          // 设置在**定时器触发时重读**。W3.1 没有这个开关，先恒为开；接上
-          // 设置面板时改的是这一行，不是 `shouldDiscard`。
-          enabled: true,
+          // 设置在**定时器触发时重读**：人在设置页把开关关掉、把分钟数调大，
+          // 下一个 tick 就按新值判断，不用等这棵子树重渲。
+          ...discardSettings(),
           loading: loadingRef.current,
           audible: audibleRef.current,
           driven: drivenRef.current,
@@ -330,9 +332,7 @@ export function WebviewGuest({
         data-slot="browser-discarded"
         style={hidden ? { display: "none" } : undefined}
       >
-        {t("browser.discarded", {
-          minutes: Math.round(BROWSER_DISCARD_MS / 60000),
-        })}
+        {t("browser.discarded", { minutes: discardMinutes })}
       </div>
     );
   }

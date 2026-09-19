@@ -3,6 +3,10 @@ import type { CanvasNode } from "@armadra/shared";
 
 import type { ArmadraFlowNode, CanvasFlowNode } from "@/canvas/sync/project";
 
+import {
+  BROWSER_DEFAULT_BACKGROUND_MAX,
+  usePreferencesStore,
+} from "@/app/preferences-store";
 import { isDesktop } from "@/platform";
 
 /**
@@ -40,8 +44,17 @@ import { isDesktop } from "@/platform";
  * 而 `zIndex` 只在不同层级间分胜负。选中态 `z = 1000` 仍然赢。
  */
 
-/** 后台（ghost）guest 的上限。超过就逐出最久退休的那个。 */
-export const BACKGROUND_WEBVIEW_MAX = 8;
+/**
+ * 后台（ghost）guest 上限的**默认值**。真正生效的是设置里的那一项。
+ *
+ * 逐出在每一次投影时判一遍，所以读在那时候发生：设置页把上限调小，下一帧
+ * 就把多出来的 ghost 逐掉，不用等应用重启。
+ */
+export const BACKGROUND_WEBVIEW_MAX = BROWSER_DEFAULT_BACKGROUND_MAX;
+
+function backgroundMax(): number {
+  return usePreferencesStore.getState().browser.backgroundMax;
+}
 
 interface PoolEntry {
   id: string;
@@ -163,7 +176,8 @@ export function applyWebviewPool(
 /** 逐出最久退休者，直到 ghost 数量落回上限。活着的永远不动。 */
 function evictGhosts(): void {
   let retired = entries.filter((entry) => entry.retiredAt !== null);
-  while (retired.length > BACKGROUND_WEBVIEW_MAX) {
+  const max = backgroundMax();
+  while (retired.length > max) {
     let oldest = retired[0]!;
     for (const entry of retired) {
       if (entry.retiredAt! < oldest.retiredAt!) oldest = entry;

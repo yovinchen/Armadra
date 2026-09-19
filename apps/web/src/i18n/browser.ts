@@ -88,6 +88,15 @@ const zh = {
   /* guest 渲染出错时的兜底：只让这个节点降级，不让整棵画布空白。 */
   "browser.guestFailed": "这个页面的显示出错了；关闭节点后重开即可恢复。",
 
+  /* 设置 → 浏览器（复查 §5.2）。三项都是内存开关，说的是「这台机器愿意为
+     看不见的页面留多少」。 */
+  "browser.settings.discard": "隐藏后回收页面",
+  "browser.settings.discardHint":
+    "回收会释放那个页面的进程；回到它时整页重新加载。正在加载、正在出声、Agent 正在操作的页面不回收。",
+  "browser.settings.discardMinutes": "隐藏多少分钟后回收",
+  "browser.settings.backgroundMax": "后台页面上限",
+  "browser.settings.backgroundMaxHint": "超过上限时释放最久没回去的那个页面。",
+
   /* 受管浏览器（§2.1） */
   "browser.managed.install": "安装受管浏览器 {version}（{megabytes} MB）",
   "browser.managed.installing": "正在安装…",
@@ -173,6 +182,14 @@ const en: Record<keyof typeof zh, string> = {
     "Hidden for over {minutes} minutes, so the page was freed to save memory; coming back reloads it.",
   "browser.guestFailed":
     "This page failed to render; close the node and reopen it to recover.",
+
+  "browser.settings.discard": "Free hidden pages",
+  "browser.settings.discardHint":
+    "Freeing a page releases its process; coming back reloads it. Pages that are loading, making sound, or being driven by an agent are never freed.",
+  "browser.settings.discardMinutes": "Free after this many minutes hidden",
+  "browser.settings.backgroundMax": "Background page limit",
+  "browser.settings.backgroundMaxHint":
+    "Past the limit, the page you went back to least recently is released.",
 
   "browser.managed.install":
     "Install managed browser {version} ({megabytes} MB)",
