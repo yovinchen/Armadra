@@ -271,6 +271,17 @@
   签名移到写清单之前，只剩 `ARMADRA_RELEASE_SIGNING_KEY` 一把钥匙；
   Runtime 的信号处理器提前到发布端点之前注册。
 
+- **真机运行修正**（`7b2aa5446`、`6c0028dab`、`f13a323f5`，2026-09-19 晚）：在开发者机器上实跑开发壳与打包版撞出四处——
+  pnpm 对已缓存的 `electron` 不补跑 postinstall，`predev` 加 `ensure-electron.mjs` 自愈；壳的 CSP
+  `default-src 'self'` 拦掉 Vite 开发模式注入的内联 React-refresh preamble，页面 `#root` 空白且无覆盖层，
+  现在只对 dev server 文档加 `script-src 'self' 'unsafe-inline'`，打包版仍严格；`<webview>` 方法在
+  `dom-ready` 前与 guest 销毁后会抛错，StrictMode 双跑效果必撞第一种，所有 guest 方法改经 try/catch，
+  并给 guest 加了 apps/web 第一个错误边界（`GuestBoundary`）；`allowpopups={true}` 被 React 当未知属性
+  丢弃从未生效，改为字符串；Vite 开发服务器定义的 `VITE_RUNTIME_URL=""` 压过壳的端点让所有 WS 绕经
+  1420 代理（主进程日志刷 EPIPE），现在壳在场时空字符串让位给壳的端点。验证：开发壳 CDP 冷启动零客户端
+  错误、WS 直连 Runtime；打包版（`release/mac-arm64/Armadra.app`，空 `ARMADRA_DATA_DIR`）从
+  `Contents/Resources/` 拉起 Runtime 与 Host，页面挂载、`/health` 200、票据以页面来源签发。
+
 **能力回退**：**手机远端观看浏览器页面的能力已移除（D6）**（连同手机焦点页的浏览器控制条）；
 **受管 Chromium 下载已移除**（§2.1）。前者是本轮唯一实打实的损失：
 `<webview>` 是本机进程内的 OOPIF，画面不经 Host 转发，所以经 Host 从手机看同一页面这条路没有了。
