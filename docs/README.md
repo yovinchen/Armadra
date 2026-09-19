@@ -57,6 +57,7 @@
 | [全面修改方案（2026-09）](design/overhaul-plan.md)              | 本轮总纲：界面补齐、Mermaid、功能复查、TS 核心、收尾与多端编译 |
 | [桌面壳迁移到 Electron](design/electron-migration.md)           | 换壳、`<webview>` 浏览器节点、画布性能前置与六条工作流         |
 | [TypeScript Core](design/typescript-core.md)                    | Go Host 与 Rust Runtime 合一为一个 TS core，两种壳、R0–R7      |
+| [画板导入 Mermaid 图](design/mermaid-import.md)                 | flowchart → 原生白板对象，其余图种 → 图片回退                  |
 
 ## status/ 已验证进度
 
