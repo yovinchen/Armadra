@@ -125,3 +125,15 @@ export function useWebviewTabs(initialUrl: string): TabsControl {
     patch,
   };
 }
+
+/** 没有图标时的替身：站点首字母，而不是一个到处都一样的通用图标。 */
+export function tabLetter(tab: Pick<WebviewTab, "title" | "address">): string {
+  try {
+    const host = new URL(tab.address).hostname.replace(/^www\./, "");
+    if (host) return host[0]!.toUpperCase();
+  } catch {
+    /* 还没导航完的标签没有可解析的地址，用标题顶上。 */
+  }
+  const source = (tab.title || tab.address).trim();
+  return (source[0] ?? "·").toUpperCase();
+}

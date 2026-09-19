@@ -21,5 +21,4 @@ export {
   type NodeMeta,
 } from "./registry";
 export { SubagentCard, type SubagentCardProps } from "./SubagentCard";
-export { normalizeUrl } from "./browser";
 export { breadcrumbs } from "./files/breadcrumb";

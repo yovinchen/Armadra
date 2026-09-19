@@ -1,11 +1,7 @@
 import * as React from "react";
 import { ChevronLeft } from "lucide-react";
-import type { BrowserSession } from "@armadra/shared";
 
-import { runtimeApi } from "../api/client";
 import { useT } from "../app/preferences-store";
-import { ActivityLine, LeaseBadge } from "../nodes/browser/Lease";
-import { useLease } from "../nodes/browser/session";
 import { useCompactLayout } from "../platform/layout";
 import { useCanvasStore } from "../store/canvas-store";
 import { NODE_BODY, nodeMeta } from "../nodes/registry";
@@ -117,75 +113,7 @@ export function MobileFocusPage() {
       </div>
 
       {node.type === "terminal" && <TerminalKeyBar nodeId={node.id} />}
-      {node.type === "browser" && <BrowserControlBar nodeId={node.id} />}
     </div>
-  );
-}
-
-/**
- * 手机上的控制条（浏览器补全设计 §2.8）。
- *
- * 接管 / 交还在画布上是节点头部的按钮，整屏之后头部被压成一行，指头够不着；
- * 所以它进到常驻行——和软键盘工具条一样的位置，一样的最小点击尺寸。
- * 徽标本身是同一个组件，读的也是同一份 `browser.lease` 事件。
- */
-function BrowserControlBar({ nodeId }: { nodeId: string }) {
-  const workspaceId = useCanvasStore((state) => state.workspace?.id);
-  const [session, setSession] = React.useState<BrowserSession | null>(null);
-
-  React.useEffect(() => {
-    if (!workspaceId) return;
-    let cancelled = false;
-    const controller = new AbortController();
-    void runtimeApi
-      .browserSessions(workspaceId, controller.signal)
-      .then((list) => {
-        if (cancelled) return;
-        setSession(
-          list.sessions.find((item) => item.nodeId === nodeId) ?? null,
-        );
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [workspaceId, nodeId]);
-
-  return (
-    <div
-      data-slot="mobile-browser-bar"
-      className={cn(
-        "flex shrink-0 items-center gap-2 border-t border-border px-2 py-2",
-        "bg-[var(--panel)] pb-[calc(env(safe-area-inset-bottom)+0.5rem)]",
-        // 常驻行里的按钮要够手指按，比画布上的头部按钮大一圈。
-        "[&_button]:min-h-10 [&_button]:px-3",
-      )}
-    >
-      <MobileBrowserLease workspaceId={workspaceId} session={session} />
-    </div>
-  );
-}
-
-function MobileBrowserLease({
-  workspaceId,
-  session,
-}: {
-  workspaceId: string | undefined;
-  session: BrowserSession | null;
-}) {
-  const lease = useLease(workspaceId, session);
-  return (
-    <>
-      <LeaseBadge
-        lease={lease.lease}
-        deviceId={lease.deviceId}
-        busy={lease.busy || !session}
-        onTakeover={lease.takeover}
-        onHandback={lease.handback}
-      />
-      <ActivityLine activity={lease.activity} />
-    </>
   );
 }
 

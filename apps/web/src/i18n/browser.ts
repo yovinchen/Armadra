@@ -32,6 +32,8 @@ const zh = {
   "browser.unavailable.launch_failed": "浏览器启动失败",
   "browser.unavailable.cdp_closed": "浏览器调试连接已断开",
   "browser.unavailable.unknown": "受控浏览器在这台机器上不可用",
+  "browser.unavailable.desktopOnly":
+    "浏览器节点只在桌面应用里可用；在浏览器里打开画布时它没有可以嵌入的页面。",
   "browser.searched": "已查找的可执行文件路径",
   "browser.searchedNone": "没有可查找的路径",
 
@@ -120,6 +122,8 @@ const en: Record<keyof typeof zh, string> = {
   "browser.unavailable.cdp_closed": "The browser debugging connection closed",
   "browser.unavailable.unknown":
     "The controlled browser is unavailable on this machine",
+  "browser.unavailable.desktopOnly":
+    "Browser nodes only work in the desktop app; opened in a browser tab there is no page for one to embed.",
   "browser.searched": "Executable paths searched",
   "browser.searchedNone": "No paths were searched",
 
