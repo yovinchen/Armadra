@@ -7,8 +7,7 @@
 //! against a fake TCP server; what is missing there is the other half of
 //! W0.3 — the *Runtime*-side behaviour (publishing, unbinding, withdrawing)
 //! — and proof that the two halves actually add up to self-healing with real
-//! processes and a real `SIGKILL`, the way `docs/research/nodeterm/
-//! agent-integration.md` §2.5 / §8 批 0 describes the bug and its fix.
+//! processes and a real `SIGKILL`.
 //!
 //! This spawns the actual `armadra-runtime` and `armadra-hook` binaries.
 //! `CARGO_BIN_EXE_armadra-hook` is not set here — that variable is only

@@ -9,8 +9,8 @@
  * answer, a redirect in a browser node, a remote announcement feed all reach
  * here — so the list is an allow-list rather than a deny-list.
  *
- * `http` and `https` only, per the migration design §2.2. nodeterm also allows
- * `mailto:`; Armadra does not, because nothing in the product produces one and
+ * `http` and `https` only, per the migration design §2.2. Armadra excludes
+ * `mailto:` because nothing in the product produces one and
  * an allow-list should hold exactly what is used.
  */
 

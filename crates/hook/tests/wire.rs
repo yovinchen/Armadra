@@ -401,8 +401,7 @@ fn hook_mode_fails_open_when_nothing_is_listening() {
 
 /// W0.3: `ARMADRA_ENDPOINT_FILE` is missing entirely, but the runtime is
 /// reachable at the well-known default-data-directory location. Candidate 2
-/// (`docs/research/nodeterm/agent-integration.md` §2.5 / §7.1) is what saves
-/// this — before it existed, an unset or stale env var meant `canvas`/hook
+/// provides this fallback — before it existed, an unset or stale env var meant `canvas`/hook
 /// reports had nowhere else to look.
 #[test]
 fn control_falls_back_to_the_default_data_directory_when_the_env_file_is_missing() {

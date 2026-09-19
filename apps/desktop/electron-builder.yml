@@ -83,8 +83,8 @@ mac:
     # prompt and no row in System Settings → Privacy & Security → Local
     # Network: the denial is silent and ungrantable, and it surfaces as
     # `EHOSTUNREACH` from an agent session while Apple-signed `/usr/bin/curl`
-    # succeeds at the same instant (docs/research/nodeterm/process-model-and-platform.md §4,
-    # nodeterm issue #589). Reviewed allowlist enforced by `build/info-plist.test.ts`.
+    # succeeds at the same instant. The reviewed allowlist is enforced by
+    # `scripts/info-plist.test.mjs`.
     NSLocalNetworkUsageDescription: "Armadra 的 Runtime 与已连接的 Agent CLI 需要访问本机局域网内的设备与服务。"
     # The name macOS shows under the Dock icon, in Spotlight and in the Force
     # Quit list — distinct from `CFBundleName` (electron-builder derives that

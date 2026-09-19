@@ -14,9 +14,8 @@ import { closeAction } from "../shell-core/window-rules";
  * `BrowserWindow` in a closure at init. On macOS the window can be closed
  * (the app stays alive, and so do the Runtime, the Host and the user's
  * terminals) and recreated from the dock; a captured reference then points at
- * a destroyed window and every send is silently dropped. nodeterm shipped that
- * bug — agent status badges died after a close→reopen cycle — and its
- * `main-window.ts:1-6` is where this rule is written down.
+ * a destroyed window and every send is silently dropped, leaving agent status
+ * badges stale after a close→reopen cycle.
  */
 
 let current: BrowserWindow | null = null;

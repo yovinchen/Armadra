@@ -12,9 +12,8 @@
 //! invocation — which self-heals a runtime restart that writes to the *same*
 //! path, but leaves nothing to try when that variable is stale, unset, or
 //! simply points at a location a currently-running Runtime no longer
-//! publishes to. `docs/research/nodeterm/agent-integration.md` §2.5 / §7.1
-//! describes the same gap in nodeterm and the fix it settled on: a small,
-//! bounded list of places to look, tried in order, where only a *transport*
+//! publishes to. Armadra checks a small, bounded list of places in order,
+//! where only a *transport*
 //! failure (refused connection, timeout, missing socket) advances to the next
 //! one — any HTTP answer at all, including a 4xx/5xx, is authoritative and
 //! ends the search.
@@ -52,16 +51,15 @@
 //!      bearer at all would draw a `401`, which is an HTTP answer and would
 //!      wrongly end the search right there.
 //!
-//! The list is capped at [`MAX_CANDIDATES`] (nodeterm uses the same bound for
-//! the same reason: a hook call sits on the hot path of every CLI event, so
-//! the number of connect attempts it can make has to stay small and constant).
+//! The list is capped at [`MAX_CANDIDATES`]: a hook call sits on the hot path
+//! of every CLI event, so the number of connect attempts it can make has to
+//! stay small and constant.
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Bound on how many endpoints one invocation will try before giving up.
-/// Mirrors nodeterm's "上限 3" (agent-integration.md §2.5).
 pub const MAX_CANDIDATES: usize = 3;
 
 /// Keys the client understands. Unknown keys are kept but ignored.

@@ -88,7 +88,7 @@ fn the_default_terminal_is_probed_and_falls_back() {
     assert!(rendered_conf().contains(&format!("set -g default-terminal \"{terminal}\"")));
 }
 
-/// nodeterm research §2.3: `session_activity` is bumped to `now` by every
+/// `session_activity` is bumped to `now` by every
 /// client attach, independent of pane output, and is therefore useless as an
 /// idle judgement. `list_alive` must read `window_activity` instead.
 #[test]
@@ -97,8 +97,8 @@ fn list_alive_reads_window_activity_not_session_activity() {
     assert!(!LIST_ALIVE_FORMAT.contains("#{session_activity}"));
 }
 
-/// The copy-mode guard and the paste itself must be one tmux invocation
-/// (nodeterm research §2.6), and `-r` must be present so embedded newlines
+/// The copy-mode guard and the paste itself must be one tmux invocation,
+/// and `-r` must be present so embedded newlines
 /// survive as `\n`.
 #[test]
 fn the_paste_plan_guards_copy_mode_in_the_same_call_and_keeps_newlines() {
@@ -142,20 +142,16 @@ fn the_paste_plan_skips_enter_when_not_requested() {
 
 /* ---------------------- test tmux server isolation (W4.2) ---------------------- */
 //
-// nodeterm research §1.4 / §6.4-4: this crate is developed from inside its own
-// terminal nodes, which are themselves tmux-backed. A `cargo test` run from
-// such a pane inherits that pane's `TMUX`/`TMUX_PANE`, and a test that trusts
-// either would think it is nested inside the very session it is about to
-// drive. Armadra's socket is already an absolute `-S <data_dir>/tmux.sock`
-// (see `base_args` in control.rs) rather than nodeterm's named `-L <socket>`
-// under the shared default tmpdir, so two of nodeterm's three legs do not
-// apply here by construction. What remained unguarded is: (1) whether the
-// production child-environment path actually strips an ambient `TMUX`
-// client — nodeterm strips in both production and tests, "because pane
-// sub-tmux commands should not think they are already inside one"; (2) a
-// test in this directory reaching for the real data directory or a bare
-// `-L` socket instead of a tempdir; (3) that every socket path a test
-// constructs is provably under a tempdir.
+// Armadra is developed from inside its own tmux-backed terminal nodes.
+// A `cargo test` run from such a pane inherits that pane's `TMUX`/`TMUX_PANE`,
+// and a test that trusts either would think it is nested inside the very
+// session it is about to drive. Armadra uses an absolute
+// `-S <data_dir>/tmux.sock` (see `base_args` in control.rs), isolating each
+// data directory's server. These tests guard three boundaries: (1) the
+// production child-environment path strips ambient `TMUX`/`TMUX_PANE` so
+// child commands do not think they are already inside tmux; (2) no test
+// reaches for the real data directory or a bare `-L` socket instead of a
+// tempdir; (3) every socket path a test constructs is under a tempdir.
 
 /// Test-only backend constructor. Every socket it binds lives under `dir`, a
 /// tempdir the caller owns — never `paths::data_dir()` and never the
@@ -221,7 +217,7 @@ fn a_test_backends_socket_lives_under_its_own_tempdir() {
     );
 }
 
-/// Leg 2 (behavioural, nodeterm §1.4): actually start a session through a
+/// Leg 2 (behavioural): actually start a session through a
 /// test-built backend and prove the socket file it binds landed under the
 /// tempdir — measured on disk, not inferred from the constructor argument.
 /// Skips itself when tmux is unavailable, the same convention as the
@@ -267,7 +263,7 @@ const REAL_DATA_DIR_PATTERN: &str = r"paths::data_dir\s*\(\s*\)";
 /// needing.
 const DEFAULT_SOCKET_FLAG_PATTERN: &str = r#"["']-L["']"#;
 
-/// Leg 3 of the nodeterm model (by review): prove the two patterns above
+/// Leg 3 (pattern validation): prove the two patterns above
 /// match the construction they are meant to catch, and not their neighbours,
 /// before trusting them to scan anything.
 #[test]

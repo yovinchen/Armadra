@@ -98,8 +98,7 @@ function rowOf(
  * 只有自己那一行的四个数字。
  *
  * 所以这里订阅同一个房间，但只在**自己这一行**变了的时候才 setState。数字没
- * 动的那些徽标一帧都不画——这就是 nodeterm `Canvas.tsx:1575-1579` 那条纪律
- * （「只订阅一个会变的签名」）落在资源采样上的形状。
+ * 动的那些徽标一帧都不画，资源采样只订阅各行实际使用的字段。
  */
 export function useSessionResources(
   workspaceId: string | null,

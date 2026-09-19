@@ -67,9 +67,8 @@ export function searchOrUrl(input: string): string {
  * 渲染侧的导航门：只放行 http(s)（W3.1）。
  *
  * `file://` 与其余 scheme 一律拒绝——一个远程页面能把 guest 导航到本地文件，
- * 就等于它能读这台机器上任何用户可读的东西。这一版**故意**比 nodeterm 更严：
- * nodeterm 在「当前页已经是 file:// 或 guest 全新」时放行 `file://`，那条放行
- * 只有在有本地媒体节点时才有意义，Armadra 现在没有，先不开。
+ * 就等于它能读这台机器上任何用户可读的东西。Armadra 没有需要本地文件访问的
+ * 媒体节点，因此即使当前页已经是 file:// 或 guest 全新，也不放行 `file://`。
  *
  * 真正的强制点在主进程（guest 的 `will-navigate` 与 `setWindowOpenHandler`），
  * 这里这一道是给 W3.3 之前的过渡期用的：渲染侧能拦下的先拦，拦不下的（真正

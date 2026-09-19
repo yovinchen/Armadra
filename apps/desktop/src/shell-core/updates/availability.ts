@@ -35,10 +35,9 @@ import type { MissingUpdaterConfig, UpdateState } from "./machine";
  * signed.
  *
  * `unknown` is refused rather than assumed. Windows is `unknown` until W2.3
- * wires Authenticode, which is the order the research doc states plainly:
+ * wires Authenticode. Armadra requires this order:
  * **sign first, then turn on automatic updates**, because an unsigned
- * automatic update is a step backwards in trust
- * (`docs/research/nodeterm/process-model-and-platform.md` §4).
+ * automatic update is a step backwards in trust.
  */
 export type SignatureState =
   | "signed"
@@ -58,13 +57,12 @@ export type SignatureState =
  *   release script, so a promoted build is untouched and keeps updating;
  * - read from `join(app.getAppPath(), "package.json")` at startup only.
  *
- * It exists for the reason nodeterm's `nodeTermUpdates` marker exists
- * (`src/main/updater.ts:24-37`): a locally packaged app is indistinguishable
+ * A locally packaged app is indistinguishable
  * from a release at runtime — `app.isPackaged` is true for both — so without
  * the marker it polls the production feed for a version that was never
  * published there and logs a `latest*.yml` 404 every check.
  *
- * The trade-off, stated plainly and the same one nodeterm wrote down: a `dist`
+ * The trade-off: a `dist`
  * package can no longer smoke-test the updater wiring. Verifying the real feed
  * is the job of a release package, which carries no marker; verifying the
  * wiring is the job of a local release server (`ARMADRA_UPDATES_DEV=1` plus

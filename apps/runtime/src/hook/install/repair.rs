@@ -14,7 +14,7 @@
 //!     stops running, the user's included;
 //!   * instruction blocks in the CLI's global `AGENTS.md` / `CLAUDE.md`, fenced `<!-- nodeterm:<name>:start -->` … `:end -->`
 //!     (or `aicc:`), two hundred lines telling the model to drive the canvas
-//!     through a `nodeterm.sh` that answers "not a nodeterm agent node" — the
+//!     through an obsolete `nodeterm.sh` that rejects the current session — the
 //!     model believes the instructions and never looks for the current skill.
 //!
 //! Three rules, in order of how much they matter:
@@ -594,10 +594,10 @@ mod tests {
     use serde_json::json;
     use tempfile::{TempDir, tempdir};
 
-    /// The `~/.codex/AGENTS.md` one user actually had: two nodeterm-era blocks
+    /// The `~/.codex/AGENTS.md` one user actually had: two legacy instruction blocks
     /// around their own text. Only the blocks go; the backup keeps the whole.
     #[test]
-    fn an_instruction_file_from_the_nodeterm_era_loses_only_its_marked_blocks() {
+    fn an_instruction_file_loses_only_its_legacy_marked_blocks() {
         let home = tempdir().unwrap();
         let path = home.path().join("AGENTS.md");
         let text = "# Mine\n\nkeep this line\n\n\

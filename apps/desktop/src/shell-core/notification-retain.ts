@@ -5,8 +5,7 @@
  * (electron/electron#16922): the notification still shows, but once the
  * wrapper is collected its `click` handler is gone — clicking then only
  * activates the app (the macOS default) instead of running the shell's own
- * focus logic. nodeterm shipped that bug; `src/main/notifications.ts` there is
- * where it was diagnosed.
+ * focus logic.
  *
  * So every shown notification is retained here until the OS reports it
  * dismissed. The structural `NotificationLike` keeps the rule Electron-free
