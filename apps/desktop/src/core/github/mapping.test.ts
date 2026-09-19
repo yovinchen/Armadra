@@ -1,22 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  GithubIssueSchema,
   GithubIssueState,
+  GithubStatusSource,
+} from "./types";
+import {
+  GithubIssueSchema,
   GithubLabelSchema,
   GithubStateCouplingSchema,
   GithubStatusGroupSchema,
   GithubStatusMappingSchema,
-  GithubStatusSource,
-  create,
-} from "@armadra/protocol";
+} from "./schema";
+import { create } from "../contract/message";
 
 import { applyLabelGroups, applyProjectGroups, checkMapping } from "./mapping";
 
 function group(
   id: string,
   label: string,
-  couples = GithubIssueState.UNSPECIFIED,
+  couples: GithubIssueState = GithubIssueState.UNSPECIFIED,
 ) {
   return create(GithubStatusGroupSchema, {
     id,

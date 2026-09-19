@@ -9,17 +9,23 @@
 import { createHash } from "node:crypto";
 
 import {
-  GithubRepositoryRefSchema,
-  GithubStatusMappingSchema,
   GithubStatusSource,
-  create,
-  fromBinary,
-  toBinary,
+  type GithubRateLimit,
   type GithubReferenceKind,
   type GithubReferenceTargetKind,
   type GithubRepositoryRef,
   type GithubStatusMapping,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  GithubRepositoryRefSchema,
+  GithubStatusMappingSchema,
+} from "./schema";
+import {
+  canonicalJson,
+  create,
+  fromJson,
+  toJson,
+} from "../contract/message";
 
 import type { Scope } from "../identity/scopes";
 import { permits, scope } from "../identity/scopes";
@@ -182,7 +188,10 @@ export class GithubService {
     }
     let mapping: GithubStatusMapping;
     try {
-      mapping = fromBinary(GithubStatusMappingSchema, record.mapping);
+      mapping = fromJson(
+        GithubStatusMappingSchema,
+        JSON.parse(Buffer.from(record.mapping).toString("utf8")) as unknown,
+      );
     } catch {
       throw githubError("corrupt");
     }
@@ -202,7 +211,13 @@ export function key(ref: GithubRepositoryRef): GithubRepositoryKey {
   };
 }
 
-/** 把存下来的那份编成确定性的 protobuf 字节。 */
+/**
+ * 把存下来的那份编成确定性的字节：**规范 JSON 的 UTF-8**。
+ *
+ * R7 之前这里是 protobuf 序列化。换掉的理由和自动化域那次一样
+ * （`docs/contracts/core-json-api.md` §4.2）：一条记录在库里只该有一种字节，而那
+ * 种字节不该只有一份生成码才读得懂。列还是 BLOB，存储对它仍然是不透明的。
+ */
 export function encodeMapping(mapping: GithubStatusMapping): Uint8Array {
   const stored = create(GithubStatusMappingSchema, {
     source: mapping.source,
@@ -213,19 +228,16 @@ export function encodeMapping(mapping: GithubStatusMapping): Uint8Array {
   });
   // revision 和时间戳是存储来赋的；客户端在那两项里写了什么都丢掉，不作为事实
   // 持久化。
-  return toBinary(GithubStatusMappingSchema, stored);
+  return new Uint8Array(
+    Buffer.from(
+      canonicalJson(toJson(GithubStatusMappingSchema, stored)),
+      "utf8",
+    ),
+  );
 }
 
-export function rateLimit(value: RateLimit): {
-  $typeName: "armadra.v1.GithubRateLimit";
-  limit: bigint;
-  remaining: bigint;
-  resetsAtUnixMs: bigint;
-  throttled: boolean;
-  retryAfterUnixMs: bigint;
-} {
+export function rateLimit(value: RateLimit): GithubRateLimit {
   return {
-    $typeName: "armadra.v1.GithubRateLimit",
     limit: BigInt(value.limit),
     remaining: BigInt(value.remaining),
     resetsAtUnixMs: BigInt(value.resetsAtMs),

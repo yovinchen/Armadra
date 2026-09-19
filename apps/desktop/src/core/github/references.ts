@@ -7,24 +7,26 @@
  */
 
 import {
-  GithubExternalReferenceSchema,
   GithubReferenceKind,
   GithubReferenceTargetKind,
-  GithubRepositoryRefSchema,
-  ListGithubReferencesResponseSchema,
-  UnlinkGithubReferenceResponseSchema,
-  create,
+  type ConfigureGithubCredentialRequest,
   type GithubCredentialStatus,
   type GithubExternalReference,
   type GithubRepositoryRef,
-  type ConfigureGithubCredentialRequest,
   type LinkGithubReferenceRequest,
   type ListGithubReferencesRequest,
   type ListGithubReferencesResponse,
   type RevokeGithubCredentialRequest,
   type UnlinkGithubReferenceRequest,
   type UnlinkGithubReferenceResponse,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  GithubExternalReferenceSchema,
+  GithubRepositoryRefSchema,
+  ListGithubReferencesResponseSchema,
+  UnlinkGithubReferenceResponseSchema,
+} from "./schema";
+import { create } from "../contract/message";
 
 import { githubError } from "./errors";
 import {

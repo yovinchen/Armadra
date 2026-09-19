@@ -18,7 +18,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
 
-import { GithubCredentialSource } from "@armadra/protocol";
+import {
+  GithubCredentialSource,
+} from "./types";
 
 import { GithubClient } from "./client";
 import { CredentialService, type GhCli, type SecretStore } from "./credentials";

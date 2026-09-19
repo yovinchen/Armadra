@@ -9,8 +9,6 @@ import {
   GithubCheckConclusion,
   GithubIssueState,
   GithubPullState,
-  GithubRepositorySchema,
-  create,
   type GithubCheckRun,
   type GithubCheckSummary,
   type GithubComment,
@@ -24,7 +22,11 @@ import {
   type GithubRepositoryRef,
   type GithubReview,
   type GithubReviewComment,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  GithubRepositorySchema,
+} from "./schema";
+import { create } from "../contract/message";
 
 import { type GithubClient, type GithubResponse, perPage } from "./client";
 import { apiFailure, codeOf } from "./errors";

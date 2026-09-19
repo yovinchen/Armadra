@@ -8,12 +8,6 @@ import {
   GithubReferenceKind,
   GithubStatusSource,
   GithubWriteState,
-  ListGithubIssuesResponseSchema,
-  GetGithubIssueResponseSchema,
-  MoveGithubIssueResponseSchema,
-  ResolveGithubRepositoryResponseSchema,
-  GithubWriteOutcomeSchema,
-  create,
   type CommentGithubIssueRequest,
   type CreateGithubIssueRequest,
   type GetGithubIssueRequest,
@@ -31,7 +25,15 @@ import {
   type ResolveGithubRepositoryResponse,
   type SetGithubIssueStateRequest,
   type UpdateGithubIssueRequest,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  GetGithubIssueResponseSchema,
+  GithubWriteOutcomeSchema,
+  ListGithubIssuesResponseSchema,
+  MoveGithubIssueResponseSchema,
+  ResolveGithubRepositoryResponseSchema,
+} from "./schema";
+import { create } from "../contract/message";
 
 import type { GithubClient } from "./client";
 import * as api from "./endpoints";
@@ -80,7 +82,6 @@ export async function resolveRepository(
     });
   }
   const ref = service.repository({
-    $typeName: "armadra.v1.GithubRepositoryRef",
     owner: parsed.owner,
     name: parsed.name,
     apiBase: base,

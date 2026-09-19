@@ -7,18 +7,20 @@
  */
 
 import {
-  DeleteGithubBranchResponseSchema,
   GithubCheckConclusion,
-  GithubWriteOutcomeSchema,
   GithubWriteState,
-  RerunGithubChecksResponseSchema,
-  create,
   type DeleteGithubBranchRequest,
   type DeleteGithubBranchResponse,
   type GithubCheckSummary,
   type RerunGithubChecksRequest,
   type RerunGithubChecksResponse,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  DeleteGithubBranchResponseSchema,
+  GithubWriteOutcomeSchema,
+  RerunGithubChecksResponseSchema,
+} from "./schema";
+import { create } from "../contract/message";
 
 import * as api from "./endpoints";
 import { codeOf, githubError, isGithubError } from "./errors";

@@ -7,18 +7,6 @@
 
 import {
   GithubCheckConclusion,
-  GithubCheckRunSchema,
-  GithubCheckSummarySchema,
-  GithubCommentSchema,
-  GithubIssueSchema,
-  GithubLabelSchema,
-  GithubMilestoneSchema,
-  GithubPullFileSchema,
-  GithubPullRequestSchema,
-  GithubReviewCommentSchema,
-  GithubReviewSchema,
-  GithubUserSchema,
-  create,
   GithubIssueState,
   GithubIssueStateReason,
   GithubMergeMethod,
@@ -36,7 +24,21 @@ import {
   type GithubReview,
   type GithubReviewComment,
   type GithubUser,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  GithubCheckRunSchema,
+  GithubCheckSummarySchema,
+  GithubCommentSchema,
+  GithubIssueSchema,
+  GithubLabelSchema,
+  GithubMilestoneSchema,
+  GithubPullFileSchema,
+  GithubPullRequestSchema,
+  GithubReviewCommentSchema,
+  GithubReviewSchema,
+  GithubUserSchema,
+} from "./schema";
+import { create } from "../contract/message";
 
 /* -------------------------------- 线上形状 -------------------------------- */
 

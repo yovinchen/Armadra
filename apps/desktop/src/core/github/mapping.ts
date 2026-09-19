@@ -13,7 +13,7 @@ import {
   type GithubIssue,
   type GithubStatusGroup,
   type GithubStatusMapping,
-} from "@armadra/protocol";
+} from "./types";
 
 import { githubError } from "./errors";
 
