@@ -3,40 +3,17 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  AuthenticatedSessionSchema,
-  ErrorResponseSchema,
-  HelloRequestSchema,
-  HelloResponseSchema,
-  ListDevicesRequestSchema,
-  ListDevicesResponseSchema,
-  LogoutSessionRequestSchema,
-  PROTOCOL_MAJOR,
-  PROTOCOL_MINOR,
-  PairDeviceRequestSchema,
-  RefreshSessionRequestSchema,
-  RenewCsrfRequestSchema,
-  RenewCsrfResponseSchema,
-  RevokeDeviceRequestSchema,
-  RevokeDeviceResponseSchema,
-  SessionClosedResponseSchema,
-  CurrentSessionRequestSchema,
-  create,
-  fromBinary,
-  toBinary,
-} from "@armadra/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase } from "../db/open";
 import type { CoreRequest } from "../http/router";
 import {
   BROWSER_SESSION_CAPABILITY,
   IdentityHttp,
-  MEDIA_TYPE,
   NATIVE_SESSION_CAPABILITY,
-  RPC_METHODS,
   bearerCredential,
   cookieName,
 } from "./http";
+import { MAX_FRAME_BYTES, PROTOCOL_MAJOR, PROTOCOL_MINOR } from "./protocol";
 import { allScopes } from "./scopes";
 import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
@@ -88,10 +65,7 @@ async function harness(): Promise<Harness> {
         raw: request,
         json: <T>() => JSON.parse(body.toString("utf8") || "null") as T,
       };
-      const face = url.pathname.startsWith("/api/identity/")
-        ? http.api(core, response, {})
-        : http.rpc(core, response, {});
-      void face;
+      void http.handle(core, response, {});
     });
   });
   await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
@@ -106,29 +80,37 @@ async function harness(): Promise<Harness> {
   };
 }
 
-async function rpc(
+type Headers = Record<string, string>;
+
+async function call(
   fixture: Harness,
   method: string,
-  body: Uint8Array,
-  headers: Record<string, string> = {},
+  path: string,
+  body?: unknown,
+  headers: Headers = {},
 ): Promise<Response> {
-  return fetch(`${fixture.base}/rpc/armadra.v1.${method}`, {
-    method: "POST",
+  return fetch(`${fixture.base}/api/identity/${path}`, {
+    method,
     headers: {
-      "content-type": MEDIA_TYPE,
-      accept: MEDIA_TYPE,
       origin: fixture.origin,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
       ...headers,
     },
-    body: new Uint8Array(body),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
 
-async function wire(response: Response): Promise<Uint8Array> {
-  return new Uint8Array(await response.arrayBuffer());
+interface Session {
+  hostId: string;
+  csrfToken: string;
+  device: { deviceId: string; role: string; revision: number };
+  scopes: unknown[];
+  native: { accessToken: string; refreshToken: string };
 }
 
-async function pair(fixture: Harness) {
+async function pair(
+  fixture: Harness,
+): Promise<{ ticket: { ticket: string }; session: Session }> {
   const ticket = fixture.service.issueBootstrap({
     hostId: fixture.hostId,
     instanceId: INSTANCE,
@@ -136,82 +118,38 @@ async function pair(fixture: Harness) {
     deviceName: "本机桌面",
     scopes: allScopes(),
   });
-  const response = await rpc(
-    fixture,
-    "IdentityService/Pair",
-    toBinary(
-      PairDeviceRequestSchema,
-      create(PairDeviceRequestSchema, {
-        ticket: ticket.ticket,
-        expectedHostId: fixture.hostId,
-        expectedInstanceId: INSTANCE,
-      }),
-    ),
-  );
+  const response = await call(fixture, "POST", "pair", {
+    ticket: ticket.ticket,
+  });
   expect(response.status).toBe(200);
-  const session = fromBinary(AuthenticatedSessionSchema, await wire(response));
-  return { ticket, session };
+  return { ticket, session: (await response.json()) as Session };
 }
 
-describe("the compatibility face", () => {
-  it("covers the eight methods the front end sends", () => {
-    expect([...RPC_METHODS]).toHaveLength(8);
-  });
-
-  it("answers Hello with the host identity and the session capabilities", async () => {
+describe("身份域的 JSON 面", () => {
+  it("Hello 报出这台 core 是谁、支持什么，不要求凭据", async () => {
     const fixture = await harness();
-    const response = await rpc(
-      fixture,
-      "HostService/Hello",
-      toBinary(
-        HelloRequestSchema,
-        create(HelloRequestSchema, {
-          clientId: "test",
-          protocol: { major: PROTOCOL_MAJOR, minor: PROTOCOL_MINOR },
-        }),
-      ),
-    );
-    expect(response.headers.get("content-type")).toBe(MEDIA_TYPE);
-    const hello = fromBinary(HelloResponseSchema, await wire(response));
+    const response = await call(fixture, "GET", "hello");
+    expect(response.status).toBe(200);
+    const hello = (await response.json()) as {
+      protocol: { major: number; minor: number };
+      hostId: string;
+      hostInstanceId: string;
+      capabilities: string[];
+      maxFrameBytes: number;
+    };
     expect(hello.hostId).toBe(fixture.hostId);
     expect(hello.hostInstanceId).toBe(INSTANCE);
-    expect(hello.protocol?.major).toBe(PROTOCOL_MAJOR);
-    expect(hello.maxFrameBytes).toBeGreaterThan(0);
+    expect(hello.protocol).toEqual({
+      major: PROTOCOL_MAJOR,
+      minor: PROTOCOL_MINOR,
+    });
+    expect(hello.maxFrameBytes).toBe(MAX_FRAME_BYTES);
+    // 页面靠这两个名字决定走原生传输还是浏览器会话。
     expect(hello.capabilities).toContain(NATIVE_SESSION_CAPABILITY);
     expect(hello.capabilities).toContain(BROWSER_SESSION_CAPABILITY);
   });
 
-  it("never advertises a minor above the one it speaks", async () => {
-    const fixture = await harness();
-    const response = await rpc(
-      fixture,
-      "HostService/Hello",
-      toBinary(
-        HelloRequestSchema,
-        create(HelloRequestSchema, {
-          clientId: "test",
-          protocol: { major: PROTOCOL_MAJOR, minor: 99 },
-        }),
-      ),
-    );
-    const hello = fromBinary(HelloResponseSchema, await wire(response));
-    expect(hello.protocol?.minor).toBe(PROTOCOL_MINOR);
-  });
-
-  it("pairs a ticket and answers the native bearers in the body", async () => {
-    const fixture = await harness();
-    const { session } = await pair(fixture);
-    expect(session.hostId).toBe(fixture.hostId);
-    expect(session.device?.role).toBe("owner");
-    expect(session.csrfToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(session.native?.accessToken).toMatch(
-      /^[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/,
-    );
-    expect(session.native?.refreshToken).not.toBe(session.native?.accessToken);
-    expect(session.scopes.length).toBeGreaterThan(0);
-  });
-
-  it("gives a loopback HTTP origin no cookie session", async () => {
+  it("配对答出原生密钥，回环 HTTP 上不发 Cookie", async () => {
     const fixture = await harness();
     const ticket = fixture.service.issueBootstrap({
       hostId: fixture.hostId,
@@ -220,257 +158,143 @@ describe("the compatibility face", () => {
       deviceName: "本机桌面",
       scopes: allScopes(),
     });
-    const response = await rpc(
-      fixture,
-      "IdentityService/Pair",
-      toBinary(
-        PairDeviceRequestSchema,
-        create(PairDeviceRequestSchema, {
-          ticket: ticket.ticket,
-          expectedHostId: fixture.hostId,
-          expectedInstanceId: INSTANCE,
-        }),
-      ),
+    const response = await call(fixture, "POST", "pair", {
+      ticket: ticket.ticket,
+    });
+    const session = (await response.json()) as Session;
+    expect(session.hostId).toBe(fixture.hostId);
+    expect(session.device.role).toBe("owner");
+    expect(session.csrfToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(session.native.accessToken).toMatch(
+      /^[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/,
     );
-    // Cookie 不按端口隔离，回环 HTTP 上发 Cookie 等于发给同一个 profile 下的
+    expect(session.native.refreshToken).not.toBe(session.native.accessToken);
+    expect(session.scopes.length).toBeGreaterThan(0);
+    // Cookie 不按端口隔离：回环 HTTP 上发 Cookie 等于发给同一个 profile 下的
     // 任何本机端口。这条传输只发 Bearer。
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
-  it("refuses the second use of the same ticket", async () => {
+  it("同一张票用第二次就是 401", async () => {
     const fixture = await harness();
     const { ticket } = await pair(fixture);
-    const again = await rpc(
-      fixture,
-      "IdentityService/Pair",
-      toBinary(
-        PairDeviceRequestSchema,
-        create(PairDeviceRequestSchema, {
-          ticket: ticket.ticket,
-          expectedHostId: fixture.hostId,
-          expectedInstanceId: INSTANCE,
-        }),
-      ),
-    );
+    const again = await call(fixture, "POST", "pair", {
+      ticket: ticket.ticket,
+    });
     expect(again.status).toBe(401);
-    expect(fromBinary(ErrorResponseSchema, await wire(again)).code).toBe(
+    expect(((await again.json()) as { code: string }).code).toBe(
       "UNAUTHENTICATED",
     );
   });
 
-  it("reads the current session from the access bearer", async () => {
+  it("从访问密钥读当前会话，没有密钥就是 401", async () => {
     const fixture = await harness();
     const { session } = await pair(fixture);
-    const response = await rpc(
-      fixture,
-      "IdentityService/Current",
-      toBinary(
-        CurrentSessionRequestSchema,
-        create(CurrentSessionRequestSchema),
-      ),
-      { authorization: `Bearer ${session.native?.accessToken}` },
-    );
-    expect(response.status).toBe(200);
-    const current = fromBinary(
-      AuthenticatedSessionSchema,
-      await wire(response),
-    );
-    expect(current.device?.deviceId).toBe(session.device?.deviceId);
-    // Current 不发新的 CSRF：它不是一次轮转。
-    expect(current.csrfToken).toBe("");
+    const current = await call(fixture, "GET", "session", undefined, {
+      authorization: `Bearer ${session.native.accessToken}`,
+    });
+    expect(current.status).toBe(200);
+    expect(
+      ((await current.json()) as { device: { deviceId: string } }).device
+        .deviceId,
+    ).toBe(session.device.deviceId);
+
+    const anonymous = await call(fixture, "GET", "session");
+    expect(anonymous.status).toBe(401);
   });
 
-  it("answers 401 without a bearer at all", async () => {
-    const fixture = await harness();
-    await pair(fixture);
-    const response = await rpc(
-      fixture,
-      "IdentityService/Current",
-      toBinary(
-        CurrentSessionRequestSchema,
-        create(CurrentSessionRequestSchema),
-      ),
-    );
-    expect(response.status).toBe(401);
-  });
-
-  it("rotates, then refuses the rotated-away refresh bearer", async () => {
+  it("轮转之后旧的刷新密钥被拒", async () => {
     const fixture = await harness();
     const { session } = await pair(fixture);
     const rotate = () =>
-      rpc(
-        fixture,
-        "IdentityService/Refresh",
-        toBinary(
-          RefreshSessionRequestSchema,
-          create(RefreshSessionRequestSchema),
-        ),
-        {
-          authorization: `Bearer ${session.native?.refreshToken}`,
-          "x-armadra-csrf": session.csrfToken,
-        },
-      );
-    const first = await rotate();
-    expect(first.status).toBe(200);
-    const second = await rotate();
-    expect(second.status).toBe(401);
-  });
-
-  it("renews a lost CSRF from the refresh bearer", async () => {
-    const fixture = await harness();
-    const { session } = await pair(fixture);
-    const response = await rpc(
-      fixture,
-      "IdentityService/RenewCsrf",
-      toBinary(RenewCsrfRequestSchema, create(RenewCsrfRequestSchema)),
-      { authorization: `Bearer ${session.native?.refreshToken}` },
-    );
-    expect(response.status).toBe(200);
-    expect(
-      fromBinary(RenewCsrfResponseSchema, await wire(response)).csrfToken,
-    ).toMatch(/^[A-Za-z0-9_-]{43}$/);
-  });
-
-  it("logs out and then refuses the access bearer", async () => {
-    const fixture = await harness();
-    const { session } = await pair(fixture);
-    const logout = await rpc(
-      fixture,
-      "IdentityService/Logout",
-      toBinary(LogoutSessionRequestSchema, create(LogoutSessionRequestSchema)),
-      {
-        authorization: `Bearer ${session.native?.refreshToken}`,
+      call(fixture, "POST", "session/refresh", {}, {
+        authorization: `Bearer ${session.native.refreshToken}`,
         "x-armadra-csrf": session.csrfToken,
-      },
+      });
+    expect((await rotate()).status).toBe(200);
+    expect((await rotate()).status).toBe(401);
+  });
+
+  it("丢了的 CSRF 可以从刷新密钥上补一张", async () => {
+    const fixture = await harness();
+    const { session } = await pair(fixture);
+    const response = await call(fixture, "POST", "session/csrf", {}, {
+      authorization: `Bearer ${session.native.refreshToken}`,
+    });
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { csrfToken: string }).csrfToken).toMatch(
+      /^[A-Za-z0-9_-]{43}$/,
     );
-    expect(
-      fromBinary(SessionClosedResponseSchema, await wire(logout)).closed,
-    ).toBe(true);
-    const current = await rpc(
-      fixture,
-      "IdentityService/Current",
-      toBinary(
-        CurrentSessionRequestSchema,
-        create(CurrentSessionRequestSchema),
-      ),
-      { authorization: `Bearer ${session.native?.accessToken}` },
-    );
+  });
+
+  it("登出之后访问密钥被拒", async () => {
+    const fixture = await harness();
+    const { session } = await pair(fixture);
+    const logout = await call(fixture, "POST", "session/logout", {}, {
+      authorization: `Bearer ${session.native.refreshToken}`,
+      "x-armadra-csrf": session.csrfToken,
+    });
+    expect(logout.status).toBe(200);
+    const current = await call(fixture, "GET", "session", undefined, {
+      authorization: `Bearer ${session.native.accessToken}`,
+    });
     expect(current.status).toBe(401);
   });
 
-  it("lists devices and revokes one, after which its session is 401", async () => {
+  it("列设备、撤一台，撤掉之后它的会话就是 401", async () => {
     const fixture = await harness();
     const { session } = await pair(fixture);
-    const list = await rpc(
-      fixture,
-      "IdentityService/ListDevices",
-      toBinary(
-        ListDevicesRequestSchema,
-        create(ListDevicesRequestSchema, { limit: 50 }),
-      ),
-      { authorization: `Bearer ${session.native?.accessToken}` },
-    );
-    const page = fromBinary(ListDevicesResponseSchema, await wire(list));
+    const list = await call(fixture, "GET", "devices", undefined, {
+      authorization: `Bearer ${session.native.accessToken}`,
+    });
+    const page = (await list.json()) as { devices: { name: string }[] };
     expect(page.devices).toHaveLength(1);
-    expect(page.devices[0]?.displayName).toBe("本机桌面");
+    expect(page.devices[0]?.name).toBe("本机桌面");
 
-    const revoke = await rpc(
+    const revoked = await call(
       fixture,
-      "IdentityService/RevokeDevice",
-      toBinary(
-        RevokeDeviceRequestSchema,
-        create(RevokeDeviceRequestSchema, {
-          deviceId: session.device?.deviceId as string,
-          expectedRevision: 1n,
-        }),
-      ),
+      "POST",
+      "devices/revoke",
+      { deviceId: session.device.deviceId, expectedRevision: 1 },
       {
-        authorization: `Bearer ${session.native?.accessToken}`,
+        authorization: `Bearer ${session.native.accessToken}`,
         "x-armadra-csrf": session.csrfToken,
       },
     );
-    expect(revoke.status).toBe(200);
-    expect(
-      fromBinary(RevokeDeviceResponseSchema, await wire(revoke)).revoked,
-    ).toBe(true);
+    expect(revoked.status).toBe(200);
 
-    const after = await rpc(
-      fixture,
-      "IdentityService/Current",
-      toBinary(
-        CurrentSessionRequestSchema,
-        create(CurrentSessionRequestSchema),
-      ),
-      { authorization: `Bearer ${session.native?.accessToken}` },
-    );
+    const after = await call(fixture, "GET", "session", undefined, {
+      authorization: `Bearer ${session.native.accessToken}`,
+    });
     expect(after.status).toBe(401);
   });
 
-  it("refuses a request with no Origin, and one that is not protobuf", async () => {
+  it("没有 Origin 的请求一律 403", async () => {
     const fixture = await harness();
-    const missing = await fetch(
-      `${fixture.base}/rpc/armadra.v1.IdentityService/Current`,
-      {
-        method: "POST",
-        headers: { "content-type": MEDIA_TYPE },
-        body: new Uint8Array(),
-      },
-    );
-    expect(missing.status).toBe(403);
-    const wrongType = await fetch(
-      `${fixture.base}/rpc/armadra.v1.IdentityService/Current`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: fixture.origin },
-        body: "{}",
-      },
-    );
-    expect(wrongType.status).toBe(415);
+    const response = await fetch(`${fixture.base}/api/identity/session`, {
+      method: "GET",
+    });
+    expect(response.status).toBe(403);
   });
 
-  it("answers an unknown method 404 rather than pretending", async () => {
+  it("不存在的动作是 404，而不是一个看起来成功的空响应", async () => {
     const fixture = await harness();
-    const response = await rpc(
-      fixture,
-      "IdentityService/Nonsense",
-      new Uint8Array(),
-    );
+    const response = await call(fixture, "GET", "nonsense");
     expect(response.status).toBe(404);
   });
 
-  it("allows the Authorization header on the native preflight only", async () => {
+  it("失败是 { code, message }", async () => {
     const fixture = await harness();
-    const allowed = await fetch(
-      `${fixture.base}/rpc/armadra.v1.IdentityService/Current`,
-      {
-        method: "OPTIONS",
-        headers: {
-          origin: fixture.origin,
-          "access-control-request-method": "POST",
-          "access-control-request-headers": "content-type, authorization",
-        },
-      },
-    );
-    expect(allowed.status).toBe(204);
-    expect(allowed.headers.get("access-control-allow-headers")).toContain(
-      "Authorization",
-    );
-    const refused = await fetch(
-      `${fixture.base}/rpc/armadra.v1.IdentityService/Current`,
-      {
-        method: "OPTIONS",
-        headers: {
-          origin: fixture.origin,
-          "access-control-request-method": "POST",
-          "access-control-request-headers": "x-somebody-elses-header",
-        },
-      },
-    );
-    expect(refused.status).toBe(403);
+    const response = await call(fixture, "GET", "session");
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      code: "UNAUTHENTICATED",
+      message: "Device session is invalid or expired",
+    });
   });
 });
 
-describe("the new face", () => {
+describe("配对到撤销的一整条路", () => {
   it("pairs, reads the session and revokes, in JSON", async () => {
     const fixture = await harness();
     const ticket = fixture.service.issueBootstrap({
@@ -535,63 +359,6 @@ describe("the new face", () => {
     expect(revoked.status).toBe(200);
   });
 
-  it("答一份与 HostService/Hello 逐字段相同的能力表", async () => {
-    const fixture = await harness();
-    const json = await fetch(`${fixture.base}/api/identity/hello`, {
-      headers: { origin: fixture.origin },
-    });
-    expect(json.status).toBe(200);
-    const hello = (await json.json()) as {
-      protocol: { major: number; minor: number };
-      hostId: string;
-      hostInstanceId: string;
-      capabilities: string[];
-      maxFrameBytes: number;
-    };
-
-    const viaRpc = fromBinary(
-      HelloResponseSchema,
-      new Uint8Array(
-        await (
-          await rpc(
-            fixture,
-            "HostService/Hello",
-            toBinary(
-              HelloRequestSchema,
-              create(HelloRequestSchema, {
-                clientId: "test",
-                protocol: { major: PROTOCOL_MAJOR, minor: PROTOCOL_MINOR },
-              }),
-            ),
-          )
-        ).arrayBuffer(),
-      ),
-    );
-
-    // 页面靠这张表决定开不开一块面板，两张面对同一件事必须说同一句话。
-    expect(hello.hostId).toBe(viaRpc.hostId);
-    expect(hello.hostInstanceId).toBe(viaRpc.hostInstanceId);
-    expect(hello.capabilities).toEqual([...viaRpc.capabilities]);
-    expect(hello.maxFrameBytes).toBe(viaRpc.maxFrameBytes);
-    expect(hello.protocol).toEqual({
-      major: viaRpc.protocol?.major,
-      minor: viaRpc.protocol?.minor,
-    });
-    // 配对之前就要答得出来：它说的是「这台 core 是谁」。
-    expect(hello.capabilities).toContain(NATIVE_SESSION_CAPABILITY);
-  });
-
-  it("reports a failure as { code, message }", async () => {
-    const fixture = await harness();
-    const response = await fetch(`${fixture.base}/api/identity/session`, {
-      headers: { origin: fixture.origin },
-    });
-    expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({
-      code: "UNAUTHENTICATED",
-      message: "Device session is invalid or expired",
-    });
-  });
 });
 
 describe("reading a credential off a request", () => {

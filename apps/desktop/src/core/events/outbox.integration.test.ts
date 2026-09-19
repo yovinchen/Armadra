@@ -41,7 +41,6 @@ async function start(): Promise<RunningCore> {
   const core = await run({
     argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", dataDir],
     env: {
-      ARMADRA_CORE: "ts",
       ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir,
       ARMADRA_LOG: "error",
     },

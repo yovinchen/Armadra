@@ -6,7 +6,7 @@ import { controlDispatcher } from "../collab/control";
 import { type RunningCore, run } from "../main";
 
 /**
- * The agent domain, assembled by the real `run()` under `ARMADRA_CORE=ts`.
+ * The agent domain, assembled by the real `run()`.
  *
  * This is the closest this batch can get to the end-to-end acceptance while
  * the Hook surface is still 501: the Hook server is what a CLI actually talks
@@ -25,7 +25,7 @@ beforeAll(async () => {
   directory = mkdtempSync(join(tmpdir(), "armadra-core-agent-"));
   core = await run({
     argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", directory],
-    env: { ...process.env, ARMADRA_CORE: "ts", ARMADRA_LOG: "error" },
+    env: { ...process.env, ARMADRA_LOG: "error" },
     stdout: () => {},
   });
   const spec = core.bound[0];

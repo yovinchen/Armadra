@@ -1,5 +1,5 @@
 /**
- * 装配级验收：`ARMADRA_CORE=ts` 起一个真 core，账号这一面真答。
+ * 装配级验收：起一个真 core，账号这一面真答。
  *
  * 三件事：
  *
@@ -50,7 +50,6 @@ async function start(): Promise<{ core: RunningCore; base: string }> {
   const core = await run({
     argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", dataDir],
     env: {
-      ARMADRA_CORE: "ts",
       ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir,
       ARMADRA_LOG: "error",
     },
@@ -115,7 +114,7 @@ function call(
   });
 }
 
-describe("ARMADRA_CORE=ts 下的账号面", () => {
+describe("账号这一面", () => {
   it("principals 答的是真的 owner 行", async () => {
     const { core, base } = await start();
     const session = await pair(core, base);

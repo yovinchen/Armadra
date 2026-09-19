@@ -1,24 +1,5 @@
 import type { ServerResponse } from "node:http";
-import {
-  AuthenticatedSessionSchema,
-  ErrorResponseSchema,
-  HelloRequestSchema,
-  HelloResponseSchema,
-  ListDevicesRequestSchema,
-  ListDevicesResponseSchema,
-  LogoutSessionRequestSchema,
-  MAX_FRAME_BYTES,
-  PROTOCOL_MAJOR,
-  PROTOCOL_MINOR,
-  PairDeviceRequestSchema,
-  RenewCsrfResponseSchema,
-  RevokeDeviceRequestSchema,
-  RevokeDeviceResponseSchema,
-  SessionClosedResponseSchema,
-  create,
-  fromBinary,
-  toBinary,
-} from "@armadra/protocol";
+import { MAX_FRAME_BYTES, PROTOCOL_MAJOR, PROTOCOL_MINOR } from "./protocol";
 import type { CoreRequest } from "../http/router";
 import type { AccountsService } from "./accounts";
 import { handleAccounts } from "./accounts-http";
@@ -32,15 +13,11 @@ import type {
 } from "./service";
 
 /**
- * 身份域的两张面。
+ * 身份域的那一面：`/api/identity/*`，JSON，`{ code, message }` 的错误信封。
  *
- * **新面** `/api/identity/*`：JSON，`{ code, message }` 的错误信封，设计 D9 里
- * 前端最终要收到的那一套。
- *
- * **兼容面** `/rpc/armadra.v1.{HostService,IdentityService}/…`：二进制 protobuf，
- * `packages/host-client` 今天发的就是它。本批前端一行不改，所以这一面必须逐字
- * 对上：路径、`application/x-protobuf`、消息形状、以及 `Origin` 与 CSRF 的门。
- * 它活到 R7，前端改打 `/api/` 之后才删。
+ * `/rpc/armadra.v1.{HostService,IdentityService}/*` 的 protobuf 兼容面在 R7 删掉
+ * 了，能力表只在 `GET /api/identity/hello` 上（`docs/contracts/core-json-api.md`
+ * §3）。
  *
  * **Cookie 的规矩照 Host**：只有 HTTPS 的那个权威来源才发 Cookie。回环 HTTP
  * 来源拿不到 Cookie 会话——Cookie 按 host 不按 port 隔离，`127.0.0.1:A` 的
@@ -49,28 +26,11 @@ import type {
  * 所以实际上永远走原生传输；Cookie 那一支留着给 R6 的服务器壳。
  */
 
-export const MEDIA_TYPE = "application/x-protobuf";
-export const RPC_PREFIX = "/rpc/armadra.v1.";
 export const API_PREFIX = "/api/identity/";
 
 /** Hello 里报的两个会话能力名，`apps/web/src/host/native-session.ts` 认这两个。 */
 export const NATIVE_SESSION_CAPABILITY = "identity.native-session.v1";
 export const BROWSER_SESSION_CAPABILITY = "identity.browser-session.v1";
-
-/** 兼容面覆盖的方法。少一个，页面的登录流程就断在那一步。 */
-export const RPC_METHODS = [
-  "HostService/Hello",
-  "IdentityService/Pair",
-  "IdentityService/Current",
-  "IdentityService/Refresh",
-  "IdentityService/RenewCsrf",
-  "IdentityService/Logout",
-  "IdentityService/ListDevices",
-  "IdentityService/RevokeDevice",
-] as const;
-
-/** 拿刷新密钥当 Bearer 的三个方法，其余用访问密钥。 */
-const REFRESH_BEARER = new Set(["Refresh", "RenewCsrf", "Logout"]);
 
 export interface IdentityHttpOptions {
   readonly service: IdentityService;
@@ -191,46 +151,6 @@ function grants(principal: Principal) {
   }));
 }
 
-function sessionMessage(
-  principal: Principal,
-  csrfToken: string,
-  expiresAtUnixMs: number,
-) {
-  return create(AuthenticatedSessionSchema, {
-    hostId: principal.hostId,
-    device: {
-      deviceId: principal.deviceId,
-      principalId: principal.principalId,
-      displayName: principal.deviceName,
-      role: principal.role,
-      createdAtUnixMs: BigInt(principal.deviceCreatedAtMs),
-      revision: BigInt(principal.deviceEpoch),
-    },
-    scopes: grants(principal),
-    csrfToken,
-    expiresAtUnixMs: BigInt(expiresAtUnixMs),
-  });
-}
-
-function credentialMessage(
-  request: CoreRequest,
-  credentials: SessionCredentials,
-) {
-  const message = sessionMessage(
-    credentials.principal,
-    credentials.csrfToken,
-    credentials.accessExpiresAtMs,
-  );
-  if (nativeRequest(request)) {
-    message.native = {
-      $typeName: "armadra.v1.NativeSessionCredentials",
-      accessToken: credentials.accessToken,
-      refreshToken: credentials.refreshToken,
-    };
-  }
-  return message;
-}
-
 /** 新面上的会话，JSON，camelCase。密钥不在里面——它们在 `native` 里单独给。 */
 export function sessionJson(
   principal: Principal,
@@ -268,78 +188,7 @@ export class IdentityHttp {
     ];
   }
 
-  /** 兼容面。前端发什么，这里就得收什么。 */
-  async rpc(
-    request: CoreRequest,
-    response: ServerResponse,
-    cors: Record<string, string>,
-  ): Promise<void> {
-    const method = request.path.slice(RPC_PREFIX.length);
-    const origin = header(request, "origin");
-    if (request.method === "OPTIONS") {
-      this.preflight(request, response, cors, origin);
-      return;
-    }
-    if (request.method !== "POST") {
-      this.fail(response, cors, 405, "UNSUPPORTED", "A POST is required");
-      return;
-    }
-    if (!(RPC_METHODS as readonly string[]).includes(method)) {
-      this.fail(response, cors, 404, "NOT_FOUND", "No such method");
-      return;
-    }
-    if (!this.acceptable(request)) {
-      this.fail(
-        response,
-        cors,
-        415,
-        "INVALID_ARGUMENT",
-        "A Protobuf request is required",
-      );
-      return;
-    }
-    if (request.body.byteLength > MAX_FRAME_BYTES) {
-      this.fail(
-        response,
-        cors,
-        413,
-        "RESOURCE_EXHAUSTED",
-        "Identity request exceeds its limit",
-      );
-      return;
-    }
-    if (method === "HostService/Hello") {
-      this.hello(request, response, cors);
-      return;
-    }
-    // 身份方法一律要求已经校验过的精确 Origin，并且必须是非简单 POST——这是
-    // 表单与匿名导航配不了对的原因。
-    if (origin === undefined || countHeader(request, "origin") !== 1) {
-      this.fail(
-        response,
-        cors,
-        403,
-        "PERMISSION_DENIED",
-        "Device permission or CSRF check failed",
-      );
-      return;
-    }
-    try {
-      this.identity(
-        request,
-        response,
-        cors,
-        method.split("/")[1] as string,
-        origin,
-      );
-    } catch (error) {
-      const failure = identityFailure(error);
-      this.fail(response, cors, failure.status, failure.code, failure.message);
-    }
-  }
-
-  /** 新面。同一个服务，JSON 的外衣。 */
-  async api(
+  async handle(
     request: CoreRequest,
     response: ServerResponse,
     cors: Record<string, string>,
@@ -368,18 +217,6 @@ export class IdentityHttp {
     };
     try {
       switch (`${request.method} ${action}`) {
-        case "GET hello": {
-          // 和兼容面的 Hello 同一份内容，JSON 的外衣。不需要会话：页面要先
-          // 知道这是谁、装了哪些面，才谈得上换一个会话。
-          this.json(response, cors, 200, {
-            protocol: { major: PROTOCOL_MAJOR, minor: PROTOCOL_MINOR },
-            hostId,
-            hostInstanceId: this.options.instanceId,
-            capabilities: this.capabilities(),
-            maxFrameBytes: MAX_FRAME_BYTES,
-          });
-          return;
-        }
         case "POST pair": {
           const body = request.json<{ ticket?: unknown }>();
           if (typeof body?.ticket !== "string")
@@ -400,12 +237,12 @@ export class IdentityHttp {
           return;
         }
         case "GET hello": {
-          // 能力表与 `HostService/Hello` 是同一张：页面靠 `automation.plans.v1`
-          // 与 `github.*` 这类名字决定开不开一块面板，两张面对同一件事必须说同
-          // 一句话（`http.test.ts` 有一条用例就是逐字段比对它们）。
+          // 能力表只在这一条上。页面靠 `automation.plans.v1` 与 `github.*` 这类
+          // 名字决定开不开一块面板，改一个名字等于让所有已装机器的那块面板一起
+          // 熄灭。
           //
-          // 这一条不要求凭据：它回答的是「这台 core 是谁、支持什么」，而那正是
-          // 一次配对之前就要知道的事。
+          // 不要求凭据：它回答的是「这台 core 是谁、支持什么」，而那正是一次配对
+          // **之前**就要知道的事。
           this.json(response, cors, 200, this.helloJson());
           return;
         }
@@ -549,155 +386,11 @@ export class IdentityHttp {
     return body;
   }
 
-  private identity(
-    request: CoreRequest,
-    response: ServerResponse,
-    cors: Record<string, string>,
-    action: string,
-    origin: string,
-  ): void {
-    const hostId = this.service.hostId();
-    const csrfToken = header(request, "x-armadra-csrf") ?? "";
-    const actor: AccessRequest = {
-      accessToken: credential(request, hostId, "access"),
-      hostId,
-      origin,
-      csrfToken,
-    };
-    switch (action) {
-      case "Pair": {
-        const input = fromBinary(PairDeviceRequestSchema, request.body);
-        const credentials = this.service.consumeBootstrap({
-          ticket: input.ticket,
-          hostId: input.expectedHostId,
-          instanceId: input.expectedInstanceId,
-          origin,
-        });
-        sessionCookies(request, response, hostId, credentials);
-        this.proto(
-          response,
-          cors,
-          200,
-          AuthenticatedSessionSchema,
-          credentialMessage(request, credentials),
-        );
-        return;
-      }
-      case "Current": {
-        const principal = this.service.authenticate(actor);
-        this.proto(
-          response,
-          cors,
-          200,
-          AuthenticatedSessionSchema,
-          sessionMessage(principal, "", principal.accessExpiresAtMs),
-        );
-        return;
-      }
-      case "Refresh": {
-        const credentials = this.service.refresh({
-          refreshToken: credential(request, hostId, "refresh"),
-          csrfToken,
-          hostId,
-          origin,
-        });
-        sessionCookies(request, response, hostId, credentials);
-        this.proto(
-          response,
-          cors,
-          200,
-          AuthenticatedSessionSchema,
-          credentialMessage(request, credentials),
-        );
-        return;
-      }
-      case "RenewCsrf": {
-        const csrf = this.service.renewCsrf({
-          refreshToken: credential(request, hostId, "refresh"),
-          hostId,
-          origin,
-        });
-        this.proto(
-          response,
-          cors,
-          200,
-          RenewCsrfResponseSchema,
-          create(RenewCsrfResponseSchema, { csrfToken: csrf }),
-        );
-        return;
-      }
-      case "Logout": {
-        fromBinary(LogoutSessionRequestSchema, request.body);
-        this.service.logoutRefresh({
-          refreshToken: credential(request, hostId, "refresh"),
-          csrfToken,
-          hostId,
-          origin,
-        });
-        clearSessionCookies(request, response, hostId);
-        this.proto(
-          response,
-          cors,
-          200,
-          SessionClosedResponseSchema,
-          create(SessionClosedResponseSchema, { closed: true }),
-        );
-        return;
-      }
-      case "ListDevices": {
-        const input = fromBinary(ListDevicesRequestSchema, request.body);
-        const limit = input.limit === 0 ? 50 : input.limit;
-        const page = this.service.listDevices(actor, input.afterId, limit);
-        this.proto(
-          response,
-          cors,
-          200,
-          ListDevicesResponseSchema,
-          create(ListDevicesResponseSchema, {
-            nextId: page.nextId,
-            hasMore: page.hasMore,
-            devices: page.devices.map((device) => ({
-              deviceId: device.deviceId,
-              principalId: device.principalId,
-              displayName: device.name,
-              role: device.role,
-              createdAtUnixMs: BigInt(device.createdAtMs),
-              revokedAtUnixMs: BigInt(device.revokedAtMs),
-              revision: BigInt(device.epoch),
-            })),
-          }),
-        );
-        return;
-      }
-      case "RevokeDevice": {
-        const input = fromBinary(RevokeDeviceRequestSchema, request.body);
-        this.service.revokeDevice(
-          { ...actor, requireCsrf: true },
-          input.deviceId,
-          Number(input.expectedRevision),
-        );
-        this.proto(
-          response,
-          cors,
-          200,
-          RevokeDeviceResponseSchema,
-          create(RevokeDeviceResponseSchema, {
-            deviceId: input.deviceId,
-            revoked: true,
-          }),
-        );
-        return;
-      }
-      default:
-        this.fail(response, cors, 404, "NOT_FOUND", "No such method");
-    }
-  }
-
   /**
-   * Hello 的 JSON 形状：与 `HelloResponse` 逐字段对应。
+   * Hello 的形状，写在 `docs/contracts/core-json-api.md` §3。
    *
-   * `maxFrameBytes` 是 `uint32`，所以它是个 `number`；`protocol` 摊开成两个数。
-   * 形状写在 `docs/contracts/core-json-api.md` §3。
+   * 不要求凭据：它回答的是「这台 core 是谁、支持什么」，而那正是一次配对**之前**
+   * 就要知道的事。
    */
   helloJson(): {
     readonly protocol: { readonly major: number; readonly minor: number };
@@ -713,136 +406,6 @@ export class IdentityHttp {
       capabilities: this.capabilities(),
       maxFrameBytes: MAX_FRAME_BYTES,
     };
-  }
-
-  private hello(
-    request: CoreRequest,
-    response: ServerResponse,
-    cors: Record<string, string>,
-  ): void {
-    const input = fromBinary(HelloRequestSchema, request.body);
-    void create(HelloRequestSchema);
-    this.proto(
-      response,
-      cors,
-      200,
-      HelloResponseSchema,
-      create(HelloResponseSchema, {
-        protocol: {
-          major: PROTOCOL_MAJOR,
-          minor: Math.min(input.protocol?.minor ?? 0, PROTOCOL_MINOR),
-        },
-        hostInstanceId: this.options.instanceId,
-        hostId: this.service.hostId(),
-        capabilities: this.capabilities(),
-        maxFrameBytes: MAX_FRAME_BYTES,
-      }),
-    );
-  }
-
-  private preflight(
-    request: CoreRequest,
-    response: ServerResponse,
-    cors: Record<string, string>,
-    origin: string | undefined,
-  ): void {
-    const wanted = header(request, "access-control-request-method");
-    if (origin === undefined || wanted !== "POST") {
-      this.fail(
-        response,
-        cors,
-        403,
-        "PERMISSION_DENIED",
-        "Device permission or CSRF check failed",
-      );
-      return;
-    }
-    const native = nativeRequest(request);
-    for (const line of headerList(request, "access-control-request-headers")) {
-      for (const name of line.split(",")) {
-        switch (name.trim().toLowerCase()) {
-          case "":
-          case "content-type":
-          case "accept":
-          case "x-armadra-csrf":
-            break;
-          case "authorization":
-            // 只有原生传输发 Bearer；浏览器页面问能不能发，照旧拒绝。
-            if (!native) {
-              this.fail(
-                response,
-                cors,
-                403,
-                "PERMISSION_DENIED",
-                "Device permission or CSRF check failed",
-              );
-              return;
-            }
-            break;
-          default:
-            this.fail(
-              response,
-              cors,
-              403,
-              "PERMISSION_DENIED",
-              "Device permission or CSRF check failed",
-            );
-            return;
-        }
-      }
-    }
-    const headers: Record<string, string> = {
-      ...cors,
-      "access-control-allow-origin": origin,
-      "access-control-allow-methods": "POST",
-      "access-control-allow-headers": native
-        ? "Content-Type, Accept, X-Armadra-CSRF, Authorization"
-        : "Content-Type, Accept, X-Armadra-CSRF",
-      vary: "Access-Control-Request-Method, Access-Control-Request-Headers, Origin",
-    };
-    // 这条传输上没有 Cookie，也就没有带凭据的 CORS。
-    if (!native) headers["access-control-allow-credentials"] = "true";
-    response.writeHead(204, headers);
-    response.end();
-  }
-
-  private acceptable(request: CoreRequest): boolean {
-    const encoding = header(request, "content-encoding");
-    if (encoding !== undefined && encoding !== "identity") return false;
-    const type = header(request, "content-type");
-    return type?.split(";", 1)[0]?.trim().toLowerCase() === MEDIA_TYPE;
-  }
-
-  private proto(
-    response: ServerResponse,
-    cors: Record<string, string>,
-    status: number,
-    schema: Parameters<typeof toBinary>[0],
-    message: Parameters<typeof toBinary>[1],
-  ): void {
-    const payload = Buffer.from(toBinary(schema, message));
-    response.writeHead(status, {
-      ...cors,
-      "content-type": MEDIA_TYPE,
-      "content-length": String(payload.byteLength),
-    });
-    response.end(payload);
-  }
-
-  private fail(
-    response: ServerResponse,
-    cors: Record<string, string>,
-    status: number,
-    code: string,
-    message: string,
-  ): void {
-    this.proto(
-      response,
-      cors,
-      status,
-      ErrorResponseSchema,
-      create(ErrorResponseSchema, { code, message }),
-    );
   }
 
   private json(
