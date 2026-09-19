@@ -22,7 +22,45 @@ const dist = join(packageDir, "dist");
 
 if (!(existsSync(pathFile) && existsSync(dist))) install();
 brandDevBundle();
+ensureNodePty();
 process.exit(0);
+
+/**
+ * Patch and rebuild `node-pty` for this Electron's ABI.
+ *
+ * Both halves are required and in this order. The patch closes the pty-device
+ * leaks documented in `patch-node-pty.mjs` and must land before anything is
+ * compiled, because what ships is the compiled artefact. The rebuild is
+ * needed because pnpm installs the module's prebuild for *Node's* ABI, and
+ * Electron's is different: loading the wrong one throws
+ * NODE_MODULE_VERSION at require time, which in a packaged app means every
+ * terminal fails to open with a message about a module version.
+ *
+ * Idempotent, and cheap when there is nothing to do: the patch stops at its
+ * own marker, and `electron-rebuild` skips a module already built for the
+ * target ABI.
+ */
+function ensureNodePty() {
+  const here = dirname(new URL(import.meta.url).pathname);
+  const patch = spawnSync(process.execPath, [join(here, "patch-node-pty.mjs")], {
+    stdio: "inherit",
+  });
+  if (patch.status !== 0) {
+    process.stderr.write("node-pty could not be patched; refusing to build it\n");
+    process.exit(patch.status ?? 1);
+  }
+  const rebuild = spawnSync(
+    "npx",
+    ["--no-install", "electron-rebuild", "-f", "-w", "node-pty"],
+    { cwd: join(here, ".."), stdio: "inherit" },
+  );
+  if (rebuild.status !== 0) {
+    process.stderr.write(
+      "electron-rebuild failed for node-pty; terminals will not open\n",
+    );
+    process.exit(rebuild.status ?? 1);
+  }
+}
 
 function install() {
   process.stdout.write(

@@ -14,11 +14,14 @@ const web = resolve(here, "../web");
  *      at `node_modules/electron/index.js` gets bundled in and the app tries
  *      to download Electron at runtime. It has to be listed explicitly.
  *   2. Native modules' internal `require()` calls use relative paths that
- *      break once bundled, so they stay external too. Armadra has none today
- *      (the terminal domain is the Rust Runtime's), but the list is the place
- *      one would go, so the rule is written down rather than rediscovered.
+ *      break once bundled, so they stay external too. `node-pty` is the first
+ *      one (R2, the terminal domain): it resolves `build/Release/pty.node` and
+ *      `build/Release/spawn-helper` relative to its own file, and a bundled
+ *      copy would look for both next to `out/core/main.js`. It is therefore
+ *      external here **and** unpacked from the asar in
+ *      `electron-builder.yml` — the two have to move together.
  */
-const EXTERNAL = ["electron"];
+const EXTERNAL = ["electron", "node-pty"];
 
 /**
  * Workspace packages go the other way: they must be BUNDLED. A packaged app
@@ -94,8 +97,8 @@ function renderer(command: "serve" | "build", mode: string): UserConfig {
  *
  * `ws` and `node:sqlite` need nothing here: `ws` is pure JavaScript and is
  * bundled, and `node:sqlite` is built into Node, which is the whole reason it
- * was chosen. R2 brings the first real native module (`node-pty`) and with it
- * the `asarUnpack` entry `electron-builder.yml` is holding open.
+ * was chosen. `node-pty` is the one exception and is in `EXTERNAL` above,
+ * with the matching `asarUnpack` entry in `electron-builder.yml`.
  *
  * electron-vite itself only knows three targets, so the core rides along as a
  * plugin on the main build: one extra `vite build` after the main bundle

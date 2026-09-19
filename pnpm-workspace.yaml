@@ -11,6 +11,13 @@ allowBuilds:
   # electron-builder's Squirrel.Windows dependency; unused (we ship NSIS, not
   # Squirrel), so its postinstall script does not need to run.
   electron-winstaller: false
+  # Deliberately false. node-pty's own install script compiles against the
+  # *Node* ABI, and what this repository needs is a patched source compiled
+  # against *Electron's* — so `apps/desktop/scripts/ensure-electron.mjs` runs
+  # `patch-node-pty.mjs` and then `electron-rebuild` instead. Letting pnpm
+  # build it here would produce an artefact that is both unpatched and, in the
+  # shell, unloadable.
+  node-pty: false
 
 minimumReleaseAgeExclude:
   - "@xyflow/react@12.11.3"
