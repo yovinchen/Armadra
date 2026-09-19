@@ -1,3 +1,4 @@
+import { writeLauncher } from "../../../cli/armadra-hook/launcher";
 import {
   existsSync,
   mkdirSync,
@@ -129,6 +130,51 @@ export interface ClientEnvironment {
   readonly executableDir?: string;
   /** `PATH` lookup, injectable so the resolution can be tested. */
   readonly onPath?: (name: string) => string | undefined;
+  /**
+   * The TypeScript client. When the bundle is found, a launcher is written
+   * under `<dataDir>/bin` and *that* becomes the installed command — the
+   * bundle is JavaScript, and the CLIs run hooks through a shell that has no
+   * interpreter for it except the one this process runs on.
+   */
+  readonly launcher?: ClientLauncher;
+}
+
+export interface ClientLauncher {
+  readonly dataDir: string;
+  /** Where to look for `armadra-hook.js`; defaults cover the packaged and the built tree. */
+  readonly bundleCandidates?: readonly string[];
+  /** The runner the launcher execs; defaults to this process' executable. */
+  readonly runner?: string;
+}
+
+/** The places a built `armadra-hook.js` can be, in the order they are tried. */
+export function defaultBundleCandidates(): string[] {
+  const candidates: string[] = [];
+  if (process.resourcesPath !== undefined)
+    candidates.push(join(process.resourcesPath, "cli", "armadra-hook.js"));
+  candidates.push(join(dirname(process.execPath), "cli", "armadra-hook.js"));
+  // `out/core/main.js` → `out/cli/armadra-hook.js`; the source tree has no
+  // bundle, and a test that wants one passes it explicitly.
+  candidates.push(join(__dirname, "..", "cli", "armadra-hook.js"));
+  return candidates;
+}
+
+/**
+ * Writes the launcher for the TypeScript client and returns its path, or
+ * `undefined` when no bundle is present (a source checkout running the core
+ * with `node` and no build).
+ */
+export function launcherClientBinary(
+  launcher: ClientLauncher,
+): string | undefined {
+  const bundle = (launcher.bundleCandidates ?? defaultBundleCandidates()).find(
+    isFile,
+  );
+  if (bundle === undefined) return undefined;
+  return writeLauncher(join(launcher.dataDir, "bin"), {
+    runner: launcher.runner ?? process.execPath,
+    bundle,
+  });
 }
 
 /**
@@ -185,6 +231,10 @@ export function resolveClientBinary(options: ClientEnvironment = {}): string {
       "bad_request",
       `ARMADRA_HOOK_BIN does not point at a file: ${override}`,
     );
+  }
+  if (options.launcher !== undefined) {
+    const written = launcherClientBinary(options.launcher);
+    if (written !== undefined) return written;
   }
   const directory = options.executableDir ?? dirname(process.execPath);
   for (const name of clientFileNames()) {
