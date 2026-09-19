@@ -621,6 +621,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "资源采样",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/resources/subscription",
@@ -628,6 +629,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "资源采样",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/resources/subscription/{subscriptionId}",
@@ -635,6 +637,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "资源采样",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/resources/orphans/{sessionId}/adopt",
@@ -642,6 +645,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "资源采样",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/resources/orphans/{orphanId}/terminate",
@@ -649,6 +653,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "资源采样",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/power",

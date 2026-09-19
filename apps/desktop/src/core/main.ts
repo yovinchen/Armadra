@@ -37,6 +37,7 @@ import {
 } from "./platform";
 import { install as installLanguage } from "./language";
 import { install as installRemote } from "./remote";
+import { install as installResources } from "./resources";
 import { install as installTerminals } from "./terminal/install";
 import { install as installAgents } from "./agent";
 import { install as installBrowser } from "./browser";
@@ -134,6 +135,9 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installTerminals,
   // 调度在终端之后：一次投递要往 pane 里写，而那个桥是终端域装好之后才有的。
   installSchedule,
+  // Resources after terminals: a sample reads the session rows the terminal
+  // domain writes, and it publishes through the event stream installed first.
+  installResources,
   // Language servers after settings (the probe cache and the overrides live in
   // that document) and after events (a hub publishes its status the moment it
   // starts). It starts nothing until a session is opened.
