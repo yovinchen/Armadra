@@ -58,6 +58,41 @@ Runtime 与 Host 的 43121 三个回环端口。
 Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 Host、桌面持有的 Runtime 及受管会话。
 独立启动的 Runtime 由启动它的终端管理。详见[桌面说明](../../apps/desktop/README.md)。
 
+## 无窗口服务器壳
+
+`apps/server`（`@armadra/server`）把 TypeScript Core 装在同一个进程里，对外只有 TLS 一个面，
+浏览器与手机加载的是同一份 `apps/web` 产物。它要求数据目录**已经过统一库迁移**
+（`ARMADRA_CORE=ts` 的单向门，见 [实施进度](../status/typescript-core-status.md) §6），
+否则拒绝启动。
+
+```sh
+pnpm --filter @armadra/web build                     # 页面产物，serve 默认往上找 apps/web/dist
+pnpm --filter @armadra/server build                  # esbuild → apps/server/out/main.js
+node apps/server/out/main.js serve --data-dir ~/.armadra-server
+node apps/server/out/main.js serve --listen 0.0.0.0:8443 \
+  --public-origin https://armadra.example \
+  --tls-cert /etc/armadra/tls.crt --tls-key /etc/armadra/tls.key
+```
+
+`--listen` 默认 `127.0.0.1:0`；**监听非回环地址必须同时给 `--public-origin`**，否则直接拒绝。
+不给 `--tls-cert/--tls-key` 就在 `<数据目录>/tls/` 生成一张自签名证书（私钥 0600），
+`status` 会把它标成「自签名」。启动时打印一行
+`armadra-server pairing https://…/#pair=<两分钟一次性票>`——用它在新设备上完成配对，
+之后是 `__Host-` 前缀的会话 Cookie；POSIX 上 `kill -USR2 <pid>` 再铸一张。
+
+运维相关的四条命令只写文件，**绝不调用 launchctl / systemctl / sc.exe**：
+
+```sh
+node apps/server/out/main.js install --service-dir /etc/systemd/system \
+  --run-as armadra --web-root /opt/armadra/web   # 只生成定义，自己审阅后再注册
+node apps/server/out/main.js status --output json
+node apps/server/out/main.js logs --lines 200
+node apps/server/out/main.js upgrade --binary /tmp/armadra-server.next   # 没有 --confirm 只打印计划
+```
+
+`install` 必须显式给 `--service-dir` 与 `--run-as`，拒绝 root/SYSTEM 一类账号，`--env` 里名字带
+TOKEN / SECRET / PASSWORD / CREDENTIAL 字样一律拒绝。
+
 ## 检查与打包
 
 从仓库根执行，按改动涉及的模块选择：
@@ -68,6 +103,7 @@ Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 H
 | 一次过静态检查      | `pnpm check`＝libs 构建 + format:check + rust:fmt + typecheck + protocol:check + repo:check |
 | 前端                | `pnpm --filter @armadra/web test`、`pnpm --filter @armadra/web typecheck`                   |
 | 共享模型            | `pnpm --filter @armadra/shared test`                                                        |
+| 服务器壳            | `pnpm --filter @armadra/server test`、`pnpm --filter @armadra/server typecheck`             |
 | Runtime             | `cargo test -p armadra-runtime`                                                             |
 | Go Host             | `go -C apps/host test ./...`、`go -C apps/host vet ./...`                                   |
 | 桌面脚本            | `pnpm --filter @armadra/desktop test`                                                       |

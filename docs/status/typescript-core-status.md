@@ -5,16 +5,16 @@
 
 ## 1. 阶段状态
 
-| 阶段   | 范围                                               | 状态                  |
-| ------ | -------------------------------------------------- | --------------------- |
-| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本    | 已合入（`c1644c10d`） |
-| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移          | 已合入（`0b098c650`） |
-| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC   | 已合入（`aa180c6e7`） |
-| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`           | 已合入（`aa180c6e7`） |
-| **R4** | Git、文件 / 导入导出、定时与事件 outbox            | 已合入（`601095795`） |
-| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约   | 已合入（`601095795`） |
-| **R6** | 服务器壳、账号与共享、远程浏览器节点、session-host | 进行中                |
-| R7     | 收尾                                               | 未开始                |
+| 阶段   | 范围                                                                               | 状态                   |
+| ------ | ---------------------------------------------------------------------------------- | ---------------------- |
+| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                    | 已合入（`c1644c10d`）  |
+| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                          | 已合入（`0b098c650`）  |
+| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                   | 已合入（`aa180c6e7`）  |
+| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                           | 已合入（`aa180c6e7`）  |
+| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`601095795`）  |
+| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`）  |
+| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | R6a 已合入，其余进行中 |
+| R7     | 收尾                                                                               | 未开始                 |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -224,3 +224,43 @@ R4 与 R5 的六条线全部合入。迁移编号合入时重排为：`0017_even
 | 浏览器授权 / 租约 / 17 动词 | `core/browser/`                                  | 三个稳定错误码与 Rust 一致；`browser:drive` 出站回环 WS        | 60     |
 
 已知偏差（都写在对应模块的注释里）：用量后台刷新在第一次读时武装而非装配时；语言域 `$/cancelRequest` 归还在途额度（Rust 泄漏）；两条导入路由的请求体上限按路由抬到 65 MiB（`server.bodyLimit`）；调度的 `LAUNCH_FROZEN` 冷启动未接。
+
+## 11. R6a：`apps/server` 无窗口服务器壳
+
+`apps/server`（pnpm 工作区成员 `@armadra/server`）在**同一个进程**里装配 core：直接 `import { run, DOMAINS }`，再向装好的 `CoreServer` 要一个**不绑定地址**的交接点，把 TLS 那一侧的 `request` / `upgrade` 原样转过去。没有代理进程、没有第二个套接字——Go Host 时代的 `proxy.go` 存在的唯一理由是两个进程。core 自己仍在回环上监听一个内核分配的端口，hook 客户端与 `endpoints.json` 的发现打那里。
+
+它同时是「core 不依赖 Electron」的运行时证明：`core/no-electron.test.ts` 扫的是源码，`apps/server` 能把 core 整个装起来并对外服务，扫的是运行时。
+
+### 11.1 做了什么
+
+- **CLI**：`serve | install | uninstall | status | logs | upgrade | version`，解析是纯函数，`main(argv, io)` 返回退出码而不自己 `process.exit`。
+- **监听与 TLS**：`--listen`（默认 `127.0.0.1:0`）+ TLS。**监听非回环地址而不给 `--public-origin` 直接拒绝启动**。`--tls-cert/--tls-key` 成对给出就用运维那份；没给就在 `<数据目录>/tls/` 生成一张自签名的 P-256 证书（私钥 0600，目录 0700，SAN 覆盖监听地址与每个对外来源），并在 `status` 与启动日志里标注**自签名**。证书是手写 DER 拼的（`src/der.ts`），没有引入新依赖，单测拿 `node:crypto` 的 `X509Certificate` 反向解回来验。
+- **托管 `apps/web` 产物**：根限定两道——字符串上塌缩（解码、`..`、重复分隔符），以及打开前的 **realpath 复核**（包内指向包外的符号链接只有这一道拦得住）。SPA 回退只接住没有扩展名的路径；带哈希的资产 `immutable`，`index.html` `no-store`；CSP 复用桌面壳的 `shell-core/csp.ts` 并摘掉回环授权（页面与 core 同源），指令集合由单测盯着与桌面壳逐条相同。
+- **认证**：沿用 `core/identity` 已有的配对票 → 可撤销凭据 → 会话轮转，**不写第二套**。服务器壳自己加的是门（`src/auth.ts`）：回环专用面（`/hook/`、`/control/`、`/rpc/`…）在公网一侧一律 404；Origin 只接受 `--public-origin` 与监听地址自己那个；写方法要求 `x-armadra-csrf` 双提交（密钥由 `IdentityService` 常量时间比），外加「发了 `Sec-Fetch-Site` 就必须是 `same-origin`」；会话 Cookie 是 core 已有的 `__Host-armadra_<hostId>_<access|refresh>`（`HttpOnly; Secure; SameSite=Strict; Path=/`）。设备 token 不进 URL，配对码只进 URL 片段。
+- **配对**：`serve` 启动时铸一张两分钟的一次性票并打印 `armadra-server pairing <origin>/#pair=<票>`；POSIX 上 `SIGUSR2` 再铸一张，不必为一台新设备重启服务。
+- **`CorePlatform` 的服务器实现**（`src/platform-node.ts`）：不提供 `sealSecret`/`unsealSecret`（落到 core 已有的「keychain 不可用就降级 0600 文件并标注」那条路径）、没有 `resourcesPath`、`openExternal` 是 no-op 并记日志、`notify` 落日志。
+- **服务定义**：`install` 只**生成** launchd / systemd / `sc.exe` 定义并记一个 0600 的标记，绝不调用 launchctl / systemctl / sc.exe；`--service-dir` 与 `--run-as` 必须显式给，root / Administrator / SYSTEM 一类账号拒绝；`--env` 名字里带 TOKEN / SECRET / PASSWORD / CREDENTIAL 一类字样是**拒绝**而不是删掉；`uninstall` 只删通得过归属检查的那份文件；`status` 重新渲染一次定义与磁盘上的比字节，报 `matches` / `drifted` / `missing`；`upgrade` 先查文件本身、再查 sha256 校验文件、再在有超时的子进程里查候选自报的身份，**没有 `--confirm` 只打印计划**，替换是旁写改名，失败放回原文件，`--rollback` 回到 `<目标>.previous`。
+
+### 11.2 core 侧的两处接口点
+
+- `core/http/cors.ts` 加了 `allowOrigins(origins)`：回环之外的来源由壳在绑定之后注入一次。判定仍只有 `corsHeaders` 与 `websocketOriginAllowed` 两处，注入的是数据不是第二套规则；桌面壳不调用它。
+- `core/main.ts` 的 `RunOptions` 加了可选的 `platform` 工厂：数据目录要等参数解析完才知道，所以给的是工厂而不是对象。不给就是原来的 `nodePlatform`，桌面壳一行不改。
+
+### 11.3 怎么验证
+
+```sh
+pnpm --filter @armadra/server test      # 9 个文件 68 例，含装配级用例
+pnpm --filter @armadra/desktop test     # 跑之前先 node apps/desktop/scripts/ensure-node-pty.mjs
+pnpm --filter @armadra/server typecheck
+pnpm --filter @armadra/server build     # esbuild → apps/server/out/main.js
+```
+
+装配级用例（`src/serve.integration.test.ts`）真起一次 `serve`（临时数据目录、随机端口、自签名 TLS）并断言：`/health` 200；`index.html` 200 且带 CSP、`no-store`；带哈希的资产 `immutable`；根限定挡住 `..`、编码过的 `..` 与指向包外的符号链接；未认证的 `/api/workspaces` 401；Origin 不在白名单 403；回环专用面 404；配对之后带 Cookie 的请求 200 且 Cookie 带 `__Host-`/`HttpOnly`/`Secure`/`SameSite=Strict`；写方法没有 CSRF 头 403；配对票重放 401；撤销设备之后下一个请求立刻 401。
+
+### 11.4 没做什么
+
+- **R6b（账号与共享）不在本批**：`identity_*` 的表结构一个字节没动，配对出来的设备拿 `allScopes()` 的全量授权。按 principal 编译 scope 的接口点就是 `serve()` 里 `issueBootstrap` 的那一个 `scopes` 参数。
+- **R6c 远程浏览器节点、R6d Windows session-host 不在本批**。
+- **不注册服务**：`install` 没有 `--register`，也不打算有——「只生成定义」是这条线的硬规则。
+- **不自动更新**：`upgrade` 只认运维指过来的本地候选，不下载发布清单（设计里服务器壳本来就是「不自动更新，`status` 报版本」）。
+- **`serve` 要求数据目录已经过统一库迁移**（`ARMADRA_CORE=ts` 的单向门），否则拒绝启动而不是自己去过门。

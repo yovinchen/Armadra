@@ -55,6 +55,12 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 - **apps/desktop 只做壳**。主进程提供目录选择、外部链接、系统通知与窗口，
   能给页面的东西只有 `src/shared/ipc.ts` 那张表。
 
+第四个目录 `apps/server` 是 TypeScript Core 线上的无窗口服务器壳（R6a）：同一份
+`apps/web` 产物、同一套 core，对外只有 TLS 一个面，认证走设备配对与可撤销会话。
+它不参与上面这套 Rust Runtime + Go Host 的现状，用法见
+[开发指南](development.md#无窗口服务器壳)，进度见
+[TypeScript Core 实施进度](../status/typescript-core-status.md) §10。
+
 ## 3. 画布层
 
 窗口浮层以侧栏之外的可用画布区域为布局容器。标题栏图标共用 44px 高度的
