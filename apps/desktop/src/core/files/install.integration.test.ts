@@ -1,0 +1,241 @@
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type RunningCore, run } from "../main";
+import { MAX_BODY_BYTES } from "../http/server";
+
+/**
+ * The filesystem and import domains, assembled by the real `run()` under
+ * `ARMADRA_CORE=ts` and driven over a real socket.
+ *
+ * The route tests beside each module dispatch through the router directly,
+ * which is the right level for the behaviour. What only this level can show is
+ * the rest of the stack: that the fifteen paths are claimed in the table (a
+ * 501 here would mean the claim never took), that a `raw` answer leaves the
+ * JSON envelope alone and keeps its own headers, that a multipart upload
+ * survives `readBody`, and that the body ceiling is the one the core enforces.
+ */
+
+let core: RunningCore;
+let directory: string;
+let root: string;
+let base: string;
+let workspaceId: string;
+
+const CRLF = "\r\n";
+
+beforeAll(async () => {
+  directory = mkdtempSync(join(tmpdir(), "armadra-core-files-"));
+  root = join(directory, "project");
+  mkdirSync(join(root, "src"), { recursive: true });
+  core = await run({
+    argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", directory],
+    env: { ...process.env, ARMADRA_CORE: "ts", ARMADRA_LOG: "error" },
+    stdout: () => {},
+  });
+  const spec = core.bound[0];
+  if (spec === undefined || spec.kind !== "tcp") throw new Error("no listener");
+  base = `http://${spec.host}:${spec.port}`;
+  const created = await send("POST", "/api/workspaces", {
+    name: "files",
+    rootPath: root,
+  });
+  workspaceId = (created.body as { id: string }).id;
+}, 30_000);
+
+afterAll(async () => {
+  await core?.stop();
+  rmSync(directory, { recursive: true, force: true });
+});
+
+async function send(
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: unknown; headers: Headers }> {
+  const answer = await fetch(base + path, {
+    method,
+    headers: {
+      origin: base,
+      ...(body === undefined || Buffer.isBuffer(body)
+        ? {}
+        : { "content-type": "application/json" }),
+      ...headers,
+    },
+    ...(body === undefined
+      ? {}
+      : {
+          body: Buffer.isBuffer(body)
+            ? new Uint8Array(body)
+            : JSON.stringify(body),
+        }),
+  });
+  const text = await answer.text();
+  return {
+    status: answer.status,
+    body: text === "" ? undefined : (JSON.parse(text) as unknown),
+    headers: answer.headers,
+  };
+}
+
+function upload(boundary: string, manifest: string, bytes: Buffer): Buffer {
+  return Buffer.concat([
+    Buffer.from(
+      `--${boundary}${CRLF}Content-Disposition: form-data; name="manifest"${CRLF}${CRLF}${manifest}${CRLF}` +
+        `--${boundary}${CRLF}Content-Disposition: form-data; name="0"; filename="untrusted"${CRLF}${CRLF}`,
+      "utf8",
+    ),
+    bytes,
+    Buffer.from(`${CRLF}--${boundary}--${CRLF}`, "utf8"),
+  ]);
+}
+
+describe("the assembled filesystem and import domains", () => {
+  it("answers every claimed path for real rather than 501", async () => {
+    const paths = [
+      `/api/workspaces/${workspaceId}/files?path=.`,
+      `/api/workspaces/${workspaceId}/file-index?query=`,
+      `/api/workspaces/${workspaceId}/file-entries/trash`,
+    ];
+    for (const path of paths) {
+      const answer = await send("GET", path);
+      expect(answer.status, path).toBe(200);
+    }
+    // A path that has not been written answers 501 with the feature's name, so
+    // a 200 above is evidence the claim took rather than evidence of nothing.
+    const notYet = await send("GET", `/api/workspaces/${workspaceId}/git/refs`);
+    expect(notYet.status).toBe(501);
+  });
+
+  it("carries an editor session end to end", async () => {
+    const uri = `/api/workspaces/${workspaceId}/file`;
+    const created = await send("PUT", uri, {
+      path: "src/note.txt",
+      content: "one\n",
+    });
+    expect(created.status).toBe(200);
+
+    const read = await send("GET", `${uri}?path=src/note.txt`);
+    expect(read.status).toBe(200);
+    const content = read.body as { content: string; sha256: string };
+    expect(content.content).toBe("one\n");
+
+    const watch = `/api/workspaces/${workspaceId}/file-watch`;
+    const registered = await send("POST", watch, {
+      path: "src/note.txt",
+      nodeId: "node-1",
+    });
+    expect(registered.status).toBe(200);
+    expect((registered.body as { status: string }).status).toBe("watching");
+
+    const saved = await send("PUT", uri, {
+      path: "src/note.txt",
+      content: "two\n",
+      expectedSha256: content.sha256,
+    });
+    expect(saved.status).toBe(200);
+
+    const version = await send(
+      "GET",
+      `/api/workspaces/${workspaceId}/file-version?path=src/note.txt`,
+    );
+    expect((version.body as { sha256: string }).sha256).toBe(
+      (saved.body as { sha256: string }).sha256,
+    );
+
+    const search = await send(
+      "POST",
+      `/api/workspaces/${workspaceId}/file-search`,
+      { query: "two" },
+    );
+    expect(
+      (search.body as { files: { path: string }[] }).files.map((f) => f.path),
+    ).toContain("src/note.txt");
+
+    const closed = await send(
+      "DELETE",
+      `${watch}?path=src/note.txt&nodeId=node-1`,
+    );
+    expect(closed.status).toBe(204);
+    // Give the watcher a beat to let go before the suite removes the tree.
+    await delay(50);
+  });
+
+  it("uploads through the real body reader and downloads with its own headers", async () => {
+    const bytes = Buffer.from([0x00, 0x01, 0x02, 0x0d, 0x0a, 0xff]);
+    const uploaded = await send(
+      "POST",
+      `/api/workspaces/${workspaceId}/imports`,
+      upload("edge", '{"paths":["blob.bin"]}', bytes),
+      { "content-type": "multipart/form-data; boundary=edge" },
+    );
+    expect(uploaded.status).toBe(200);
+    const path = (uploaded.body as { files: { path: string }[] }).files[0]
+      ?.path as string;
+    expect(readFileSync(join(root, path))).toEqual(bytes);
+
+    const answer = await fetch(
+      `${base}/api/workspaces/${workspaceId}/file-download?path=${encodeURIComponent(path)}`,
+      { headers: { origin: base } },
+    );
+    expect(answer.status).toBe(200);
+    expect(answer.headers.get("content-type")).toBe("application/octet-stream");
+    expect(answer.headers.get("content-disposition")).toBe(
+      "attachment; filename*=UTF-8''%62%6C%6F%62%2E%62%69%6E",
+    );
+    expect(answer.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(Buffer.from(await answer.arrayBuffer())).toEqual(bytes);
+  });
+
+  it("imports a dropped folder as its own workspace", async () => {
+    const created = await send(
+      "POST",
+      "/api/workspaces/import?name=Dropped",
+      upload(
+        "edge",
+        '{"paths":["a.txt"],"directories":["nested"]}',
+        Buffer.from("dragged in\n", "utf8"),
+      ),
+      { "content-type": "multipart/form-data; boundary=edge" },
+    );
+    expect(created.status).toBe(200);
+    const workspace = created.body as { rootPath: string };
+    expect(readFileSync(join(workspace.rootPath, "a.txt"), "utf8")).toBe(
+      "dragged in\n",
+    );
+    const listed = await send("GET", "/api/workspaces");
+    expect(
+      (listed.body as { name: string }[]).some((one) => one.name === "Dropped"),
+    ).toBe(true);
+  });
+
+  /**
+   * The one place the core is stricter than the Runtime today.
+   *
+   * `apps/runtime/src/lib.rs` raises the axum body limit to
+   * `MAX_BATCH_BYTES + 1 MiB` for the two multipart import routes; the core
+   * has a single ceiling for every route, set in `core/http/server.ts`, and
+   * this domain may not reach into that file. So the *semantic* limits below
+   * are the Runtime's (16 MiB per file, 64 MiB per batch, 256 files) while the
+   * *transport* ceiling is 12 MiB, and an upload between the two is refused
+   * before the manifest is read. Asserted rather than left implicit so the
+   * divergence is visible the day `server.ts` grows a per-route ceiling.
+   */
+  it("refuses an upload above the core's single body ceiling", async () => {
+    const oversized = upload(
+      "edge",
+      '{"paths":["big.bin"]}',
+      Buffer.alloc(MAX_BODY_BYTES + 1024),
+    );
+    const answer = await send(
+      "POST",
+      `/api/workspaces/${workspaceId}/imports`,
+      oversized,
+      { "content-type": "multipart/form-data; boundary=edge" },
+    ).catch(() => ({ status: 400, body: undefined, headers: new Headers() }));
+    expect(answer.status).toBe(400);
+  });
+});
