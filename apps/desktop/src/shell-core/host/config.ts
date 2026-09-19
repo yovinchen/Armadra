@@ -15,9 +15,8 @@ export const HOST_ENDPOINT = "http://127.0.0.1:43121";
 export const HELLO_PATH = "/rpc/armadra.v1.HostService/Hello";
 
 /**
- * The origins a packaged Tauri page could be served from. W1.2 replaces these
- * with the shell's real loopback HTTP origin; until the static server exists
- * the Electron shell grants exactly what the Rust shell granted, so a Host
+ * The origins a packaged Tauri page is served from. They are kept while both
+ * shells exist (design §2.1: the Tauri spellings go away in W5), so a Host
  * started by either shell answers both.
  */
 export const NATIVE_ORIGINS = [
@@ -25,6 +24,45 @@ export const NATIVE_ORIGINS = [
   "http://tauri.localhost",
   "https://tauri.localhost",
 ] as const;
+
+/**
+ * Whether an origin is one a desktop shell can present — a Tauri spelling, or
+ * the loopback HTTP origin the Electron shell's static server binds.
+ *
+ * This is the shell's copy of the rule the Host enforces in
+ * `apps/host/internal/server/native.go:loopbackHTTPOrigin`, and the one the
+ * page applies in `packages/host-client/src/native.ts`. All three have to
+ * agree on the same string or a ticket is minted for an origin that cannot
+ * spend it; the tests on each side pin the same table.
+ *
+ * It is a spelling check, not an authorization. The Electron shell's port is
+ * kernel-assigned, so there is no constant to compare against; what makes a
+ * loopback HTTP origin a shell origin is that nothing off this machine can be
+ * behind it, and the ticket still only ever comes from the same-user control
+ * channel.
+ */
+export function nativeOrigin(origin: string): boolean {
+  if ((NATIVE_ORIGINS as readonly string[]).includes(origin)) return true;
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  // `parsed.origin === origin` rejects a path, a query, or credentials: an
+  // origin is a scheme, a host and a port and nothing else.
+  if (parsed.protocol !== "http:" || parsed.origin !== origin) return false;
+  return loopbackHostname(parsed.hostname);
+}
+
+/** Loopback as the Host reads it: `localhost`, `::1`, or any `127.0.0.0/8`. */
+export function loopbackHostname(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+  );
+}
 
 export const STDOUT_LIMIT = 1_048_576;
 export const STDERR_LIMIT = 65_536;
@@ -34,7 +72,18 @@ export const MAX_CLI_TIMEOUT_MS = 15_000;
 export interface HostLaunchConfig {
   readonly binary: string;
   readonly dataDir?: string | undefined;
+  /**
+   * The page's own origin — the one the window will actually load from, and
+   * the only one a ticket is ever minted for.
+   */
   readonly browserOrigin: string;
+  /**
+   * Further origins the Host may answer, beyond the page's own and the Tauri
+   * spellings. Development adds apps/web's dev server here so the same Host
+   * serves the shell's window and a browser tab opened on the same front end;
+   * neither can mint a ticket, which is what makes the extra grant cheap.
+   */
+  readonly additionalOrigins?: readonly string[] | undefined;
   readonly cliTimeoutMs: number;
   /**
    * The shared `endpoints.json` directory — the Runtime's data directory, so
@@ -96,6 +145,7 @@ export function validate(
     config.cliTimeoutMs <= 0 ||
     config.cliTimeoutMs > MAX_CLI_TIMEOUT_MS ||
     !validOrigin(config.browserOrigin) ||
+    (config.additionalOrigins ?? []).some((origin) => !validOrigin(origin)) ||
     (config.expectedHttpEndpoint !== undefined &&
       !validEndpoint(config.expectedHttpEndpoint));
   return invalid ? hostError("invalidConfiguration") : undefined;
@@ -176,10 +226,15 @@ export function startArguments(config: HostLaunchConfig): string[] {
     listen,
   ];
   if (config.expectedHttpEndpoint !== undefined) {
-    for (const origin of NATIVE_ORIGINS) args.push("--allow-origin", origin);
-    if (!(NATIVE_ORIGINS as readonly string[]).includes(config.browserOrigin)) {
-      args.push("--allow-origin", config.browserOrigin);
-    }
+    // Order is the declaration order, and each origin is granted exactly
+    // once: the Host refuses a repeated --allow-origin, and a line that
+    // differs between two starts of the same shell is one nobody can diff.
+    const granted = new Set<string>([
+      ...NATIVE_ORIGINS,
+      config.browserOrigin,
+      ...(config.additionalOrigins ?? []),
+    ]);
+    for (const origin of granted) args.push("--allow-origin", origin);
   }
   if (config.endpointsDir !== undefined)
     args.push("--endpoints-dir", config.endpointsDir);

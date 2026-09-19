@@ -36,10 +36,11 @@ import { repoRoot } from "./repo-root";
  * somebody else's process on a loopback port, and this module never signals
  * one it did not start. Ported from `src-tauri/src/runtime_process.rs`.
  *
- * In W1.1 the Runtime still listens the way it does today (a Unix socket in
- * the data directory). The shell reaches `/health` through that socket, the
- * page reaches the Runtime directly — W1.2 is where the listener becomes TCP
- * and the page gets its bases from `transport:endpoints`.
+ * The owned Runtime listens twice: on a Unix socket in the data directory,
+ * which is what `/health` and the stale-Runtime takeover use because they need
+ * an address known before the spawn, and on a kernel-assigned loopback TCP
+ * port, which is what the page uses. Only `endpoints.json` knows the second
+ * one, and `transport:endpoints` is how the page is told.
  */
 
 const sleep = (ms: number): Promise<void> =>
@@ -103,11 +104,19 @@ export class RuntimeProcess {
       "--listen",
       listenArgument(address),
     ];
-    // `armadra.sh run desktop` adds a loopback port on top of the socket so a
-    // Vite page can still reach the Runtime this shell owns. A packaged build
-    // never sets this and therefore never binds a port.
-    const extra = process.env.ARMADRA_RUNTIME_LISTEN;
-    if (extra) args.push("--listen", extra);
+    // A loopback port on top of the socket, because the page is now an
+    // ordinary HTTP client of the Runtime (§2.1): `fetch` and `WebSocket` go
+    // straight there, with no protocol forwarding left to reach a socket
+    // through. The kernel picks the number and `endpoints.json` publishes it.
+    //
+    // The socket stays, and is still what `/health` and the stale-Runtime
+    // takeover use: those need an address this shell knows BEFORE the spawn,
+    // which a kernel-assigned port is not. `ARMADRA_RUNTIME_LISTEN` overrides
+    // it for `armadra.sh run desktop`, which pins a port for its own page.
+    args.push(
+      "--listen",
+      process.env.ARMADRA_RUNTIME_LISTEN || "tcp:127.0.0.1:0",
+    );
     const child = spawn(executable, args, {
       // stdout is piped, not discarded: the first line identifies this run and
       // the rest is the Runtime's own log, which the Tauri shell used to throw

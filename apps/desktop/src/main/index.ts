@@ -1,5 +1,4 @@
 import { app, dialog, ipcMain } from "electron";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ALL_CHANNELS,
@@ -7,11 +6,15 @@ import {
   IPC,
   NOT_IMPLEMENTED,
   type PickOptions,
+  type NativeTicketAnswer,
   type TransportEndpoints,
+  ipcError,
   ipcRejection,
 } from "../shared/ipc";
 import { dataDir } from "../shell-core/paths";
+import { DEFAULT_DEV_RENDERER_URL } from "../shell-core/window-rules";
 import { HOST_ENDPOINT, configFromEnvironment } from "./host";
+import { deviceName, issueNativeTicket } from "./host/ticket";
 import {
   DesktopLifecycle,
   quitFailureDialog,
@@ -23,25 +26,31 @@ import {
   ownedRuntimeAddress,
   waitForRuntime,
 } from "./runtime-process";
+import { type PageSource, startPageSource } from "./static-server";
 import { traceLifecycle } from "./trace";
 import { installUpdates } from "./updates";
 import {
+  endpointsSnapshot,
+  fallbackEndpoints,
+  publishEndpoints,
+  resolveEndpoints,
+} from "./transport";
+import {
+  applyContentSecurityPolicy,
   createMainWindow,
   getMainWindow,
   loadRenderer,
   markQuitting,
   onWindowCreated,
   revealWindow,
+  setPageUrl,
 } from "./window";
 import { pickDirectory, pickFiles } from "./dialogs";
 import { openExternal } from "./external";
 import { installApplicationMenu, installKeydownIntercept } from "./menu";
 import { applyShortcuts, releaseShortcuts } from "./shortcuts";
 import { createTray, destroyTray } from "./tray";
-import {
-  ownsRuntime,
-  publishedRuntimeBases,
-} from "../shell-core/runtime/identity";
+import { ownsRuntime } from "../shell-core/runtime/identity";
 
 /**
  * The application's assembly. Everything with a rule worth stating lives in
@@ -54,6 +63,8 @@ const lifecycle = new DesktopLifecycle();
 const runtime = new RuntimeProcess();
 const development = !app.isPackaged;
 const updates = installUpdates(lifecycle, runtime);
+/** Set by `start()` before any window exists; every origin decision reads it. */
+let page: PageSource | null = null;
 
 /* ------------------------------ the IPC table ----------------------------- */
 
@@ -68,6 +79,7 @@ const updates = installUpdates(lifecycle, runtime);
 function registerIpc(): void {
   const handlers: Record<string, (...args: unknown[]) => unknown> = {
     [IPC.transportEndpoints.channel]: transportEndpoints,
+    [IPC.identityTicket.channel]: nativeTicket,
     [IPC.appLocale.channel]: () => app.getLocale(),
     [IPC.windowIsFocused.channel]: () => getMainWindow()?.isFocused() ?? false,
     // W2.2: the seven update channels. The updater is assembled here because
@@ -81,6 +93,11 @@ function registerIpc(): void {
     [IPC.shellOpenExternal.channel]: (url) => openExternal(url),
     [IPC.shortcutsApply.channel]: (bindings) => applyShortcuts(bindings),
   };
+  // The page decides its Runtime base before its first `await`, so the same
+  // channel also answers synchronously from the snapshot taken at startup.
+  ipcMain.on(IPC.transportEndpoints.channel, (event) => {
+    event.returnValue = endpointsSnapshot(fallbackTransport);
+  });
   // The table and the implementation list must agree: a handler added here
   // without being listed there (or the reverse) is how a channel quietly
   // becomes reachable, or quietly stops being.
@@ -109,35 +126,57 @@ function registerIpc(): void {
 /**
  * Where the page should send its traffic.
  *
- * In W1.1 the shell has not taken over the page's transport yet: the Runtime
- * it owns still listens on a Unix socket, so the address returned here is the
- * EXTERNAL Runtime's — the one `armadra.sh` or `cargo run` put on a loopback
- * port, read from `endpoints.json` where available. W1.2 is where the shell
- * serves the page itself and these become its own bases.
+ * Both bases come from `endpoints.json`, whether this shell started the
+ * Runtime or attached to somebody else's: the port is kernel-assigned either
+ * way, so the published document is the only thing that knows it. The
+ * documented default port is the fallback, not a guess dressed up as an
+ * answer — without the document there is nothing else the page could try.
  */
-async function transportEndpoints(): Promise<TransportEndpoints> {
-  const directory = dataDir();
-  const published = await readPublishedBases(directory);
-  // The documented default port is the fallback, not a guess dressed up as an
-  // answer: without `endpoints.json` there is nothing else the page could try.
-  const fallback = externalRuntimeBase();
-  return {
-    httpBase: published?.http ?? fallback,
-    wsBase: published?.websocket ?? fallback.replace(/^http/, "ws"),
-    hostBase: HOST_ENDPOINT,
-    dataDir: directory,
-  };
+function transportEndpoints(): Promise<TransportEndpoints> {
+  return resolveEndpoints(dataDir(), externalRuntimeBase(), HOST_ENDPOINT);
 }
 
-async function readPublishedBases(
-  directory: string,
-): Promise<{ http: string; websocket: string } | undefined> {
+function fallbackTransport(): TransportEndpoints {
+  return fallbackEndpoints(externalRuntimeBase(), HOST_ENDPOINT, dataDir());
+}
+
+/**
+ * One native Host session ticket for the page (§4.4).
+ *
+ * The origin is the shell's own page origin, never one the page named, and
+ * the Host is the instance startup verified. `armadra-host pair` itself stays
+ * on this side of the bridge: the page gets a ticket, not the ability to pair.
+ *
+ * A refusal is RETURNED, not thrown. Electron serializes a rejected
+ * `ipcMain.handle` to its message alone — `{ code, message }` would arrive as
+ * prose the page has to parse — and "the Host is not up yet" is an answer the
+ * page acts on, not a transport fault. The shape is the one AGENTS.md asks
+ * for, carried in the result.
+ */
+async function nativeTicket(): Promise<NativeTicketAnswer> {
+  const config = lifecycle.hostLaunchConfig();
+  if (config === null)
+    return { ok: false, error: ipcError("hostUnavailable", "no Host") };
   try {
-    return publishedRuntimeBases(
-      await readFile(join(directory, "endpoints.json"), "utf8"),
-    );
-  } catch {
-    return undefined;
+    return {
+      ok: true,
+      ticket: await issueNativeTicket(
+        config,
+        lifecycle.observedHost(),
+        deviceName(app.getLocale()),
+      ),
+    };
+  } catch (thrown) {
+    // Only the stable reason travels. Whatever the CLI wrote was already
+    // dropped in `issueNativeTicket`; nothing here may add it back.
+    const reason =
+      thrown instanceof Error && "reason" in thrown
+        ? String((thrown as { reason: unknown }).reason)
+        : "cliFailed";
+    return {
+      ok: false,
+      error: ipcError(reason, `no native session ticket (${reason})`),
+    };
   }
 }
 
@@ -169,6 +208,18 @@ async function requestQuit(): Promise<void> {
 
 /* --------------------------------- startup -------------------------------- */
 
+/**
+ * The startup order, and why it is this order.
+ *
+ * 1. The page source first. Everything downstream is derived from its origin:
+ *    the Host's `--allow-origin`, the CSP, and the ticket the page will spend.
+ * 2. The Host, configured with that origin. It runs in the background — a
+ *    shell whose Host is down still opens a window and says so.
+ * 3. The Runtime, awaited when this shell owns it, because its port is
+ *    kernel-assigned and the page cannot be loaded before the answer exists.
+ * 4. The transport snapshot, then the window. The page reads its Runtime base
+ *    synchronously at module load, so it must be published before the load.
+ */
 async function start(): Promise<void> {
   traceLifecycle("setup");
   registerIpc();
@@ -183,17 +234,29 @@ async function start(): Promise<void> {
     quit: () => app.quit(),
   });
 
-  const window = createMainWindow();
-  void loadRenderer(window);
+  page = await startPageSource(
+    process.env.ELECTRON_RENDERER_URL,
+    app.isPackaged,
+    join(__dirname, "../renderer"),
+  );
+  setPageUrl(page.url);
+  applyContentSecurityPolicy(page.origin);
+  traceLifecycle(`page origin ${page.origin}`);
 
   // The Host's launch configuration is resolved even when the Host itself is
   // unavailable: a shell that cannot describe its Host is a configuration
   // error worth reporting, not a reason to refuse to open a window.
   try {
-    const origin = development ? "http://127.0.0.1:1420" : "tauri://localhost";
-    lifecycle.configureHost(
-      configFromEnvironment(development, origin, dataDir()),
-    );
+    lifecycle.configureHost({
+      ...configFromEnvironment(development, page.origin, dataDir()),
+      // Development also grants apps/web's own dev server, so the same Host
+      // answers the shell's window and a browser tab on the same front end.
+      // Neither can mint a ticket, which is what makes the grant cheap.
+      additionalOrigins:
+        development && page.origin !== DEFAULT_DEV_RENDERER_URL
+          ? [DEFAULT_DEV_RENDERER_URL]
+          : [],
+    });
   } catch (error) {
     process.stderr.write(
       `Background ${error instanceof Error ? error.message : error}\n`,
@@ -221,6 +284,9 @@ async function start(): Promise<void> {
       dialog.showErrorBox("Armadra 后台未就绪", message);
     }
   }
+
+  publishEndpoints(await transportEndpoints());
+  void loadRenderer(createMainWindow());
 }
 
 app.whenReady().then(() => {

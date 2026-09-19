@@ -44,6 +44,7 @@ describe("the IPC table", () => {
     expect([...IMPLEMENTED_CHANNELS].sort()).toEqual(
       [
         "app:locale",
+        "identity:ticket",
         "transport:endpoints",
         "window:is-focused",
         "dialog:pick-directory",
@@ -72,6 +73,14 @@ describe("the IPC table", () => {
     }
   });
 
+  it("keeps the ticket channel to this window alone", () => {
+    // A ticket is a credential for THIS page's origin. A remote peer asking
+    // for one would be asking the shell to mint a session for a page it is
+    // not, so the reach is recorded before any peer exists to ask.
+    expect(IPC.identityTicket.reach).toBe("window");
+    expect(IPC.identityTicket.direction).toBe("invoke");
+  });
+
   it("covers every domain the migration design §2.2 lists", () => {
     const domains = new Set(
       ALL_CHANNELS.map((spec) => spec.channel.split(":")[0]),
@@ -80,6 +89,7 @@ describe("the IPC table", () => {
       "app",
       "browser",
       "dialog",
+      "identity",
       "shell",
       "shortcuts",
       "transport",
