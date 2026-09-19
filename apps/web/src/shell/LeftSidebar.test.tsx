@@ -35,9 +35,11 @@ vi.mock("../api/client", () => ({
   },
 }));
 
+const desktop = vi.fn(() => false);
+
 vi.mock("../platform", () => ({
   pickDirectory: vi.fn().mockResolvedValue("/tmp/picked"),
-  isDesktop: () => false,
+  isDesktop: () => desktop(),
   onFileDrop: () => () => undefined,
 }));
 
@@ -129,9 +131,16 @@ function renderSidebar(withSettings = false) {
   );
 }
 
+const initialPlatform = window.navigator.platform;
+
 afterEach(() => {
   cleanup();
   window.matchMedia = initialMatchMedia;
+  desktop.mockReturnValue(false);
+  Object.defineProperty(window.navigator, "platform", {
+    value: initialPlatform,
+    configurable: true,
+  });
 });
 
 beforeEach(() => {
@@ -144,6 +153,15 @@ beforeEach(() => {
     pinnedBoardIds: [],
   });
 });
+
+/** 桌面壳 + macOS：`isDesktop()` 与 `isMacPlatform()` 都得为真。 */
+function asMacDesktopShell(): void {
+  desktop.mockReturnValue(true);
+  Object.defineProperty(window.navigator, "platform", {
+    value: "MacIntel",
+    configurable: true,
+  });
+}
 
 describe("LeftSidebar", () => {
   it("自上而下是标题栏、Armadra、新建画布、项目、设置", () => {
@@ -306,5 +324,43 @@ describe("LeftSidebar", () => {
     expect(usePreferencesStore.getState().sidebarOpen).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
     expect(await screen.findByRole("dialog", { name: "侧栏" })).toBeTruthy();
+  });
+
+  it("折叠钮、搜索、通知三个按钮尺寸一致，且折叠钮不带常亮的高亮底", () => {
+    renderSidebar();
+    const toggle = screen.getByLabelText("收起侧栏");
+    const search = screen.getByLabelText("搜索");
+    const bell = screen.getByLabelText("通知");
+
+    // 三个都是 IconButton 的 `cluster` 预设：28×28，同一套圆角。
+    for (const button of [toggle, search, bell]) {
+      expect(button.className).toContain("size-[28px]");
+    }
+    // 侧栏默认展开，是多数/中性状态，不是「当前有东西盖在上面」——折叠钮不该
+    // 像通知钮显示 Agent 面板时那样常亮一块方形底，那会让它显得比另外两个
+    // 更「重」，看起来尺寸、基线都不齐。
+    expect(toggle.getAttribute("data-active")).toBeNull();
+    expect(search.getAttribute("data-active")).toBeNull();
+  });
+
+  it("桌面壳 macOS 下标题栏左侧给红绿灯留白，折叠钮不会贴着它们", () => {
+    asMacDesktopShell();
+    renderSidebar();
+    const toggle = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar-toggle"]',
+    )!;
+
+    // 红绿灯占位（`trafficLightInset()`）+ 8px 的呼吸间距，而不是紧贴在 x=8。
+    const left = Number.parseFloat(toggle.style.left);
+    expect(left).toBeGreaterThan(8);
+  });
+
+  it("浏览器（非桌面壳）下折叠钮紧贴左边，不留红绿灯占位", () => {
+    renderSidebar();
+    const toggle = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar-toggle"]',
+    )!;
+
+    expect(toggle.style.left).toBe("8px");
   });
 });

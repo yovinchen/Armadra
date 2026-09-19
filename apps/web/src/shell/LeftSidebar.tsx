@@ -192,7 +192,10 @@ function TitlebarRow({
 
 /**
  * 标题栏里的折叠钮：紧贴红绿灯右侧，展开与折叠时都在同一个位置。
- * 与搜索、通知统一为 28px，放在 44px 标题栏的中心线上。
+ * 与搜索、通知统一为 28px，放在 44px 标题栏的中心线上，且**不带常亮的方形
+ * 高亮底**——侧栏展开是默认/多数状态，不是「当前叠加内容」，跟通知钮的
+ * `active`（代表 Agent 面板正盖在项目树上）不是一回事；常亮只会让它显得比
+ * 旁边两颗图标「更重」，看起来尺寸、基线都不齐。
  * 右上角那颗点 = 当前工作空间里有 Agent 在等你（红）或跑完没看（蓝）。
  */
 function SidebarToggle({ open }: { open: boolean }) {
@@ -216,7 +219,6 @@ function SidebarToggle({ open }: { open: boolean }) {
           <IconButton
             size="cluster"
             label={label}
-            active={open}
             className="relative"
             onClick={() => setPanel("sidebar", open ? "collapsed" : "open")}
           >
