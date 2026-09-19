@@ -52,8 +52,7 @@ function fixture(): Fixture {
   const dataDir = mkdtempSync(join(tmpdir(), "armadra-resources-"));
   const db = openDatabase({
     file: join(dataDir, "canvas.db"),
-    migrationsDir: resolve(here, "../../../../runtime/migrations"),
-    unifiedMigrationsDir: resolve(here, "../db/migrations"),
+    migrationsDir: resolve(here, "../db/migrations"),
   });
   // 工作空间的 id 是库生成的；测试按它回填，而不是硬写一个。
   const workspace = createWorkspace(db.database, {

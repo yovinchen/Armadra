@@ -1,22 +1,22 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { DatabaseRefused, openDatabase } from "./open";
 import { loadMigrations } from "./migrations";
-import {
-  BACKUP_PREFIX,
-  UNIFIED_VERSION,
-  backupPath,
-  resolveUnifiedMigrationsDir,
-  unifiedEnabled,
-} from "./unified";
+import { BACKUP_PREFIX, UNIFIED_VERSION, backupPath } from "./unified";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
-const unifiedDir = join(here, "migrations");
+/** 唯一的迁移目录：0001–0020 一条序列。 */
+const migrationsDir = join(here, "migrations");
 
 const closing: (() => void)[] = [];
 afterEach(() => {
@@ -33,11 +33,25 @@ function file(): string {
   return join(mkdtempSync(join(tmpdir(), "armadra-unified-")), "canvas.db");
 }
 
-function open(path: string, unified: boolean) {
+/**
+ * 门之前的那批迁移，复制成一个夹具目录。
+ *
+ * 已经装了旧版本的机器上，库的账本停在 14；这个目录就是那种库的来源，也是
+ * 「门后的库被一个不认识 15 的构建打开会怎样」的来源。
+ */
+function beforeGate(): string {
+  const directory = mkdtempSync(join(tmpdir(), "armadra-before-gate-"));
+  for (const name of readdirSync(migrationsDir)) {
+    if (Number.parseInt(name.slice(0, 4), 10) >= UNIFIED_VERSION) continue;
+    copyFileSync(join(migrationsDir, name), join(directory, name));
+  }
+  return directory;
+}
+
+function open(path: string, gate: boolean) {
   const opened = openDatabase({
     file: path,
-    migrationsDir,
-    ...(unified ? { unifiedMigrationsDir: unifiedDir } : {}),
+    migrationsDir: gate ? migrationsDir : beforeGate(),
   });
   closing.push(opened.close);
   return opened;
@@ -54,34 +68,14 @@ function backups(path: string): string[] {
 }
 
 describe("the one-way gate", () => {
-  it("is off unless ARMADRA_CORE says ts", () => {
-    expect(unifiedEnabled({})).toBe(false);
-    expect(unifiedEnabled({ ARMADRA_CORE: "rust" })).toBe(false);
-    expect(unifiedEnabled({ ARMADRA_CORE: "TS" })).toBe(false);
-    expect(unifiedEnabled({ ARMADRA_CORE: "ts" })).toBe(true);
-  });
-
-  it("starts at the gate and is numbered after the shared directory", () => {
-    const shared = loadMigrations(migrationsDir);
-    const overlay = loadMigrations(unifiedDir);
-    // 这个目录会继续长：每一批把自己的表加进统一库时都在这里新增一条。门本身
-    // 是 0015，所以断言的是「第一条就是门，其余严格在门之后」，而不是条数。
-    expect(overlay.length).toBeGreaterThanOrEqual(1);
-    expect(overlay[0]?.version).toBe(UNIFIED_VERSION);
-    for (const migration of overlay.slice(1)) {
-      expect(migration.version).toBeGreaterThan(UNIFIED_VERSION);
-    }
-    expect(Math.max(...shared.map((m) => m.version))).toBeLessThan(
-      UNIFIED_VERSION,
+  it("sits at 15, in one continuous sequence from 1", () => {
+    const all = loadMigrations(migrationsDir);
+    expect(all.map((migration) => migration.version)).toEqual(
+      all.map((_, index) => index + 1),
     );
-  });
-
-  it("is not in the directory the Rust Runtime compiles in", () => {
-    // 这条测试就是单向门本身：0015 一旦出现在 Runtime 目录，Rust 也会应用它，
-    // 「应用后 Rust 拒绝启动」就不再成立。
-    expect(
-      readdirSync(migrationsDir).some((name) => name.startsWith("0015")),
-    ).toBe(false);
+    expect(all.some((migration) => migration.version === UNIFIED_VERSION)).toBe(
+      true,
+    );
   });
 
   it("names the backup without characters a Windows path refuses", () => {
@@ -92,17 +86,6 @@ describe("the one-way gate", () => {
     expect(path).toBe("/data/canvas.db.before-ts-core-20260919T080706Z");
     expect(path.includes(":")).toBe(false);
   });
-
-  it("finds its directory through the override", () => {
-    expect(
-      resolveUnifiedMigrationsDir({
-        env: { ARMADRA_CORE_MIGRATIONS_DIR: "/elsewhere" },
-      }),
-    ).toBe("/elsewhere");
-    expect(resolveUnifiedMigrationsDir({ env: {}, from: here })).toBe(
-      unifiedDir,
-    );
-  });
 });
 
 describe("applying the unified migration", () => {
@@ -110,7 +93,7 @@ describe("applying the unified migration", () => {
     const path = file();
     const opened = open(path, true);
     expect(opened.migrations).toHaveLength(
-      14 + loadMigrations(unifiedDir).length,
+      loadMigrations(migrationsDir).length,
     );
     expect(opened.unified).toBe(true);
     const tables = (
@@ -132,7 +115,7 @@ describe("applying the unified migration", () => {
     expect(tables).not.toContain("identity_owner");
   });
 
-  it("does not run without the overlay, and leaves the ledger at 14", () => {
+  it("stops at 14 for a build whose set ends before the gate", () => {
     const path = file();
     const opened = open(path, false);
     expect(opened.migrations).toHaveLength(14);
@@ -160,7 +143,7 @@ describe("applying the unified migration", () => {
     // 备份是应用 0015 之前的那个库：14 条账本，没有身份表。
     const copy = openDatabase({
       file: backup,
-      migrationsDir,
+      migrationsDir: beforeGate(),
       migrate: false,
     });
     closing.push(copy.close);
@@ -176,13 +159,13 @@ describe("applying the unified migration", () => {
         )
         .get(),
     ).toBeUndefined();
-    // 原库已经过门：备份留在门前，原库的账本多了一条 15。
+    // 原库已经过门：备份留在门前，原库的账本是完整的一条序列。
     expect(typeof before).toBe("string");
     expect(
       opened.database
         .prepare("SELECT count(*) AS total FROM _sqlx_migrations")
         .get(),
-    ).toEqual({ total: 14 + loadMigrations(unifiedDir).length });
+    ).toEqual({ total: loadMigrations(migrationsDir).length });
   });
 
   it("does not back up a second time once the gate is behind it", () => {
@@ -197,8 +180,8 @@ describe("applying the unified migration", () => {
     expect(backups(path)).toHaveLength(1);
   });
 
-  it("refuses a database that already went through, when the overlay is gone", () => {
-    // 这是 Rust Runtime 会看到的东西：账本里有一条它不认识的 15。
+  it("refuses a database that already went through, to a build without 15", () => {
+    // 这是门前那个构建会看到的东西：账本里有一条它不认识的 15。
     const path = file();
     open(path, true).close();
     expect(() => open(path, false)).toThrow(DatabaseRefused);

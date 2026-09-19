@@ -14,8 +14,7 @@ import {
 import { openDatabase } from "./open";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
-const unifiedDir = join(here, "migrations");
+const migrationsDir = resolve(here, "migrations");
 
 const closing: (() => void)[] = [];
 afterEach(() => {
@@ -41,7 +40,6 @@ function unified(directory: string) {
   const opened = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir,
-    unifiedMigrationsDir: unifiedDir,
   });
   closing.push(opened.close);
   return opened;

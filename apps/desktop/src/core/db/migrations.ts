@@ -3,13 +3,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 /**
- * The migration set, read from the same `.sql` files the Rust Runtime compiles
- * in.
+ * 迁移集，读自 `apps/desktop/src/core/db/migrations` —— 唯一的迁移目录。
  *
- * There is no second copy. The 14 files in `apps/runtime/migrations` are the
- * source of truth for both implementations, `migrations.lock` guards their
- * bytes, and this module reproduces — exactly — how `sqlx::migrate!` turns a
- * directory into a set of migrations:
+ * 0001–0020 是一条连续序列：1–14 是这个库从一开始就有的那些，15 起是统一库
+ * 之后加的。`migrations.lock` 守住它们的字节。文件名到迁移的读法沿用最初那套
+ * 目录约定，一个字节都不能变（已发布的账本里记着按它算出的校验和）：
  *
  *   * the file name is `<VERSION>_<DESCRIPTION>.sql`; the version is the
  *     integer before the first `_`, and anything that does not split that way
@@ -82,12 +80,12 @@ export function loadMigrations(directory: string): Migration[] {
 }
 
 /**
- * Where the `.sql` files are, in the order a running core should look.
+ * 那一个 `.sql` 目录在哪，按运行中的 core 该找的顺序。
  *
- * A packaged shell stages them beside its resources; a development run walks
- * up from `from` (the built bundle's own directory) until it finds the
- * checkout. `ARMADRA_MIGRATIONS_DIR` overrides both, which is how a test points
- * one core at a fixture directory without moving anything.
+ * 打好包的壳把它放在资源目录下的 `migrations/`（`after-pack.mjs` 放进去的）；
+ * 开发时从 `from`（产物自己所在的目录）往上走到检出。
+ * `ARMADRA_CORE_MIGRATIONS_DIR` 覆盖两者，测试用它把一个 core 指到夹具目录，
+ * 不用移动任何东西。
  */
 export function resolveMigrationsDir(options: {
   readonly env?: NodeJS.ProcessEnv;
@@ -95,18 +93,18 @@ export function resolveMigrationsDir(options: {
   readonly from?: string;
 }): string {
   const env = options.env ?? process.env;
-  if (env.ARMADRA_MIGRATIONS_DIR) return env.ARMADRA_MIGRATIONS_DIR;
+  if (env.ARMADRA_CORE_MIGRATIONS_DIR) return env.ARMADRA_CORE_MIGRATIONS_DIR;
   if (options.resourcesPath) {
     const staged = join(options.resourcesPath, "migrations");
     if (existsSync(staged)) return staged;
   }
   const found = findUpwards(
     options.from ?? process.cwd(),
-    "apps/runtime/migrations",
+    "apps/desktop/src/core/db/migrations",
   );
   if (found !== undefined) return found;
   throw new Error(
-    "could not find the migration directory; set ARMADRA_MIGRATIONS_DIR",
+    "could not find the migration directory; set ARMADRA_CORE_MIGRATIONS_DIR",
   );
 }
 

@@ -42,8 +42,7 @@ import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
-const unifiedDir = resolve(here, "../db/migrations");
+const migrationsDir = resolve(here, "../db/migrations");
 const INSTANCE = "0123456789abcdef0123456789abcdef";
 
 const closing: (() => void | Promise<void>)[] = [];
@@ -69,7 +68,6 @@ async function harness(): Promise<Harness> {
   const opened = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir,
-    unifiedMigrationsDir: unifiedDir,
   });
   closing.push(opened.close);
   const store = new IdentityStore(opened.database);

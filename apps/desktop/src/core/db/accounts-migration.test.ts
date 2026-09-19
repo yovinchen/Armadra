@@ -14,8 +14,7 @@ import { openDatabase } from "./open";
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
-const unifiedDir = join(here, "migrations");
+const migrationsDir = resolve(here, "migrations");
 const OWNER = "a".repeat(32);
 const DEVICE = "b".repeat(32);
 const SESSION = "c".repeat(32);
@@ -39,18 +38,17 @@ afterEach(() => {
  */
 function beforeAccounts(): string {
   const directory = mkdtempSync(join(tmpdir(), "armadra-0019-overlay-"));
-  for (const name of readdirSync(unifiedDir)) {
+  for (const name of readdirSync(migrationsDir)) {
     if (Number(name.slice(0, 4)) >= 19) continue;
-    copyFileSync(join(unifiedDir, name), join(directory, name));
+    copyFileSync(join(migrationsDir, name), join(directory, name));
   }
   return directory;
 }
 
-function open(file: string, overlay: string) {
+function open(file: string, directory: string) {
   const opened = openDatabase({
     file,
-    migrationsDir,
-    unifiedMigrationsDir: overlay,
+    migrationsDir: directory,
   });
   closing.push(opened.close);
   return opened;
@@ -97,7 +95,7 @@ describe("0019：identity_owner → identity_principals", () => {
     old.close();
     closing.length = 0;
 
-    const upgraded = open(file, unifiedDir);
+    const upgraded = open(file, migrationsDir);
     expect(
       upgraded.database
         .prepare(
@@ -138,7 +136,7 @@ describe("0019：identity_owner → identity_principals", () => {
       mkdtempSync(join(tmpdir(), "armadra-0019-")),
       "canvas.db",
     );
-    const opened = open(file, unifiedDir);
+    const opened = open(file, migrationsDir);
     opened.database
       .prepare(
         "INSERT INTO identity_principals(principal_id, kind, display_name, created_at_ms, disabled_at_ms) " +
@@ -172,7 +170,7 @@ describe("0019：identity_owner → identity_principals", () => {
       mkdtempSync(join(tmpdir(), "armadra-0019-")),
       "canvas.db",
     );
-    const opened = open(file, unifiedDir);
+    const opened = open(file, migrationsDir);
     const insert = opened.database.prepare(
       "INSERT INTO identity_principals(principal_id, kind, display_name, created_at_ms, disabled_at_ms) " +
         "VALUES(?, 'owner', '', 1, 0)",
@@ -186,7 +184,7 @@ describe("0019：identity_owner → identity_principals", () => {
       mkdtempSync(join(tmpdir(), "armadra-0019-")),
       "canvas.db",
     );
-    const opened = open(file, unifiedDir);
+    const opened = open(file, migrationsDir);
     opened.database
       .prepare(
         "INSERT INTO audit_log(at_ms, principal_id, action, target) VALUES(1, '', 'identity.group.delete', ?)",

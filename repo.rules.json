@@ -79,25 +79,11 @@
   },
   "migrations": {
     "lock": "migrations.lock",
+    "$comment": "迁移只有一个来源：core 的 db/migrations。0001–0020 是一条连续序列，lock 守住它们的字节。",
     "sources": [
       {
-        "path": "apps/runtime/migrations",
-        "kind": "directory"
-      },
-      {
-        "$comment": "统一库迁移只有 TS core 认识：放进 apps/runtime/migrations 会被 sqlx::migrate! 编译进 Rust Runtime，Rust 也会应用它，TypeScript Core 设计 §7 的单向门就不成立。编号与 Runtime 目录同一条序列往下接，1–14 在那边，所以这里把它们登记为 reserved 占位，连续性检查才对得上。",
         "path": "apps/desktop/src/core/db/migrations",
-        "kind": "directory",
-        "reserved": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-      },
-      {
-        "path": "apps/host/internal/migration/legacy",
         "kind": "directory"
-      },
-      {
-        "path": "apps/host/internal/storage/schema.go",
-        "kind": "go-constants",
-        "pattern": "const (schemaV\\d+)"
       }
     ]
   },

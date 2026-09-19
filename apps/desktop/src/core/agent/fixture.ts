@@ -55,10 +55,6 @@ import { installRoutes } from "./routes";
 const here = dirname(fileURLToPath(import.meta.url));
 
 export function migrationsDir(): string {
-  return resolve(here, "../../../../runtime/migrations");
-}
-
-export function unifiedMigrationsDir(): string {
   return resolve(here, "../db/migrations");
 }
 
@@ -135,7 +131,6 @@ export function agentFixture(): AgentFixture {
   const opened: OpenedDatabase = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir: migrationsDir(),
-    unifiedMigrationsDir: unifiedMigrationsDir(),
   });
   const database = opened.database;
   const log = createLog("error");

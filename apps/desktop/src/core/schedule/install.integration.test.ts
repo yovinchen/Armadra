@@ -31,8 +31,7 @@ import { AUTOMATION_CAPABILITY } from "./capabilities";
 import { scheduleDomain } from "./index";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
-const unifiedDir = resolve(here, "../db/migrations");
+const migrationsDir = resolve(here, "../db/migrations");
 
 const running: RunningCore[] = [];
 const directories: string[] = [];
@@ -52,8 +51,7 @@ async function start(): Promise<{ core: RunningCore; base: string }> {
     argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", dataDir],
     env: {
       ARMADRA_CORE: "ts",
-      ARMADRA_MIGRATIONS_DIR: migrationsDir,
-      ARMADRA_CORE_MIGRATIONS_DIR: unifiedDir,
+      ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir,
       ARMADRA_LOG: "error",
     },
     stdout: () => {},

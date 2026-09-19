@@ -18,8 +18,7 @@ import { serve } from "./serve";
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../runtime/migrations");
-const unifiedDir = resolve(here, "../../desktop/src/core/db/migrations");
+const migrationsDir = resolve(here, "../../desktop/src/core/db/migrations");
 
 interface Answer {
   readonly status: number;
@@ -105,8 +104,7 @@ beforeAll(async () => {
     deviceName: "测试设备",
     pairing: true,
     env: {
-      ARMADRA_MIGRATIONS_DIR: migrationsDir,
-      ARMADRA_CORE_MIGRATIONS_DIR: unifiedDir,
+      ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir,
       ARMADRA_LOG: "error",
     },
     stdout: () => {},

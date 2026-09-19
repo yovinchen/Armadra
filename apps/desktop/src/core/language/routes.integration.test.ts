@@ -25,7 +25,7 @@ import { MOCK_LSP } from "./fixture";
 import type { JsonObject } from "./jsonrpc";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
+const migrationsDir = resolve(here, "../db/migrations");
 
 const running: RunningCore[] = [];
 const directories: string[] = [];
@@ -45,7 +45,7 @@ async function start(): Promise<{ core: RunningCore; root: string }> {
   directories.push(dataDir, root);
   const core = await run({
     argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", dataDir],
-    env: { ARMADRA_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
+    env: { ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
     stdout: () => {},
   });
   running.push(core);
