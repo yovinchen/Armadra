@@ -595,3 +595,80 @@ migrations/                    0001–0020，20 个 .sql
 ```
 
 没有任何 sidecar 二进制——这正是 R7d 要的形状。`after-pack` 逐个打印了它放进去的 21 个文件。
+
+## 18. R7d-core：源码层面删掉 protobuf、`/rpc/*` 与 Rust / Go 进程
+
+分支 `feature/host-protocol-foundation` 的 worktree，七个提交。这一节只记 core 与
+页面这一半；删目录、CI、打包脚本与 `repo.rules.json` 是并行的 R7d-repo 那一线。
+
+### 18.1 两个域各自有了自己的类型
+
+自动化与 GitHub 两块的形状原来由 `proto/armadra/v1/*.proto` 说了算，类型来自
+`packages/protocol` 的生成码。现在：
+
+- `core/contract/message.ts` —— 字段表，以及照着它做的三件事（造一份、编成
+  JSON、从 JSON 读回来）。写成一张表而不是几百个手写函数，是因为这两个域有几十
+  种记录，而三件事各只该有一份实现。线上的形状仍然是 [core 的 JSON
+  面](../contracts/core-json-api.md) §2。
+- `core/schedule/types.ts`、`core/github/{types,schema}.ts` —— 这两个域的类型与
+  字段表。**枚举的值就是它的名字**（`"GITHUB_ISSUE_STATE_OPEN"`），所以编码这
+  一步没有一张会对错的映射表；`int64` 仍然是 `bigint`。
+
+**内部摘要换了算法。** 激活摘要、投递摘要、收据摘要与 GitHub 状态映射存进库里的
+那份字节，原来都是 protobuf 序列化的 SHA-256，现在是**规范 JSON 的 UTF-8** 的
+SHA-256——和配置摘要在 0020 那次换掉的理由一样（契约 §4.2）：一个只有 protobuf
+序列化器才算得出来的数不能是「这条记录」的身份。直接后果与那次相同：**升级之后
+已经激活的计划要重新授权一次**，已存的状态映射读不回来。产品未发布。
+
+### 18.2 三张 `/rpc/*` 面删除
+
+`/rpc/armadra.v1.{AutomationService,GithubService,HostService,IdentityService}/*`
+连同 `schedule/rpc.ts`、GitHub 的 24 方法表与帧上限检查、身份的八方法表一起删掉。
+能力表只在 `GET /api/identity/hello` 上。协议版本与帧上限搬进
+`core/identity/protocol.ts`——只剩一端，它们住在报它们的那个域里。
+
+`schedule/convert-legacy.ts`、store 里读 protobuf BLOB 的那一支、以及
+`db/absorb-host.ts` 对自动化实体的投影与命令会话的解码一并删除。那两个 BLOB 列还
+在表上（已发布的迁移不改），但没有任何一条路径再去读它们。
+
+### 18.3 路由表只说四件事
+
+`path` / `methods` / `surface` / `implemented`。`feature`、`phase`、
+`beyondContract` 三列与 `routes.test.ts` 里逐条对着 Rust 源码的对账都是迁移期的
+东西：那时候有两个实现，表得说清每条路由归谁、哪一批写、哪几条是对面没有的。
+没写的路由仍然答 501，正文改成「未实现：<路径>」，和一个拼错的 URL（404）仍然
+分得开。
+
+统一库迁移（0015 起）不再看 `ARMADRA_CORE`：没有第二个读者会因为「这条迁移本
+构建不认识」而拒绝启动。单向门与应用前的备份照旧。
+
+### 18.4 壳只起 TS core
+
+`main/runtime-process.ts` 剩下一条路：`fork` 出 `out/core/main.js`，SIGTERM 停
+它，「接管上一个还活着的 core」那一段照旧（命令行标记从二进制名改成
+`core/main.js`）。`ARMADRA_CORE` 开关、Rust 二进制的探测与 stdin 上那帧 protobuf
+控制帧一起删掉。
+
+`main/host/**` 与 `shell-core/host/**` 整目录删除；core 私有通道取票那一半搬到
+`main/core-ticket.ts` 与 `shell-core/ticket.ts`。退出只剩一步：core 确认停了才
+退。端点里的 `hostBase` 去掉——core 就是全部，两个 base 本来就是同一个。
+`ARMADRA_SESSION_HOST` 的 `rust` 分支删掉，会话主机只剩 TS 那一个。
+
+### 18.5 页面
+
+`host/host-client-compat.ts` 与 `host/proxy-session.ts` 两个垫片删除。GitHub 与
+自动化两块面板直接打 `api/identity.ts`（`identityHello` / `resumeIdentity` /
+`hasSessionCapability` / `permits`）。`tlsRequired` 与 `sameOrigin` 两档拒绝理由
+连同文案一起去掉：它们描述的是一个填错的 Host 地址，而那个输入框已经没有了。
+
+`packages/protocol` 与 `packages/host-client` 两个目录删除，锁文件跟着更新。
+`packages/shared/src/host-events.ts` 一并删除——它投影的是 Go Host 的 protobuf
+事件信封，页面里没有第二个消费者。
+
+### 18.6 留给别人的两件事
+
+- `apps/desktop/electron.vite.config.ts` 的 `BUNDLED_WORKSPACE_PACKAGES` 还写着
+  `@armadra/protocol`。那个文件在本线的边界之外，没有动。
+- `main/updates/updater.ts` 还有一个 `host` 依赖（装更新前停 Host）。装配处已经
+  传了一个永远为 `null` 的实现，那条分支不再触发；真正拆掉它连着
+  `shell-core/updates` 的几个函数，留作单独一批。
