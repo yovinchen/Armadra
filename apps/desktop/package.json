@@ -13,6 +13,7 @@
     "stage:binaries-placeholders": "node scripts/stage-binaries.mjs --placeholders",
     "dist": "node scripts/dist.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "node scripts/ensure-node-pty.mjs",
     "test": "vitest run && node --test scripts/*.test.mjs"
   },
   "dependencies": {
