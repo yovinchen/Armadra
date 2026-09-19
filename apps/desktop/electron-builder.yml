@@ -1,10 +1,8 @@
 # electron-builder packaging configuration.
 #
-# `appId` and `productName` are copied from `src-tauri/tauri.conf.json`
-# (`identifier`, `productName`) rather than redeclared independently, so the
-# two shells keep the same application identity while they coexist
-# (docs/design/electron-migration.md D10). `apps/desktop/scripts/check-identity.mjs`
-# asserts the two stay in sync.
+# `appId` and `productName` carry over unchanged from the shell this one
+# replaced, so an existing installation upgrades in place rather than landing
+# beside itself under a second identity (docs/design/electron-migration.md D10).
 #
 # The target list on every platform is one-for-one with
 # `tools/release/artifacts.mjs` (`desktopAssets()`): six `<os>-<arch>` entries,
@@ -59,7 +57,7 @@ mac:
     - from: resources/armadra-hook
       to: .
   category: public.developer-tools
-  icon: src-tauri/icons/icon.icns
+  icon: build/icons/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
@@ -90,7 +88,7 @@ mac:
       arch: [arm64, x64]
 
 win:
-  icon: src-tauri/icons/icon.ico
+  icon: build/icons/icon.ico
   extraResources:
     - from: resources/armadra-runtime.exe
       to: .
@@ -114,7 +112,7 @@ nsis:
   allowToChangeInstallationDirectory: true
 
 linux:
-  icon: src-tauri/icons/icon.png
+  icon: build/icons/icon.png
   category: Development
   extraResources:
     - from: resources/armadra-runtime

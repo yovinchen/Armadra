@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,10 +56,7 @@ export function prepareHost({
     env: plan.env,
     stdio: "inherit",
   });
-  mkdirSync(dirname(plan.destination), { recursive: true });
-  copyFileSync(plan.source, plan.destination);
   console.log(`Prepared Go Host: ${plan.source}`);
-  console.log(`Staged Tauri Host sidecar: ${plan.destination}`);
   return plan;
 }
 

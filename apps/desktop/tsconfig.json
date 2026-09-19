@@ -8,5 +8,5 @@
     "allowJs": false
   },
   "include": ["src/**/*.ts", "electron.vite.config.ts", "vitest.config.mts"],
-  "exclude": ["node_modules", "out", "src-tauri"]
+  "exclude": ["node_modules", "out", "release", "resources"]
 }

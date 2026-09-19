@@ -54,7 +54,7 @@ test("a Windows target also ships the session host", () => {
   ]);
 });
 
-test("destinations have no triple suffix, unlike Tauri's externalBin staging", () => {
+test("destinations carry the binary's plain name, with no triple suffix", () => {
   const target = selectTarget({ host, target: host });
   const directory = root();
   const destination = resourceDestination({

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   goTarget,
@@ -10,24 +9,9 @@ import {
   sidecarPaths,
 } from "./sidecar-targets.mjs";
 import { parseArguments } from "./prepare-host.mjs";
-import { main as sidecarMain } from "./prepare-sidecar.mjs";
 
 const host = "aarch64-apple-darwin";
 const repository = resolve("/project with spaces/Armadra");
-
-test("imports expose entrypoints without running a build", () => {
-  assert.equal(typeof sidecarMain, "function");
-});
-
-test("the Tauri CLI is started as JavaScript, not through a .cmd shim", async () => {
-  // `execFileSync` cannot start a Windows `.cmd` without a shell, so a build
-  // that shelled out to `pnpm exec tauri` worked everywhere except the one
-  // platform whose installers only CI produces.
-  const { tauriEntry } = await import("./build.mjs");
-  const entry = tauriEntry();
-  assert.match(entry, /@tauri-apps[\\/]cli[\\/]tauri\.js$/);
-  assert.ok(existsSync(entry), entry);
-});
 
 test("explicit supported Rust triples map to Go OS and architecture", () => {
   // Every triple the release matrix names has to be in here, or the packaging
@@ -70,15 +54,8 @@ test("target selection preserves Cargo behavior and native dev override", () => 
     triple: host,
     explicitTarget: true,
   });
-  assert.deepEqual(
-    selectTarget({ host, env: { TAURI_ENV_TARGET_TRIPLE: host } }),
-    { triple: host, explicitTarget: false },
-  );
-  const env = {
-    CARGO_BUILD_TARGET: "x86_64-apple-darwin",
-    TAURI_ENV_TARGET_TRIPLE: "x86_64-pc-windows-msvc",
-  };
-  assert.equal(selectTarget({ host, env }).triple, env.TAURI_ENV_TARGET_TRIPLE);
+  const env = { CARGO_BUILD_TARGET: "x86_64-apple-darwin" };
+  assert.equal(selectTarget({ host, env }).triple, env.CARGO_BUILD_TARGET);
   assert.equal(
     selectTarget({ host, env, target: "x86_64-unknown-linux-gnu" }).triple,
     "x86_64-unknown-linux-gnu",
@@ -105,10 +82,6 @@ test("native debug paths and spaces are preserved as a single argv item", () => 
     env: { GOOS: "wrong", GOARCH: "wrong", CGO_ENABLED: "1" },
   });
   assert.equal(plan.source, resolve(repository, "target/debug/armadra-host"));
-  assert.equal(
-    plan.destination,
-    resolve(repository, `target/release/armadra-host-${host}`),
-  );
   assert.equal(plan.args[plan.args.indexOf("-o") + 1], plan.source);
   assert.equal(plan.cwd, resolve(repository, "apps/host"));
   assert.equal(plan.env.CGO_ENABLED, "0");
@@ -121,7 +94,7 @@ test("native debug paths and spaces are preserved as a single argv item", () => 
   );
 });
 
-test("custom Cargo target directory changes source but not Tauri staging", () => {
+test("custom Cargo target directory moves the built binary with it", () => {
   for (const directory of [
     "custom target",
     resolve("/another target location"),
@@ -132,10 +105,6 @@ test("custom Cargo target directory changes source but not Tauri staging", () =>
     assert.equal(
       plan.source,
       resolve(repository, directory, target.triple, "release/armadra-host.exe"),
-    );
-    assert.equal(
-      plan.destination,
-      resolve(repository, `target/release/armadra-host-${target.triple}.exe`),
     );
     assert.equal(plan.env.GOOS, "windows");
     assert.ok(plan.args.includes("-ldflags=-s -w"));
@@ -206,7 +175,7 @@ test("the session host ships on Windows targets only", () => {
   );
 });
 
-test("the Windows session host is staged with the target triple in its name", () => {
+test("the Windows session host is found under the target triple directory", () => {
   const target = selectTarget({ host, target: "x86_64-pc-windows-msvc" });
   const paths = sidecarPaths({
     repository,
@@ -222,11 +191,5 @@ test("the Windows session host is staged with the target triple in its name", ()
       "release/armadra-session-host.exe",
     ),
   );
-  assert.equal(
-    paths.destination,
-    resolve(
-      repository,
-      `target/release/armadra-session-host-${target.triple}.exe`,
-    ),
-  );
+  assert.equal(paths.destination, undefined);
 });

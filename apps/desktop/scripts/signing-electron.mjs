@@ -1,30 +1,24 @@
 /**
  * What `electron-builder` should do about signing and notarization, decided
  * **before** the build starts. Same problem and the same fix as the
- * Tauri-era `scripts/signing.mjs` (docs/guides/ci-release.md §2.6,
+ * shell this one replaced (docs/guides/ci-release.md §2.6,
  * docs/design/updates-and-service-install.md §2.5): electron-builder's own
  * `hardenedRuntime` + `notarize: true` in `electron-builder.yml` sign and
  * notarize unconditionally once the packaging step runs, and notarization in
  * particular is a network round-trip at the very end of a multi-minute
  * build. Deciding here, from the environment, means a build that cannot be
  * signed says so in the first second instead of the last one — and the
- * `signingPlan()` shape below (`sign` / `skip` / `refuse`, each with a
- * `reason` and a `message`) is kept the same as `signing.mjs` on purpose, so
- * `scripts/dist.mjs` reads both plans the same way.
+ * `signingPlan()` shape below is `sign` / `skip` / `refuse`, each with a
+ * `reason` and a `message`, which is what `scripts/dist.mjs` reads.
  *
- * The key material is a different system from Tauri's (minisign key pair for
- * updater artifacts): electron-builder signs and notarizes macOS bundles with
- * Apple's own tools, driven by these environment variables —
+ * The key material is a different system from the updater's own signature
+ * (a minisign key pair over the updater artifacts): electron-builder signs and
+ * notarizes macOS bundles with Apple's tools, driven by these environment
+ * variables —
  *
  *   CSC_LINK / CSC_KEY_PASSWORD              base64 (or file path) .p12 + its password
  *   APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD   notarytool credentials
  *   APPLE_TEAM_ID                            notarytool team
- *
- * — which is also why this is a second script rather than a rewrite of
- * `signing.mjs`: the two key systems, and the two sets of environment
- * variables, do not merge into one meaningful "have a key or not" check.
- * `signing.mjs` still decides for the Tauri shell, which keeps shipping until
- * W5.
  */
 
 /** The p12 certificate (base64 or a file path) electron-builder signs macOS builds with. */
@@ -47,8 +41,8 @@ function present(value) {
 /**
  * Decides what this build does about code signing and notarization.
  *
- * Unlike the Tauri plan there is no "refuse" case driven by the checked-in
- * configuration: electron-builder does not embed a public key the shell
+ * There is no "refuse" case driven by the checked-in configuration:
+ * electron-builder does not embed a public key the shell
  * verifies against (that is electron-updater's job, landing in W2.2), so
  * there is nothing here a mismatched key could be rejected by at install
  * time. "refuse" still exists for `ARMADRA_REQUIRE_SIGNED_BUNDLE=1` without a
@@ -139,8 +133,8 @@ export function signingPlan({ env = {} } = {}) {
  * The `--config` object electron-builder's CLI accepts for this plan, merged
  * with the updater endpoints a *published* release injects.
  *
- * `ARMADRA_UPDATER_ENDPOINTS` is comma-separated, mirroring the Tauri-era
- * `signing.mjs`: the address a real release polls must arrive from the
+ * `ARMADRA_UPDATER_ENDPOINTS` is comma-separated, and the rule is the one the
+ * previous shell had: the address a real release polls must arrive from the
  * workflow that publishes to it, never from `electron-builder.yml`, whose
  * `publish.url` is the placeholder every build — signed or not — otherwise
  * shares.

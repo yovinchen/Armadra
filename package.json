@@ -7,7 +7,6 @@
     "node": ">=22"
   },
   "scripts": {
-    "host:bootstrap-smoke": "node tools/host-bootstrap-smoke.mjs",
     "host:lifecycle-smoke": "node tools/host-lifecycle-smoke.mjs",
     "handoff:read-smoke": "node tools/handoff-read-smoke.mjs",
     "agent:smoke": "node tools/agent-channel-smoke.mjs",

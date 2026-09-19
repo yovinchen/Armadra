@@ -4,16 +4,13 @@
  *
  *   node apps/desktop/scripts/stage-binaries.mjs [--target <triple>] [--placeholders]
  *
- * This is the Electron-packaging equivalent of `prepare-sidecar.mjs` /
- * `prepare-host.mjs` / `stage-sidecar-placeholders.mjs`, collapsed into one
- * script because electron-builder does not need Tauri's `<name>-<triple>`
- * externalBin naming convention (armadra-inventory.md §2 item 29):
- * `extraResources` copies files verbatim into `process.resourcesPath`, which
- * `runtime-process.ts`'s `runtimeExecutable()` already resolves against. The
- * old four scripts and their tests are left in place — the Tauri shell still
- * uses them until W5 removes `src-tauri/`.
+ * One script rather than the several the previous shell needed: nothing here
+ * has to rename a binary to `<name>-<triple>`, because `extraResources` copies
+ * files verbatim into `process.resourcesPath`, which `runtime-process.ts`'s
+ * `runtimeExecutable()` already resolves against (armadra-inventory.md §2
+ * item 29).
  *
- * Unlike `prepare-sidecar.mjs`, this script never builds anything. Building
+ * This script never builds anything. Building
  * the Runtime, the hook client and the Go Host takes minutes, which is the
  * wrong cost to pay every time packaging is invoked (and the wrong tool to
  * hold a `cargo build`/`go build` invocation this script does not own); it
@@ -21,8 +18,7 @@
  * missing path, when a binary is not there — never a placeholder, because a
  * placeholder here would package a shell that starts and then cannot find its
  * own Runtime. Placeholders exist only for `--placeholders`, which CI's
- * `electron-vite build` smoke job uses the same way `cargo check` uses
- * `stage-sidecar-placeholders.mjs`: to satisfy a check that never runs the
+ * `electron-vite build` smoke job uses to satisfy a check that never runs the
  * binary.
  */
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
