@@ -33,6 +33,18 @@ export interface RouteEntry {
   readonly phase?: number;
   /** Answered for real by this build. */
   readonly implemented?: true;
+  /**
+   * A route the Rust Runtime never had.
+   *
+   * The table is the Runtime's 163 and stays contractual until R7, so a path
+   * that is not one of them is marked rather than quietly added: the parity
+   * check subtracts exactly these before it compares the two sides, and a
+   * reader can see in one column which paths the front end may not assume of
+   * a Rust-backed build. R6 adds the first one — the remote browser node's
+   * frame stream, which cannot exist on the Rust side because that build has
+   * no headless backend to stream.
+   */
+  readonly beyondContract?: true;
 }
 
 export const ROUTES: readonly RouteEntry[] = [
@@ -1212,6 +1224,17 @@ export const ROUTES: readonly RouteEntry[] = [
     feature: "浏览器动词",
     phase: 5,
     implemented: true,
+  },
+  {
+    // R6c: a browser node on a shell with no window. The desktop build never
+    // answers it — there the page is a `<webview>` the person is looking at.
+    path: "/api/workspaces/{workspaceId}/browser/{nodeId}/stream",
+    methods: ["GET"],
+    surface: "runtime",
+    feature: "远程浏览器节点画面流",
+    phase: 6,
+    implemented: true,
+    beyondContract: true,
   },
   {
     path: "/automation/agent-target",

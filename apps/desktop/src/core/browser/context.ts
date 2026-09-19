@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import type { AgentSettings } from "../agent/registry";
 import { BoardLog } from "../collab/board-log";
 import type { WorkspaceEvent } from "../bus";
-import type { DriveClient } from "./client";
+import type { DriveBackend } from "./backend";
 import type { SessionContext } from "./session";
 import { BrowserSessions } from "./session";
 
@@ -18,8 +18,10 @@ export interface BrowserContext extends SessionContext {
   readonly database: DatabaseSync;
   readonly settings: AgentSettings;
   readonly sessions: BrowserSessions;
-  /** The drive channel, or `undefined` when no shell started this core. */
-  readonly client?: DriveClient | undefined;
+  /** The backend that holds the page: the desktop shell's drive channel, or
+   * the headless Chromium this core started. `undefined` when there is
+   * neither, and every verb then answers `browser_unavailable`. */
+  readonly client?: DriveBackend | undefined;
   readonly boardLog: BoardLog;
 }
 
@@ -27,7 +29,7 @@ export interface BrowserOptions {
   readonly database: DatabaseSync;
   readonly settings: AgentSettings;
   readonly publish?: (workspaceId: string, event: WorkspaceEvent) => void;
-  readonly client?: DriveClient | undefined;
+  readonly client?: DriveBackend | undefined;
   readonly now?: (() => Date) | undefined;
   readonly log?:
     | ((message: string, detail?: Record<string, unknown>) => void)
