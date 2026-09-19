@@ -181,9 +181,9 @@ describe("the handshake", () => {
         protocol: { major: PROTOCOL_MAJOR + 1, minor: 0 },
       }),
     ).toThrow(HandshakeRefused);
-    expect(() => accept("Box", VERSION, { ...hello(), protocol: undefined })).toThrow(
-      HandshakeRefused,
-    );
+    expect(() =>
+      accept("Box", VERSION, { ...hello(), protocol: undefined }),
+    ).toThrow(HandshakeRefused);
   });
 
   /**

@@ -16,12 +16,7 @@ import { badRequest, coreError, type ErrorResponse } from "../../http/errors";
 import type { CoreRequest, HandlerResult } from "../../http/router";
 import type { SshHost } from "../../settings/ssh-hosts";
 import type { AskpassService } from "./askpass";
-import {
-  ScanFailed,
-  forget as forgetKeys,
-  scan,
-  trust,
-} from "./known-hosts";
+import { ScanFailed, forget as forgetKeys, scan, trust } from "./known-hosts";
 import { PromptError } from "./prompts";
 
 export interface SshRouteDeps {
@@ -44,7 +39,8 @@ export interface SshRouteDeps {
 /** An unknown id is a 400, exactly like creating a terminal for one. */
 function required(deps: SshRouteDeps, hostId: string): SshHost {
   const host = deps.host(hostId);
-  if (host === undefined) throw new ScanFailed(400, "bad_request", "Unknown SSH host");
+  if (host === undefined)
+    throw new ScanFailed(400, "bad_request", "Unknown SSH host");
   return host;
 }
 

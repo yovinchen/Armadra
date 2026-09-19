@@ -155,7 +155,9 @@ export class Connection {
       return "write";
     }
     const written = await new Promise<boolean>((resolve) => {
-      stdin.write(frame, (error) => resolve(error === null || error === undefined));
+      stdin.write(frame, (error) =>
+        resolve(error === null || error === undefined),
+      );
     });
     if (!written) {
       this.waiting.delete(requestId);

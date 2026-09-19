@@ -4,14 +4,19 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { PROMPT_TIMEOUT_MS, PromptError, PromptRegistry, classify } from "./prompts";
+import {
+  PROMPT_TIMEOUT_MS,
+  PromptError,
+  PromptRegistry,
+  classify,
+} from "./prompts";
 import { redactSecrets, tail } from "./redact";
 
 describe("classifying a prompt", () => {
   it("tells a passphrase prompt from a password one", () => {
-    expect(classify("Enter passphrase for key '/home/ada/.ssh/id_ed25519': ")).toBe(
-      "passphrase",
-    );
+    expect(
+      classify("Enter passphrase for key '/home/ada/.ssh/id_ed25519': "),
+    ).toBe("passphrase");
     expect(classify("ada@example.com's password: ")).toBe("password");
   });
 });
@@ -129,9 +134,10 @@ describe("redaction", () => {
 
   /** The reported output is a redacted tail, never a full transcript. */
   it("keeps the last six non-empty lines and redacts them", () => {
-    const text = Array.from({ length: 20 }, (_, index) => `line ${index + 1}`).join(
-      "\n",
-    );
+    const text = Array.from(
+      { length: 20 },
+      (_, index) => `line ${index + 1}`,
+    ).join("\n");
     const trimmed = tail(`${text}\npassword=hunter2`);
     expect(trimmed.startsWith("line 16")).toBe(true);
     expect(trimmed).toContain("[REDACTED]");

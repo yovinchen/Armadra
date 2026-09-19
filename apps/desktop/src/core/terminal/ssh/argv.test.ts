@@ -96,7 +96,10 @@ describe("the ssh command lines", () => {
     const argv = workerArgv(
       DATA,
       { ...host(), port: 2222 },
-      { path: "/opt/armadra/armadra-core", stateDir: "/var/lib/armadra/worker" },
+      {
+        path: "/opt/armadra/armadra-core",
+        stateDir: "/var/lib/armadra/worker",
+      },
     );
     expect(argv.slice(-8)).toEqual([
       "-p",

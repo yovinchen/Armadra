@@ -64,7 +64,10 @@ describe("the options and the environment", () => {
   it("enables exactly one prompt", () => {
     const options = askpassOptions();
     expect(
-      options.some((value, index) => value === "-o" && options[index + 1] === "BatchMode=no"),
+      options.some(
+        (value, index) =>
+          value === "-o" && options[index + 1] === "BatchMode=no",
+      ),
     ).toBe(true);
     expect(
       options.some(
@@ -80,7 +83,9 @@ describe("the options and the environment", () => {
    * ignores `SSH_ASKPASS` entirely without one.
    */
   it("forces the helper on both old and new OpenSSH", () => {
-    const pairs = new Map(environment("/opt/armadra/askpass", "/s.sock", "t", "box"));
+    const pairs = new Map(
+      environment("/opt/armadra/askpass", "/s.sock", "t", "box"),
+    );
     expect(pairs.get("SSH_ASKPASS_REQUIRE")).toBe("force");
     expect(pairs.get("DISPLAY")).toBeDefined();
     expect(pairs.get("SSH_ASKPASS")).toBe("/opt/armadra/askpass");
@@ -171,7 +176,9 @@ describe("the generated helper", () => {
       { [SOCKET_ENV]: socket, [TOKEN_ENV]: "", [HOST_ENV]: "box" },
     ]) {
       await expect(
-        run(helper, ["password: "], { env: { PATH: process.env.PATH ?? "", ...env } }),
+        run(helper, ["password: "], {
+          env: { PATH: process.env.PATH ?? "", ...env },
+        }),
       ).rejects.toMatchObject({ code: expect.anything() });
     }
   });
@@ -190,9 +197,13 @@ describe("the generated helper", () => {
     await created.start();
     const env = created.childEnvironment("box");
     expect(env).toBeDefined();
-    const { stdout } = await run(helperPath(dataDir), ['ada@box\'s "password": '], {
-      env: { PATH: process.env.PATH ?? "", ...Object.fromEntries(env ?? []) },
-    });
+    const { stdout } = await run(
+      helperPath(dataDir),
+      ['ada@box\'s "password": '],
+      {
+        env: { PATH: process.env.PATH ?? "", ...Object.fromEntries(env ?? []) },
+      },
+    );
     // One line, exactly as `ssh` reads it.
     expect(stdout).toBe("hunter2\n");
     expect(seen?.hostId).toBe("box");
@@ -230,19 +241,22 @@ describe("the generated helper", () => {
    * authentication failure, which is a different and more confusing thing to
    * debug.
    */
-  shell("exits non-zero and prints nothing when the prompt is cancelled", async () => {
-    const { service: created, dataDir } = service((prompt) => {
-      setTimeout(() => created.prompts.close(prompt.promptId), 10);
-    });
-    await created.start();
-    const env = {
-      PATH: process.env.PATH ?? "",
-      ...Object.fromEntries(created.childEnvironment("box") ?? []),
-    };
-    const failure = await run(helperPath(dataDir), ["password: "], {
-      env,
-    }).catch((error: { code?: number; stdout?: string }) => error);
-    expect(failure).toMatchObject({ code: expect.anything() });
-    expect((failure as { stdout?: string }).stdout ?? "").toBe("");
-  });
+  shell(
+    "exits non-zero and prints nothing when the prompt is cancelled",
+    async () => {
+      const { service: created, dataDir } = service((prompt) => {
+        setTimeout(() => created.prompts.close(prompt.promptId), 10);
+      });
+      await created.start();
+      const env = {
+        PATH: process.env.PATH ?? "",
+        ...Object.fromEntries(created.childEnvironment("box") ?? []),
+      };
+      const failure = await run(helperPath(dataDir), ["password: "], {
+        env,
+      }).catch((error: { code?: number; stdout?: string }) => error);
+      expect(failure).toMatchObject({ code: expect.anything() });
+      expect((failure as { stdout?: string }).stdout ?? "").toBe("");
+    },
+  );
 });
