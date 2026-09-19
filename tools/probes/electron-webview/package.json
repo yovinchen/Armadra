@@ -1,0 +1,21 @@
+{
+  "name": "armadra-probe-electron-webview",
+  "private": true,
+  "version": "0.0.0",
+  "description": "W3.0 go/no-go probe: a bare <webview> inside a zoomed React Flow canvas.",
+  "main": "main.cjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "probe": "node build.mjs && electron . --probe",
+    "watch": "node build.mjs && electron . --interactive"
+  },
+  "dependencies": {
+    "@xyflow/react": "12.11.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "electron": "42.10.1",
+    "esbuild": "0.25.10"
+  }
+}
