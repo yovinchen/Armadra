@@ -127,7 +127,9 @@ export function rename(
     }
   }
   if (title === undefined && handle === undefined && !clearHandle) {
-    throw Refusal.badRequest('rename 需要 --title "新标题" 或 --handle <短名>。');
+    throw Refusal.badRequest(
+      'rename 需要 --title "新标题" 或 --handle <短名>。',
+    );
   }
   const document = load(context, caller);
   const target = resolveOnBoard(document, args.text("node") ?? caller.node.id);

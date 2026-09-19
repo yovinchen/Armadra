@@ -120,9 +120,7 @@ export async function close(
     .filter((node) => node.id !== targetId)
     // Members of a closed group outlive it; only the frame goes away.
     .map((node) =>
-      node.parentId === targetId
-        ? stripParent(node, rfc3339())
-        : node,
+      node.parentId === targetId ? stripParent(node, rfc3339()) : node,
     );
   const edges = after.edges.filter(
     (edge) => edge.source !== targetId && edge.target !== targetId,

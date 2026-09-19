@@ -96,7 +96,9 @@ export interface ControlRequestBody {
 
 /** Typed reads over the loosely typed `args` object. */
 export class Args {
-  constructor(private readonly source: Readonly<Record<string, unknown>> = {}) {}
+  constructor(
+    private readonly source: Readonly<Record<string, unknown>> = {},
+  ) {}
 
   /**
    * A flag's string value. A bare flag (`true`) is deliberately not a string:
@@ -174,7 +176,11 @@ export class Args {
  * like a line break becomes a space.
  */
 export function collapseNewlines(value: string): string {
-  return value.replace(/[\r\n]/g, " ").trim().split(/\s+/).join(" ");
+  return value
+    .replace(/[\r\n]/g, " ")
+    .trim()
+    .split(/\s+/)
+    .join(" ");
 }
 
 /**
@@ -211,7 +217,8 @@ export function truncate(text: string, maxBytes: number): string {
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
     if (
-      Buffer.byteLength(characters.slice(0, middle).join(""), "utf8") <= maxBytes
+      Buffer.byteLength(characters.slice(0, middle).join(""), "utf8") <=
+      maxBytes
     ) {
       low = middle;
     } else {

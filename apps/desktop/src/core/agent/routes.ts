@@ -19,10 +19,7 @@ import {
 } from "../conversations";
 import { definition, baseAgent } from "./registry";
 import { loadSession } from "../collab/nodes";
-import {
-  type ContextUsageCache,
-  contextUsage,
-} from "../usage/context-usage";
+import { type ContextUsageCache, contextUsage } from "../usage/context-usage";
 import {
   type ConfirmRequest,
   accept,
@@ -97,11 +94,7 @@ export function installRoutes(deps: AgentRouteDeps): void {
       const status = getAgentStatus(database, nodeId);
       if (status === undefined) throw notFound("This node has never reported");
       const provider = baseAgent(collab.settings, status.agentId);
-      const located = locate(
-        provider,
-        status.transcriptPath,
-        status.sessionId,
-      );
+      const located = locate(provider, status.transcriptPath, status.sessionId);
       // A provider that keeps nothing readable is **501, not an empty body**.
       // An empty excerpt would be indistinguishable from a session that has
       // said nothing yet, and the panel would draw the blank as the truth.
@@ -110,10 +103,7 @@ export function installRoutes(deps: AgentRouteDeps): void {
           `${provider} keeps no transcript this machine can read`,
         );
       }
-      const wanted = Number.parseInt(
-        request.query.get("maxBytes") ?? "",
-        10,
-      );
+      const wanted = Number.parseInt(request.query.get("maxBytes") ?? "", 10);
       const budget = Number.isFinite(wanted)
         ? Math.min(MAX_TAIL_BYTES, Math.max(1, wanted))
         : MAX_TAIL_BYTES;
@@ -434,10 +424,7 @@ function answered(
 }
 
 function answeredAsync(
-  handle: (
-    match: RouteMatch,
-    request: CoreRequest,
-  ) => Promise<HandlerResult>,
+  handle: (match: RouteMatch, request: CoreRequest) => Promise<HandlerResult>,
 ): (match: RouteMatch, request: CoreRequest) => Promise<HandlerResult> {
   return async (match, request) => {
     try {
@@ -477,11 +464,15 @@ function parsePrepare(body: Record<string, unknown>): PrepareRequest {
     throw badRequest("sections is required");
   }
   const filePaths = body.filePaths ?? [];
-  if (!Array.isArray(filePaths) || filePaths.some((p) => typeof p !== "string")) {
+  if (
+    !Array.isArray(filePaths) ||
+    filePaths.some((p) => typeof p !== "string")
+  ) {
     throw badRequest("filePaths must be an array of strings");
   }
   const byteBudget = body.byteBudget;
-  if (typeof byteBudget !== "number") throw badRequest("byteBudget is required");
+  if (typeof byteBudget !== "number")
+    throw badRequest("byteBudget is required");
   return {
     sourceNodeId: required(body, "sourceNodeId"),
     sourceSessionId: required(body, "sourceSessionId"),
@@ -527,10 +518,7 @@ function required(source: Record<string, unknown>, name: string): string {
   return value;
 }
 
-function requiredNumber(
-  source: Record<string, unknown>,
-  name: string,
-): number {
+function requiredNumber(source: Record<string, unknown>, name: string): number {
   const value = source[name];
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw badRequest(`${name} is required`);

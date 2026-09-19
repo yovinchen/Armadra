@@ -2,12 +2,7 @@ import { expectedProcesses, paneRunsAgent } from "../../agent/launch";
 import { baseAgent } from "../../agent/registry";
 import { getContextLinks } from "../../canvas/context-links";
 import { AddressError, loadHandles, resolveLink } from "../addressing";
-import {
-  type Caller,
-  loadNode,
-  loadSession,
-  workspaceRoot,
-} from "../nodes";
+import { type Caller, loadNode, loadSession, workspaceRoot } from "../nodes";
 import { type Args, Refused, nonce } from "../refusals";
 import type { CollabContext } from "../service";
 import { type Outcome, result } from "./outcome";
@@ -110,10 +105,7 @@ export async function interrupt(
     const foreground = await context.terminals
       ?.foreground(session.sessionId)
       .catch(() => undefined);
-    if (
-      foreground === undefined ||
-      !paneRunsAgent(foreground, expected)
-    ) {
+    if (foreground === undefined || !paneRunsAgent(foreground, expected)) {
       throw new Refused(
         409,
         "target_not_agent_pane",

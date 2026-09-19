@@ -1,10 +1,4 @@
-import {
-  closeSync,
-  openSync,
-  readSync,
-  readdirSync,
-  statSync,
-} from "node:fs";
+import { closeSync, openSync, readSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { hasCapability } from "../agent/registry";
 import { getAgentStatus } from "../agent/status";
@@ -190,7 +184,8 @@ function renderList(links: readonly ContextLink[]): string {
       out += `  ${label}\n`;
     }
   }
-  out += '\n读取方式：armadra-hook context summary --node "<标题或 id>" [-n 行数]\n';
+  out +=
+    '\n读取方式：armadra-hook context summary --node "<标题或 id>" [-n 行数]\n';
   return out;
 }
 
@@ -394,7 +389,11 @@ function readShape(
   } else if (status === "error") {
     out += "\n图片引用生成或同步失败；请在画板的引用菜单重试。\n";
   }
-  if (png !== undefined && png !== "" && (status === undefined || status === "ready")) {
+  if (
+    png !== undefined &&
+    png !== "" &&
+    (status === undefined || status === "ready")
+  ) {
     const root = workspaceRoot(context.database, workspaceId);
     let resolved: string | undefined;
     if (root !== undefined) {
@@ -455,9 +454,7 @@ async function readTerminal(
     return `「${target.title}」终端最近 ${capture.lines} 行：\n\n${capture.data.trimEnd()}\n`;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw Refusal.notFound(
-      `无法读取「${target.title}」的终端画面：${message}`,
-    );
+    throw Refusal.notFound(`无法读取「${target.title}」的终端画面：${message}`);
   }
 }
 
@@ -502,7 +499,8 @@ function readTranscript(
 }
 
 function sticky(target: NodeRef): string {
-  const content = typeof target.data.content === "string" ? target.data.content : "";
+  const content =
+    typeof target.data.content === "string" ? target.data.content : "";
   if (content.trim() === "") return `便签「${target.title}」还是空的。\n`;
   return `便签「${target.title}」：\n\n${content.trimEnd()}\n`;
 }

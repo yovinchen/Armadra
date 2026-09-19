@@ -83,7 +83,11 @@ export function loadHandles(
     let data: Record<string, unknown>;
     try {
       const parsed = JSON.parse(row.data_json) as unknown;
-      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      if (
+        parsed === null ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed)
+      )
         continue;
       data = parsed as Record<string, unknown>;
     } catch {

@@ -131,7 +131,10 @@ export class ContextUsageCache {
     if (!Number.isFinite(revision)) return false;
     let snapshot = parsed;
     const previous = this.entries.get(nodeId);
-    if (previous !== undefined && previous.snapshot.sessionId === report.sessionId) {
+    if (
+      previous !== undefined &&
+      previous.snapshot.sessionId === report.sessionId
+    ) {
       if (previous.snapshot.generation > report.generation) return false;
       if (previous.snapshot.generation === report.generation) {
         if (previous.revision >= revision) return false;
