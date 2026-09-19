@@ -29,11 +29,18 @@ files:
   - out/**/*
   - package.json
 
-# No native Node addon ships today (the terminal and PTY domains live in the
-# Rust Runtime, not in this shell — AGENTS.md "代码边界"). Left explicit and
-# empty rather than omitted, so the day a native module *is* added here, this
-# is the line that has to change and a reviewer sees it move.
-asarUnpack: []
+# `node-pty` is the one native Node addon in this shell (R2, the TypeScript
+# core's terminal domain). It must be OUTSIDE the asar: the addon resolves
+# `build/Release/pty.node` and the `spawn-helper` executable relative to its
+# own directory, and `posix_spawn` cannot execute a helper that lives inside
+# an archive. Unpacking it is also what lets the macOS notarisation step see
+# and sign a real Mach-O file rather than bytes in a blob.
+#
+# This entry and the `EXTERNAL` list in `electron.vite.config.ts` are one
+# decision in two files: bundling the module would make this path empty, and
+# unpacking without externalising would ship a copy nothing requires.
+asarUnpack:
+  - node_modules/node-pty/**
 
 # The four sidecar binaries `scripts/stage-binaries.mjs` stages into
 # `resources/` before packaging. Electron's `process.resourcesPath` is exactly

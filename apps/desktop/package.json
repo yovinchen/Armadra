@@ -17,9 +17,11 @@
   "dependencies": {
     "@armadra/protocol": "workspace:*",
     "electron-updater": "6.8.9",
+    "node-pty": "1.1.0",
     "ws": "8.18.3"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/js-yaml": "4.0.9",
     "@types/node": "24.3.0",
