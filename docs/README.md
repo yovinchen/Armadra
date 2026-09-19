@@ -61,13 +61,13 @@
 
 ## status/ 已验证进度
 
-| 文档                                                     | 内容                                                       |
-| -------------------------------------------------------- | ---------------------------------------------------------- |
-| [平台实施记录](status/platform-implementation-status.md) | 阶段状态、需求核对与验证证据                               |
-| [功能预期总表](status/feature-roadmap.md)                | 已交付与待实现功能全表、多仓库 Git、用量看板、资源监控     |
-| [画布性能基线](status/canvas-performance-baseline.md)    | 30 个终端 + 真实会话的 fps / 帧时 / 重渲组件数，改动前后   |
-| [Electron 迁移复查](status/electron-migration-review.md) | 换壳后功能总表逐行核查、UI 死角、文档漂移与测试盲区        |
-| [TypeScript Core 进度](status/typescript-core-status.md) | 单向门（应用 0015 后 Rust 拒绝启动）、host.db 吸收、身份域 |
+| 文档                                                     | 内容                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------- |
+| [平台实施记录](status/platform-implementation-status.md) | 阶段状态、需求核对与验证证据                                   |
+| [功能预期总表](status/feature-roadmap.md)                | 已交付与待实现功能全表、多仓库 Git、用量看板、资源监控         |
+| [画布性能基线](status/canvas-performance-baseline.md)    | 30 个终端 + 真实会话的 fps / 帧时 / 重渲组件数，改动前后       |
+| [Electron 迁移复查](status/electron-migration-review.md) | 换壳后功能总表逐行核查、UI 死角、文档漂移与测试盲区            |
+| [TypeScript Core 进度](status/typescript-core-status.md) | R0–R7 阶段状态、R2 纵切实测数字、单向门与 host.db 吸收、身份域 |
 
 ## contracts/ 实施契约
 

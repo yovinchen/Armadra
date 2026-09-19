@@ -26,7 +26,13 @@ import {
 import { asRecord, childEnvironment } from "../environment";
 import { childCommands, terminateTree } from "../process";
 import { type Pty, openPty, releasePty } from "../pty";
-import { LIST_ALIVE_FORMAT, TmuxControl, coreFingerprint, parseAliveLine, pastePlan } from "./control";
+import {
+  LIST_ALIVE_FORMAT,
+  TmuxControl,
+  coreFingerprint,
+  parseAliveLine,
+  pastePlan,
+} from "./control";
 import { detect, ensureConf } from "./config";
 
 /**
@@ -84,7 +90,9 @@ export class TmuxBackend implements TerminalBackend {
       // A tmux client redraws the pane by itself, so no `snapshot` is owed.
       redrawsOnAttach: true,
       usable: detection.usable,
-      ...(detection.version === undefined ? {} : { version: detection.version }),
+      ...(detection.version === undefined
+        ? {}
+        : { version: detection.version }),
       ...(detection.reason === undefined ? {} : { reason: detection.reason }),
     };
   }
@@ -93,7 +101,11 @@ export class TmuxBackend implements TerminalBackend {
 
   async create(spec: TerminalSpec): Promise<TerminalHandle> {
     ensureConf(this.control.conf);
-    const name = sessionName(spec.workspaceId, spec.sessionKey, spec.generation);
+    const name = sessionName(
+      spec.workspaceId,
+      spec.sessionKey,
+      spec.generation,
+    );
     // A leftover session under the same name would silently be reused.
     await this.control.tryRun(["kill-session", "-t", name]);
 
@@ -415,7 +427,13 @@ export class TmuxBackend implements TerminalBackend {
   private async leaveCopyMode(session: TmuxSession): Promise<void> {
     if (!session.inCopyMode) return;
     session.inCopyMode = false;
-    await this.control.tryRun(["send-keys", "-X", "-t", session.name, "cancel"]);
+    await this.control.tryRun([
+      "send-keys",
+      "-X",
+      "-t",
+      session.name,
+      "cancel",
+    ]);
   }
 }
 

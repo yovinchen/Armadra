@@ -46,11 +46,17 @@ describe("server frames", () => {
 
   it("carries a null exit code rather than omitting it", () => {
     const parsed = JSON.parse(
-      encodeFrame({ type: "status", status: "exited", exitCode: null }).toString(
-        "utf8",
-      ),
+      encodeFrame({
+        type: "status",
+        status: "exited",
+        exitCode: null,
+      }).toString("utf8"),
     );
-    expect(parsed).toEqual({ type: "status", status: "exited", exitCode: null });
+    expect(parsed).toEqual({
+      type: "status",
+      status: "exited",
+      exitCode: null,
+    });
   });
 
   it("names the current generation in a stale frame", () => {
@@ -99,7 +105,9 @@ describe("client frames", () => {
     expect(decodeFrame("[]")).toBeUndefined();
     expect(decodeFrame('{"type":"input"}')).toBeUndefined();
     expect(decodeFrame('{"type":"input","data":42}')).toBeUndefined();
-    expect(decodeFrame('{"type":"resize","cols":"80","rows":24}')).toBeUndefined();
+    expect(
+      decodeFrame('{"type":"resize","cols":"80","rows":24}'),
+    ).toBeUndefined();
     expect(decodeFrame('{"type":"whatever"}')).toBeUndefined();
   });
 

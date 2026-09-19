@@ -102,10 +102,7 @@ export function collect(socket) {
             )}`,
           );
         }
-        await Promise.race([
-          new Promise((r) => waiters.push(r)),
-          delay(50),
-        ]);
+        await Promise.race([new Promise((r) => waiters.push(r)), delay(50)]);
       }
     },
   };
@@ -138,7 +135,8 @@ async function main() {
       }),
     });
     const session = await created.json();
-    if (!created.ok) throw new Error(`create failed: ${JSON.stringify(session)}`);
+    if (!created.ok)
+      throw new Error(`create failed: ${JSON.stringify(session)}`);
     console.log("created", session.id, session.backend, session.generation);
 
     const first = openSocket(core.ws, session.id);
@@ -150,9 +148,13 @@ async function main() {
     assert(hello.generation === 1, `generation was ${hello.generation}`);
 
     const marker = `armadra-smoke-${Date.now()}`;
-    first.send(JSON.stringify({ type: "input", data: `echo ${marker}\r`, inputId: 1 }));
+    first.send(
+      JSON.stringify({ type: "input", data: `echo ${marker}\r`, inputId: 1 }),
+    );
     await firstFrames.waitFor((f) => f.type === "ack" && f.inputId === 1);
-    await firstFrames.waitFor((f) => f.type === "output" && f.data.includes(marker));
+    await firstFrames.waitFor(
+      (f) => f.type === "output" && f.data.includes(marker),
+    );
     console.log("echo round-tripped");
 
     first.close();
@@ -185,7 +187,9 @@ async function main() {
     // A socket for a session nobody knows is refused before the upgrade.
     const refused = openSocket(core.ws, "00000000-0000-0000-0000-000000000000");
     const status = await new Promise((r) => {
-      refused.once("unexpected-response", (_req, response) => r(response.statusCode));
+      refused.once("unexpected-response", (_req, response) =>
+        r(response.statusCode),
+      );
       refused.once("open", () => r(101));
       refused.once("error", () => r(0));
     });
