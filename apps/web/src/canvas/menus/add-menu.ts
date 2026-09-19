@@ -18,6 +18,7 @@ import {
   Terminal,
   Type,
   Upload,
+  Workflow,
 } from "lucide-react";
 import type { AgentInfo, Position, SshHost, Workspace } from "@armadra/shared";
 import type { CommandId } from "../../keybindings";
@@ -30,6 +31,7 @@ import { revealNewNode } from "../flow/use-flow-viewport";
 import { pickFilesForCanvas } from "../dnd/external-content";
 import { addItems, createItemId, select } from "../whiteboard/store";
 import { textItemAt } from "../whiteboard/tools/draft";
+import { openMermaidImport } from "../whiteboard/mermaid/open";
 import { openAutomationPanel } from "../../panels/automation/open";
 
 /**
@@ -255,6 +257,15 @@ export function buildAddMenu(
       icon: Frame,
       group: "content",
       run: (context) => addFrameShape(context.position),
+    },
+    {
+      id: "add.importMermaid",
+      label: t("add.importMermaid"),
+      icon: Workflow,
+      group: "content",
+      shortcut: "canvas.importMermaid",
+      // 落点交给对话框：它盖着画布，确认时用视口中心比用这里的锚点合理。
+      run: () => openMermaidImport(),
     },
     {
       id: "add.browser",

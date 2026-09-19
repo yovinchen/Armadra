@@ -4,14 +4,17 @@
  * 放在单独的文件里是因为 `parse.test.ts`、`layout.test.ts` 与
  * `to-items.test.ts` 都要用同一份输入——三层各测各的，但测的必须是同一张图，
  * 否则「解析对了但生成错了」这种偏差会在层与层之间漏过去。
+ *
+ * 标签一律用西文：这不是测试文件，`i18n.test.ts` 会把任何非注释的中文当成
+ * 写死的界面文案。中文标签的覆盖放在各 `.test.ts` 里（那些文件是豁免的）。
  */
 
 /** 含 subgraph 与边标签的 LR 流程图。 */
 export const FLOWCHART_LR = `flowchart LR
-  A[开始] --> B{要继续吗}
-  B -- 是 --> C((完成))
-  B -- 否 --> D([停下])
-  subgraph S [收尾]
+  A[Start] --> B{Continue}
+  B -- yes --> C((Done))
+  B -- no --> D([Stop])
+  subgraph S [Wrap up]
     C
     D
   end`;

@@ -108,7 +108,7 @@ describe("layoutGraph", () => {
     const layout = layoutGraph(graph, OPTIONS);
     expect(layout.groups).toHaveLength(1);
     const frame = layout.groups[0]!;
-    expect(frame.label).toBe("收尾");
+    expect(frame.label).toBe("Wrap up");
     for (const id of graph.groups[0]!.nodes) {
       const node = layout.nodes.get(id)!;
       expect(node.x).toBeGreaterThanOrEqual(frame.x + GROUP_PADDING - 0.001);

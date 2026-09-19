@@ -259,6 +259,15 @@ export const COMMANDS = [
     allowWhileTyping: false,
   },
   {
+    id: "canvas.importMermaid",
+    labelKey: "cmd.canvas.importMermaid",
+    scope: "canvas",
+    // ⌘⇧M 在全表里空着；命中后开的是一个对话框，所以输入框里也不放行。
+    defaultKeys: both("Mod+Shift+M"),
+    allowInTerminal: false,
+    allowWhileTyping: false,
+  },
+  {
     id: "canvas.zoomIn",
     labelKey: "cmd.canvas.zoomIn",
     scope: "canvas",

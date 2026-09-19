@@ -95,7 +95,7 @@ describe("graphToItems：LR 流程图（含 subgraph 与边标签）", () => {
   it("节点标签进的是 shape.label，不另起文字对象", async () => {
     const { items } = await build(FLOWCHART_LR);
     const labels = of(items, "shape").map((shape) => shape.label);
-    for (const label of ["开始", "要继续吗", "完成", "停下"]) {
+    for (const label of ["Start", "Continue", "Done", "Stop"]) {
       expect(labels).toContain(label);
     }
   });
@@ -103,7 +103,7 @@ describe("graphToItems：LR 流程图（含 subgraph 与边标签）", () => {
   it("边标签落成 text 对象，居中对齐", async () => {
     const { items } = await build(FLOWCHART_LR);
     const texts = of(items, "text") as TextItem[];
-    expect(texts.map((text) => text.text).sort()).toEqual(["否", "是"]);
+    expect(texts.map((text) => text.text).sort()).toEqual(["no", "yes"]);
     expect(texts.every((text) => text.style.align === "middle")).toBe(true);
   });
 
@@ -112,17 +112,17 @@ describe("graphToItems：LR 流程图（含 subgraph 与边标签）", () => {
     const byLabel = new Map(
       (of(items, "shape") as ShapeItem[]).map((s) => [s.label, s.geo]),
     );
-    expect(byLabel.get("开始")).toBe("rectangle");
-    expect(byLabel.get("要继续吗")).toBe("diamond");
-    expect(byLabel.get("完成")).toBe("ellipse");
-    expect(byLabel.get("停下")).toBe("ellipse");
+    expect(byLabel.get("Start")).toBe("rectangle");
+    expect(byLabel.get("Continue")).toBe("diamond");
+    expect(byLabel.get("Done")).toBe("ellipse");
+    expect(byLabel.get("Stop")).toBe("ellipse");
   });
 
   it("子图框是虚线、不填充的矩形，且排在最前（即 z 最低）", async () => {
     const { items } = await build(FLOWCHART_LR);
     const first = items[0] as ShapeItem;
     expect(first.kind).toBe("shape");
-    expect(first.label).toBe("收尾");
+    expect(first.label).toBe("Wrap up");
     expect(first.geo).toBe("rectangle");
     expect(first.style.dash).toBe("dashed");
     expect(first.style.fill).toBe("none");

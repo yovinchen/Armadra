@@ -42,8 +42,13 @@ const KEYWORD_PATTERN = new RegExp(
   `^(?:${MERMAID_KEYWORDS.map((word) => word.replace(/[-]/g, "\\-")).join("|")})(?![A-Za-z0-9])`,
 );
 
-/** ```mermaid … ``` 围栏（从 Markdown 里复制出来的那种）。 */
-const FENCE = /^```+\s*mermaid\b/i;
+/**
+ * Markdown 的 mermaid 代码围栏（从文档里连着反引号一起复制出来的那种）。
+ *
+ * 反引号写成 `\x60`：`i18n.test.ts` 的注释剥离器不认识正则字面量，字面的
+ * 反引号会被它当成模板串的开头，后面整段注释就不再算注释了。
+ */
+const FENCE = /^\x60{3,}\s*mermaid\b/i;
 
 /**
  * 正文的首个有意义的行。

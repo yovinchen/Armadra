@@ -13,6 +13,7 @@ import {
   buildClipboard,
   parseClipboard,
   relocateClipboard,
+  routePaste,
   serializeClipboard,
   UNCOPYABLE_NODE_TYPES,
   type CanvasClipboard,
@@ -24,6 +25,7 @@ import {
   removeItems,
   select,
 } from "../store";
+import { openMermaidImport } from "../mermaid/open";
 import { textItemAt } from "./draft";
 
 /**
@@ -209,6 +211,12 @@ export async function paste(
     return;
   }
   if (content.text && content.text.trim().length > 0) {
+    // Mermaid 看起来像图时先弹导入框让用户确认，不直接落地（Mermaid 导入
+    // 设计 D8）。判据在 `clipboard.routePaste` 里，和其余几条分流同一张表。
+    if (routePaste({ text: content.text }) === "mermaid") {
+      openMermaidImport({ text: content.text, at: target.at });
+      return;
+    }
     const item = {
       ...textItemAt(target.at, createItemId()),
       text: content.text,

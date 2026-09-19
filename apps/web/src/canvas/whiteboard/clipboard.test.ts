@@ -178,4 +178,24 @@ describe("外部内容分流", () => {
     expect(routePaste({ text: "   " })).toBe("none");
     expect(routePaste({})).toBe("none");
   });
+
+  it("看起来像 Mermaid 的文本单独一支（落地前会弹确认框）", () => {
+    expect(routePaste({ text: "flowchart LR\n A --> B" })).toBe("mermaid");
+    expect(routePaste({ text: "sequenceDiagram\n A->>B: hi" })).toBe("mermaid");
+    // 普通文本不受影响。
+    expect(routePaste({ text: "graphql is not mermaid" })).toBe("text");
+  });
+
+  it("签名与图片都排在 Mermaid 前面", () => {
+    reset();
+    const canvasText = serializeClipboard(
+      buildClipboard([makeItem("shape")], []),
+    );
+    // 我们自己复制的内容永远优先，哪怕它碰巧以图种关键字开头。
+    expect(routePaste({ text: canvasText })).toBe("canvas");
+    // 截图粘贴时 `text/plain` 里可能混着别的东西，图片仍然优先。
+    expect(routePaste({ text: "flowchart LR\n A-->B", hasImage: true })).toBe(
+      "image",
+    );
+  });
 });
