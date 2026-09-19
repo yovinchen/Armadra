@@ -31,6 +31,7 @@ import {
   externalRuntimeBase,
   ownedRuntimeAddress,
   setPackagedShell,
+  startsHost,
   waitForRuntime,
 } from "./runtime-process";
 import { type PageSource, startPageSource } from "./static-server";
@@ -337,17 +338,22 @@ async function start(): Promise<void> {
   // The Host's launch configuration is resolved even when the Host itself is
   // unavailable: a shell that cannot describe its Host is a configuration
   // error worth reporting, not a reason to refuse to open a window.
+  //
+  // `ARMADRA_CORE=ts` starts no Host at all: the TypeScript core absorbed the
+  // Host's responsibilities, and a Host beside it would be a second writer of
+  // one database — the arrangement the merge exists to remove.
   try {
-    lifecycle.configureHost({
-      ...configFromEnvironment(development, page.origin, dataDir()),
-      // Development also grants apps/web's own dev server, so the same Host
-      // answers the shell's window and a browser tab on the same front end.
-      // Neither can mint a ticket, which is what makes the grant cheap.
-      additionalOrigins:
-        development && page.origin !== DEFAULT_DEV_RENDERER_URL
-          ? [DEFAULT_DEV_RENDERER_URL]
-          : [],
-    });
+    if (startsHost())
+      lifecycle.configureHost({
+        ...configFromEnvironment(development, page.origin, dataDir()),
+        // Development also grants apps/web's own dev server, so the same Host
+        // answers the shell's window and a browser tab on the same front end.
+        // Neither can mint a ticket, which is what makes the grant cheap.
+        additionalOrigins:
+          development && page.origin !== DEFAULT_DEV_RENDERER_URL
+            ? [DEFAULT_DEV_RENDERER_URL]
+            : [],
+      });
   } catch (error) {
     process.stderr.write(
       `Background ${error instanceof Error ? error.message : error}\n`,
