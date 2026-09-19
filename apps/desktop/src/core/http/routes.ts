@@ -50,6 +50,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/message/providers",
@@ -57,6 +58,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/message/source",
@@ -64,6 +66,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/message/generate",
@@ -71,6 +74,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repositories",
@@ -78,6 +82,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/log",
@@ -85,6 +90,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/refs",
@@ -92,6 +98,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/identity",
@@ -99,6 +106,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/branches",
@@ -106,6 +114,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/history",
@@ -113,6 +122,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/reflog",
@@ -120,6 +130,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/status-batch",
@@ -127,6 +138,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/worktree-binding",
@@ -134,6 +146,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/commit",
@@ -141,6 +154,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/commit-file",
@@ -148,6 +162,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/worktrees",
@@ -155,6 +170,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/rebase-todo",
@@ -162,6 +178,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/tags",
@@ -169,6 +186,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/remotes",
@@ -176,6 +194,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/stashes",
@@ -183,6 +202,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/integration",
@@ -190,6 +210,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/cherry-pick-preview",
@@ -197,6 +218,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/stash-detail",
@@ -204,6 +226,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/operations",
@@ -211,6 +234,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/operations/{operationId}",
@@ -218,6 +242,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/repository/operations/{operationId}/cancel",
@@ -225,6 +250,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/open-directory",
@@ -501,6 +527,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/init",
@@ -508,6 +535,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/diff",
@@ -515,6 +543,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/stage",
@@ -522,6 +551,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/unstage",
@@ -529,6 +559,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/revert",
@@ -536,6 +567,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/resolve",
@@ -543,6 +575,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/head-commit",
@@ -550,6 +583,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/commit",
@@ -557,6 +591,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/sessions",
@@ -728,6 +763,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/git/clone/{jobId}",
@@ -735,6 +771,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Git 工具",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/terminals",

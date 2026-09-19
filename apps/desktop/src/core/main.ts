@@ -40,6 +40,7 @@ import { install as installTerminals } from "./terminal/install";
 import { install as installAgents } from "./agent";
 import { install as installBrowser } from "./browser";
 import { install as installSchedule } from "./schedule";
+import { install as installGit } from "./git";
 
 /**
  * The core process.
@@ -136,6 +137,9 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // After agents: the browser verbs reach the canvas through the same node and
   // link tables, and the hook surface that carries them is the agent domain's.
   installBrowser,
+  // Git last among the domains that own routes: it reads the workspace table
+  // and subscribes to `file.changed`, both of which have to exist first.
+  installGit,
   // Last: the hook service publishes an endpoint file, and nothing may be
   // advertised before the domains that answer a hook report exist.
   installHooks,

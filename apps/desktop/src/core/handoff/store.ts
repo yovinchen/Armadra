@@ -9,6 +9,7 @@ import {
 import { type Caller, loadNode } from "../collab/nodes";
 import { locate, readTail, render } from "../collab/transcript";
 import { type CollabContext, nowDate, nowSeconds } from "../collab/service";
+import { type Fingerprinted, gitFingerprint } from "../git/fingerprint";
 import {
   badRequest,
   conflict,
@@ -359,8 +360,10 @@ export function prepare(
  *   * the terminal-log fallback is gone — this core keeps the transcript path
  *     the CLI reported and nothing else, so a session with no readable
  *     transcript says `noGenerationBoundTranscript`;
- *   * the git fingerprint is `unavailable` until the Git domain lands. An
- *     invented `observed` would be a claim about a worktree nobody looked at.
+ *   * the git fingerprint is `observed` only when the Git domain could read
+ *     HEAD and the index. A workspace without the execution grant, or one that
+ *     is not a repository, reports `unavailable` — an invented `observed` would
+ *     be a claim about a worktree nobody looked at.
  */
 function build(
   context: CollabContext,
@@ -415,7 +418,8 @@ function build(
   if (files.some((file) => file.status !== "referenced")) {
     omitted.push("someFileReferencesUnavailable");
   }
-  omitted.push("gitFingerprintUnavailable");
+  const git = gitFingerprint(workspaceFingerprint(context, workspaceId, root));
+  if (git.status !== "observed") omitted.push("gitFingerprintUnavailable");
   omitted.push("worktreeDigestCoversStatusSummaryOnly");
   return {
     version: 1,
@@ -431,15 +435,7 @@ function build(
     trust: TRUST,
     sourcePreserved: true,
     files,
-    git: {
-      headOid: null,
-      indexDigest: null,
-      worktreeDigest: null,
-      repositoryId: null,
-      worktreeId: null,
-      status: "unavailable",
-      worktreeDigestBasis: "statusSummary",
-    },
+    git,
     attachments: [],
     budget: {
       byteLimit: request.byteBudget,
@@ -452,6 +448,29 @@ function build(
       omitted,
     },
   };
+}
+
+/**
+ * What the Git fingerprint is allowed to look at.
+ *
+ * The execution grant is read here rather than assumed, because reading the
+ * index can run repository filters: a workspace without it gets the
+ * `unavailable` fingerprint, which is the honest answer rather than a refusal
+ * that would stop the handoff.
+ */
+function workspaceFingerprint(
+  context: CollabContext,
+  workspaceId: string,
+  root: string,
+): Fingerprinted | undefined {
+  try {
+    return {
+      rootPath: root,
+      execute: getWorkspace(context.database, workspaceId).permissions.execute,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /**
