@@ -137,7 +137,7 @@ vi.mock("./renderer", () => ({
   tellRenderer: vi.fn(),
 }));
 
-import { SCRIPTS } from "../../shell-core/browser/scripts";
+import { SCRIPTS } from "../../core/browser/cdp/scripts";
 import { attachCount } from "./cdp";
 import { registerGuest, resetRegistry } from "./registry";
 import { runVerb } from "./verbs";

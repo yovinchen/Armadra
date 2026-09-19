@@ -25,6 +25,12 @@
 
 import { timingSafeEqual } from "node:crypto";
 
+import {
+  DRIVE_CODES,
+  driveError,
+  type DriveError,
+} from "../../core/browser/cdp/codes";
+
 /** The path the drive server listens on. Nothing else on that port answers. */
 export const DRIVE_PATH = "/browser/drive";
 
@@ -69,11 +75,6 @@ export interface DriveRequest {
   readonly args: Record<string, unknown>;
 }
 
-export interface DriveError {
-  readonly code: string;
-  readonly message: string;
-}
-
 export type DriveResponse =
   | { readonly id: string; readonly ok: true; readonly result: unknown }
   | { readonly id: string; readonly ok: false; readonly error: DriveError };
@@ -87,24 +88,13 @@ export interface DriveEvent {
   readonly [field: string]: unknown;
 }
 
-/** Stable codes. The Runtime maps them onto its own prose. */
-export const DRIVE_CODES = Object.freeze({
-  /** No shell is connected. Produced by the RUNTIME, never sent over the wire. */
-  unavailable: "browser_unavailable",
-  notDrivable: "browser_not_drivable",
-  discarded: "browser_discarded",
-  staleRef: "browser_stale_ref",
-  notFound: "browser_not_found",
-  refused: "browser_refused",
-  badArgument: "browser_bad_argument",
-  unknownVerb: "browser_unknown_verb",
-  timeout: "browser_timeout",
-  failed: "browser_failed",
-});
-
-export function driveError(code: string, message: string): DriveError {
-  return { code, message };
-}
+/**
+ * Stable codes, and the error shape they travel in. Both are
+ * `core/browser/cdp/codes.ts` — the verbs that produce them are shared with
+ * the headless backend, and a code spelled twice is two codes.
+ */
+export { DRIVE_CODES, driveError };
+export type { DriveError };
 
 /**
  * Validates one request off the wire. The shell trusts the Runtime to have
