@@ -77,7 +77,7 @@ export function resolveRuntimeUrl(
     return (
       // 壳先问：它拉起的 Runtime 端口是内核分配的，页面地址推不出来，而且开发
       // 模式下页面来源是 Vite，回环默认端口多半是别人的 Runtime。
-      shell?.httpBase ?? hostServedOrigin(pageUrl) ?? LOCAL_RUNTIME
+      shell?.httpBase ?? serverShellOrigin(pageUrl) ?? LOCAL_RUNTIME
     );
   // Vite 开发服务器发现 Runtime 后会把这个值定义成 `""`，让浏览器标签页走同源
   // 代理。壳里的页面不该走那条弯路：壳知道内核分配的端口，打包版也从不经代理，
@@ -99,15 +99,16 @@ export function resolveRuntimeUrl(
 }
 
 /**
- * 「经 Host 访问」模式的 Runtime 基址：Go Host 用 HTTPS 托管这份前端，并把
- * `/api/**` 与 WebSocket 代理到本机 Runtime（host-protocol-design §5，H02）。
- * 此时同源就是唯一能用的地址，不需要 `VITE_RUNTIME_URL`。
+ * 服务器壳托管这份前端时的 core 基址（typescript-core R6）。
  *
- * 判据是页面协议：开发服务器与 `armadra.sh run web` 都是回环 HTTP，Host 只在
- * 明确配置的 HTTPS 来源上提供页面；而 HTTPS 页面本来也无法访问
+ * `apps/server` 在一个 HTTPS 来源上同时托管页面与 `/api/**`，此时同源就是唯一
+ * 能用的地址，不需要 `VITE_RUNTIME_URL`。
+ *
+ * 判据是页面协议：开发服务器与 `armadra.sh run web` 都是回环 HTTP，服务器壳
+ * 只在明确配置的 HTTPS 来源上提供页面；而 HTTPS 页面本来也无法访问
  * `http://127.0.0.1`（混合内容会被浏览器拦掉），所以这里不存在更好的猜测。
  */
-export function hostServedOrigin(pageUrl: string): string | null {
+export function serverShellOrigin(pageUrl: string): string | null {
   let url: URL;
   try {
     url = new URL(pageUrl);
@@ -119,16 +120,16 @@ export function hostServedOrigin(pageUrl: string): string | null {
 }
 
 /**
- * 这份页面是不是由 Host 托管、`/api` 走它的认证代理。
+ * 这份页面是不是由服务器壳托管。
  *
- * 只有这种模式下写请求才要带会话 CSRF 头，「对外服务」开关也才有对象可读写；
- * 桌面壳与本机开发直连 Runtime，Runtime 自己没有会话。
+ * 只有这种模式下页面拿的是 Cookie 会话，写请求才要带双提交的 CSRF 头；桌面壳
+ * 走的是票据换 Bearer 的原生传输，凭据只在页面内存里。
  */
-export function isHostServed(
+export function isServerShellServed(
   configured: string | undefined,
   pageUrl: string,
 ): boolean {
-  const origin = hostServedOrigin(pageUrl);
+  const origin = serverShellOrigin(pageUrl);
   return origin !== null && resolveRuntimeUrl(configured, pageUrl) === origin;
 }
 

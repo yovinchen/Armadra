@@ -330,13 +330,11 @@ describe("cross-repository commit", () => {
   });
 
   it("commits once per repository with the same message", async () => {
-    const commit = vi
-      .spyOn(gitGateway, "commit")
-      .mockResolvedValue({
-        commit: "abc1234",
-        committed: ["abc1234"],
-        summary: "",
-      });
+    const commit = vi.spyOn(gitGateway, "commit").mockResolvedValue({
+      commit: "abc1234",
+      committed: ["abc1234"],
+      summary: "",
+    });
     view();
     await ready();
     fireEvent.change(await messageBox(), {

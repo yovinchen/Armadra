@@ -38,7 +38,7 @@ import { MobileBottomNav } from "../shell/MobileBottomNav";
 import { MobileFocusPage } from "../shell/MobileFocusPage";
 import { WindowDragLayer } from "../shell/WindowDragLayer";
 import { useCanvasStore } from "../store/canvas-store";
-import { onHostSessionChange } from "../host/proxy-session";
+import { onIdentitySessionChange } from "../api/identity";
 import { Toaster } from "@/ui/sonner";
 import { TooltipProvider } from "@/ui/tooltip";
 import { useCommandDispatch } from "./commands";
@@ -94,7 +94,7 @@ function AppShell() {
   // session appears, re-read rather than leaving the shell showing the
   // failures from before the user signed in.
   useEffect(
-    () => onHostSessionChange(() => void queryClient.invalidateQueries()),
+    () => onIdentitySessionChange(() => void queryClient.invalidateQueries()),
     [queryClient],
   );
 

@@ -1,19 +1,24 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+
 import {
-  type HostIdentityClient,
-  HostIdentityError,
-  type HelloResponse,
-  type HostIdentityDevices,
-  type HostIdentitySession,
-} from "@armadra/host-client";
+  hasSessionCapability,
+  IdentityRequestError,
+  IdentityTransportError,
+  listIdentityDevices,
+  logoutIdentity,
+  pairIdentity,
+  resumeIdentity,
+  revokeIdentityDevice,
+  takePairingTicket,
+  type IdentityDevicePage,
+  type IdentityHello,
+  type IdentitySession,
+} from "../../../api/identity";
 import { usePreferencesStore, useT } from "../../../app/preferences-store";
 import {
-  createHostIdentity,
-  hasHostSessionCapability,
-  hostSessionBlock,
+  isNativeShell,
   nativeSessionFailureKey,
 } from "../../../host/native-session";
-import { rememberHostCsrf } from "../../../host/proxy-session";
 import { Button } from "@/ui/button";
 import {
   AlertDialog,
@@ -28,65 +33,44 @@ import {
 import { SettingsGroup } from "../SettingsGroup";
 
 export interface HostIdentityPanelProps {
-  address: string;
-  hello?: HelloResponse;
+  hello?: IdentityHello;
 }
-type Device = HostIdentityDevices["devices"][number];
-function availability(
-  address: string,
-  hello: HelloResponse | undefined,
-): string | null {
-  // The same judgement every session-bound module uses: HTTPS same-origin in
-  // a browser, loopback HTTP inside the desktop shell.
-  const blocked = hostSessionBlock(address);
-  if (blocked) return `hostIdentity.${blocked}`;
+
+type Device = IdentityDevicePage["devices"][number];
+
+/** 身份面用不上的原因；`null` 表示可以用。 */
+function availability(hello: IdentityHello | undefined): string | null {
   if (!hello?.hostId || !hello.hostInstanceId)
     return "hostIdentity.checkRequired";
-  if (!hasHostSessionCapability(hello)) return "hostIdentity.unsupported";
+  if (!hasSessionCapability(hello)) return "hostIdentity.unsupported";
   return null;
 }
+
 function failureKey(error: unknown): string {
-  // Inside the shell the ticket comes from the shell itself; its failure has
-  // its own sentence so the person knows which side to look at.
+  // 壳里票据由壳自己签；它的失败有自己那句话，好让人知道该看哪一边。
   const native = nativeSessionFailureKey(error);
   if (native) return native;
-  if (!(error instanceof HostIdentityError))
+  if (error instanceof IdentityTransportError)
     return "hostIdentity.error.network";
-  if (error.outcomeUnknown) return "hostIdentity.error.unknown";
-  if (error.hostCode === "UNAUTHENTICATED") return "hostIdentity.error.auth";
-  if (error.hostCode === "PERMISSION_DENIED")
-    return "hostIdentity.error.permission";
-  if (error.hostCode === "CONFLICT") return "hostIdentity.error.conflict";
-  if (error.code === "INVALID_OPTIONS") return "hostIdentity.error.invalid";
-  if (
-    [
-      "MALFORMED_RESPONSE",
-      "RESPONSE_TOO_LARGE",
-      "UNEXPECTED_CONTENT_TYPE",
-    ].includes(error.code)
-  )
+  if (!(error instanceof IdentityRequestError))
     return "hostIdentity.error.response";
+  if (error.status === 401) return "hostIdentity.error.auth";
+  if (error.status === 403) return "hostIdentity.error.permission";
+  if (error.status === 409) return "hostIdentity.error.conflict";
+  if (error.status === 400) return "hostIdentity.error.invalid";
   return "hostIdentity.error.network";
 }
 
-export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
+export function HostIdentityPanel({ hello }: HostIdentityPanelProps) {
   const t = useT();
   const locale = usePreferencesStore((state) => state.locale);
   const id = useId();
-  const unavailable = availability(address, hello);
-  const hostId = hello?.hostId,
-    instanceId = hello?.hostInstanceId;
-  const config = useMemo(
-    () =>
-      unavailable || !hostId || !instanceId
-        ? null
-        : { baseUrl: address, hostId, hostInstanceId: instanceId },
-    [address, hostId, instanceId, unavailable],
-  );
-  const current = useRef<HostIdentityClient | null>(null);
+  const unavailable = availability(hello);
+  const ready = unavailable === null;
   const working = useRef(false);
+  const generation = useRef(0);
   const revokeTrigger = useRef<HTMLButtonElement | null>(null);
-  const [session, setSession] = useState<HostIdentitySession | null>(null);
+  const [session, setSession] = useState<IdentitySession | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
   const [cursor, setCursor] = useState("");
   const [hasMore, setHasMore] = useState(false);
@@ -96,12 +80,11 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
   const [notice, setNotice] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Device | null>(null);
 
-  function live(target: HostIdentityClient) {
-    return current.current === target;
-  }
-  async function devicePage(target: HostIdentityClient, after = "") {
-    const page = await target.listDevices(after);
-    if (!live(target)) return;
+  const live = (mark: number) => generation.current === mark;
+
+  async function devicePage(mark: number, after = "") {
+    const page = await listIdentityDevices(after);
+    if (!live(mark)) return;
     setDevices((previous) =>
       after
         ? [
@@ -116,51 +99,40 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
     setCursor(page.nextId);
     setHasMore(page.hasMore);
   }
-  async function accept(
-    target: HostIdentityClient,
-    value: HostIdentitySession | null,
-  ) {
-    if (!live(target)) return;
+
+  async function accept(mark: number, value: IdentitySession | null) {
+    if (!live(mark)) return;
     setSession(value);
     setConfirm(null);
     setDevices([]);
     setHasMore(false);
     setCursor("");
     if (value?.scopes.some((scope) => scope.permission === "identity:read"))
-      await devicePage(target);
+      await devicePage(mark);
   }
-  async function run(action: (target: HostIdentityClient) => Promise<void>) {
-    const target = current.current;
-    if (!target || working.current) return;
+
+  async function run(action: (mark: number) => Promise<void>) {
+    const mark = generation.current;
+    if (working.current) return;
     working.current = true;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      await action(target);
+      await action(mark);
     } catch (failure) {
-      if (live(target)) setError(failureKey(failure));
+      if (live(mark)) setError(failureKey(failure));
     } finally {
-      if (live(target)) {
+      if (live(mark)) {
         working.current = false;
         setBusy(false);
       }
     }
   }
+
   useEffect(() => {
-    let client: HostIdentityClient | null = null;
-    try {
-      // The Runtime calls this Host proxies share this session, so its CSRF
-      // token has exactly one holder in the page (H02).
-      if (config)
-        client = createHostIdentity({
-          ...config,
-          onCsrfToken: rememberHostCsrf,
-        });
-    } catch {
-      /* Invalid configuration never starts a request. */
-    }
-    current.current = client;
+    generation.current += 1;
+    const mark = generation.current;
     working.current = false;
     setSession(null);
     setDevices([]);
@@ -171,16 +143,24 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
     setNotice(null);
     setConfirm(null);
     setBusy(false);
-    if (client)
-      void run(async (target) => accept(target, await target.resume()));
+    if (!ready) return;
+    // 服务器壳把票放在地址栏的片段里（`…/#pair=<票>`）。读到就直接配对：
+    // 让人把一串票自己复制一遍，只会多一次出错的机会。
+    const pending = takePairingTicket();
+    void run(async (current) =>
+      accept(
+        current,
+        pending ? await pairIdentity(pending) : await resumeIdentity(),
+      ),
+    );
     return () => {
-      if (current.current === client) current.current = null;
+      generation.current += 1;
       revokeTrigger.current = null;
-      client?.dispose();
     };
-    // The selected Host, not locale or response-object identity, owns this session.
+    // 这条会话只跟着「身份面能不能用」走，不跟着语言或响应对象的身份走。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config]);
+  }, [ready]);
+
   const canManage = session?.scopes.some(
     (scope) => scope.permission === "identity:manage",
   );
@@ -188,22 +168,21 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
     (scope) => scope.permission === "identity:read",
   );
   const expiry =
-    session && session.expiresAtUnixMs <= 8_640_000_000_000_000n
+    session && session.expiresAtUnixMs > 0
       ? new Intl.DateTimeFormat(locale, {
           dateStyle: "medium",
           timeStyle: "short",
-        }).format(Number(session.expiresAtUnixMs))
+        }).format(session.expiresAtUnixMs)
       : "—";
-  const disabledKey =
-    unavailable ?? (!config ? "hostIdentity.checkRequired" : null);
+
   return (
     <section aria-labelledby={`${id}-title`} className="min-w-0 space-y-3">
       <h3 id={`${id}-title`} className="text-[13px] font-medium">
         {t("hostIdentity.title")}
       </h3>
-      {disabledKey ? (
+      {unavailable ? (
         <p className="text-[13px] leading-5 text-muted-foreground">
-          {t(disabledKey)}
+          {t(unavailable)}
         </p>
       ) : (
         <SettingsGroup>
@@ -233,8 +212,8 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                   if (busy || !ticket.trim()) return;
                   const material = ticket;
                   setTicket("");
-                  void run(async (target) =>
-                    accept(target, await target.pair(material)),
+                  void run(async (mark) =>
+                    accept(mark, await pairIdentity(material)),
                   );
                 }}
               >
@@ -261,7 +240,11 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                   id={`${id}-ticket-help`}
                   className="text-[11px] leading-4 text-muted-foreground"
                 >
-                  {t("hostIdentity.ticketHelp")}
+                  {t(
+                    isNativeShell()
+                      ? "hostIdentity.ticketHelp"
+                      : "hostIdentity.ticketHelp.server",
+                  )}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -279,8 +262,8 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                     className="min-h-10"
                     disabled={busy}
                     onClick={() =>
-                      void run(async (target) =>
-                        accept(target, await target.resume()),
+                      void run(async (mark) =>
+                        accept(mark, await resumeIdentity()),
                       )
                     }
                   >
@@ -296,10 +279,10 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                       {t("hostIdentity.current")}
                     </dt>
                     <dd className="mt-1 break-words font-medium">
-                      {session.device!.displayName} · {t("hostIdentity.owner")}
+                      {session.device.displayName} · {t("hostIdentity.owner")}
                     </dd>
                     <dd className="mt-1 break-all text-muted-foreground select-text">
-                      {session.device!.deviceId}
+                      {session.device.deviceId}
                     </dd>
                   </div>
                   <div>
@@ -346,8 +329,8 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                     className="min-h-10"
                     disabled={busy}
                     onClick={() =>
-                      void run(async (target) =>
-                        accept(target, await target.resume()),
+                      void run(async (mark) =>
+                        accept(mark, await resumeIdentity()),
                       )
                     }
                   >
@@ -360,10 +343,10 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                     className="min-h-10"
                     disabled={busy}
                     onClick={() =>
-                      void run(async (target) => {
-                        await target.logout();
-                        await accept(target, null);
-                        if (live(target)) setNotice("hostIdentity.loggedOut");
+                      void run(async (mark) => {
+                        await logoutIdentity();
+                        await accept(mark, null);
+                        if (live(mark)) setNotice("hostIdentity.loggedOut");
                       })
                     }
                   >
@@ -383,7 +366,7 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                         disabled={busy}
                         onClick={() => {
                           setConfirm(null);
-                          void run((target) => devicePage(target));
+                          void run((mark) => devicePage(mark));
                         }}
                       >
                         {t("hostIdentity.reloadDevices")}
@@ -397,28 +380,28 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                         >
                           <div className="min-w-0 text-[12px]">
                             <p className="break-words font-medium">
-                              {device.displayName}
-                              {device.deviceId === session.device!.deviceId && (
+                              {device.name}
+                              {device.deviceId === session.device.deviceId && (
                                 <> · {t("hostIdentity.thisDevice")}</>
                               )}
                             </p>
                             <p className="mt-1 break-all text-muted-foreground">
                               {device.deviceId}
                             </p>
-                            {device.revokedAtUnixMs > 0n && (
+                            {device.revokedAtMs > 0 && (
                               <p className="mt-1 text-muted-foreground">
                                 {t("hostIdentity.revoked")}
                               </p>
                             )}
                           </div>
-                          {canManage && device.revokedAtUnixMs === 0n && (
+                          {canManage && device.revokedAtMs === 0 && (
                             <Button
                               size="sm"
                               variant="destructive"
                               className="min-h-10 shrink-0"
                               disabled={busy}
                               aria-label={t("hostIdentity.revokeNamed", {
-                                name: device.displayName,
+                                name: device.name,
                               })}
                               onClick={(event) => {
                                 revokeTrigger.current = event.currentTarget;
@@ -438,7 +421,7 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                         className="min-h-10"
                         disabled={busy}
                         onClick={() =>
-                          void run((target) => devicePage(target, cursor))
+                          void run((mark) => devicePage(mark, cursor))
                         }
                       >
                         {t("hostIdentity.more")}
@@ -469,7 +452,7 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <p className="break-words text-[13px] font-medium">
-                      {confirm?.displayName}
+                      {confirm?.name}
                     </p>
                     <p className="break-all text-[11px] text-muted-foreground">
                       {confirm?.deviceId}
@@ -486,16 +469,16 @@ export function HostIdentityPanel({ address, hello }: HostIdentityPanelProps) {
                           const device = confirm;
                           if (!device) return;
                           setConfirm(null);
-                          void run(async (target) => {
-                            await target.revokeDevice(
+                          void run(async (mark) => {
+                            await revokeIdentityDevice(
                               device.deviceId,
-                              device.revision,
+                              device.epoch,
                             );
-                            if (!live(target)) return;
-                            if (device.deviceId === session.device!.deviceId)
-                              await accept(target, null);
-                            else await devicePage(target);
-                            if (live(target))
+                            if (!live(mark)) return;
+                            if (device.deviceId === session.device.deviceId)
+                              await accept(mark, null);
+                            else await devicePage(mark);
+                            if (live(mark))
                               setNotice("hostIdentity.revokedNotice");
                           });
                         }}

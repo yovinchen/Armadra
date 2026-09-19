@@ -24,7 +24,7 @@ import { settingsApi } from "./settings";
 
 export {
   RUNTIME_URL,
-  RUNTIME_VIA_HOST,
+  RUNTIME_VIA_SERVER_SHELL,
   RuntimeConnectionError,
   RuntimeRequestError,
   isConflict,

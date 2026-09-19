@@ -1,234 +1,125 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { HostClientError, type HelloResponse } from "@armadra/host-client";
+
 import {
-  DEFAULT_HOST_ADDRESS,
-  HOST_ADDRESS_STORAGE_KEY,
-  hostErrorKey,
-  loadHostAddress,
-  rememberHostAddress,
-  type HostProbe,
-} from "./connection";
+  IdentityRequestError,
+  IdentityTransportError,
+  type IdentityHello,
+} from "../api/identity";
+import { hostErrorKey, type HostProbe } from "./connection";
 import { useHostConnection } from "./use-host-connection";
 
-function response(hostId = "host-1"): HelloResponse {
+function hello(hostId = "host-1"): IdentityHello {
   return {
-    $typeName: "armadra.v1.HelloResponse",
     hostId,
     hostInstanceId: "process-1",
     maxFrameBytes: 1_048_576,
-    capabilities: ["protocol.hello.v1"],
-    capabilityStatus: [],
-    protocol: { $typeName: "armadra.v1.ProtocolVersion", major: 1, minor: 1 },
+    capabilities: ["identity.native-session.v1"],
+    protocol: { major: 1, minor: 1 },
   };
 }
+
 function deferred() {
-  let resolve!: (value: HelloResponse) => void;
+  let resolve!: (value: IdentityHello) => void;
   let reject!: (reason: unknown) => void;
-  const promise = new Promise<HelloResponse>((done, fail) => {
+  const promise = new Promise<IdentityHello>((done, fail) => {
     resolve = done;
     reject = fail;
   });
   return { promise, resolve, reject };
 }
-beforeEach(() => {
-  const values = new Map<string, string>();
-  vi.stubGlobal("localStorage", {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => values.set(key, value),
-    removeItem: (key: string) => values.delete(key),
-    clear: () => values.clear(),
-  });
-});
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
-describe("local address preference", () => {
-  it("starts at the default without storing or requesting anything", () => {
+describe("the connection check", () => {
+  it("asks nothing until it is asked to", () => {
     const probe = vi.fn<HostProbe>();
     const { result } = renderHook(() => useHostConnection(probe));
-    expect(result.current.address).toBe(DEFAULT_HOST_ADDRESS);
     expect(result.current.state).toEqual({ status: "idle" });
     expect(probe).not.toHaveBeenCalled();
-    expect(localStorage.getItem(HOST_ADDRESS_STORAGE_KEY)).toBeNull();
   });
 
-  it("remembers a valid proxy prefix but never credentials or query tokens", () => {
-    rememberHostAddress("https://host.test/team/armadra/");
-    expect(loadHostAddress()).toBe("https://host.test/team/armadra/");
-    expect(() => rememberHostAddress("https://user:secret@host.test")).toThrow(
-      HostClientError,
-    );
-    expect(() => rememberHostAddress("https://host.test?token=secret")).toThrow(
-      HostClientError,
-    );
-    expect(localStorage.getItem(HOST_ADDRESS_STORAGE_KEY)).toBe(
-      "https://host.test/team/armadra/",
+  it("reports the hello it got back", async () => {
+    const probe = vi.fn<HostProbe>().mockResolvedValue(hello());
+    const { result } = renderHook(() => useHostConnection(probe));
+    await act(async () => void (await result.current.check()));
+    await waitFor(() =>
+      expect(result.current.state).toEqual({
+        status: "connected",
+        hello: hello(),
+      }),
     );
   });
 
-  it("discards an unsafe stored value", () => {
-    localStorage.setItem(
-      HOST_ADDRESS_STORAGE_KEY,
-      "https://host.test?token=secret",
-    );
-    expect(loadHostAddress()).toBe(DEFAULT_HOST_ADDRESS);
-    expect(localStorage.getItem(HOST_ADDRESS_STORAGE_KEY)).toBeNull();
-  });
-
-  it("works when browser storage is unavailable", async () => {
-    vi.spyOn(localStorage, "getItem").mockImplementation(() => {
-      throw new Error("disabled");
-    });
-    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
-      throw new Error("disabled");
-    });
-    const probe = vi.fn<HostProbe>().mockResolvedValue(response());
-    const { result } = renderHook(() => useHostConnection(probe));
-    await act(() => result.current.check());
-    expect(result.current.state.status).toBe("connected");
-  });
-});
-
-describe("connection state lifecycle", () => {
-  it("only checks explicitly and saves validated addresses on check", async () => {
-    const probe = vi.fn<HostProbe>().mockResolvedValue(response());
-    const { result } = renderHook(() => useHostConnection(probe));
-    act(() => result.current.editAddress("https://host.test/proxy/"));
-    expect(probe).not.toHaveBeenCalled();
-    expect(localStorage.getItem(HOST_ADDRESS_STORAGE_KEY)).toBeNull();
-    await act(() => result.current.check());
-    expect(probe).toHaveBeenCalledOnce();
-    expect(probe.mock.calls[0]?.[0]).toBe("https://host.test/proxy/");
-    expect(localStorage.getItem(HOST_ADDRESS_STORAGE_KEY)).toBe(
-      "https://host.test/proxy/",
-    );
-    expect(result.current.state).toEqual({
-      status: "connected",
-      hello: response(),
-    });
-  });
-
-  it("does not dispatch a second simultaneous check", async () => {
-    const pending = deferred();
-    const probe = vi.fn<HostProbe>().mockReturnValue(pending.promise);
-    const { result } = renderHook(() => useHostConnection(probe));
-    act(() => {
-      void result.current.check();
-      void result.current.check();
-    });
-    expect(probe).toHaveBeenCalledOnce();
-    expect(result.current.state).toEqual({ status: "checking" });
-    await act(async () => pending.resolve(response()));
-  });
-
-  it("clears a previous identity on edit, checking, or failure", async () => {
-    const probe = vi
-      .fn<HostProbe>()
-      .mockResolvedValueOnce(response())
-      .mockRejectedValue(new HostClientError("NETWORK_ERROR", true));
-    const { result } = renderHook(() => useHostConnection(probe));
-    await act(() => result.current.check());
-    act(() => result.current.editAddress("https://host.test/"));
-    expect(result.current.state).toEqual({ status: "idle" });
-    await act(() => result.current.check());
-    expect(result.current.state).toEqual({
-      status: "error",
-      messageKey: "host.error.network",
-    });
-    expect(JSON.stringify(result.current.state)).not.toContain("host-1");
-  });
-
-  it("rejects unsafe configuration without calling the probe", async () => {
-    const probe = vi.fn<HostProbe>();
-    const { result } = renderHook(() => useHostConnection(probe));
-    act(() => result.current.editAddress("https://host.test?token=secret"));
-    await act(() => result.current.check());
-    expect(result.current.state).toEqual({
-      status: "error",
-      messageKey: "host.error.address",
-    });
-    expect(probe).not.toHaveBeenCalled();
-    expect(localStorage.getItem(HOST_ADDRESS_STORAGE_KEY)).toBeNull();
-  });
-
-  it("cancels immediately and ignores a late successful reply", async () => {
-    const pending = deferred();
-    const probe = vi.fn<HostProbe>().mockReturnValue(pending.promise);
-    const { result } = renderHook(() => useHostConnection(probe));
-    act(() => {
-      void result.current.check();
-    });
-    act(() => result.current.cancel());
-    expect(probe.mock.calls[0]?.[1].aborted).toBe(true);
-    expect(result.current.state).toEqual({ status: "idle", cancelled: true });
-    await act(async () => pending.resolve(response()));
-    expect(result.current.state).toEqual({ status: "idle", cancelled: true });
-  });
-
-  it("keeps the new result when an older address completes out of order", async () => {
+  it("folds a second press into the first request", async () => {
     const first = deferred();
-    const second = deferred();
-    const probe = vi
-      .fn<HostProbe>()
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
+    const probe = vi.fn<HostProbe>().mockReturnValue(first.promise);
     const { result } = renderHook(() => useHostConnection(probe));
-    act(() => {
-      void result.current.check();
-    });
-    act(() => result.current.editAddress("https://host.test/new"));
-    expect(probe.mock.calls[0]?.[1].aborted).toBe(true);
-    act(() => {
-      void result.current.check();
-    });
-    await act(async () => second.resolve(response("new-host")));
-    await act(async () => first.resolve(response("old-host")));
-    expect(result.current.state).toEqual({
-      status: "connected",
-      hello: response("new-host"),
+    act(() => void result.current.check());
+    act(() => void result.current.check());
+    expect(probe).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      first.resolve(hello());
+      await first.promise;
     });
   });
 
-  it("ignores late failures after edit and aborts on unmount", async () => {
+  /**
+   * 取消之后那次飞行中的回答不能再落到界面上：用户已经说「别问了」，
+   * 一个迟到的「已连接」会把那句话推翻。
+   */
+  it("drops the answer of a check that was cancelled", async () => {
     const pending = deferred();
     const probe = vi.fn<HostProbe>().mockReturnValue(pending.promise);
-    const { result, unmount } = renderHook(() => useHostConnection(probe));
-    act(() => {
-      void result.current.check();
+    const { result } = renderHook(() => useHostConnection(probe));
+    act(() => void result.current.check());
+    act(() => result.current.cancel());
+    expect(result.current.state).toEqual({ status: "idle", cancelled: true });
+    await act(async () => {
+      pending.resolve(hello());
+      await pending.promise;
     });
-    act(() => result.current.editAddress("https://host.test/"));
-    await act(async () => pending.reject(new Error("secret")));
-    expect(result.current.state).toEqual({ status: "idle" });
-    const next = deferred();
-    probe.mockReturnValue(next.promise);
-    act(() => {
-      void result.current.check();
+    expect(result.current.state).toEqual({ status: "idle", cancelled: true });
+  });
+
+  it("turns a refusal into the sentence that names the side to look at", async () => {
+    const probe = vi
+      .fn<HostProbe>()
+      .mockRejectedValue(
+        new IdentityRequestError(403, "PERMISSION_DENIED", ""),
+      );
+    const { result } = renderHook(() => useHostConnection(probe));
+    await act(async () => void (await result.current.check()));
+    expect(result.current.state).toEqual({
+      status: "error",
+      messageKey: "host.error.permission",
     });
-    unmount();
-    expect(probe.mock.calls[1]?.[1].aborted).toBe(true);
-    next.resolve(response());
-    await waitFor(() => expect(probe).toHaveBeenCalledTimes(2));
   });
 });
 
-describe("sanitized localized errors", () => {
-  it.each([
-    [new HostClientError("TIMEOUT", true), "host.error.timeout"],
-    [new HostClientError("INCOMPATIBLE_PROTOCOL", false), "host.error.version"],
-    [
-      new HostClientError("REMOTE_ERROR", false, 401, "UNAUTHENTICATED"),
-      "host.error.auth",
-    ],
-    [
-      new HostClientError("REMOTE_ERROR", false, 403, "PERMISSION_DENIED"),
-      "host.error.permission",
-    ],
-    [new Error("server-secret"), "host.error.network"],
-  ])("maps errors to keys without retaining raw messages", (error, key) => {
-    expect(hostErrorKey(error)).toBe(key);
+describe("hostErrorKey", () => {
+  it("separates «could not reach it» from «it said no»", () => {
+    expect(hostErrorKey(new IdentityTransportError())).toBe(
+      "host.error.network",
+    );
+    expect(
+      hostErrorKey(new IdentityRequestError(401, "UNAUTHENTICATED", "")),
+    ).toBe("host.error.auth");
+    expect(
+      hostErrorKey(new IdentityRequestError(501, "NOT_IMPLEMENTED", "")),
+    ).toBe("host.error.unsupported");
+    expect(hostErrorKey(new IdentityRequestError(500, "INTERNAL", ""))).toBe(
+      "host.error.remote",
+    );
+  });
+
+  /** 连上了但回来的不是一份认得出的 hello：那是一个不同的故障。 */
+  it("calls an unrecognizable answer what it is", () => {
+    expect(hostErrorKey(new Error("bad shape"))).toBe(
+      "host.error.invalidResponse",
+    );
   });
 });

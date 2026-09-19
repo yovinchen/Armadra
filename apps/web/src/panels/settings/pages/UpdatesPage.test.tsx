@@ -13,12 +13,6 @@ import type {
   ShellUpdateState,
 } from "../../../updates/shell-updater";
 
-const session = vi.hoisted(() => ({
-  state: { status: "idle" } as Record<string, unknown>,
-  connect: vi.fn(async () => {}),
-  reset: vi.fn(),
-}));
-
 const store = vi.hoisted(() => ({
   panels: { settings: true },
   setPanel: vi.fn(),
@@ -53,13 +47,6 @@ const settings = vi.hoisted(() => ({
 const save = vi.hoisted(() => ({ mutate: vi.fn() }));
 
 const opened = vi.hoisted(() => ({ urls: [] as string[] }));
-
-vi.mock("../../../host/updates-session", () => {
-  const useUpdatesSession = <T,>(selector: (state: typeof session) => T) =>
-    selector(session);
-  useUpdatesSession.getState = () => session;
-  return { useUpdatesSession, UPDATES_PERMISSION: "updates:read" };
-});
 
 vi.mock("../../../store/canvas-store", () => {
   const useCanvasStore = <T,>(selector: (state: typeof store) => T) =>
@@ -139,8 +126,6 @@ function status() {
 }
 
 beforeEach(() => {
-  session.state = { status: "ready", client: { check: vi.fn() } };
-  session.connect.mockClear();
   store.setPanel.mockClear();
   save.mutate.mockClear();
   updates.check.mockClear();
@@ -172,7 +157,6 @@ describe("UpdatesPage", () => {
     draw({ state: "idle" });
     await waitFor(() => expect(status()).toBe("尚未检查更新"));
     expect(updates.check).not.toHaveBeenCalled();
-    expect(session.connect).toHaveBeenCalled();
   });
 
   /** One rendering assertion per state of design §4.1. */
@@ -262,8 +246,7 @@ describe("UpdatesPage", () => {
     expect(usePreferencesStore.getState().lastSettingsSection).toBe("host");
   });
 
-  it("routes a blocked session to the background service settings", async () => {
-    session.state = { status: "blocked", reason: "signedOut" };
+  it("routes a blocked release side to the background service settings", async () => {
     draw({ state: "idle" }, { kind: "blocked", reason: "signedOut" });
     expect(await screen.findByText("此设备尚未登录后台服务。")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "检查更新" })).toBeNull();

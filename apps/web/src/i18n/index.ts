@@ -8,7 +8,6 @@ import { collab } from "./collab";
 import { commands } from "./commands";
 import { executionHosts } from "./execution-hosts";
 import { explorer } from "./explorer";
-import { externalService } from "./external-service";
 import { format } from "./format";
 import { meta } from "./meta";
 import { launcher } from "./launcher";
@@ -80,7 +79,6 @@ export const MESSAGE_MODULES = {
   "host-identity": hostIdentity,
   "host-native": hostNative,
   integration,
-  "external-service": externalService,
   "legacy-archives": legacyArchives,
   "context-usage": contextUsage,
   "git-repository": gitRepository,

@@ -1,35 +1,18 @@
-import {
-  HostIdentityClient,
-  HostNativeCredentials,
-  isNativePageOrigin,
-  type HelloResponse,
-  type HostIdentityClientOptions,
-} from "@armadra/host-client";
-
 /**
- * 页面拿 Host 会话的共用判定（桌面壳原生 Host 会话 §4.3）。
+ * 页面所在的壳，以及在桌面壳里怎么拿到一张配对票（typescript-core §4.3）。
  *
- * 浏览器里的规则不变：Host 地址必须是 HTTPS 且与页面同源，会话走 Cookie。
- * 桌面壳里那条规则永远满足不了，改走原生传输：回环 HTTP 的 Host、
- * `Authorization: Bearer`、凭据只在页面内存里；票据由壳经 OS 私有控制通道
- * 取得，页面只能要一张票，要不到配对本身。
+ * 两种壳，两条认证路径：
  *
- * 「在壳里」= 有壳的桥（`window.armadra.identity`），且页面来源是壳能呈现的
- * 来源（`isNativePageOrigin`：回环 HTTP）。壳的静态服务端口由内核分配，所以
- * 来源判定不可能是常量；Cookie 不按端口隔离（electron-migration §2.1），这
- * 正是票据链必须保留、而不是换成 Cookie 会话的原因。
+ *  - **桌面壳**：页面由壳的回环 HTTP 静态服务提供，core 在另一个回环端口。
+ *    Cookie 按 host 不按 port 隔离（`127.0.0.1:A` 的 Cookie 会发往同 profile
+ *    的任何 `127.0.0.1:B`），所以这条路上不能用 Cookie 会话。壳经 preload 桥
+ *    签一张两分钟的票，页面拿它换一份只在内存里的 Bearer 凭据。壳的静态服务
+ *    端口由内核分配，所以「在壳里」不可能是一个常量判断。
+ *  - **服务器壳**：页面由 core 自己托管在一个 HTTPS 来源上，是一个真正的
+ *    浏览器会话——HttpOnly Cookie + 双提交的 CSRF 头，配对材料从 `#pair=` 来。
  *
- * 九个需要会话的模块都从这里拿判定、能力名和客户端，所以「壳内要不要
- * 自动登录」只在这一处决定。
+ * 判定只在这一处做，所以「壳内要不要自动登录」也只有一个答案。
  */
-
-/** Host 配好 HTTPS 认证时在 Hello 里报的能力名。 */
-export const BROWSER_SESSION_CAPABILITY = "identity.browser-session.v1";
-/** Host 在回环 HTTP 上对被允许的原生来源报的能力名。 */
-export const NATIVE_SESSION_CAPABILITY = "identity.native-session.v1";
-
-/** 地址本身就用不了会话传输的两种原因；文案由各模块的 `*.blocked.*` 给。 */
-export type HostSessionBlock = "tlsRequired" | "sameOrigin";
 
 /**
  * 壳取票失败的原因。前五个是壳报的稳定标记，
@@ -48,11 +31,11 @@ export type NativeSessionFailure = (typeof NATIVE_SESSION_FAILURES)[number];
 export class HostNativeSessionError extends Error {
   readonly name = "HostNativeSessionError";
   constructor(readonly reason: NativeSessionFailure) {
-    super(`Desktop shell could not issue a Host session ticket (${reason}).`);
+    super(`Desktop shell could not issue a session ticket (${reason}).`);
   }
 }
 
-/** 壳返回的票据：和 `armadra-host pair` 的 JSON 同一个形状。 */
+/** 壳返回的票据：和 core 私有控制通道签出来的那份 JSON 同一个形状。 */
 export interface NativeTicket {
   hostId: string;
   hostInstanceId: string;
@@ -62,7 +45,7 @@ export interface NativeTicket {
 }
 
 /**
- * 页面来源，按 Host 在 `Origin` 头里看到的拼法。`URL.origin` 对非特殊 scheme
+ * 页面来源，按 core 在 `Origin` 头里看到的拼法。`URL.origin` 对非特殊 scheme
  * 是 `"null"`，所以在那种情况下从 protocol 和 host 拼。
  */
 export function pageOrigin(): string | undefined {
@@ -72,6 +55,35 @@ export function pageOrigin(): string | undefined {
   if (location.protocol && location.host)
     return `${location.protocol}//${location.host}`;
   return undefined;
+}
+
+function loopbackHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
+  );
+}
+
+/**
+ * 壳能呈现的那种来源：回环上的明文 HTTP。
+ *
+ * 这是**拼法判断，不是授权**——浏览器也可以停在一个回环 HTTP 来源上，它只是
+ * 造不出票，因为票只有同用户的私有通道签得出来。core 的
+ * `identity/origin.ts::nativeOrigin` 是同一条规则的服务端一半。
+ */
+export function isNativePageOrigin(value: string | undefined): boolean {
+  if (!value) return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:") return false;
+  if (url.username || url.password) return false;
+  if (url.pathname !== "" && url.pathname !== "/") return false;
+  return loopbackHost(url.hostname.toLowerCase());
 }
 
 /** 壳的取票桥；不在壳里是 `undefined`。 */
@@ -88,76 +100,6 @@ function ticketBridge(): { ticket(): Promise<unknown> } | undefined {
  */
 export function isNativeShell(): boolean {
   return ticketBridge() !== undefined && isNativePageOrigin(pageOrigin());
-}
-
-function loopbackHost(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    hostname === "[::1]" ||
-    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)
-  );
-}
-
-/** 这个 Host 地址能不能承载会话传输；`null` 表示可以。 */
-export function hostSessionBlock(address: string): HostSessionBlock | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return "tlsRequired";
-  }
-  if (isNativeShell()) {
-    if (url.protocol === "http:" && loopbackHost(url.hostname)) return null;
-    // 壳里配了一个远端地址：页面自己停在回环 HTTP 来源上，HTTPS 同源不可能
-    // 成立，明说而不是假装能登录。
-    return url.protocol === "https:" ? "sameOrigin" : "tlsRequired";
-  }
-  if (url.protocol !== "https:") return "tlsRequired";
-  if (url.origin !== globalThis.location?.origin) return "sameOrigin";
-  return null;
-}
-
-/** 当前环境要求 Hello 报的会话能力名。 */
-export function hostSessionCapability(): string {
-  return isNativeShell()
-    ? NATIVE_SESSION_CAPABILITY
-    : BROWSER_SESSION_CAPABILITY;
-}
-
-/** Hello 报没报当前环境能用的会话能力。 */
-export function hasHostSessionCapability(hello: HelloResponse): boolean {
-  return hello.capabilities.includes(hostSessionCapability());
-}
-
-let credentials: HostNativeCredentials | null = null;
-
-/**
- * 壳内所有身份客户端共用的一份原生凭据。共用是关键：每个客户端各配一次
- * 对，Host 上就会多出九台「本机桌面」，而且各自的轮转会互相作废。
- */
-export function nativeCredentials(): HostNativeCredentials {
-  credentials ??= new HostNativeCredentials({ ticket: fetchNativeTicket });
-  return credentials;
-}
-
-/** 测试与登出后重置：丢掉这份凭据，下一次会重新取票。 */
-export function resetNativeSession(): void {
-  credentials = null;
-}
-
-/**
- * 按环境构造身份客户端：浏览器走 Cookie，壳内走共享的原生凭据。
- * 构造失败（地址不合规）照旧抛 `HostIdentityError`，由调用方映射。
- */
-export function createHostIdentity(
-  options: Omit<HostIdentityClientOptions, "transport" | "pageOrigin">,
-): HostIdentityClient {
-  if (!isNativeShell()) return new HostIdentityClient(options);
-  return new HostIdentityClient({
-    ...options,
-    pageOrigin: pageOrigin(),
-    transport: { kind: "native", credentials: nativeCredentials() },
-  });
 }
 
 function isFailure(value: unknown): value is NativeSessionFailure {
@@ -188,7 +130,7 @@ function validTicket(value: unknown): value is NativeTicket {
  * 结构留不下来，所以拒绝走返回值而不是异常。
  *
  * 认不出的东西一律 `shellUnavailable`。票据不进日志、不进存储，原样交给
- * `pair()`。
+ * `POST /api/identity/pair`。
  */
 export async function fetchNativeTicket(): Promise<string> {
   const bridge = isNativeShell() ? ticketBridge() : undefined;
@@ -225,3 +167,16 @@ export function nativeSessionFailureKey(error: unknown): string | null {
     ? `hostNative.blocked.${error.reason}`
     : null;
 }
+
+/**
+ * R7a 之前还在用 `packages/host-client` 的那两个面从这里取旧接线。
+ * 它们改打 JSON 面之后 `host-client-compat.ts` 整文件删除。
+ */
+export {
+  createHostIdentity,
+  hasHostSessionCapability,
+  hostSessionBlock,
+  nativeCredentials,
+  resetNativeSession,
+  type HostSessionBlock,
+} from "./host-client-compat";

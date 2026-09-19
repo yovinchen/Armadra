@@ -6,53 +6,34 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import {
-  CapabilityState,
-  HostClientError,
-  type HelloResponse,
-} from "@armadra/host-client";
 
 const probe = vi.fn();
 vi.mock("../../../host/connection", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../host/connection")>()),
   probeHost: (...args: unknown[]) => probe(...args),
 }));
+vi.mock("./HostIdentityPanel", () => ({
+  HostIdentityPanel: () => null,
+}));
 
 import { HostPage } from "./HostPage";
 import { usePreferencesStore } from "../../../app/preferences-store";
 import {
-  DEFAULT_HOST_ADDRESS,
-  HOST_ADDRESS_STORAGE_KEY,
-} from "../../../host/connection";
+  IdentityRequestError,
+  IdentityTransportError,
+  type IdentityHello,
+} from "../../../api/identity";
 import { SETTINGS_SECTIONS } from "../nav";
 
-const hello: HelloResponse = {
-  $typeName: "armadra.v1.HelloResponse",
+const hello: IdentityHello = {
   hostId: "host-confirmed",
   hostInstanceId: "process-confirmed",
   maxFrameBytes: 1_048_576,
-  capabilities: ["protocol.hello.v1"],
-  capabilityStatus: [],
-  protocol: { $typeName: "armadra.v1.ProtocolVersion", major: 1, minor: 1 },
+  capabilities: ["identity.native-session.v1"],
+  protocol: { major: 1, minor: 1 },
 };
 
-function unsupported(name: string) {
-  return {
-    $typeName: "armadra.v1.CapabilityStatus" as const,
-    name,
-    state: CapabilityState.UNSUPPORTED,
-    reason: "host.capability.reserved",
-  };
-}
-
 beforeEach(() => {
-  const values = new Map<string, string>();
-  vi.stubGlobal("localStorage", {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => values.set(key, value),
-    removeItem: (key: string) => values.delete(key),
-    clear: () => values.clear(),
-  });
   probe.mockReset();
   usePreferencesStore.setState({ locale: "zh-CN" });
 });
@@ -66,10 +47,6 @@ describe("HostPage", () => {
     const section = SETTINGS_SECTIONS.find((entry) => entry.id === "host");
     expect(section?.groupKey).toBe("settings.group.connection");
     render(<HostPage />);
-    const address = screen.getByRole("textbox", {
-      name: "服务地址",
-    }) as HTMLInputElement;
-    expect(address.value).toBe(DEFAULT_HOST_ADDRESS);
     expect(screen.getByRole("status").textContent).toBe("尚未检查连接");
     expect(
       screen.getByText(/不会切换当前正在运行的工作空间或终端/),
@@ -77,150 +54,71 @@ describe("HostPage", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  it("submits a keyboard-accessible form and keeps confirmed identities in expandable details", async () => {
+  it("keeps a confirmed identity in expandable details", async () => {
     probe.mockResolvedValue(hello);
     render(<HostPage />);
-    const address = screen.getByRole("textbox", {
-      name: "服务地址",
-    }) as HTMLInputElement;
-    expect(address.inputMode).toBe("url");
-    expect(address.autocomplete).toBe("off");
-    fireEvent.change(address, {
-      target: { value: "https://host.test/proxy/" },
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
     });
-    fireEvent.submit(address.closest("form")!);
-    await screen.findByText("已确认服务响应");
-    expect(probe).toHaveBeenCalledTimes(1);
-    expect(probe.mock.calls[0]?.[0]).toBe("https://host.test/proxy/");
-    expect(localStorage.getItem(HOST_ADDRESS_STORAGE_KEY)).toBe(
-      "https://host.test/proxy/",
-    );
-    const summary = screen.getByText("连接详情");
-    const details = summary.closest("details")!;
-    expect(details.open).toBe(false);
-    fireEvent.click(summary);
-    expect(details.open).toBe(true);
+    expect(screen.getByRole("status").textContent).toBe("已确认服务响应");
+    const details = screen.getByText("连接详情").closest("details");
+    expect(details).toBeTruthy();
+    expect(details?.open).toBe(false);
     expect(screen.getByText("host-confirmed")).toBeTruthy();
     expect(screen.getByText("process-confirmed")).toBeTruthy();
-    fireEvent.change(address, { target: { value: DEFAULT_HOST_ADDRESS } });
-    expect(screen.queryByText("host-confirmed")).toBeNull();
-    expect(screen.queryByText("连接详情")).toBeNull();
-    expect(screen.getByRole("status").textContent).toBe("尚未检查连接");
+    // 能力名原样列出：这一页说的是 core 报了什么，不是页面猜它支持什么。
+    expect(screen.getByText("identity.native-session.v1")).toBeTruthy();
   });
 
-  it("shows reserved surfaces as unsupported, and silence as not reported", async () => {
-    probe.mockResolvedValue({
-      ...hello,
-      capabilityStatus: [
-        unsupported("presence"),
-        unsupported("accountBinding"),
-      ],
-    });
-    render(<HostPage />);
-    fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
-    await screen.findByText("已确认服务响应");
-    fireEvent.click(screen.getByText("连接详情"));
-    expect(screen.getByText("协同在场与编辑租约")).toBeTruthy();
-    expect(screen.getByText("节点账号绑定")).toBeTruthy();
-    expect(screen.getAllByText("不支持")).toHaveLength(2);
-    expect(screen.queryByText("未报告")).toBeNull();
-
-    // A Host that says nothing is not claiming support either.
-    cleanup();
-    probe.mockResolvedValue(hello);
-    render(<HostPage />);
-    fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
-    await screen.findByText("已确认服务响应");
-    fireEvent.click(screen.getByText("连接详情"));
-    expect(screen.getAllByText("未报告")).toHaveLength(2);
-    expect(screen.queryByText("不支持")).toBeNull();
-  });
-
-  it("reports unsupported persistent identity accurately for a legacy service", async () => {
-    probe.mockResolvedValue({
-      ...hello,
-      hostId: "",
-      protocol: { ...hello.protocol!, minor: 0 },
-    });
-    render(<HostPage />);
-    fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
-    await screen.findByText("已确认服务响应");
-    expect(screen.getByText("此版本尚未提供持久服务标识")).toBeTruthy();
-    expect(screen.getByText("process-confirmed")).toBeTruthy();
-    expect(screen.queryByText("host-confirmed")).toBeNull();
-  });
-
-  it("announces validation errors without native browser validation or network requests", async () => {
-    render(<HostPage />);
-    const address = screen.getByRole("textbox", { name: "服务地址" });
-    fireEvent.change(address, {
-      target: { value: "https://host.test?token=secret" },
-    });
-    fireEvent.submit(address.closest("form")!);
-    await screen.findByText(/请输入有效的服务地址/);
-    expect(address.getAttribute("aria-invalid")).toBe("true");
-    expect(address.getAttribute("aria-describedby")).toContain(
-      screen.getByRole("status").id,
+  /**
+   * 远端返回的文字不进界面：一句可以本地化的话说明该去看哪一边，
+   * 原样打印一段服务端消息既翻译不了，也可能带出不该出现在屏幕上的东西。
+   */
+  it("localizes a refusal without printing remote text", async () => {
+    probe.mockRejectedValue(
+      new IdentityRequestError(403, "PERMISSION_DENIED", "raw remote detail"),
     );
-    expect(screen.getByRole("status").textContent).not.toContain("secret");
-    expect(probe).not.toHaveBeenCalled();
-    expect(localStorage.getItem(HOST_ADDRESS_STORAGE_KEY)).toBeNull();
-  });
-
-  it("clears success when another check fails and localizes without remote text", async () => {
-    probe
-      .mockResolvedValueOnce(hello)
-      .mockRejectedValueOnce(new Error("remote-token-secret"));
     render(<HostPage />);
-    const check = screen.getByRole("button", { name: "检查连接" });
-    fireEvent.click(check);
-    await screen.findByText("已确认服务响应");
-    fireEvent.click(check);
-    await screen.findByText(/无法连接。/);
-    expect(screen.queryByText("host-confirmed")).toBeNull();
-    expect(screen.getByRole("status").textContent).toContain(
-      "桌面端当前仅允许默认本机地址",
-    );
-    expect(screen.getByRole("status").textContent).not.toContain(
-      "remote-token-secret",
-    );
-    expect(probe).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
+    });
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("拒绝访问");
+    expect(status.textContent).not.toContain("raw remote detail");
   });
 
   it("allows cancellation while checking and ignores the old result", async () => {
-    let complete!: (value: HelloResponse) => void;
+    let resolve!: (value: IdentityHello) => void;
     probe.mockReturnValue(
-      new Promise((resolve) => {
-        complete = resolve;
+      new Promise<IdentityHello>((done) => {
+        resolve = done;
       }),
     );
     render(<HostPage />);
-    const check = screen.getByRole("button", {
-      name: "检查连接",
-    }) as HTMLButtonElement;
-    fireEvent.click(check);
-    expect(check.disabled).toBe(true);
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
+    });
     expect(screen.getByRole("status").textContent).toBe("正在检查连接…");
-    fireEvent.click(screen.getByRole("button", { name: "取消" }));
-    expect(check.disabled).toBe(false);
-    expect(probe.mock.calls[0]?.[1].aborted).toBe(true);
-    await act(async () => complete(hello));
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    });
     expect(screen.getByRole("status").textContent).toBe("已取消检查");
-    expect(screen.queryByText("host-confirmed")).toBeNull();
+    await act(async () => {
+      resolve(hello);
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("status").textContent).toBe("已取消检查");
   });
 
-  it("updates status and control translations without repeating a request", async () => {
-    probe.mockRejectedValue(new HostClientError("TIMEOUT", true));
+  it("updates status translations without repeating a request", async () => {
+    probe.mockRejectedValue(new IdentityTransportError());
     render(<HostPage />);
-    fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
-    await screen.findByText("连接检查超时，请稍后重试。");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "检查连接" }));
+    });
+    expect(screen.getByRole("status").textContent).toContain("无法连接");
     act(() => usePreferencesStore.setState({ locale: "en" }));
-    expect(
-      screen.getByRole("button", { name: "Check connection" }),
-    ).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toBe(
-      "The connection check timed out. Try again later.",
-    );
+    expect(screen.getByRole("status").textContent).toContain("Cannot connect");
     expect(probe).toHaveBeenCalledTimes(1);
   });
 });

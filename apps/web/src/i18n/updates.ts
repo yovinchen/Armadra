@@ -116,17 +116,9 @@ export const updates: MessageModule = {
     "updates.blocked.noSession": "此后台服务版本不支持浏览器会话登录。",
     "updates.blocked.signedOut": "此设备尚未登录后台服务。",
     "updates.blocked.noPermission": "此设备没有读取更新信息的权限。",
+    "updates.blocked.noReleaseSource":
+      "此版本没有可询问的发布来源，无法判断有没有新版本。",
     "updates.blocked.action": "前往后台服务设置",
-    "updates.error.network": "请求未能完成，请稍后重试。",
-    "updates.error.unauthenticated": "登录已失效，请重新登录后再试。",
-    "updates.error.permission": "此设备没有读取更新信息的权限。",
-    "updates.error.unsupported": "此后台服务不提供更新检查。",
-    "updates.error.invalid": "更新检查请求无效。",
-    "updates.error.response": "后台服务的回复无法解析。",
-    "updates.error.cancelled": "检查已取消。",
-    "updates.error.notFound": "此后台服务没有更新检查接口。",
-    "updates.error.conflict": "更新信息已变化，请重新检查。",
-    "updates.error.unknownOutcome": "请求结果未知，请重新检查。",
   },
   en: {
     "updates.nav": "Updates",
@@ -252,21 +244,8 @@ export const updates: MessageModule = {
       "This device is not signed in to the background service.",
     "updates.blocked.noPermission":
       "This device is not allowed to read update information.",
+    "updates.blocked.noReleaseSource":
+      "This build has no release source to ask, so it cannot tell whether a newer version exists.",
     "updates.blocked.action": "Open background service settings",
-    "updates.error.network": "The request did not complete. Try again later.",
-    "updates.error.unauthenticated":
-      "The session expired. Sign in again and retry.",
-    "updates.error.permission":
-      "This device is not allowed to read update information.",
-    "updates.error.unsupported":
-      "This background service does not offer update checks.",
-    "updates.error.invalid": "The update request was not valid.",
-    "updates.error.response":
-      "The background service's answer could not be parsed.",
-    "updates.error.cancelled": "The check was cancelled.",
-    "updates.error.notFound":
-      "This background service has no update check method.",
-    "updates.error.conflict": "Update information changed. Check again.",
-    "updates.error.unknownOutcome": "The result is unknown. Check again.",
   },
 };
