@@ -37,7 +37,7 @@ Command Q /「退出并停止后台」停止配置目录的 Host，再结束桌�
 启动器从开发构建目录或 `process.resourcesPath` 定位 `armadra-host`，调用 `start --output protobuf`，
 验证服务身份、`http://127.0.0.1:43121` 和实际页面 Origin。管理操作不暴露给页面；唯一的例外是只读通道
 `identity:ticket`：它在同一把启停锁下运行 `pair --origin <页面来源> --device-name 本机桌面`，
-把绑定本次 Host 实例的一次性票据交给页面换取 Bearer 会话（[设计](../../docs/design/host-native-session.md)），
+把绑定本次 Host 实例的一次性票据交给页面换取 Bearer 会话（[设计](../../docs/history/host-native-session.md)），
 失败只返回稳定的 `{ ok: false, error: { code } }`，不带路径、退出码或子进程输出。
 已有服务地址/来源不兼容时报告错误，不自动重配；失败不阻断 Runtime/UI。启动与退出串行协调。
 

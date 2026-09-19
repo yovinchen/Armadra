@@ -15,7 +15,8 @@
 | **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`） |
 | **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | 全部已合入            |
 | R7a    | GitHub 与自动化改打 JSON 面（R7 的前置）                                           | 已合入                |
-| R7     | 收尾                                                                               | 未开始                |
+| R7c    | 页面的身份 / 会话 / 事件流 / 更新脱离 `host-client`                                | 已合入                |
+| R7d    | 收尾：删 Rust / Go / proto，CI、规则、打包与文档收口                               | 仓库层已合入（本节）  |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -506,3 +507,72 @@ R7 要删 `proto/`、`packages/protocol`、`packages/host-client` 与 core 里�
 - `pnpm --filter @armadra/desktop test`、`pnpm --filter @armadra/web test`、`pnpm -r typecheck`、`pnpm check` 全绿。
 - core 侧新用例：自动化 JSON 面每条路由一条（形状、错误码、匿名回环、两张面对账）、GitHub JSON 面六条（24 个动词齐、工作空间缺席、动词不存在、零值照写、两张面对账、列表不带正文）、Hello 两张面逐字段对账、迁移 0020 + 转换一条（字节行 → JSON 行 + 摘要确实变了 + 跑第二遍无操作）。
 - web 侧新用例：两个 api 模块的 zod（`int64` → `bigint`、`bytes` → `Uint8Array`、摊平的 `oneof` → `{ case, value }`、认不出来的枚举名落回 `UNSPECIFIED`）、请求形状（工作空间在查询串、`bigint` 发成字符串、载荷发原文）、错误分档各一条。既有的面板用例改到 JSON 假服务上继续绿。
+
+## 17. R7d-repo：仓库层的收尾
+
+R7d 分两条线：源码层（`apps/desktop/src/**`、`apps/web/**`、删 `packages/protocol` 与 `packages/host-client`）与本节记的仓库层。两条线同时进行，所以本节里的「全绿」指的是仓库层这几道门，不含 `typecheck`——它要等源码层删掉 protobuf 引用之后才可能过。
+
+### 17.1 迁移合成一个目录
+
+`apps/runtime/migrations` 的 0001–0014 搬进 `apps/desktop/src/core/db/migrations/`，字节不变（`migrations.lock` 里的 sha256 逐条对得上，只是键从两个目录并成一个）。之后迁移只有一个来源，0001–0020 一条连续序列：
+
+- `resolveMigrationsDir()` 的查找顺序是 `ARMADRA_CORE_MIGRATIONS_DIR` → 包内 `resources/migrations` → 往上走到检出里的 `apps/desktop/src/core/db/migrations`。`ARMADRA_MIGRATIONS_DIR` 这个名字不再存在。
+- `resolveUnifiedMigrationsDir()` 与 `unifiedEnabled()` 删除，`openDatabase` 少一个 `unifiedMigrationsDir` 参数。**单向门留着**：判据从「传没传第二个目录」变成「这批迁移里含不含 15」，过门前照旧 `VACUUM INTO` 一份 `canvas.db.before-ts-core-<时间戳>` 并验证那份副本打得开。已经装了旧版本的机器仍然会第一次经过这道门，所以这段逻辑一个字都不能少。
+- `repo.rules.json` 的 `migrations.sources` 收成一条，`reserved` 占位删除；`tools/repo-check.mjs` 里 `reserved` 与 `go-constants` 两个分支随之删除。
+
+### 17.2 删掉的目录与工具
+
+| 删的东西                                                                                          | 行数       |
+| ------------------------------------------------------------------------------------------------- | ---------- |
+| `apps/runtime/` + `crates/` + `Cargo.toml` / `Cargo.lock`（含 interop 测试）                      | 154,016    |
+| `apps/host/`（含 `gen/` 的生成码与 `go.mod` / `go.sum`）                                          | 144,662    |
+| `proto/`（22 份 schema + 191 份 fixture）与 `tools/protocol.mjs`                                  | 这一批合计 |
+| 写入所有权的 e2e 与 harness（`tools/ownership*`、`tools/canvas-ownership-*`）                     | 同上       |
+| Host 的烟囱测试、`tools/github-e2e.mjs` 与它的 mock、Rust↔Go 归档互通                            | 同上       |
+| `tools/probes/core-terminal-bench.mjs`（比较两套实现）、`tools/probes/conpty-smoke`（Rust crate） | 同上       |
+
+`tools/probes/` 里另外三个探针（`connection-drag`、`git-tool-window`、`canvas-stress`）**保留**：它们量的是页面，后端只是背景。启动行从 `target/debug/armadra-runtime` 换成 `node apps/desktop/out/core/main.js --data-dir …`，读 `endpoints.json` 的那一段不动（core 写同一个文件的同一段）。
+
+`agent:smoke` 与 `handoff:read-smoke` 一并删除：两者的参数是「受管二进制的绝对路径」，而那两个二进制不存在了。它们验证的事实由 core 各域的用例覆盖，但**真 CLI 的端到端那一层目前没有替代品**——对着 core 的等价脚本要重写，还没有。
+
+### 17.3 打包
+
+这个壳不再有 sidecar 二进制，所以 `stage-binaries.mjs`、`sidecar-targets.mjs`、`prepare-host.mjs` 及其测试删除，`dist.mjs` 从三步变两步。`after-pack.mjs` 自己持有 `bundleResources()`（hook 客户端，Windows 另加 session-host），并新增 `migrationResources()`：把 `src/core/db/migrations/*.sql` 逐个放进 `Resources/migrations/`——正是打好包的 core 找迁移的那个位置。之前谁也没放，打包后的 core 只能靠「往上走到检出」这条开发期路径。
+
+发布侧：组件包（host / worker / hook / session-host 的 tar/zip）与 `package-components.mjs` 删除，`artifacts.mjs` 只剩桌面产物与 `armadra-web_<version>.tar.gz`（服务器壳要托管的那份前端产物）。`version.mjs` 的版本源从 `Cargo.toml` 换成根 `package.json`，另两处是两种壳的 manifest。`compatibility.json` 收成一条 `minimumInstalled`：`protocolMajor` / `minimumProtocolMinor` 曾经必须等于 Go Host 的 `ProtocolMajor`，那个常量不存在了，所以它们现在是 `normalize()` 会拒绝的未知键（有一条用例就断言这件事）。
+
+`verify-linux-glibc-baseline.sh` 保留但换了检查对象：从 `target/release` 里的四个二进制换成 `apps/desktop/release/linux*-unpacked/` 里的 `armadra` 启动器与 asar 外的原生插件（node-pty 的 `pty.node` 与 `spawn-helper`）。原生插件是在 runner 上现编的，所以这条检查仍然是「runner 镜像往前走了」的出声处。
+
+### 17.4 CI
+
+`ci.yml` 删 Rust / Go 的 setup、缓存、`Rust lint`、`Rust 测试`、`Go vet 与测试`、`Go 交叉编译` 与`三端协议契约`。三平台矩阵保留（平台差异在终端域，不在前端），每行跑：`pnpm check`、`pnpm repo:test` / `release:test`、`pnpm -r test` / `typecheck`、`pnpm --filter @armadra/web build`、桌面壳四个 target 的构建。`go_race` 矩阵键随之消失。
+
+`release.yml` 删`构建受管二进制`、`打组件包`、Rust / Go 工具链与缓存、`腾出磁盘`（那是为 `cargo test --workspace` 腾的）、`verify` 里的 `cargo test` / `go test` / `protocol:*`，以及 build 矩阵里只有组件包用的 `triple` 列。Linux glibc 基线保留。
+
+### 17.5 根脚本与规则
+
+根 `package.json`：删 `protocol:*`、`rust:fmt`、`check:rust` 与那批被删脚本对应的入口；`libs:build` 变成只 build `@armadra/shared`；`check` = `libs:build + format:check + typecheck + repo:check + ci:workflows + release:check`。
+
+`armadra.sh`：`doctor` 不再找 cargo / rustc，`install` 不再 `cargo fetch`，`check` 就是 `pnpm check`，`test` 是 shared 构建加 `pnpm -r test`，`build` 只构建前端与两种壳的产物。`run web` 起的是 `node apps/desktop/out/core/main.js`，`runtime_endpoint()` 读 `endpoints.json` 的那段不变——core 写的是同一个文件的同一段。
+
+`repo.rules.json`：根白名单去掉 `Cargo.toml` / `Cargo.lock` / `crates` / `proto`，黑名单去掉 `target/` 与 `apps/desktop/resources/`（两者都不再产生），命名规则只剩 `packages`，`fileSize.extensions` 只剩 `.ts` / `.tsx` / `.mjs` / `.js`，`proto` 段整段删除。`tools/repo-check.mjs` 的 `proto-coverage` 规则与 `readAll()` 随之删除，`RULES` 从 8 条变 7 条。
+
+### 17.6 文档
+
+四份只描述分进程时代的文档移进 `docs/history/` 并在索引里登记为历史：`host-protocol-design.md`、`host-business-migration.md`、`host-native-session.md`、`host-device-auth.md`（最后一份原本在 `guides/`，因为它讲的是 `armadra-host` 这个二进制的命令面）。
+
+`guides/{architecture,development,ci-release,agent-collaboration}.md` 与 `AGENTS.md` 按现状重写，不是加注释：三层结构的中间一层现在写的是 `apps/desktop/src/core`，端口表少了 Host 的 43121、多了迁移目录那一行，检查表里没有 cargo 与 go。`contracts/v3-agent-terminal-plan.md` 只在抬头多一行说明执行服务已经换成 core，§N 编号与正文不动。
+
+### 17.7 验证
+
+在本线的 worktree 里跑，源码层尚未合入：
+
+| 门                                                                                   | 结果                                                          |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| `pnpm repo:check`                                                                    | 通过（7 条规则）                                              |
+| `pnpm ci:workflows`                                                                  | 通过（两份工作流）                                            |
+| `pnpm release:check`                                                                 | 通过（三处版本一致）                                          |
+| `node --test tools/release/*.test.mjs tools/ci/*.test.mjs tools/repo-check.test.mjs` | 通过                                                          |
+| `node --test apps/desktop/scripts/*.test.mjs`                                        | 通过                                                          |
+| `pnpm --filter @armadra/desktop dist`（macOS arm64）                                 | 见 §17.8                                                      |
+| `pnpm check` 里的 `typecheck`                                                        | **预期失败**：源码里还有 `@armadra/protocol` 的引用，归源码层 |

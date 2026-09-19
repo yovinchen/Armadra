@@ -21,7 +21,6 @@
 | [Agent 协作](guides/agent-collaboration.md)            | CLI 能力、上下文与消息箱协议     |
 | [界面规范](guides/ui-refinement.md)                    | 布局、交互与验收范围             |
 | [客户端平台](guides/client-platforms.md)               | 各平台职责与适配边界             |
-| [Host 设备认证](guides/host-device-auth.md)            | owner 多设备认证接口与当前范围   |
 | [原生白板参考](guides/native-whiteboard-references.md) | 原生对象作为 Agent 资料的规则    |
 
 代码边界与验证入口见[项目约定](../AGENTS.md)。
@@ -30,30 +29,27 @@
 
 以下是目标方案，不代表功能已经交付；进度以 `status/` 与源码为准。
 
-| 文档                                                 | 内容                                       |
-| ---------------------------------------------------- | ------------------------------------------ |
-| [平台总纲](design/canvas-platform-design.md)         | 需求、M0–M8 阶段与验收                     |
-| [Host 与协议](design/host-protocol-design.md)        | Go Host、Rust Worker、数据所有权与设备接入 |
-| [Agent 自动化](design/agent-automation-design.md)    | 交接、循环卡片、计划与命名                 |
-| [Git / GitHub](design/git-github-design.md)          | worktree、提交、Issues 与 PR               |
-| [Git 工具窗口](design/git-tool-window.md)            | IDEA 式日志三栏、提交页、多仓库合并图      |
-| [编辑器与浏览器](design/editor-browser-design.md)    | 语言服务、远程文件与受控浏览器             |
-| [终端宿主](design/terminal-host-design.md)           | 持久终端、ConPTY、资源与快捷键             |
-| [Windows 早期方案](design/windows-session-daemon.md) | 早期设计，本轮目标以终端宿主方案为准       |
-| [仓库结构与校验](design/repository-structure.md)     | 目标目录、统一规则、repo-check 与 CI       |
+| 文档                                                 | 内容                                  |
+| ---------------------------------------------------- | ------------------------------------- |
+| [平台总纲](design/canvas-platform-design.md)         | 需求、M0–M8 阶段与验收                |
+| [Agent 自动化](design/agent-automation-design.md)    | 交接、循环卡片、计划与命名            |
+| [Git / GitHub](design/git-github-design.md)          | worktree、提交、Issues 与 PR          |
+| [Git 工具窗口](design/git-tool-window.md)            | IDEA 式日志三栏、提交页、多仓库合并图 |
+| [编辑器与浏览器](design/editor-browser-design.md)    | 语言服务、远程文件与受控浏览器        |
+| [终端宿主](design/terminal-host-design.md)           | 持久终端、ConPTY、资源与快捷键        |
+| [Windows 早期方案](design/windows-session-daemon.md) | 早期设计，本轮目标以终端宿主方案为准  |
+| [仓库结构与校验](design/repository-structure.md)     | 目标目录、统一规则、repo-check 与 CI  |
 
 按域展开的实施方案：
 
 | 文档                                                            | 内容                                                           |
 | --------------------------------------------------------------- | -------------------------------------------------------------- |
-| [Host 业务所有权迁移](design/host-business-migration.md)        | H01 第二阶段：其余五个业务域的六步切换                         |
 | [语言服务](design/language-service.md)                          | 编辑器 LSP 集成的接口、文件与批次                              |
 | [浏览器与远端执行补全](design/remote-and-browser-completion.md) | B01 / H02 首轮之外的剩余部分                                   |
 | [发布、更新与服务安装](design/updates-and-service-install.md)   | S03：下载、自动更新、签名发布与系统服务                        |
 | [React Flow 画布](design/canvas-react-flow.md)                  | 画布换成 React Flow：能力映射与批次                            |
 | [Agent 协作通道](design/agent-collaboration-channels.md)        | Pi / OMP / Copilot 的 Hook 适配与省资源通道                    |
 | [Agent 接入统一管理](design/agent-integration.md)               | Hook + 技能一个安装单元、启动时注入、旧残留修复                |
-| [桌面壳原生 Host 会话](design/host-native-session.md)           | 打包桌面壳经私有通道取票、Bearer 会话                          |
 | [全面修改方案（2026-09）](design/overhaul-plan.md)              | 本轮总纲：界面补齐、Mermaid、功能复查、TS 核心、收尾与多端编译 |
 | [服务器账号、中转与共享](design/server-accounts-and-sharing.md) | 多 principal、组与授予编译成 scope、接口与现有代码的预留点     |
 | [桌面壳迁移到 Electron](design/electron-migration.md)           | 换壳、`<webview>` 浏览器节点、画布性能前置与六条工作流         |
@@ -79,6 +75,17 @@
 ## history/ 与 research/
 
 `history/` 保存已被取代的需求、界面方案、实施与交接记录；[实施批次记录](history/platform-implementation-log.md)归档各提交的详细验证过程。
+
+分进程时代（Go Host + Rust Worker + 写入所有权切换）的四份文档在 R7d 随那两个进程一起移进来，只用于追溯：
+
+| 文档                                                      | 当时描述的东西                            |
+| --------------------------------------------------------- | ----------------------------------------- |
+| [Host 与协议](history/host-protocol-design.md)            | Go Host、Rust Worker、Protobuf 与设备接入 |
+| [Host 业务所有权迁移](history/host-business-migration.md) | 五个业务域在两个实现之间的六步切换        |
+| [桌面壳原生 Host 会话](history/host-native-session.md)    | 打包桌面壳经私有通道取票、Bearer 会话     |
+| [Host 设备认证](history/host-device-auth.md)              | `armadra-host` 的 owner 多设备认证接口    |
+
+现状对应的文档：进程与装配见[架构](guides/architecture.md)，core 的线上形状见 [core 的 JSON 面](contracts/core-json-api.md)，服务器壳的账号模型见[服务器账号、中转与共享](design/server-accounts-and-sharing.md)。
 `research/` 保存研究材料：[M0 探针记录](research/m0-executor-probes.md)与[运行入口](../tools/probes/README.md)、[UI 风格参考](research/ui-style-references/README.md)、[立项会话归档](research/chatgpt-conversation-archive.md)。
 
 架构变化同步更新 `guides/architecture.md`。

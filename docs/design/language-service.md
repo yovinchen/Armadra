@@ -269,7 +269,7 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 | `WorkerHelloResponse.capabilities` | 串行连接声明 `language.v1`（能探测与开会话）；`--language-link` 连接声明 `language.link.v1`                                                                                                                                                                     |
 | `resources.proto`                  | `PLATFORM_COMPONENT_KIND_LANGUAGE_SERVER = 6`，`PlatformComponentMetrics` 不加字段，`name` 为可执行文件名                                                                                                                                                       |
 
-按 [proto/README.md](../../proto/README.md) 的规则每个 `.proto` 至少一个 `proto/fixtures/*.hex` 与三端契约测试：`language_capabilities.hex`（含 UNSUPPORTED + reason、`optional pid` 缺席）、`language_session.hex`、`language_frame_message.hex`（payload 含中文与 emoji）、`language_frame_ack.hex`、`language_apply_edit.hex`（map 字段）。
+（R7d：跨进程协议已整体删除，这里原本要求的 `.proto` 与三端 fixture 不再存在。同样的事实——UNSUPPORTED 带 reason、`pid` 可缺席、payload 里的中文与 emoji、apply-edit 的 map——由 core 的语言域用例直接断言。）
 
 ### 2.9 Runtime ↔ Web 接口（camelCase JSON；错误 `{ code, message }`）
 

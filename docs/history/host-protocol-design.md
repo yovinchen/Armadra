@@ -1,8 +1,10 @@
 # 常驻 Host、Protobuf 与跨端服务设计
 
-> 状态：目标方案，待实施。需求范围以[总纲](./canvas-platform-design.md)为准。
+> 历史文档（R7d）：它描述的是 Go Host / Rust Worker 分进程、写入所有权在两个实现之间切换的那个时代。那两个进程与那套机制都已删除，业务由一个 TypeScript core 执行（[TypeScript Core](../design/typescript-core.md)、[架构](../guides/architecture.md)）。只用于追溯。
+
+> 状态：目标方案，待实施。需求范围以[总纲](../design/canvas-platform-design.md)为准。
 > 核心决定：Go 管理服务与业务状态，Rust 管理执行；前端是可随时断开的客户端。
-> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](../design/electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 ## 1. 拓扑与职责
 
@@ -53,7 +55,7 @@ Go Host 不替换现有 Rust 终端引擎；将 `apps/runtime` 渐进拆为执�
 
 ### 2.1 服务器模式命令（已实现）
 
-`armadra-host install | uninstall | status | logs | upgrade | version`，实现见 [Host README](../../apps/host/README.md#服务器模式)。
+`armadra-host install | uninstall | status | logs | upgrade | version`（该二进制与它的 README 已随 R7d 删除）。
 
 - **只生成定义，不托管**：`install` 写出 launchd plist / systemd unit / Windows `sc.exe` 脚本，绝不调用 launchctl、systemctl、sc.exe，也不启用或启动任何东西；注册与否始终是运维的动作。`uninstall` 只删除本命令生成的那个文件，认不出来就拒绝，且不停止运行中的 Host。
 - **账号显式**：必须给出 `--service-dir` 与 `--run-as`，不从当前用户推断，拒绝特权账号。定义内容由输入唯一决定，便于评审与配置管理比对。

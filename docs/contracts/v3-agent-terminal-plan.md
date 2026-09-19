@@ -3,8 +3,9 @@
 > 状态：Phase 0–4 已实施（2026-09-04，分支 main）。验证结果见 implementation-status.md  
 > 日期：2026-09-04  
 > 输入：当前代码盘点（2026-09-04）  
-> 不变边界：[architecture.md](../guides/architecture.md) 的三层结构（React Flow / Rust Runtime / 桌面薄壳）与"SQLite 为真相"原则继续有效；本文取代 [redesign-plan.md](../history/redesign-plan.md) 成为新的实施契约。
+> 不变边界：[architecture.md](../guides/architecture.md) 的三层结构（React Flow / core / 桌面壳）与"SQLite 为真相"原则继续有效；本文取代 [redesign-plan.md](../history/redesign-plan.md) 成为新的实施契约。
 > 2026-09-19：本文写于桌面壳还是 Tauri 的时候，壳相关的段落（`tauri.conf.json`、`tauri-plugin-*`、sidecar 打包）按当时的实现记述；章节编号被代码引用，所以正文不动。壳的现状见 [Electron 迁移](../design/electron-migration.md) 与 [架构](../guides/architecture.md)。
+> 2026-09-20（R7d）：执行服务已从 Rust Runtime 换成 `apps/desktop/src/core/` 这个 TypeScript core，`armadra-hook` 从 Rust 小二进制换成随包的单文件 JS。正文里说「Rust」「sidecar」的地方按当时的实现读；§N 编号不变，被代码引用的仍是本文。
 
 ## 0. 一句话结论
 

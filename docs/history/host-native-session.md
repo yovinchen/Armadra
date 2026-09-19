@@ -1,12 +1,14 @@
 # 桌面壳的原生 Host 会话
 
-> 状态：已实施，来源判定已放宽（[Electron 迁移](electron-migration.md) §2.1）。「壳来源」不是固定拼写：任何被 `--allow-origin` 允许的回环 HTTP 来源（`http://127.0.0.1:<内核分配端口>` 等）都走这条路径，自定义 scheme 一律不是。桌面壳因此沿用本文全部机制，不需要新的传输。Cookie 会话保持 HTTPS 硬规则：Cookie 不按端口隔离，回环 HTTP 上无法把会话限定在一个端口内。
+> 历史文档（R7d）：它描述的是 Go Host / Rust Worker 分进程、写入所有权在两个实现之间切换的那个时代。那两个进程与那套机制都已删除，业务由一个 TypeScript core 执行（[TypeScript Core](../design/typescript-core.md)、[架构](../guides/architecture.md)）。只用于追溯。
+
+> 状态：已实施，来源判定已放宽（[Electron 迁移](../design/electron-migration.md) §2.1）。「壳来源」不是固定拼写：任何被 `--allow-origin` 允许的回环 HTTP 来源（`http://127.0.0.1:<内核分配端口>` 等）都走这条路径，自定义 scheme 一律不是。桌面壳因此沿用本文全部机制，不需要新的传输。Cookie 会话保持 HTTPS 硬规则：Cookie 不按端口隔离，回环 HTTP 上无法把会话限定在一个端口内。
 > 本文描述打包桌面壳如何在不削弱浏览器安全模型的前提下使用需要 Host 身份会话的功能（GitHub、自动化、经 Host 的设置、更新，以及六个业务域的 Host 客户端）。
 > 范围：Go Host 的身份/传输层、`@armadra/host-client` 的原生传输、`apps/web/src/host/` 的共用判定、桌面壳的取票命令与冒烟脚本。浏览器与手机端的 HTTPS 认证流程、真实 TLS 证书、多用户都不在范围内。
 
 ## 1. 问题
 
-打包桌面壳启动并发现本机 Go Host 后，前端所有需要 Host 会话的功能都被「必须 HTTPS 且与页面同源」的判定挡住。这条判定对**浏览器**是对的（[Host 设备认证](../guides/host-device-auth.md)：Tauri 与自定义来源不能凭 `--allow-origin` 自动登录），但打包版里 Host 二进制就在包内、与桌面壳同一系统账号运行，结果是这些功能在桌面版全部不可用。
+打包桌面壳启动并发现本机 Go Host 后，前端所有需要 Host 会话的功能都被「必须 HTTPS 且与页面同源」的判定挡住。这条判定对**浏览器**是对的（[Host 设备认证](host-device-auth.md)：Tauri 与自定义来源不能凭 `--allow-origin` 自动登录），但打包版里 Host 二进制就在包内、与桌面壳同一系统账号运行，结果是这些功能在桌面版全部不可用。
 
 ## 2. 信任根
 

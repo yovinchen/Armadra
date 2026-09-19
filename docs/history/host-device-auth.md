@@ -1,5 +1,7 @@
 # Host 设备认证
 
+> 历史文档（R7d）：它描述的是 Go Host / Rust Worker 分进程、写入所有权在两个实现之间切换的那个时代。那两个进程与那套机制都已删除，业务由一个 TypeScript core 执行（[TypeScript Core](../design/typescript-core.md)、[架构](../guides/architecture.md)）。只用于追溯。
+
 当前实现单个 owner 的多个设备。认证接口使用 Protobuf；业务数据所有权、Worker 和终端转发仍按平台实施记录推进，认证成功本身不表示已经完成远程业务迁移。
 
 ## 启动 HTTPS
@@ -47,7 +49,7 @@ armadra-host pair --data-dir /path/to/host-data \
 
 ## 桌面壳
 
-桌面壳的页面来源满足不了上面的浏览器规则，但它与 Host 同属一个系统账号。壳用回环 HTTP 静态服务提供页面，来源是 `http://127.0.0.1:<内核分配端口>`——端口由内核给，所以这不是一个常量。Host 据此判定**壳来源**：任意回环 HTTP 来源（`127.0.0.0/8`、`[::1]`、`localhost`，端口不限），自定义 scheme 一律不是。壳因此走一条独立的原生路径（[设计](../design/host-native-session.md)）：
+桌面壳的页面来源满足不了上面的浏览器规则，但它与 Host 同属一个系统账号。壳用回环 HTTP 静态服务提供页面，来源是 `http://127.0.0.1:<内核分配端口>`——端口由内核给，所以这不是一个常量。Host 据此判定**壳来源**：任意回环 HTTP 来源（`127.0.0.0/8`、`[::1]`、`localhost`，端口不限），自定义 scheme 一律不是。壳因此走一条独立的原生路径（[设计](host-native-session.md)）：
 
 - 壳以 `--listen 127.0.0.1:43121 --allow-origin <原生来源>` 启动 Host，再用 `armadra-host pair --origin <原生来源> --device-name 本机桌面 --output protobuf` 经 OS 私有控制通道取一张票据；票据与浏览器票据同一张表、同样两分钟有效、只能消费一次。回环 HTTP 的 Host 只对被 `--allow-origin` 允许的原生来源出票，对浏览器来源仍然拒绝；HTTPS Host 只认 `--public-origin`。
 - 壳来源不是授权：票据只由同用户 OS 控制通道签发。浏览器确实可以打开壳的那个回环 HTTP 地址并持有同一个来源，但它拿不到票据，因此换不到会话。允许清单里的端口是这条边界的落点——没写进 `--allow-origin` 的回环来源一律按普通跨源请求拒绝。

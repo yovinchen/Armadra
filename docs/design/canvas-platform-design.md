@@ -24,13 +24,13 @@ Armadra 是以画布为主工作面的开发平台。终端、Agent、文件、�
 
 ## 2. 文档地图与决策优先级
 
-| 文档                                            | 负责的契约                                                         |
-| ----------------------------------------------- | ------------------------------------------------------------------ |
-| [服务端与协议](./host-protocol-design.md)       | Go Host、Rust Worker、Protobuf、数据归属、SSH、移动端、同步和迁移  |
-| [Agent 与自动化](./agent-automation-design.md)  | 能力继承、上下文用量、对话交接、Loop/Cron/Schedule、后台调度、命名 |
-| [Git 与 GitHub](./git-github-design.md)         | Git 全流程、历史图、worktree 分组、Issue/PR、AI 提交信息           |
-| [编辑器与浏览器](./editor-browser-design.md)    | 文件编辑、语言服务、内嵌受控浏览器、跨端浏览与 Agent 操作          |
-| [终端与主机生命周期](./terminal-host-design.md) | Windows ConPTY、持久会话、后台渲染、休眠、资源与电源、更新         |
+| 文档                                               | 负责的契约                                                         |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| [服务端与协议](../history/host-protocol-design.md) | Go Host、Rust Worker、Protobuf、数据归属、SSH、移动端、同步和迁移  |
+| [Agent 与自动化](./agent-automation-design.md)     | 能力继承、上下文用量、对话交接、Loop/Cron/Schedule、后台调度、命名 |
+| [Git 与 GitHub](./git-github-design.md)            | Git 全流程、历史图、worktree 分组、Issue/PR、AI 提交信息           |
+| [编辑器与浏览器](./editor-browser-design.md)       | 文件编辑、语言服务、内嵌受控浏览器、跨端浏览与 Agent 操作          |
+| [终端与主机生命周期](./terminal-host-design.md)    | Windows ConPTY、持久会话、后台渲染、休眠、资源与电源、更新         |
 
 新需求与旧计划冲突时，本组文档定义目标行为；旧计划保留现有章节编号以供源码追溯。阶段实施完成时才同步修改“当前架构”和功能完成状态。不得提前把目标架构写成已经上线的功能。
 

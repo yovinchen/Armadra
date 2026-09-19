@@ -10,7 +10,7 @@
 | **GitHub Releases 是唯一发布来源**；Host 已能读它，桌面 updater 与 Host `upgrade` 都只消费同一份 Release，不另建更新服务器                                                      | [终端宿主 §11](./terminal-host-design.md#11-更新与-github-发布预留)、`apps/host/internal/updates/source.go` |
 | **一把 minisign 密钥签所有产物**：桌面包由 Tauri updater 验签，Host/Worker/Hook/Session Host 压缩包与 `SHA256SUMS` 由 Host `upgrade` 验签；公钥随二进制发布，私钥只在 CI secret | `tauri.conf.json` 注释、[Tauri Updater](https://v2.tauri.app/plugin/updater/)                               |
 | **安装永远是人的动作**：检查可自动，下载需开关，应用与重启必须确认；检查失败、未配置、本地构建都不显示「已是最新」                                                              | 平台总纲 S03 验收、`updates.proto` 注释                                                                     |
-| **谁启动的 Host 谁更新**：桌面持有的 Host 随桌面包更新；服务器模式的 Host 只由 `armadra-host upgrade` 更新；两者互斥由 Host 记录的启动方决定，不靠猜                            | [Host 与协议 §2.1](./host-protocol-design.md#21-服务器模式命令已实现)                                       |
+| **谁启动的 Host 谁更新**：桌面持有的 Host 随桌面包更新；服务器模式的 Host 只由 `armadra-host upgrade` 更新；两者互斥由 Host 记录的启动方决定，不靠猜                            | [Host 与协议 §2.1](../history/host-protocol-design.md#21-服务器模式命令已实现)                              |
 | **真正注册系统服务是新的显式子命令** `install --register` / `uninstall --unregister`，需要 `--confirm`、提权与定义文件未漂移三项同时成立                                        | `apps/host/cmd/armadra-host/service.go`、`internal/servicedef/*`                                            |
 | **受管 Host 的升级顺序改为「先替换、后停止」**：让 KeepAlive / Restart 拉起的就是新二进制；无托管的 Host 保持现有「先停止、后替换」                                             | §3.3，现状 `upgradeHost` 在 KeepAlive 下存在竞态                                                            |
 | 协议不新增 RPC；只给 `UpdateArtifact` / `CheckForUpdateRequest` 加 `component` 字段（minor 1→2），`DownloadUpdate` / `ApplyUpdate` 本轮继续 UNSUPPORTED                         | §1.5                                                                                                        |
@@ -197,7 +197,7 @@ stateDiagram-v2
 | 服务管理器返回非零                 | 原样输出 stderr、退出码；`registered=false`；不重试                                                  |
 | 注册后自检                         | 轮询 `daemon.Status` 最多 30s，Hello 报告的 `hostVersion`、`launcher=service` 才算 `registered=true` |
 
-`uninstall --unregister` 先停止并注销，再删除文件（仍只删自己生成的），数据目录、凭据与会话保持不动（[Host 与协议 §2](./host-protocol-design.md#2-生命周期与部署) 已约定分开）。
+`uninstall --unregister` 先停止并注销，再删除文件（仍只删自己生成的），数据目录、凭据与会话保持不动（[Host 与协议 §2](../history/host-protocol-design.md#2-生命周期与部署) 已约定分开）。
 
 ### 3.2 `upgrade` 扩展
 
