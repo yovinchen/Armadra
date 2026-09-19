@@ -2,7 +2,10 @@ import type { WorkspaceEvent } from "../bus";
 import { install as installEvents } from "../events";
 import type { CoreContext } from "../main";
 import { rfc3339, uuidV7 } from "../workspaces/support";
-import { fixture as coreFixture, type Fixture as CoreFixture } from "../workspaces/fixture";
+import {
+  fixture as coreFixture,
+  type Fixture as CoreFixture,
+} from "../workspaces/fixture";
 import { install as installWorkspaces } from "../workspaces/routes";
 import type { IngestContext } from "./ingest";
 import { HookServer } from "./server";

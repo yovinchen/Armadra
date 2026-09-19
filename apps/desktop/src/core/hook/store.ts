@@ -103,7 +103,9 @@ function optionalText(value: unknown): string | undefined {
 }
 
 function optionalBool(value: unknown): boolean | undefined {
-  return value === null || value === undefined ? undefined : Number(value) !== 0;
+  return value === null || value === undefined
+    ? undefined
+    : Number(value) !== 0;
 }
 
 function statusFromRow(row: Row): AgentStatusRow {
@@ -149,9 +151,9 @@ export function getAgentStatus(
   database: DatabaseSync,
   nodeId: string,
 ): AgentStatusRow | undefined {
-  const row = database
-    .prepare(`${SELECT}WHERE node_id = ?`)
-    .get(nodeId) as Row | undefined;
+  const row = database.prepare(`${SELECT}WHERE node_id = ?`).get(nodeId) as
+    | Row
+    | undefined;
   return row === undefined ? undefined : statusFromRow(row);
 }
 
@@ -398,13 +400,7 @@ export function insertApproval(
       "INSERT INTO agent_approvals (id, node_id, workspace_id, request_json, created_at) " +
         "VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
     )
-    .run(
-      pendingId,
-      nodeId,
-      workspaceId,
-      JSON.stringify(request ?? null),
-      now,
-    );
+    .run(pendingId, nodeId, workspaceId, JSON.stringify(request ?? null), now);
   const written = getApproval(database, pendingId);
   if (written === undefined) {
     throw new Error("Approval request was not found");
@@ -413,14 +409,15 @@ export function insertApproval(
 }
 
 /** Why an answer could not be recorded, in the shape the routes report. */
-export type AnswerRefusal =
-  | "bad_request"
-  | "not_found"
-  | "conflict";
+export type AnswerRefusal = "bad_request" | "not_found" | "conflict";
 
 export type AnswerResult =
   | { readonly ok: true; readonly approval: AgentApproval }
-  | { readonly ok: false; readonly reason: AnswerRefusal; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly reason: AnswerRefusal;
+      readonly message: string;
+    };
 
 /**
  * Records the user's decision. Answering twice is a conflict, not a silent

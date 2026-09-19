@@ -31,6 +31,23 @@ export const SWEEP_INTERVAL_MS = 3_600_000;
 export const PERM_WAIT_SECONDS = 45;
 
 /**
+ * The extra PTY variable that switches the hook client from "report and exit"
+ * to "write the request, wait for an answer file, print the decision"
+ * (contract §5.5).
+ *
+ * Only Claude implements a hook that can answer a permission request, and the
+ * user can turn it off with `hooks.replyApprovals`. Everything else gets an
+ * empty list, which is the same as not being injected at all.
+ */
+export function permissionWaitEnvironment(
+  agentId: string,
+  replyApprovals: boolean,
+): readonly (readonly [string, string])[] {
+  if (agentId !== "claude" || !replyApprovals) return [];
+  return [["ARMADRA_PERM_WAIT_SECS", String(PERM_WAIT_SECONDS)]];
+}
+
+/**
  * `<nodeId>-<epochMs>-<pid>`; anything that could escape the directory or name
  * a file we did not write is refused before it reaches the filesystem.
  */

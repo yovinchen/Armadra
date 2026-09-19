@@ -142,7 +142,9 @@ export function sessionEvent(
 export type Payload = unknown;
 
 function asObject(payload: Payload): Record<string, unknown> | undefined {
-  return typeof payload === "object" && payload !== null && !Array.isArray(payload)
+  return typeof payload === "object" &&
+    payload !== null &&
+    !Array.isArray(payload)
     ? (payload as Record<string, unknown>)
     : undefined;
 }
@@ -170,7 +172,9 @@ export function field(
  */
 export function truncate(value: string, limit: number): string {
   const characters = [...value];
-  return characters.length <= limit ? value : characters.slice(0, limit).join("");
+  return characters.length <= limit
+    ? value
+    : characters.slice(0, limit).join("");
 }
 
 export function text(

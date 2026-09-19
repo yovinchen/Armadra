@@ -1,9 +1,6 @@
 import { existsSync, rmSync, rmdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import {
-  CLAUDE_HOOK_EVENTS,
-  HOOK_CLIENT_REVISION,
-} from "./events";
+import { CLAUDE_HOOK_EVENTS, HOOK_CLIENT_REVISION } from "./events";
 import {
   type InstallReport,
   type JsonObject,

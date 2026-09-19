@@ -85,8 +85,10 @@ describe("the Codex installer", () => {
       ],
     ];
     for (const [event, hash] of expected) {
-      expect(hookHash(event, undefined, command, DEFAULT_TIMEOUT_SEC), event)
-        .toBe(hash);
+      expect(
+        hookHash(event, undefined, command, DEFAULT_TIMEOUT_SEC),
+        event,
+      ).toBe(hash);
     }
     // The event name and the timeout are both inside the hash.
     expect(hookHash("stop", undefined, command, DEFAULT_TIMEOUT_SEC)).not.toBe(
@@ -150,9 +152,7 @@ describe("the Codex installer", () => {
         hooks: {
           Stop: [
             {
-              hooks: [
-                { type: "command", command: "/usr/local/bin/theirs.sh" },
-              ],
+              hooks: [{ type: "command", command: "/usr/local/bin/theirs.sh" }],
             },
           ],
         },

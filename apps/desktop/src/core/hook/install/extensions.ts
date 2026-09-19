@@ -63,7 +63,11 @@ export function modulePath(agentId: string, configHome: string): string {
     : piExtensionPath(configHome);
 }
 
-function installed(agentId: string, path: string, clientBin: string): InstallReport {
+function installed(
+  agentId: string,
+  path: string,
+  clientBin: string,
+): InstallReport {
   return {
     agentId,
     configPath: path,
