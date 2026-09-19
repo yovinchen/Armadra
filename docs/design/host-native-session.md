@@ -14,7 +14,7 @@
 
 - 桌面壳用 `armadra-host pair --origin <原生来源> --device-name <本机桌面> --output protobuf` 取得一张票据；票据绑定 `hostId`、`hostInstanceId`、来源与设备名，两分钟有效、只能消费一次，语义与浏览器票据完全相同（同一张表、同一段消费代码）。
 - Host 只在「回环 HTTP（没有 `--public-origin`、没有 TLS）+ 该原生来源在 `--allow-origin` 里 + 请求 `Origin` 就是该原生来源」时对它签发票据、接受配对与会话请求。`--public-origin` 的 HTTPS Host、非回环地址、浏览器来源一律维持现状（拒绝）。
-- 浏览器页面无法伪造 `Origin: tauri://localhost`；能伪造它的本机进程（curl）要拿到票据仍必须走同用户控制通道，与今天 `pair` 的信任边界一致。
+- 浏览器页面能合法持有壳那个回环 HTTP 来源（打开同一个地址即可），能伪造 `Origin` 的本机进程（curl）更不用说；两者要拿到票据仍必须走同用户控制通道，与 `pair` 的信任边界一致。来源判定是拼写检查，不是授权。
 - 回环 HTTP 来源与此不同：浏览器可以真的打开 Electron 壳的静态服务并**合法**持有那个来源。信任根因此完全落在票据上——票据只由同用户 OS 控制通道签发，壳经 IPC 拿到，浏览器拿不到。到达闸门不等于有会话；没有票据就没有 bearer，什么也换不到。
 
 ## 3. 传输
@@ -34,7 +34,7 @@
 
 撤销、绝对期限（30 天）、access 期限（15 分钟）、refresh 轮转、设备 revision 核对全部复用现有 `identity_sessions` / `identity_devices` 表与 `identity.Service`，Host 侧没有新表、没有新迁移。会话的 `origin` 列记录原生来源，因此浏览器来源的请求即使拿到 bearer 也过不了 `liveSession` 的来源核对。
 
-`/api` 代理、事件流 WebSocket、对外服务开关仍只在 HTTPS 形态开放：桌面壳直接经 `armadra://` 连本机 Runtime，不需要 Host 代理；`runtime.proxy.v1` 与 `events.stream.v1` 不对原生来源报告。
+`/api` 代理、事件流 WebSocket、对外服务开关仍只在 HTTPS 形态开放：桌面壳的页面直连本机 Runtime（壳在 preload 里给出基址），不需要 Host 代理；`runtime.proxy.v1` 与 `events.stream.v1` 不对原生来源报告。
 
 ## 4. 各层职责
 

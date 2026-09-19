@@ -44,8 +44,9 @@ function spec(
 export const IPC = {
   /**
    * Where the page should send its Runtime and Host traffic, plus the data
-   * directory both processes agreed on without talking. Replaces the Rust shell's
-   * shell's `__armadra/transport` port publication.
+   * directory both processes agreed on without talking. Replaces the route the
+   * Rust shell published its forwarder ports on, which existed only because its
+   * page origin was not an HTTP one; this page's is.
    *
    * Answered twice over: `invoke` re-reads, and `sendSync` on the same channel
    * returns the snapshot taken before the window loaded. The page needs the
