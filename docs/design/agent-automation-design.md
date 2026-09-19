@@ -1,6 +1,6 @@
 # Agent 能力、上下文、对话交接与后台自动化
 
-> 状态：目标设计，部分实施。Host/Worker 及协议边界见[服务端设计](./host-protocol-design.md)。
+> 状态：目标设计，部分实施。Host/Worker 及协议边界见[服务端设计](../history/host-protocol-design.md)。
 
 ## 实现状态（截至 2026-09-05）
 

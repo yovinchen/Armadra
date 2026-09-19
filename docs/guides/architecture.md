@@ -1,6 +1,6 @@
 # 架构
 
-> 下一阶段目标见 [画布工作平台设计总纲](../design/canvas-platform-design.md)及其专项文档：Go 常驻 Host、Protobuf、后台调度和跨端能力均为待实施方案。本文件继续描述当前实现，不将目标能力提前计入现状。
+> 下一阶段目标见 [画布工作平台设计总纲](../design/canvas-platform-design.md)及其专项文档。本文件描述当前实现，不把目标能力提前计入现状。
 
 > 当前实现的架构。画布层细节见 [画布换成 React Flow](../design/canvas-react-flow.md)，
 > Agent 运行时与接口契约见 [v3-agent-terminal-plan.md](../contracts/v3-agent-terminal-plan.md)。
@@ -8,7 +8,9 @@
 
 ## 1. 定位
 
-独立 Go Host 已有身份、单实例、后台启停和 Protobuf 基础。桌面启动时异步启动/发现 Host，设置页可显式检查连接；Go Host 的生命周期独立于界面。默认应用业务仍由下述 Rust Runtime 提供。关闭桌面窗口隐藏前台并保留服务；Command Q/托盘退出经私有控制结束受管会话和后台。普通 Runtime 重启信号保留 tmux 恢复语义；尚未切换业务数据库或接入 Host 调度。实际进度见 [平台实施记录](../status/platform-implementation-status.md)。
+业务由**一个 Electron-free 的 TypeScript core**（`apps/desktop/src/core/`）执行，两种壳装配它：Electron 桌面壳（`apps/desktop`）与无窗口服务器壳（`apps/server`）。2026-09 之前的 Rust Runtime（`apps/runtime` + `crates/`）、Go Host（`apps/host`）与它们之间的 Protobuf 已在 R7d 整体删除；那个时代的设计文档移入 `docs/history/`。进度见 [TypeScript Core 进度](../status/typescript-core-status.md)。
+
+关闭桌面窗口隐藏前台并保留服务；Command Q / 托盘退出经私有控制结束受管会话与后台。core 重启保留 tmux 恢复语义。
 
 Armadra 是一个 local-first 的桌面画布：把 Claude Code、Codex、
 opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之间连一条线即
@@ -20,44 +22,47 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 
 ```text
 ┌──────────────────────────── apps/desktop ────────────────────────────┐
-│ Electron 薄壳：启动 / 健康检查 / 停止受管进程、系统目录选择器、        │
-│ 外部链接、拖入文件的真实路径、托盘与通知                              │
+│ Electron 桌面壳：窗口、托盘、通知、系统目录选择器、外部链接、          │
+│ 拖入文件的真实路径，以及把 core 作为 utilityProcess 拉起 / 健康检查 / │
+│ 停止                                                                  │
 │ 健康检查只认自己拉起的那个实例（`/health` 的 instanceId 与子进程      │
 │ 启动时打到 stdout 的一致）；不一致时按 endpoints.json 与进程表确认    │
-│ 是同一数据目录、由桌面启动的旧 Runtime 后发 SIGTERM 再重拉            │
-│  └── 受管二进制: armadra-runtime、armadra-hook、armadra-host         │
-│      （Windows 另有 armadra-session-host）                            │
+│ 是同一数据目录、由桌面启动的旧 core 后发 SIGTERM 再重拉               │
+│  └── 随包资源：`resources/cli/armadra-hook.js`、`resources/migrations/`│
+│      （Windows 另有 `resources/session-host/host.cjs`）               │
 │  └── 回环 HTTP 静态服务：内核分配端口，页面从这里加载                 │
 └───────────────────────────────┬──────────────────────────────────────┘
-                                │ 加载同一套页面（preload 给出三个基址）
+                                │ 加载同一套页面（preload 给出基址与凭据）
 ┌───────────────────────────────▼──────────────────────────────────────┐
 │ apps/web  React 19 + Vite + React Flow 12 + shadcn/ui + Tailwind v4   │
 │ 画布、节点、终端 UI（xterm.js）、编辑器（CodeMirror 6）、设置、会话侧栏 │
-│ 浏览器节点在壳里是进程内 `<webview>`（W3.1–3.2 已合入，驱动接通中）   │
+│ 浏览器节点在壳里是进程内 `<webview>`                                  │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ HTTP + WebSocket 直连，无协议转发
 ┌───────────────────────────────▼──────────────────────────────────────┐
-│ apps/runtime  Rust + Axum + Tokio + SQLx/SQLite                       │
-│ 工作空间与画布、终端（tmux / 直连 PTY / SSH）、文件、Git、Hook 服务、  │
+│ apps/desktop/src/core  TypeScript + node:http(s) + ws + node:sqlite    │
+│ 工作空间与画布、终端（tmux / 直连 PTY / SSH / Windows session-host）、 │
+│ 文件、Git、GitHub、身份、调度与自动化、语言服务、浏览器、Hook 服务、   │
 │ 会话索引、协作动词、用量快照                                          │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ 本机回环 TCP / Unix socket
 ┌───────────────────────────────▼──────────────────────────────────────┐
-│ crates/hook  各 CLI 的 hook 与技能调用的小客户端二进制         │
+│ src/cli/armadra-hook  各 CLI 的 hook 与技能调用的小客户端（单文件 JS）│
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 三条边界不变：
 
-- **apps/web 是唯一页面**。桌面壳与浏览器加载同一份构建产物。
-- **apps/runtime 是唯一执行服务**。所有进程、文件、Git、权限判定都在这里，
-  业务逻辑不写进壳的 IPC 处理器，避免出现第二套后端。
-- **apps/desktop 只做壳**。主进程提供目录选择、外部链接、系统通知与窗口，
-  能给页面的东西只有 `src/shared/ipc.ts` 那张表。
+- **apps/web 是唯一页面**。桌面壳与服务器壳加载同一份构建产物。
+- **`src/core/` 是唯一执行服务**。所有进程、文件、Git、权限判定都在这里，
+  业务逻辑不写进壳的 IPC 处理器，避免出现第二套后端。core 不 import
+  `electron`，也不 import 壳的任何目录，由 `core/no-electron.test.ts` 的源码
+  扫描守住——它能脱离 Electron 以纯 Node 运行，是服务器壳存在的前提。
+- **apps/desktop 的 `src/main/` 只做壳**。主进程提供目录选择、外部链接、系统
+  通知与窗口，能给页面的东西只有 `src/shared/ipc.ts` 那张表。
 
-第四个目录 `apps/server` 是 TypeScript Core 线上的无窗口服务器壳（R6a）：同一份
-`apps/web` 产物、同一套 core，对外只有 TLS 一个面，认证走设备配对与可撤销会话。
-它不参与上面这套 Rust Runtime + Go Host 的现状，用法见
+第四个目录 `apps/server` 是无窗口服务器壳：同一份 `apps/web` 产物、同一套 core，
+对外只有 TLS 一个面，认证走设备配对与可撤销会话。用法见
 [开发指南](development.md#无窗口服务器壳)，进度见
 [TypeScript Core 实施进度](../status/typescript-core-status.md) §10。
 
@@ -119,37 +124,36 @@ Host，Git 命令始终在执行主机上跑。
 
 Agent 节点就是终端节点里跑着一个 CLI，没有中间协议：
 
-1. Runtime 在 PTY 里启动 CLI，注入 `ARMADRA_NODE_ID`、`ARMADRA_ENDPOINT_FILE`
+1. core 在 PTY 里启动 CLI，注入 `ARMADRA_NODE_ID`、`ARMADRA_ENDPOINT_FILE`
    等环境变量。
-2. 用户在设置中显式安装后，Runtime 往该 CLI 的配置目录写适配（`apps/runtime/src/hook/install/`）。
+2. 用户在设置中显式安装后，core 往该 CLI 的配置目录写适配（`apps/desktop/src/core/hook/install/`）。
    形式按 CLI 分两种：Claude / Codex / Copilot 装**命令 Hook**，行是 `armadra-hook` 这个小二进制；
    Pi / Oh My Pi 装一份生成的 **TS 扩展**（`extensions/armadra-status.ts`），OpenCode 装插件。
-3. 命令 Hook 每个事件 fork 一次 `armadra-hook`；进程内扩展在 CLI 自己的进程里说同一套 HTTP。
-   两者都读 `<数据目录>/hook-endpoint.env` 找到 Runtime（优先 Unix socket，其次回环 TCP），
-   带 per-node token 与终端绑定回报——同样的凭据、同样的请求，Runtime 不因来源多给权限。
-4. Runtime 归一化各家载荷（`hook/normalize/`）、reduce 成节点状态
+3. 命令 Hook 每个事件调一次 `armadra-hook`；进程内扩展在 CLI 自己的进程里说同一套 HTTP。
+   两者都读 `<数据目录>/hook-endpoint.env` 找到 core（优先 Unix socket，其次回环 TCP），
+   带 per-node token 与终端绑定回报——同样的凭据、同样的请求，core 不因来源多给权限。
+4. core 归一化各家载荷（`hook/normalize/`）、reduce 成节点状态
    （`working` / `waiting` / `blocked` / `done`），连同来源标识 `stateSource`
    （`hook` / `extension` / `observed`）通过工作空间事件 WebSocket 推给前端，
    并随 `GET /api/workspaces/{id}/sessions` 一起返回，使刷新后节点头部的来源徽标不丢。
-5. 没有任何适配的终端只有 `observed`：Runtime 按已有的输入围栏与输出计数给一个弱提示，
-   它不写进状态、也不能满足自动化提示词的空闲门（`terminal/observation.rs` 的 `input_idle`）。
+5. 没有任何适配的终端只有 `observed`：core 按已有的输入围栏与输出计数给一个弱提示，
+   它不写进状态、也不能满足自动化提示词的空闲门（`core/terminal/` 的 `input_idle`）。
 6. 权限请求在节点头部直答，答案写回 `<数据目录>/pending/`，hook 客户端阻塞读取。
 
 内置 Agent 定义集中在 `packages/shared/src/agents.ts`（launch 命令、prompt 传递方式、
-权限模式对应的 argv、resume 方式、能力位），Runtime 侧只镜像 id 与启动程序
-（`apps/runtime/src/agent.rs`）。自定义 CLI 用 `custom:<id>`。
+权限模式对应的 argv、resume 方式、能力位），core 侧只镜像 id 与启动程序
+（`core/agent/`）。自定义 CLI 用 `custom:<id>`。
 
 模型列表不写死：`GET /api/agents/{id}/models` 依次取 CLI 自己的说法
 （`claude --help` 的 `--model` 别名、Codex `config.toml` 里配好的 `model` 与各
 profile）、models.dev 目录中该 provider 的条目、以及离线兜底表，按发布日期倒序
-并标注每条的来源（`apps/runtime/src/models/agents.rs`）。目录本身由
-`apps/runtime/src/models/catalog.rs` 维护：启动时读 `<数据目录>/models-catalog.json`，
+并标注每条的来源。目录本身启动时读 `<数据目录>/models-catalog.json`，
 缓存超过 24 小时就拉一次 `https://models.dev/api.json`，之后每天一次；联网只发生在
-Runtime 侧。同一份目录供计费（`usage/cost/pricing.rs`：内置表 → 目录 →
-`model-pricing.json`）与上下文上限（`context_models.rs`：目录 → 家族规则）使用，
+core 侧。同一份目录供计费（内置表 → 目录 → `model-pricing.json`）与上下文上限
+（目录 → 家族规则）使用，
 来源与更新时间在设置页「账号与用量」里显示（`GET /api/models/catalog`）。
 
-Agent 之间的协作走 Runtime 的两个动词表面：
+Agent 之间的协作走 core 的两个动词表面：
 
 - `POST /context-link/{verb}`：读取被链接节点的转录、摘要或终端画面。
 - `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `sticky` /
@@ -173,10 +177,10 @@ Hook 时提供独立的按需技能，不再追加全局长指令。详见
 ```
 
 - 持久化两条通道由 `PUT /api/workspaces/{id}/boards/{boardId}/document` 一次带走。
-  节点与连线仍是 `nodes` / `edges` 表——Runtime、hook、控制动词、会话侧栏只认这张表；
+  节点与连线仍是 `nodes` / `edges` 表——core、hook、控制动词、会话侧栏只认这张表；
   节点 id 就是那一行的 uuid，白板对象是 `wb:<uuid>`，都不查表；分组是 `group` 节点。
 - 白板对象与内容引用序列化成一份 `{"engine":"armadra-flow","version":2,…}` 的
-  JSON 存进 `boards.whiteboard_json`，**Runtime 不解析它**（只看长度与摘要）。
+  JSON 存进 `boards.whiteboard_json`，**core 不解析它**（只看长度与摘要）。
   上限 8 MiB，超了这一轮不保存并提示。不认识的 `engine` / 更高的 `version`
   按「保留原文」处理：不覆盖，也不显示成空白板。
 - **图片资产不进快照**：字节走 `POST /api/workspaces/{id}/assets`（或按路径
@@ -185,13 +189,15 @@ Hook 时提供独立的按需技能，不再追加全局长指令。详见
 - 保存是 CAS：请求带 `expectedUpdatedAt`，冲突返回 `409`。请求体仍是整份文档
   （服务端按 id 做 upsert + 删掉请求里没有的行），所以「谁的改动算数」由
   CAS 加客户端变基决定，不是按字段合并。
-- 保存成功后 Runtime 广播 `board.changed{boardId, updatedAt}`。同一块板的另一个
+- 保存成功后 core 广播 `board.changed{boardId, updatedAt}`。同一块板的另一个
   窗口按这个 `updatedAt` 判断这条事件是不是自己刚存的那一次：不是就重取文档，
   经 `canvas/sync/merge.ts` 合进 `canvas-store`——视口留本地的，本地这一轮动过的
   实体（`store/canvas/pending.ts` 记账）留本地的，其余照收远端的。远端灌入
   **不进也不清**撤销栈，手势进行中先不合，等松手。
 
-SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量添加消息箱：
+SQLite 的迁移只有一个目录——`apps/desktop/src/core/db/migrations/`，0001–0020 一条
+连续序列，字节由根 `migrations.lock` 守住（R7d 把原先分散在两处的来源合成一处）。
+基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量添加消息箱：
 
 | 表                                    | 内容                                                |
 | ------------------------------------- | --------------------------------------------------- |
@@ -201,80 +207,83 @@ SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量�
 | `agent_status`                        | 每个 Agent 节点的当前状态（hook reduce 的结果）     |
 | `agent_approvals`                     | 权限请求与答复                                      |
 | `agent_mailbox`                       | 持久化拉取消息箱（幂等发送、确认、过期）            |
-| `agent_deliveries`                    | 已弃用：Runtime 不再写入，仅 Host 侧保留读取        |
 | `context_links`                       | 供 Agent 查询的链接视图                             |
 | `hook_installs`                       | 每个 CLI 的 hook 安装记录                           |
 | `conversations`                       | 会话索引（provider + session id → 标题）            |
 
-`db::connect` 在同一 `BEGIN IMMEDIATE` 事务内先检查迁移账本，再执行已知迁移与启动恢复。未知版本、校验和不符、脏记录、损坏账本、无账本的非空 schema 或迁移历史缺口均拒绝启动；失败回滚并关闭连接池，不改名、删除或重建原库。SQLx 的 SQLite 迁移锁本身为空操作，外层事务用于防止校验与迁移之间的并发写入。既有 SQL 迁移文件保持原字节，文件中旧的重建说明是历史注释，不能为了更新说明而改变其校验和。
+`core/db/open.ts` 在同一 `BEGIN IMMEDIATE` 事务内先检查迁移账本，再执行已知迁移与启动恢复。未知版本、校验和不符、脏记录、损坏账本、无账本的非空 schema 或迁移历史缺口均拒绝启动；失败回滚并关闭连接，不改名、删除或重建原库。账本表与校验和算法沿用最初那套（SHA-384），所以装过旧版本的库照常打得开。既有 SQL 迁移文件保持原字节。
+
+迁移 0015 是**单向门**：它把原先另一个进程的私有库并了进来，应用之后这个 `canvas.db` 旧实现再也打不开。所以应用它之前 core 先 `VACUUM INTO` 一份 `canvas.db.before-ts-core-<时间戳>` 并验证那份副本能打开——回滚不是再跑一条迁移，而是用这份备份替换整个文件。
 
 终端原始输出、密钥和 `.env` 不进入画板持久化。
 
-Go Host 现在独占私有 `host.db`，通用实体 revision、操作收据和事件在同一事务内提交。Runtime 的离线 `export` 生成一致性数据库与受管资产包；Host 的离线 `import` 校验 Protobuf 清单后写入不激活的 staging。该链路保留原始数据和类型，用于维护窗口切换，任何阶段都不双写。
-
-**写入所有权机制已删除（历史注记，R7c）。** 画布、设置、文件、会话、Agent、Git
-六个域曾各有一行 `write_ownership` 记录，声明「此刻由 Rust Runtime 还是 Go Host
-写」，页面按它路由每一次读写，切换窗口里画布变成只读。那个机制存在的唯一理由是
-**有两个写者**；`ARMADRA_CORE=ts` 的单一 core 里没有第二个，所以 2026-09-20 连同
-`/api/ownership`、`/api/ownership/domains` 两条路由、前端的 `canvas-ownership/` 与
-各域的 `host-session.ts` 一起删除，页面收口为「本地总是可编辑」。Rust 侧的两条路由
-随 crate 在 R7 删除，路由表与 Rust 的这处偏离记在
-`apps/desktop/src/core/http/routes.test.ts`。
+**写入所有权机制已删除（历史注记，R7c/R7d）。** 画布、设置、文件、会话、Agent、Git
+六个域曾各有一行 `write_ownership` 记录，声明「此刻由哪个实现写」，页面按它路由每
+一次读写，切换窗口里画布变成只读。那个机制存在的唯一理由是**有两个写者**；一个
+core 里没有第二个，所以 2026-09-20 连同 `/api/ownership`、`/api/ownership/domains`
+两条路由、前端的 `canvas-ownership/` 与各域的 `host-session.ts` 一起删除，页面收口
+为「本地总是可编辑」。当时的设计见 [Host 业务所有权迁移](../history/host-business-migration.md)（历史文档）。
 
 ## 6. 进程、端口与文件位置
 
-Go Host 已增加独立私有设备认证表与 Protobuf 会话接口。浏览器认证只在配置证书和准确公共来源的 HTTPS 上开放，本机 OS 控制通道签发两分钟配对票据；默认 HTTP 对浏览器来源仍不能登录。桌面壳是唯一例外：页面来源是壳自己的回环 HTTP 静态服务（端口由内核分配），经同一条控制通道取票，向回环 HTTP 的 Host 换取 Bearer 会话，凭据只在页面内存（[设计](../design/host-native-session.md)）。票据链保留而不是换成 Cookie，理由是 Cookie 按 host 不按 port 隔离（electron-migration §2.1）。会话轮转、CSRF 与设备撤销由 Host 校验，详细使用与当前边界见[设备认证](./host-device-auth.md)。
+来源与凭据检查**按壳分档**。桌面壳里 core 就在壳的进程树内，壳经 preload 直接把
+凭据注入页面，没有中间的票据链。服务器壳保留完整的设备配对、可撤销凭据、会话轮转、
+CSRF 与 Origin 校验（[服务器账号、中转与共享](../design/server-accounts-and-sharing.md)）。
+分进程时代的票据链设计见 [桌面壳原生 Host 会话](../history/host-native-session.md)
+与[设备认证](../history/host-device-auth.md)，两份都是历史文档。
 
-| 项                   | 值                                                | 覆盖方式                                        |
-| -------------------- | ------------------------------------------------- | ----------------------------------------------- |
-| Runtime 监听         | `127.0.0.1:43120`                                 | `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` |
-| Runtime 监听（壳内） | `tcp:127.0.0.1:0`，端口由内核分配、stdout 公告    | `ARMADRA_RUNTIME_LISTEN`                        |
-| 壳的静态服务         | `127.0.0.1:<内核分配>`，页面从这里加载            | —                                               |
-| Go Host 监听         | `127.0.0.1:43121`                                 | `ARMADRA_HOST_LISTEN`（仅开发）                 |
-| Web 开发服务器       | `127.0.0.1:1420`                                  | `vite --port`                                   |
-| 数据目录（macOS）    | `~/Library/Application Support/Armadra`           | `ARMADRA_DATA_DIR`                              |
-| 数据目录（Windows）  | `%LOCALAPPDATA%\Armadra`                          | 同上                                            |
-| 数据目录（Linux）    | `$XDG_DATA_HOME/armadra`                          | 同上                                            |
-| 数据库               | `<数据目录>/canvas.db`                            | `ARMADRA_DATABASE_URL`                          |
-| Hook 端点文件        | `<数据目录>/hook-endpoint.env`（0600）            | —                                               |
-| 节点 token           | `<数据目录>/node-tokens/<nodeId>`                 | —                                               |
-| 待答权限             | `<数据目录>/pending/`                             | —                                               |
-| Runtime 偏好         | `<数据目录>/settings.json`                        | —                                               |
-| 本机偏好             | `<数据目录>/worker-settings.json`                 | —                                               |
-| 模型目录缓存         | `<数据目录>/models-catalog.json`（0600）          | —                                               |
-| 价格覆盖             | `<数据目录>/model-pricing.json`                   | —                                               |
-| 私有 tmux server     | `<数据目录>/tmux.sock` + `tmux.conf`（0700 目录） | —                                               |
-| 工作区产物           | `<工作区>/.armadra/`（assets、exports、板日志）   | —                                               |
+| 项                  | 值                                                                   | 覆盖方式                                        |
+| ------------------- | -------------------------------------------------------------------- | ----------------------------------------------- |
+| core 监听           | `127.0.0.1:43120`                                                    | `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` |
+| core 监听（壳内）   | `tcp:127.0.0.1:0`，端口由内核分配、stdout 公告                       | `ARMADRA_RUNTIME_LISTEN`                        |
+| 壳的静态服务        | `127.0.0.1:<内核分配>`，页面从这里加载                               | —                                               |
+| Web 开发服务器      | `127.0.0.1:1420`                                                     | `vite --port`                                   |
+| 数据目录（macOS）   | `~/Library/Application Support/Armadra`                              | `ARMADRA_DATA_DIR`                              |
+| 数据目录（Windows） | `%LOCALAPPDATA%\Armadra`                                             | 同上                                            |
+| 数据目录（Linux）   | `$XDG_DATA_HOME/armadra`                                             | 同上                                            |
+| 数据库              | `<数据目录>/canvas.db`                                               | `ARMADRA_DATABASE_URL`                          |
+| 迁移目录            | `apps/desktop/src/core/db/migrations`（包内 `resources/migrations`） | `ARMADRA_CORE_MIGRATIONS_DIR`                   |
+| Hook 端点文件       | `<数据目录>/hook-endpoint.env`（0600）                               | —                                               |
+| 节点 token          | `<数据目录>/node-tokens/<nodeId>`                                    | —                                               |
+| 待答权限            | `<数据目录>/pending/`                                                | —                                               |
+| 账号偏好            | `<数据目录>/settings.json`                                           | —                                               |
+| 本机偏好            | `<数据目录>/worker-settings.json`                                    | —                                               |
+| 模型目录缓存        | `<数据目录>/models-catalog.json`（0600）                             | —                                               |
+| 价格覆盖            | `<数据目录>/model-pricing.json`                                      | —                                               |
+| 私有 tmux server    | `<数据目录>/tmux.sock` + `tmux.conf`（0700 目录）                    | —                                               |
+| 工作区产物          | `<工作区>/.armadra/`（assets、exports、板日志）                      | —                                               |
 
 偏好分两个文件：`settings.json` 跟着账号走，`worker-settings.json` 属于这台
-机器（`apps/runtime/src/settings/local.rs`：终端后端、浏览器可执行文件、电源
-策略、CLI 路径覆盖与探测缓存）。载入时合成一份文档、写入时再拆开，所以
+机器（`core/settings/local.ts`：终端后端、浏览器可执行文件、电源策略、
+CLI 路径覆盖与探测缓存）。载入时合成一份文档、写入时再拆开，所以
 `GET /api/settings` 仍是一个对象；`GET /api/settings/local` 告诉界面哪些键属于
 本机。
 
-Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mise Node 安装
+core 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mise Node 安装
 目录），并把同一份 PATH 交给所有终端子进程——从 `.app` 启动的 GUI 进程拿到的是
 裸系统 PATH，否则终端里能用的 CLI 会被误判为未安装。
 
-终端后端三选一（`apps/runtime/src/terminal/`）：`tmux`（默认，会话跨 Runtime 重启存活）、
-`direct`（portable-pty 直连）、`ssh`（设置里配置的远程主机）。Windows 的持久化会话
-设计见 [windows-session-daemon.md](../design/windows-session-daemon.md)（只有设计，未实现）。
+终端后端（`core/terminal/`）：`tmux`（默认，会话跨 core 重启存活）、`direct`
+（node-pty 直连）、`ssh`（设置里配置的远程主机），Windows 另有 session-host
+守护进程（`src/session-host/`，包内 `resources/session-host/host.cjs`），
+它持有 ConPTY 会话，使之比壳活得更久。早期方案见
+[windows-session-daemon.md](../design/windows-session-daemon.md)。
 
 ## 7. 安全边界
 
-- Runtime 只绑回环地址；CORS 只放行回环 HTTP 来源（`http://127.0.0.1:*`、
+- 桌面壳里的 core 只绑回环地址；CORS 只放行回环 HTTP 来源（`http://127.0.0.1:*`、
   `http://localhost:*`，以及 Unix socket / 命名管道调用者用的无端口形式）。
   自定义 scheme 不在放行之列，页面也不再用任何一种。
 - Hook 表面有独立鉴权（per-node token）和独立 body 上限，优先走 Unix socket。
-- 所有路径参数经 `security::resolve_in_root` 限制在工作区根目录内；导入的图片
+- 所有路径参数都限制在工作区根目录内（core 的路径解析）；导入的图片
   字节复制进 `.armadra/assets/`，不暴露原位置。
 - 页面能让壳做的事只有 `apps/desktop/src/shared/ipc.ts` 那张表；`shell:open-external`
   按 scheme 白名单限 `http` / `https`，对话框返回路径而不是字节。渲染进程
   `contextIsolation: true`、`nodeIntegration: false`，唯一桥是 preload。
-- CSP 见 `apps/desktop/src/shell-core/csp.ts`：`connect-src` 只留本机 Runtime 与
-  Host 的 http/ws，`<webview>` 供浏览器节点使用。
-- Host 只把回环 HTTP 来源当作壳来源（`--allow-origin` 里还要明确列出），票据
-  只由同用户的私有控制通道签发；浏览器即便停在同样的来源上也拿不到票。
+- CSP 见 `apps/desktop/src/shell-core/csp.ts`：`connect-src` 只留本机 core 的
+  http/ws，`<webview>` 供浏览器节点使用。
+- 服务器壳默认不监听非回环地址，对外服务是显式动作；它的配对码不可复用，
+  token 不出现在 URL 里，撤销设备后正在进行的流立即终止。
 
 ## 8. 未实现
 
@@ -287,13 +296,7 @@ Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mis
   签名的构建里更新器是关闭的——「没签名 = 什么也验证不了 = `notConfigured`」，
   它绝不会报 `upToDate`（`shell-core/updates/availability.ts`）。
 
-## 9. Worker 只读桥接
-
-Rust可使用独立 `worker --stdio` 入口，通过父Go进程私有管道提供规范目录与文本分块读取。该入口不启动旧Runtime HTTP或PTY；Go客户端验证Host与进程实例并负责关闭回收。当前为执行层接管的第一批，只报告已实现的只读能力，尚未切换现有业务。传输帧1MiB、文本1MiB、单块256KiB，后续块以首块SHA绑定内容版本。
-
-只有显式加 `--canvas-database FILE` 时该入口才打开 `canvas.db`，且仅为读写 `write_ownership` 一行；它不跑迁移，缺少该表直接拒绝，并只在真的打开了数据库时才报告能力 `canvas.ownership.v1`。该模式与命令调度模式互斥，因此常驻的调度 Worker 不可能被用来移动写入所有权。
-
-## 10. 会话上下文来源
+## 9. 会话上下文来源
 
 上下文统计与账号额度分离。读数按真实 PTY 会话 / generation 与单调序号更新运行期缓存；
 模型或会话变化、压缩后的空报告、断连都会清除不再可信的显示。源时间仅展示，陈旧年龄使用单调时间。

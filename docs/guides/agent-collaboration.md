@@ -28,16 +28,16 @@ OpenCode 本机入口 npm postinstall 未执行、根本启动不了（当时的
 ## 状态通道与来源徽标
 
 节点头部的状态（RUNNING / NEEDS YOU / DONE）、自动化调度的空闲判断、以及单会话上下文占用，
-都来自同一件事：CLI 自己告诉 Runtime 它在做什么。这条通道按 CLI 分两种形式，能力完全相同：
+都来自同一件事：CLI 自己告诉 core 它在做什么。这条通道按 CLI 分两种形式，能力完全相同：
 
-| 形式       | CLI                         | 装在哪                                                                                                            | 怎么工作                                                               |
-| ---------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| 命令 Hook  | Claude Code、Codex、Copilot | Claude 是**启动参数指向的会话文件**（见下）；Codex `hooks.json`；Copilot 单独一个 `~/.copilot/hooks/armadra.json` | CLI 每个事件 fork 一次 `armadra-hook`，它连 Runtime 的本地 socket 回报 |
-| 进程内扩展 | Pi、Oh My Pi                | `<配置目录>/extensions/armadra-status.ts`（Pi 是 `~/.pi/agent/`，OMP 是 `~/.omp/agent/`）                         | 生成的 TS 扩展在 CLI 进程内连同一个 socket，不 fork 进程               |
-| 插件       | OpenCode                    | `~/.config/opencode/plugins/armadra-status.js`                                                                    | 插件在 CLI 进程内连同一个 socket，连不上时才退回 fork `armadra-hook`   |
+| 形式       | CLI                         | 装在哪                                                                                                            | 怎么工作                                                             |
+| ---------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 命令 Hook  | Claude Code、Codex、Copilot | Claude 是**启动参数指向的会话文件**（见下）；Codex `hooks.json`；Copilot 单独一个 `~/.copilot/hooks/armadra.json` | CLI 每个事件调一次 `armadra-hook`，它连 core 的本地 socket 回报      |
+| 进程内扩展 | Pi、Oh My Pi                | `<配置目录>/extensions/armadra-status.ts`（Pi 是 `~/.pi/agent/`，OMP 是 `~/.omp/agent/`）                         | 生成的 TS 扩展在 CLI 进程内连同一个 socket，不 fork 进程             |
+| 插件       | OpenCode                    | `~/.config/opencode/plugins/armadra-status.js`                                                                    | 插件在 CLI 进程内连同一个 socket，连不上时才退回 fork `armadra-hook` |
 
 进程内扩展**不比**命令 Hook 更可信：两者用同一个 bearer、同一份每节点令牌、同一条终端绑定发同样的请求，
-Runtime 分不出也不会因此多给任何权限。区别只是省掉每个事件一次 fork。
+core 分不出也不会因此多给任何权限。区别只是省掉每个事件一次 fork。
 
 ## 集成：Hook 与技能是一个安装单元
 
@@ -78,7 +78,7 @@ Claude Code 的 `--settings <file-or-json>` 官方说明是「load **additional*
 旧版画布控制脚本的 `open-claude` 命令，那个脚本只会报「当前会话不是有效的 Agent 节点」，而模型信了指令就不会再找现行技能
 （2026-09-15 用户实测：Codex 在画布里被要求「创建一个 Claude Code」时跑的正是它）。
 
-Runtime 每次启动扫描并在日志里报出来，`GET /api/agents/{id}/integration` 的 `legacy.found` 也带着它，
+core 每次启动扫描并在日志里报出来，`GET /api/agents/{id}/integration` 的 `legacy.found` 也带着它，
 但**只报不改**。真正动手的只有设置页的「修复」按钮：先把要重写的文件备份成 `<file>.armadra-backup-<时间戳>`，
 只删认得出是我们写的条目，其余原样写回，然后按现行写法重写（Codex 那份顺带去掉顶层未知键）。
 报告给出 `{found, removed, kept, backup}`，`kept` 就是它认出来「不是我们的、原样留下」的那些。
@@ -104,7 +104,7 @@ Runtime 每次启动扫描并在日志里报出来，`GET /api/agents/{id}/integ
 | Pi / Oh My Pi  | `PI_CODING_AGENT_DIR`（OMP 另有 `PI_CONFIG_DIR` 与 profile） | 直接就是 agent 目录  |
 
 这些覆盖变量都**不在**终端子进程的继承白名单里（`terminal/backend.rs::INHERITED_ENV` 只放行 `HOME`、`XDG_*` 等）。
-也就是说：给 Runtime 进程设了 `CODEX_HOME`（或 `COPILOT_HOME`、`CLAUDE_CONFIG_DIR`……），安装器会写到那个目录，
+也就是说：给 core 进程设了 `CODEX_HOME`（或 `COPILOT_HOME`、`CLAUDE_CONFIG_DIR`……），安装器会写到那个目录，
 而画布上起的 CLI 仍然按自己的 `HOME` 去找——两边指向不同的地方，安装看起来成功但事件不会到。
 六种 CLI 都是这个情况，不是某一个的问题；要重定向就改 `HOME`，`pnpm agent:smoke` 用的正是这个办法。
 
@@ -128,7 +128,7 @@ Runtime 每次启动扫描并在日志里报出来，`GET /api/agents/{id}/integ
 | --------- | ---------------------------------------------------------- | -------------- |
 | Hook 上报 | CLI 的命令 Hook 报的                                       | 能             |
 | 扩展上报  | CLI 进程内的扩展报的                                       | 能             |
-| 终端观测  | 没有任何适配，Runtime 只按终端有没有新输出猜的一个弱提示   | **不能**       |
+| 终端观测  | 没有任何适配，core 只按终端有没有新输出猜的一个弱提示      | **不能**       |
 | （没有）  | 还没有人报过。头部按「未知」显示，不当作空闲，也不当作忙碌 | 不能           |
 
 「终端观测」只用于头部的弱提示与自动命名，永远不写进节点状态，也不能让自动化调度认为目标空闲——
@@ -197,13 +197,13 @@ Armadra 不把一个 Agent 的话打进另一个 Agent 的终端。原有的 `ca
 
 节点头部「更多 → 打断这一轮」是同一个键的手动入口，走用户自己按键的那条 socket，不经 hook 路由。它和上面的「中断」不是一回事：后者发 Ctrl+C 给前台进程组。
 
-`agent_deliveries` 表因为迁移已发布而保留，Runtime 不再写入；`GET /api/workspaces/{id}/deliveries` 仍能读回历史行与 Host 写的行。
+`agent_deliveries` 表因为迁移已发布而保留，没有写者；`GET /api/workspaces/{id}/deliveries` 仍能读回历史行。
 
 Armadra 的协作设计以节点身份、作用域与投递门禁为边界，采用持久化的拉取协议，将默认协作从终端输入移到应用收件箱，避免把大段协作指令和无关上下文塞进每个 Agent 的会话。
 
 ## 对话交接
 
-交接把来源的一次阶段性工作整理成一份冻结的包交给另一个 Agent，设计见 [Agent 自动化设计 §7](../design/agent-automation-design.md)。入口在 Agent 终端「更多 → Agent 协作 → 交接到…」，目标只能是画布上已连线的 Agent 终端——与 mailbox 一样，授权依据是 Runtime 里的链接文档，不是界面上的一张图。
+交接把来源的一次阶段性工作整理成一份冻结的包交给另一个 Agent，设计见 [Agent 自动化设计 §7](../design/agent-automation-design.md)。入口在 Agent 终端「更多 → Agent 协作 → 交接到…」，目标只能是画布上已连线的 Agent 终端——与 mailbox 一样，授权依据是 core 里的链接文档，不是界面上的一张图。
 
 `POST /api/workspaces/{id}/handoffs` 冻结材料并返回预览：目标 Agent / 模型 / 目录、带走的文件与 Git 指纹、按预算裁剪的结果、`omitted` 里逐条列出的未包含项，以及来源转录摘录。此时没有通知任何人。`POST …/{handoffId}/accept` 是唯一的用户授权，必须带上预览那一份的 `expectedDigest`，看到的和批准的不是同一份就返回 409；重复确认返回同一条收件箱记录，不会放两份进去。`POST …/{handoffId}/cancel` 删掉那条收件箱消息。`GET …/handoffs?sourceNodeId=` 与 `GET …/{handoffId}` 让来源和目标都能查同一份包。
 
@@ -218,11 +218,11 @@ Armadra 的协作设计以节点身份、作用域与投递门禁为边界，采
 | `acknowledged` | 目标自己 `canvas ack` 了那条收件箱消息 |
 | `cancelled`    | 已撤回，收件箱那条被删掉               |
 
-`handoff-read` 读包不等于确认：读取交出材料，`ack` 才是「我接下了」。旧库里 `dispatching` / `notified` / `unknownOutcome` / `failed` / `expired` 这些描述 PTY 写入结果的值仍在表里（已发布迁移不改），Runtime 读出来时一律归一成 `queued`——批准过、进了信箱、没被确认。会话里已有的权限批准不随交接转移，凭据不进入包；来源会话保持运行，快照之后来源又有动作时预览会标出「有新活动」。
+`handoff-read` 读包不等于确认：读取交出材料，`ack` 才是「我接下了」。旧库里 `dispatching` / `notified` / `unknownOutcome` / `failed` / `expired` 这些描述 PTY 写入结果的值仍在表里（已发布迁移不改），core 读出来时一律归一成 `queued`——批准过、进了信箱、没被确认。会话里已有的权限批准不随交接转移，凭据不进入包；来源会话保持运行，快照之后来源又有动作时预览会标出「有新活动」。
 
 因为不再需要目标空闲，交接对六种 CLI 一视同仁：没有状态适配的 Pi / OMP / Copilot 也能收到并读取，不再卡在 `queued`。
 
-画布上的交接关联复用已有的那条上下文连线，不新增边或图形；节点头部的 chip 显示进行中的交接，点开即是同一个预览对话框。删掉连线等于收回上下文权限，应用不会偷偷补回，Runtime 也会因此拒绝准备、批准和读取。
+画布上的交接关联复用已有的那条上下文连线，不新增边或图形；节点头部的 chip 显示进行中的交接，点开即是同一个预览对话框。删掉连线等于收回上下文权限，应用不会偷偷补回，core 也会因此拒绝准备、批准和读取。
 
 ## 验证
 
@@ -235,4 +235,4 @@ Armadra 的协作设计以节点身份、作用域与投递门禁为边界，采
 并连线两个节点验证 `context summary` 能读到对方的真实转录。`pnpm ownership:e2e --domain agent` 证明 Host 模式下这四个
 动作是**转发**给执行主机的，Host 一个字节也不写。
 
-交接的路由测试（`apps/runtime/tests/handoff_api.rs`）另外覆盖：预览不产生任何收件箱条目、跨工作空间的路径读不到也批不了、错误 digest 被 409 拒绝、重复确认复用同一条收件箱记录、撤回后收件箱条目消失，以及 `agent_deliveries` 与 `agent_handoff_outbox` 保持为空。`tools/handoff-read-smoke.mjs` 用真实进程、真实 PTY 和真实 hook 客户端跑完整轮：批准后目标收件箱出现 `handoff:<id>`、读包不等于确认、`ack` 后状态变 `acknowledged`、撤回后那条消失。共享包用 Runtime 真实返回的一份包校验 schema。
+交接的路由测试（`apps/desktop/src/core/handoff/`）另外覆盖：预览不产生任何收件箱条目、跨工作空间的路径读不到也批不了、错误 digest 被 409 拒绝、重复确认复用同一条收件箱记录、撤回后收件箱条目消失，以及 `agent_deliveries` 与 `agent_handoff_outbox` 保持为空。端到端那一轮（真实进程、真实 PTY、真实 hook 客户端：批准后目标收件箱出现 `handoff:<id>`、读包不等于确认、`ack` 后状态变 `acknowledged`、撤回后那条消失）原本由 `tools/handoff-read-smoke.mjs` 跑，它依赖受管二进制的路径，已随 R7d 删除；对着 core 的等价脚本还没有。

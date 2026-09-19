@@ -2,68 +2,62 @@
 
 ## 环境
 
-Node.js ≥ 22、pnpm（版本锁定于根 `package.json`）、Rust stable / edition 2024。
-Go Host 与桌面构建需要 Go ≥ 1.24。tmux 是推荐终端后端，缺失时退回直连 PTY。
+Node.js ≥ 22 与 pnpm（版本锁定于根 `package.json`）——没有别的工具链。
+tmux 是推荐终端后端，缺失时退回直连 PTY。
 macOS 桌面目标 ≥ 13.3，并需 Xcode Command Line Tools。
 
 ```sh
 pnpm install
 ./armadra.sh doctor
-./armadra.sh run web       # Runtime + Web，退出时一起关闭
-./armadra.sh run desktop   # 桌面持有 Runtime，另行准备 Go Host
+./armadra.sh run web       # core + Web，退出时一起关闭
+./armadra.sh run desktop   # 桌面壳持有 core
 ```
 
-`doctor` 检查 Node / pnpm / Rust / tmux / Xcode CLT；Go 由 Host 构建脚本检查。
+`doctor` 检查 Node / pnpm / tmux / Xcode CLT。
 
 ## 分步启动
 
 以下各进程在独立终端运行：
 
 ```sh
-cargo run -p armadra-runtime                          # 127.0.0.1:43120（兼容默认）
-cargo run -p armadra-runtime -- --listen tcp:127.0.0.1:0   # 端口由内核分配
+pnpm --filter @armadra/desktop build                       # 产出 out/core/main.js 等
+node apps/desktop/out/core/main.js                         # 127.0.0.1:43120（兼容默认）
+node apps/desktop/out/core/main.js --listen tcp:127.0.0.1:0   # 端口由内核分配
 pnpm --filter @armadra/web dev      # 127.0.0.1:1420
-# 或用桌面壳替代 Web 命令（仍需上面的外部 Runtime）
+# 或用桌面壳替代 Web 命令（仍需上面的外部 core）
 pnpm --filter @armadra/desktop dev
 ```
 
 ## 监听方式与地址发现
 
-Runtime 的 `--listen` 可重复，每次一个：`tcp:IP:PORT`（端口 `0` 由内核分配）、
+core 的 `--listen` 可重复，每次一个：`tcp:IP:PORT`（端口 `0` 由内核分配）、
 `unix:绝对路径`（0600）、`pipe:名字`（Windows 命名管道）。不给 `--listen` 时按
 `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT`，再退回 `127.0.0.1:43120`。
 指定的 TCP 端口被占用直接报错，不换端口。
 
-绑定成功后地址写入 `<数据目录>/endpoints.json`（0600），`runtime` 与 `host` 各一段，
+绑定成功后地址写入 `<数据目录>/endpoints.json`（0600）的 `runtime` 段，
 含地址、instance id、pid 与写入时间；正常退出时撤回自己那段。
 `./armadra.sh run web` 与 Vite 开发代理都从这个文件读地址，`VITE_RUNTIME_URL` 显式覆盖时不装代理。
 
 桌面壳自己提供页面：主进程在 `127.0.0.1` 的一个内核分配端口上跑一个静态服务，
-`BrowserWindow` 加载的就是这个地址。Runtime 以 `--listen tcp:127.0.0.1:0` 启动并在 stdout
+`BrowserWindow` 加载的就是这个地址。core 以 `--listen tcp:127.0.0.1:0` 启动并在 stdout
 公告实例与端口，页面经 preload 的 `transport:endpoints` 一次性取得
-`{ httpBase, wsBase, hostBase, dataDir }`，`fetch` 与 `WebSocket` 直连
+`{ httpBase, wsBase, dataDir }`，`fetch` 与 `WebSocket` 直连
 （[迁移设计](../design/electron-migration.md) §2.1）。没有自定义协议，也没有 WebSocket
-回环转发端口。
+回环转发端口。因此 `lsof -i -P | grep -i Armadra` 在「对外服务未开启」时只看到静态服务与
+core 两个回环端口。
 
-Go Host 以 `--listen 127.0.0.1:43121` 加页面来源的 `--allow-origin` 启动：页面经壳的私有
-控制通道取票、再向这个回环端口换取 Bearer 会话
-（[桌面壳原生 Host 会话](../design/host-native-session.md)）。票据链保留而不是换成 Cookie，
-因为 Cookie 按 host 不按 port 隔离，`127.0.0.1:A` 的 Cookie 会发往同一 profile 的任何
-`127.0.0.1:B`。因此 `lsof -i -P | grep -i Armadra` 在「对外服务未开启」时会看到静态服务、
-Runtime 与 Host 的 43121 三个回环端口。
-
-桌面包与 `./armadra.sh run desktop` 会持有自己的 Runtime；后者额外用 `ARMADRA_RUNTIME_LISTEN`
+桌面包与 `./armadra.sh run desktop` 会持有自己的 core；后者额外用 `ARMADRA_RUNTIME_LISTEN`
 钉一个回环端口，因为开发页面在 Vite 的 `http://127.0.0.1:1420`，不是壳的静态服务，拿不到
-壳注入的基址。直接执行桌面 `dev` 默认连接外部 Runtime。
-Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止配置的 Host、桌面持有的 Runtime 及受管会话。
-独立启动的 Runtime 由启动它的终端管理。详见[桌面说明](../../apps/desktop/README.md)。
+壳注入的基址。直接执行桌面 `dev` 默认连接外部 core。
+Command W / 关闭窗口隐藏前台；Command Q / 托盘退出停止桌面持有的 core 及受管会话。
+独立启动的 core 由启动它的终端管理。详见[桌面说明](../../apps/desktop/README.md)。
 
 ## 无窗口服务器壳
 
-`apps/server`（`@armadra/server`）把 TypeScript Core 装在同一个进程里，对外只有 TLS 一个面，
-浏览器与手机加载的是同一份 `apps/web` 产物。它要求数据目录**已经过统一库迁移**
-（`ARMADRA_CORE=ts` 的单向门，见 [实施进度](../status/typescript-core-status.md) §6），
-否则拒绝启动。
+`apps/server`（`@armadra/server`）把同一套 core 装在同一个进程里，对外只有 TLS 一个面，
+浏览器与手机加载的是同一份 `apps/web` 产物。它要求数据目录**已经过统一库迁移 0015**
+（单向门，见 [实施进度](../status/typescript-core-status.md) §6），否则拒绝启动。
 
 ```sh
 pnpm --filter @armadra/web build                     # 页面产物，serve 默认往上找 apps/web/dist
@@ -97,56 +91,41 @@ TOKEN / SECRET / PASSWORD / CREDENTIAL 字样一律拒绝。
 
 从仓库根执行，按改动涉及的模块选择：
 
-| 范围                | 命令                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| 仓库规则            | `pnpm repo:check`（秒级）、`pnpm repo:test`                                                 |
-| 一次过静态检查      | `pnpm check`＝libs 构建 + format:check + rust:fmt + typecheck + protocol:check + repo:check |
-| 前端                | `pnpm --filter @armadra/web test`、`pnpm --filter @armadra/web typecheck`                   |
-| 共享模型            | `pnpm --filter @armadra/shared test`                                                        |
-| 服务器壳            | `pnpm --filter @armadra/server test`、`pnpm --filter @armadra/server typecheck`             |
-| Runtime             | `cargo test -p armadra-runtime`                                                             |
-| Go Host             | `go -C apps/host test ./...`、`go -C apps/host vet ./...`                                   |
-| 桌面脚本            | `pnpm --filter @armadra/desktop test`                                                       |
-| 协议                | `pnpm protocol:check`、`pnpm protocol:test`                                                 |
-| 全部 JS 包 / Rust   | `pnpm test`、`cargo test --workspace`                                                       |
-| 格式 / 类型         | `pnpm format:check`、`pnpm typecheck`                                                       |
-| Rust workspace 检查 | `pnpm check:rust`                                                                           |
-| 桌面构建（不打包）  | `pnpm --filter @armadra/desktop build`                                                      |
-| 桌面打包            | `pnpm --filter @armadra/desktop dist`                                                       |
+| 范围               | 命令                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| 仓库规则           | `pnpm repo:check`（秒级）、`pnpm repo:test`                                                    |
+| 一次过静态检查     | `pnpm check`＝libs 构建 + format:check + typecheck + repo:check + ci:workflows + release:check |
+| 前端               | `pnpm --filter @armadra/web test`、`pnpm --filter @armadra/web typecheck`                      |
+| 共享模型           | `pnpm --filter @armadra/shared test`                                                           |
+| core 与桌面壳      | `pnpm --filter @armadra/desktop test`（vitest + `node --test scripts/*.test.mjs`）             |
+| 服务器壳           | `pnpm --filter @armadra/server test`、`pnpm --filter @armadra/server typecheck`                |
+| 全部包             | `pnpm test`                                                                                    |
+| 格式 / 类型        | `pnpm format:check`、`pnpm typecheck`                                                          |
+| 发布与 CI 脚本     | `pnpm release:test`、`pnpm ci:workflows`、`pnpm release:check`                                 |
+| 桌面构建（不打包） | `pnpm --filter @armadra/desktop build`                                                         |
+| 桌面打包           | `pnpm --filter @armadra/desktop dist`                                                          |
 
-`pnpm canvas:e2e` 端到端验证画布写入所有权：在临时目录里跑真实 Runtime 与 Host，写入嵌套 Frame、终端与便签、
-标注、上下文连线和白板快照，再走导出 → 导入 → `ownership switch`，逐项断言迁移前后的 sha256、Runtime 的
-`ownership_moved` 拒绝与只读回退、Host 侧的 revision 与事件，最后回滚：Host 写出格式 2 的反向导出包，
-Runtime 把它导入自己的 `canvas.db` 并回读逐项核验，再断言 Host 持有期间的那次写入出现在 Runtime 的行里。
-之后再用同一套状态机走一遍 HTTPS：Host 在跑，操作者用 `armadra-host ownership window --domain canvas`
-在本机控制通道上取一次性维护窗口令牌，客户端经 `OwnershipService` 切换与回滚，并断言令牌不能复用。
-它构建 Host、Runtime、工作区包与 Web 产物，并用无头 Chrome 驱动 `@armadra/host-client`；没有 Chrome 时设
-`CANVAS_E2E_SKIP_APP=1` 跳过浏览器部分（改从 Node 走同一 TLS 代理），或用 `CHROME_PATH` 指定浏览器，脚本不下载任何东西。
-构建缓存命中时整轮约 20 秒，跳过浏览器部分约 15 秒；首次构建 Runtime 与 Web 产物另计。
+`pnpm core:identity-smoke` 对着一个真的 core 走一遍身份域：临时数据目录、单向门、配对与会话。
+`tools/probes/` 下的探针跑的也是真的 core（`apps/desktop/out/core/main.js`）：终端的冒烟、
+生命周期与打包后验证，以及三个用无头 Chrome 驱动真实页面的 UI 探针（连线拖拽、Git 工具窗口、
+画布压力）。运行入口见 [探针说明](../../tools/probes/README.md)。
 
-`pnpm agent:smoke <runtime 绝对路径> <hook 绝对路径> <pi|omp|copilot|opencode>` 用真实 CLI 验证状态通道：
-临时数据目录起 Runtime（端口由内核分配），装适配、建 Agent 节点、跑一个回合，经工作空间事件 socket 断言节点依次出现
-`working → done`、`stateSource` 与该适配的通道一致（命令 Hook 为 `hook`，进程内扩展为 `extension`）且会话列表带同一个值，
-Pi / OMP 另外断言 `context-usage` 返回 `provider_hook / reported`，安装只增自己的文件、卸载只删自己的文件，其余字节不变。
-两个路径参数要给绝对路径：它们会写进 CLI 的配置文件，而 CLI 从自己的工作目录解析。
-CLI 不在 PATH 或起不来时打印原因并以 0 退出。真实凭据不动用户配置：脚本给 Runtime 一个临时 `HOME`
-（`COPILOT_HOME` 等变量不在终端子进程的继承白名单里，只有 `HOME` 两边一致），把该 CLI 的凭据与模型设置
-**复制**进去，macOS 另把 `~/Library/Keychains` 软链过去供 `security` 读取；失败时保留临时目录并打印路径。
-`pnpm handoff:read-smoke <runtime> <hook> [source] [target]` 走交接的读取与确认，默认 `claude`→`codex`，
-可换成任意两个声明了 `hooks` 的 Agent。
+R7d 删掉了一批只对分进程时代有意义的脚本：写入所有权的 e2e 与 harness、Host 的几支烟囱测试、
+Rust↔Go 的归档互通，以及需要受管二进制路径的 `agent:smoke` / `handoff:read-smoke`。它们验证
+的事实现在由 core 各域的用例覆盖；真 CLI 的端到端版本要重写成对着 core 的形式，还没有。
 
-`armadra.sh check` 执行 shared 构建、TS 检查、Rust fmt / clippy；`test` 执行 shared、web 与 Rust workspace 测试。
-它们不替代独立的 Go、协议与桌面脚本检查。`all` 执行 doctor → install → check → build → run。
+`armadra.sh check` 就是 `pnpm check`；`test` 是 shared 构建加 `pnpm -r test`。
+`all` 执行 doctor → install → check → build → run。
 
 `pnpm repo:check` 读 `repo.rules.json` 校验仓库结构：文档登记与相对链接、黑名单文件、包名与目录名、
-根目录白名单、源码行数上限（超限文件登记在豁免表）、迁移编号与 `migrations.lock` 里的 sha256、
-每个 `.proto` 的 fixture 与三端契约测试引用。规则说明见[仓库结构与校验](../design/repository-structure.md)。
+根目录白名单、源码行数上限（超限文件登记在豁免表）、迁移编号与 `migrations.lock` 里的 sha256。
+规则说明见[仓库结构与校验](../design/repository-structure.md)。
 仓库级脚本都在 `tools/`，各 app 自己的脚本仍在各自的 `scripts/`。
 
-打包分两步，两步都在[桌面说明](../../apps/desktop/README.md)里：先 `cargo build --release`
-与 `prepare:host` 产出受管二进制，再 `dist` 把它们按原名拷进 `apps/desktop/resources/`
-并调用 electron-builder（`stage-binaries.mjs` 只复制、不构建，缺哪个就一次报齐）。
-产物落在 `apps/desktop/release/`。
+打包只有一步：`pnpm --filter @armadra/desktop dist`（细节在[桌面说明](../../apps/desktop/README.md)）。
+它先定签名计划、再 `electron-vite build`、最后调用 electron-builder；包里要带的东西由
+`scripts/after-pack.mjs` 从 `out/` 与 `src/core/db/migrations` 放进 `Resources/`。没有受管二进制
+要先构建。产物落在 `apps/desktop/release/`。
 
 ### 更新签名
 
@@ -156,8 +135,8 @@ CLI 不在 PATH 或起不来时打印原因并以 0 退出。真实凭据不动�
   也是 electron-updater 安装前校验的东西。密钥经 `CSC_LINK` / `CSC_KEY_PASSWORD` 与
   `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` 传入。
 - **发布清单签名**：`latest.json` 里每个平台条目带一份 minisign 分离签名，由
-  `tools/release/assemble.mjs` 用 `ARMADRA_RELEASE_SIGNING_KEY` 在写清单之前签出，
-  和组件包用的是同一把钥匙（[发布、更新与服务安装 §2.5](../design/updates-and-service-install.md#25-引入步骤一次性)）。
+  `tools/release/assemble.mjs` 用 `ARMADRA_RELEASE_SIGNING_KEY` 在写清单之前签出
+  （[发布、更新与服务安装 §2.5](../design/updates-and-service-install.md#25-引入步骤一次性)）。
 
 仓库里**没有**真实密钥。`pnpm --filter @armadra/desktop dist` 在开工前就决定这次要不要签名
 （`scripts/signing-electron.mjs`），而不是把失败留到打包最后一步：
@@ -176,53 +155,41 @@ CLI 不在 PATH 或起不来时打印原因并以 0 退出。真实凭据不动�
 
 本机想演练完整的清单 + 签名 + 校验用 `pnpm release:dry-run`，它自带一次性密钥，不碰任何真实密钥。
 
-## Host 连接
+## 来源与凭据
 
-桌面启动时异步启动/发现 Host；纯 Web 模式手工启动，并允许实际页面的精确来源：
-
-```sh
-go -C apps/host run ./cmd/armadra-host --allow-origin http://127.0.0.1:1420
-```
-
-在「设置 → 连接 → 后台服务」检查 `http://127.0.0.1:43121`。
-检查只读服务身份，不切换 Runtime 或触发启动；通过后仅在本设备保存地址。
-编辑、取消或离开检查页会使旧检查失效。已有服务配置不兼容时报告失败，不自动重配。
-
-Origin 不含路径或末尾 `/`，可多次传入，且**必须是 http(s)**——自定义 scheme 一律拒绝。
-桌面壳放行的是自己静态服务的回环 HTTP 来源（端口由内核分配，所以这一行每次启动都不同），
-开发时再加上 Vite 的 `http://127.0.0.1:1420`；打包与开发都把 Host 起在 `127.0.0.1:43121`。
-CSP（`apps/desktop/src/shell-core/csp.ts`）只允许本机 Runtime 与 Host 的 http/ws。
-浏览器来源的 CORS 只允许读取元数据；壳的回环 HTTP 来源经票据换取 Bearer 会话
-（[设备认证](./host-device-auth.md)），远程执行另属未完成能力。详见[Host 说明](../../apps/host/README.md)。
+core 的 CORS 只放行回环 HTTP 来源：桌面壳放行的是自己静态服务的那个来源（端口由内核分配，
+所以每次启动都不同），开发时再加上 Vite 的 `http://127.0.0.1:1420`。自定义 scheme 一律拒绝。
+CSP（`apps/desktop/src/shell-core/csp.ts`）只允许本机 core 的 http/ws。桌面壳里凭据经
+preload 注入页面，没有票据链；服务器壳的设备配对与可撤销会话见上面的「无窗口服务器壳」。
+分进程时代的票据链见 [桌面壳原生 Host 会话](../history/host-native-session.md) 与
+[设备认证](../history/host-device-auth.md)，两份都是历史文档。
 
 ## 环境变量与数据
 
 | 变量                                            | 作用                                                                                                                            |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` | 没有 `--listen` 时的监听地址，默认 `127.0.0.1:43120`；设置后 `armadra.sh run web` 用固定端口而非随机端口                        |
-| `ARMADRA_RUNTIME_LISTEN`                        | 桌面壳持有的 Runtime 在私有 socket 之外额外监听的一个 `--listen` spec（开发用）                                                 |
+| `ARMADRA_RUNTIME_LISTEN`                        | 桌面壳持有的 core 在私有 socket 之外额外监听的一个 `--listen` spec（开发用）                                                    |
 | `ARMADRA_WEB_PORT`                              | `armadra.sh run web` 的前端端口                                                                                                 |
 | `VITE_RUNTIME_URL`                              | 前端连接地址；设置后 Vite 不装代理。不设时浏览器开发走 Vite 代理（地址取自 endpoints.json），桌面壳里取 preload 给的 `httpBase` |
-| `ARMADRA_DATA_DIR`                              | Runtime 数据目录，`endpoints.json` 与 Runtime socket 都在这里                                                                   |
+| `ARMADRA_DATA_DIR`                              | core 的数据目录，`endpoints.json` 与 core 的 socket 都在这里                                                                    |
 | `ARMADRA_DATABASE_URL`                          | SQLite 连接，例如 `sqlite://…?mode=rwc`                                                                                         |
-| `RUST_LOG`                                      | 日志过滤，默认 `info,tower_http=info`                                                                                           |
+| `ARMADRA_CORE_MIGRATIONS_DIR`                   | 迁移目录，覆盖「包内 `resources/migrations` → 往上找检出」这条查找顺序（测试与夹具用）                                          |
+| `ARMADRA_LOG`                                   | 日志级别，默认 `info`                                                                                                           |
 | `ARMADRA_HOOK_DEBUG`                            | Hook 调试                                                                                                                       |
-| `ARMADRA_HOST_LISTEN`                           | 开发桌面壳把 Host 起在别的回环地址（已装的 Armadra 占住 43121 时）；打包的壳忽略它                                              |
-| `ARMADRA_HOST_BINARY` / `ARMADRA_HOST_DATA_DIR` | 开发用的 Host 绝对路径与独立数据目录；打包的壳忽略前者                                                                          |
-| `ARMADRA_RUNTIME_BINARY`                        | 开发用的 Runtime 绝对路径                                                                                                       |
-| `ARMADRA_DESKTOP_OWNS_RUNTIME`                  | 开发也由壳持有 Runtime（默认连外部 Runtime）                                                                                    |
-| `ARMADRA_DESKTOP_PACKAGED`                      | 按打包布局解析受管二进制的位置，不必真打包                                                                                      |
+| `ARMADRA_DESKTOP_OWNS_RUNTIME`                  | 开发也由壳持有 core（默认连外部 core）                                                                                          |
+| `ARMADRA_DESKTOP_PACKAGED`                      | 按打包布局解析随包资源的位置，不必真打包                                                                                        |
 | `ARMADRA_DESKTOP_LIFECYCLE_TRACE`               | 打印启动 / 退出编排的事件                                                                                                       |
 | `ARMADRA_UPDATES_DEV`                           | `=1` 让未打包的构建也接更新器，用来对着本地发布服务走一遍流程；它不放松安装校验，未签名的包照样会被拒                           |
 | `ARMADRA_UPDATER_ENDPOINTS`                     | 逗号分隔的更新清单地址，覆盖 `electron-builder.yml` 里的占位 `publish.url`；仓库里从不写死真实地址                              |
 | `ARMADRA_HOOK_TIMEOUT_MS`                       | Agent 扩展模块上报的超时（默认 1500 ms，上限 60000）。只有测试驱动会调大它：进程级回退路径要在同一预算里起一个子进程            |
 | `ARMADRA_REMOTE_WORKER_LAUNCHER`                | 替换远端 Worker 启动行的 argv[0]（默认 `ssh`）。必须是绝对路径、不含空白；SSH 选项与远端命令原样保留。测试与自建隧道用          |
 
-脚本发现 Runtime 端口占用时直接报错。节点身份、Hook token、端点与权限等待变量由 Runtime 注入 Agent 终端，无需手工配置。
-Runtime 不监听 TCP 时 `hook-endpoint.env` 不写 `ARMADRA_HOOK_PORT`，Hook 客户端只走 `hook.sock`。
+脚本发现 core 端口占用时直接报错。节点身份、Hook token、端点与权限等待变量由 core 注入 Agent 终端，无需手工配置。
+core 不监听 TCP 时 `hook-endpoint.env` 不写 `ARMADRA_HOOK_PORT`，Hook 客户端只走 `hook.sock`。
 
 默认数据目录：macOS `~/Library/Application Support/Armadra`，Windows `%LOCALAPPDATA%\Armadra`，
-Linux `$XDG_DATA_HOME/armadra`。包含 `canvas.db`、设置、`endpoints.json`、Runtime socket、Hook 端点、节点 token、审批文件和 tmux socket。
+Linux `$XDG_DATA_HOME/armadra`。包含 `canvas.db`、设置、`endpoints.json`、core 的 socket、Hook 端点、节点 token、审批文件和 tmux socket。
 工作区 `.armadra/` 保存图片、导出与板日志，已加入 `.gitignore`。
 
 「设置 → 数据」使用当前连接的 SQLite 一致性快照备份，包含已提交 WAL 数据；完整性检查通过后写入数据库旁的唯一文件。

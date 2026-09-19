@@ -200,7 +200,7 @@
 | 上下文占用                             | Pi / OMP 报告走现有 `armadraContextUsage` 载荷，`source: provider_hook`；Copilot 的 `estimate_events_jsonl` 写好但不接能力位（§2.3），要接也只能是和 codex 同级的 `structured_transcript` 估算  | 否                                                                                                                                 |
 | i18n                                   | `settings.hooks.pullOnly` 改为只在真正无适配（自定义 Agent 关闭 hooks）时出现；新增 `settings.hooks.extension`、来源提示文案                                                                    | 否                                                                                                                                 |
 
-与 agent 域的关系：按 [Host 业务所有权迁移](./host-business-migration.md) §1.1，agent 域的表与路由今天仍全部在 Runtime，Host 无对应表；§2.7 已把 `HookEvent` 定义为**归一化后**的事件、`provider` 只路由不解释，因此新增 provider 与来源标识不触碰 Host 数据模型。`WorkerAgentUpcallKind` 不变：扩展直连与命令 Hook 在 Runtime 归一化后同样以 `HOOK_TURN` 上报。Hook 的业务动词（`post / inbox / ack / list / link`）在 Worker 转为上行请求、执行动词留本地的分工不变。
+与 agent 域的关系：按 [Host 业务所有权迁移](../history/host-business-migration.md) §1.1，agent 域的表与路由今天仍全部在 Runtime，Host 无对应表；§2.7 已把 `HookEvent` 定义为**归一化后**的事件、`provider` 只路由不解释，因此新增 provider 与来源标识不触碰 Host 数据模型。`WorkerAgentUpcallKind` 不变：扩展直连与命令 Hook 在 Runtime 归一化后同样以 `HOOK_TURN` 上报。Hook 的业务动词（`post / inbox / ack / list / link`）在 Worker 转为上行请求、执行动词留本地的分工不变。
 
 ## 5. 实施拆解
 

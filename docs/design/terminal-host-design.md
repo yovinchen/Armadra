@@ -58,7 +58,7 @@ Windows 下 Ctrl+C 作为终端输入/后端中断能力处理；Ctrl+Break、�
 
 命名管道名包含用户 SID hash 和协议 major；ACL 仅允许该用户及必要系统主体，服务身份额外验证客户端。默认拒绝远程 pipe 客户端；本机密钥保存在该用户受限目录中。worker epoch 与 generation 一起用于 fencing。
 
-协议采用 [Host 文档](./host-protocol-design.md) 的长度前缀 Protobuf，命令包含 requestId、sessionId、generation 和幂等键。握手返回 hostInstanceId、protocolRange、capabilities、maxFrame、sessions；ping 不延长任何用户授权。
+协议采用 [Host 文档](../history/host-protocol-design.md) 的长度前缀 Protobuf，命令包含 requestId、sessionId、generation 和幂等键。握手返回 hostInstanceId、protocolRange、capabilities、maxFrame、sessions；ping 不延长任何用户授权。
 
 Session Host 维护执行收据和存活目录，收据至少区分 received / not-written / write-started / write-completed / unknown。同一 inputId 不允许不同 payload。常规键盘输入不落明文持久日志，只留有界去重摘要及序号；自动化投递需额外记录授权和结果边界。
 

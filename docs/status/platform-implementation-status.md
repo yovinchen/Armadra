@@ -110,7 +110,7 @@
 - **开屏动画**（`66cb8dc1`…`1bd6e5af`）：v14 签名动画移植为 React 覆盖层（素材抽为独立 PNG），系统/用户主题、`sessionStorage` 单次、1 秒后可跳过、reduced-motion 终态、通用设置开关；深浅色真实浏览器验证，Web 1544 项。
 - **结构整理**（`09b987e8`…`03a055d8`）：按 [仓库结构与校验](../design/repository-structure.md) §5 第 1–5 步实施，`pnpm check` = libs:build + format:check + typecheck + protocol:check + repo:check；豁免表只剩待拆分的大文件并会自行过期报错。
 - **大文件拆分**：`api.rs` 5708→34 文件（最大 511）、`db.rs` 3550→22 文件（最大 456）；`shared/src/api.ts`、`domain.ts`、`host-client/github.ts`、Web `client.ts`、`canvas-store.ts`、`TerminalSurface.tsx`、`EditorNode.tsx`、Git 面板测试全部拆为 ≤ 350 行模块，导出集合与测试数逐项一致；Git/终端/浏览器/协作测试的拆分进行中。
-- **Fable 设计**（`docs/design/`）：[Host 业务迁移第二阶段](../design/host-business-migration.md)、[语言服务](../design/language-service.md)、[发布、更新与服务安装](../design/updates-and-service-install.md)、[浏览器与远端补全](../design/remote-and-browser-completion.md)，各含契约、布局、并行批次与验收。跨设计的编号预分配：Runtime 迁移 0010 浏览器 / 0011 多域所有权 / 0012 反向导入；`worker.proto` oneof 16–19 远端 watch/upload、24–28 业务域、30–34 语言服务。
+- **Fable 设计**（`docs/design/`）：[Host 业务迁移第二阶段](../history/host-business-migration.md)、[语言服务](../design/language-service.md)、[发布、更新与服务安装](../design/updates-and-service-install.md)、[浏览器与远端补全](../design/remote-and-browser-completion.md)，各含契约、布局、并行批次与验收。跨设计的编号预分配：Runtime 迁移 0010 浏览器 / 0011 多域所有权 / 0012 反向导入；`worker.proto` oneof 16–19 远端 watch/upload、24–28 业务域、30–34 语言服务。
 - **实施第一轮（进行中）**：B0a 多域所有权与 HTTPS 切换、B0b 事件流、B0c 反向导入、B0d Worker 双向通道、语言服务 A+B、发布/更新 0+A+C。
 
 ## 第六轮：设计实施第一轮（2026-09-06 中午至下午）
@@ -155,7 +155,7 @@
 ## 第九轮：打包版巡检与未完成项收口（2026-09-07 凌晨至上午）
 
 - **打包版白屏**（`d3dfa8ce`）：本机正在跑的开发 Runtime 让 `vite.config.ts` 把空 `VITE_RUNTIME_URL` 烤进产物，`tauri://localhost` 上模块初始化即抛错；代理与该 define 改为只在 `serve` 生效。诊断桥改探 React Flow（`8cfc8fe0`）。
-- **桌面壳原生 Host 会话**（Fable 设计并实施，`64cd1336`…`e4ece186`，[host-native-session.md](../design/host-native-session.md)）：巡检发现打包版 GitHub/自动化/更新/经 Host 的设置全部被「必须同源 HTTPS」挡住。信任根是 OS 私有控制通道签发的一次性票据（`armadra-host pair --origin tauri://localhost`），Host 只在「回环 HTTP + 原生来源被允许 + 票据来自私有通道」时签发 Bearer 会话（`AuthenticatedSession.native`），浏览器来源与 HTTPS 路径行为不变；Hello 报告 `identity.native-session.v1`；九处 `addressBlock()` 收敛为一个判定；`pnpm host:native-session-smoke` 证明原生来源通过、浏览器来源 403、票据二次使用 401。
+- **桌面壳原生 Host 会话**（Fable 设计并实施，`64cd1336`…`e4ece186`，[host-native-session.md](../history/host-native-session.md)）：巡检发现打包版 GitHub/自动化/更新/经 Host 的设置全部被「必须同源 HTTPS」挡住。信任根是 OS 私有控制通道签发的一次性票据（`armadra-host pair --origin tauri://localhost`），Host 只在「回环 HTTP + 原生来源被允许 + 票据来自私有通道」时签发 Bearer 会话（`AuthenticatedSession.native`），浏览器来源与 HTTPS 路径行为不变；Hello 报告 `identity.native-session.v1`；九处 `addressBlock()` 收敛为一个判定；`pnpm host:native-session-smoke` 证明原生来源通过、浏览器来源 403、票据二次使用 401。
 - **语言服务收尾**（`c5b089a3`…`b1f801ca`）：服务器主动 `workspace/applyEdit` 走与客户端同一道门并返回真实结果；引用侧栏页、`@`/`#` 符号快速打开、⌘. 代码操作（带 `command` 的动作按 §6.2 仍摘掉）、远端 restart/stop（worker.proto 35/34）、Git 冲突三方合并（行级 diff3，写盘后经既有 `git/resolve` 校验）。
 - **更新与快捷键**（`61a411d0`…`e68ed8e9`）：下载可取消；托盘「重启以完成更新」与系统通知（`settings.updates.notify`）；`scripts/signing.mjs` 在构建前决定签名/跳过/拒绝；键位配置档（default / vscode / 自定义，存储不迁移）、`when` 子集（枚举 30 个上下文求精确重叠）、编辑器与浏览器 scope 进键位表、`tauri-plugin-global-shortcut` 两条 OS 热键。
 - **界面巡检修复**（`83fdd8f5`…`8948684b`）：新建节点以视口居中并按 32px 级联避让；「新建」菜单按自身标签定宽；Dock 菜单关闭后 Tooltip 不再残留；右侧六个抽屉原为模态 Dialog 遮住整块画布（「资源管理器」「用量看板」点不到即源于此），统一为非模态 `WorkPanelSheet`、一次只开一个、工具簇让位；命令面板文案必填 i18n；手机 Dock 抬到底部导航之上、导航按钮加无障碍名。
@@ -425,7 +425,7 @@ Authenticode 走同一对 `CSC_*` 变量），列在 [ci-release.md](../guides/c
 - 真实 Worker 测试不在默认命令内，验收时需单独运行。桌面壳已无 Rust 代码：
   `pnpm --filter @armadra/desktop test` 是 vitest + `node --test scripts/*.test.mjs`。
 - **tldraw 许可证（已解决）**：tldraw 5.4 在非开发来源上无密钥时挂载 5 秒后卸掉编辑器（打包版画布消失）；用 debug 壳的诊断桥定位后，画布整体改为 React Flow（MIT），tldraw 依赖已移除。
-- 桌面壳的 Host 形态：为了让打包版用上 GitHub/自动化/更新等需要身份会话的功能，壳启动的 Host 是 `--listen 127.0.0.1:43121 --allow-origin <壳的回环 HTTP 来源>`，页面经 OS 私有通道签发的一次性票据换取回环 Bearer 会话（[host-native-session.md](../design/host-native-session.md)）；§4.4「零监听端口」对 Host 不再成立。壳自己的静态服务与它拉起的 Runtime 都用内核分配端口，Host 的 43121 是唯一还钉死的那个。每次启动壳都会登记一台「本机桌面」设备。
+- 桌面壳的 Host 形态：为了让打包版用上 GitHub/自动化/更新等需要身份会话的功能，壳启动的 Host 是 `--listen 127.0.0.1:43121 --allow-origin <壳的回环 HTTP 来源>`，页面经 OS 私有通道签发的一次性票据换取回环 Bearer 会话（[host-native-session.md](../history/host-native-session.md)）；§4.4「零监听端口」对 Host 不再成立。壳自己的静态服务与它拉起的 Runtime 都用内核分配端口，Host 的 43121 是唯一还钉死的那个。每次启动壳都会登记一台「本机桌面」设备。
 - 数据目录：macOS `~/Library/Application Support/Armadra`、Windows `%LOCALAPPDATA%\Armadra`、Linux `$XDG_DATA_HOME/armadra`（默认 `~/.local/share/armadra`），`ARMADRA_DATA_DIR` 可覆盖；Host 用其下 `host/`，默认项目在 `workspaces/default/`。
 
 ## 下一步

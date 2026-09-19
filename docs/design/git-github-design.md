@@ -244,7 +244,7 @@ Host 重启后的 Git 操作按实际 Git 状态对账：commit 查 OID/index，
 ## 12. B5 实现说明（写入所有权）
 
 §2 的「Rust Worker 的 RepositoryService 是 Git 命令唯一执行入口。Host 负责操作身份、持久结果及事件」已由
-[业务所有权迁移](./host-business-migration.md) 的 B5 批落地，契约在 `proto/armadra/v1/git.proto`。
+[业务所有权迁移](../history/host-business-migration.md) 的 B5 批落地，契约在 `proto/armadra/v1/git.proto`。
 
 - **队列在 Host，命令在执行主机**：`apps/host/internal/githost` 记操作身份、排序、前置版本与结论；
   `apps/runtime/src/worker/git.rs` 走的是 HTTP 路由用的同一批代码，所以经 Host 下的提交与经 Runtime 下的

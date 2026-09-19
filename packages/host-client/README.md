@@ -50,7 +50,7 @@ try {
 `credentials: "omit"`，并放在一份共享的 `HostNativeCredentials` 里（页面内存，不落存储）。
 多个客户端共用同一份凭据时经它的串行队列排队，轮转不会互相作废；`resume()` 在没有凭据或凭据被
 Host 拒绝时经 `ticket` 回调向壳取一张一次性票据并配对。其余浏览器规则一概不变，见
-[桌面壳原生 Host 会话](../../docs/design/host-native-session.md)。
+[桌面壳原生 Host 会话](../../docs/history/host-native-session.md)。
 
 ## 错误
 

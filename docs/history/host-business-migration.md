@@ -1,8 +1,10 @@
 # Go Host 业务所有权迁移（H01 第二阶段）
 
-> 状态：目标设计。本文把 [Host 与协议设计](./host-protocol-design.md) §4 的六步切换从画布推广到其余五个业务域；已交付的第一阶段（画布）以该文 §4.1、[架构](../guides/architecture.md) §5 与[实施记录](../status/platform-implementation-status.md) H01 行为准，本文不复述，也不把任何目标行为写成已上线。
+> 历史文档（R7d）：它描述的是 Go Host / Rust Worker 分进程、写入所有权在两个实现之间切换的那个时代。那两个进程与那套机制都已删除，业务由一个 TypeScript core 执行（[TypeScript Core](../design/typescript-core.md)、[架构](../guides/architecture.md)）。只用于追溯。
+
+> 状态：目标设计。本文把 [Host 与协议设计](host-protocol-design.md) §4 的六步切换从画布推广到其余五个业务域；已交付的第一阶段（画布）以该文 §4.1、[架构](../guides/architecture.md) §5 与[实施记录](../status/platform-implementation-status.md) H01 行为准，本文不复述，也不把任何目标行为写成已上线。
 > 范围：settings、session、agent、filesystem、git 五个域的所有权切换、契约、数据、代码布局、实施批次与验收；画布域只在需要对齐时引用。
-> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](../design/electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 ## 0. 结论
 
@@ -30,7 +32,7 @@
 | agent      | `agent_status`、`agent_approvals`、`agent_mailbox`、`agent_deliveries`、`agent_handoffs`、`agent_handoff_outbox`、`context_links` | `/api/approvals/*`、`/api/control/confirm/*`、`/api/agent-status/*`、`/api/workspaces/{id}/{deliveries,handoffs,context-links,nodes/*/context-usage}`、`/api/agents/*/hooks/*` | 无                                                                                      | 状态投影、审批记录与答复、消息箱、投递记录、交接与投递 outbox、上下文链接投影（由画布边派生）                                             | Hook 端点/令牌/待答文件、归一化与 reduce、转录读取、投递写入门、`agent_prompt_deliveries`、`hook_installs`、`conversations`、上下文用量 |
 | git        | 无表；内存操作队列（`git_repository.rs`）与 clone 任务                                                                            | `/api/workspaces/{id}/git/*`、`/api/git/clone*`                                                                                                                                | `git:*` 授权面；`GithubService`（v4）已在 Host                                          | 操作身份与队列（operationId、状态、前置版本、收据）、仓库状态快照缓存、clone 任务、worktree 绑定校验                                      | Git 命令执行、仓库级锁、进度、冲突文件、AI 提交信息生成（读本机凭据）                                                                   |
 
-`browser_sessions`、`usage`、`resources`、`power` 不在本文五个域内：它们是执行主机事实，按 [Host 与协议设计](./host-protocol-design.md) §1 归 Worker，Host 只经授权代理与事件流转发。
+`browser_sessions`、`usage`、`resources`、`power` 不在本文五个域内：它们是执行主机事实，按 [Host 与协议设计](host-protocol-design.md) §1 归 Worker，Host 只经授权代理与事件流转发。
 
 ### 1.2 切换顺序、依赖与回滚
 
@@ -71,7 +73,7 @@ Worker 在任何域都不再做业务授权：请求到达 Worker 时已由 Host
 
 ### 2.1 通用规则
 
-沿用 [Host 与协议设计](./host-protocol-design.md) §3.3 的兼容规则，本阶段新增的 `.proto` 统一：
+沿用 [Host 与协议设计](host-protocol-design.md) §3.3 的兼容规则，本阶段新增的 `.proto` 统一：
 
 | 规则       | 约定                                                                                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -166,7 +168,7 @@ Worker 在任何域都不再做业务授权：请求到达 Worker 时已由 Host
 | 方法（HTTPS）        | `Create`、`Start`、`List`、`Get`、`Terminate`、`Recycle`、`Close`、`SuggestTitle`（执行，转 Worker）、`GetContextUsage`（读 Worker 缓存）                                                                                                                                                                                                          | `Create` 只写意图；`Start` 才让 Worker 起进程并返回 `SessionRun`         |
 | 方法（Worker 通道）  | Host→Worker：`StartRun`、`SignalRun`、`ReclaimRuns`、`CaptureRun`；Worker→Host：`RunStarted`、`RunExited`、`RunLost`、`AttachCountChanged`                                                                                                                                                                                                         | `ReclaimRuns` 在 Host 或 Worker 重启后按 `session_key + generation` 对账 |
 
-前端 `apps/web/src/agent/pending-launch.ts` 与 `TerminalSurface.tsx` 的「创建/启动」决定移到 Host（[总纲](./canvas-platform-design.md) §7）：挂载只发 `Get` + 附着，缺会话时经 `Create/Start`，不再由挂载顺序决定是否起进程。终端 WebSocket 路径与帧格式不变，Host 代理在升级前用 `Session` 记录校验 `session_id/generation` 归属。
+前端 `apps/web/src/agent/pending-launch.ts` 与 `TerminalSurface.tsx` 的「创建/启动」决定移到 Host（[总纲](../design/canvas-platform-design.md) §7）：挂载只发 `Get` + 附着，缺会话时经 `Create/Start`，不再由挂载顺序决定是否起进程。终端 WebSocket 路径与帧格式不变，Host 代理在升级前用 `Session` 记录校验 `session_id/generation` 归属。
 
 ### 2.7 `agent.proto`（扩展现有文件）
 
@@ -190,7 +192,7 @@ Worker 在任何域都不再做业务授权：请求到达 Worker 时已由 Host
 
 | 消息 / 枚举         | 字段（号）                                                                                                                                                                                                                                     | 说明                                                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `RepositoryScope`   | `execution_host_id`(1) `workspace_id`(2) `repository_id`(3) `repository_path`(4) `worktree_id`(5)                                                                                                                                              | [Git 设计](./git-github-design.md) §2 的定义；`repository_path` 才是检出身份                                      |
+| `RepositoryScope`   | `execution_host_id`(1) `workspace_id`(2) `repository_id`(3) `repository_path`(4) `worktree_id`(5)                                                                                                                                              | [Git 设计](../design/git-github-design.md) §2 的定义；`repository_path` 才是检出身份                              |
 | `RepositoryState`   | `scope`(1) `head_oid`(10) `branch`(11) `detached`(12) `index_fingerprint`(13) `worktree_fingerprint`(14) `upstream`(15) `ahead`(16) `behind`(17) `operation_state`(30) `observed_at`(40) `revision`(50)                                        | Host 缓存；`observed_at` 来自 Worker                                                                              |
 | `GitOperationState` | 0 UNSPECIFIED、1 QUEUED、2 RUNNING、3 SUCCEEDED、4 FAILED、5 CANCELLED、6 UNKNOWN_OUTCOME、7 AWAITING_RESOLUTION                                                                                                                               | 与 `OperationState` 一一对应                                                                                      |
 | `GitActionKind`     | 封闭枚举，覆盖 `RepositoryAction` 的每个变体（stage/unstage/revert/resolve/commit/branch/fetch/pull/push/sync/merge/rebase/cherry-pick/stash/tag/remote/reset/worktree/clone…），未知值 `UNSUPPORTED`                                          | 首版参数走 `action`(bytes, 版本锁 JSON) + `action_sha256`，与 `WorkerServiceRequest` 同策略；类型化消息追加式替换 |
@@ -302,7 +304,7 @@ Worker 在任何域都不再做业务授权：请求到达 Worker 时已由 Host
 
 ## 4. 代码布局
 
-按[仓库结构](./repository-structure.md) §2 的目标结构与规则：单文件 ≤ 800 行（本阶段新文件的上限，比 §3.1 的 1500 更严）、测试与实现分离、每个一级包只暴露一个 `Service`/`Client`。改名前不移动无关目录。
+按[仓库结构](../design/repository-structure.md) §2 的目标结构与规则：单文件 ≤ 800 行（本阶段新文件的上限，比 §3.1 的 1500 更严）、测试与实现分离、每个一级包只暴露一个 `Service`/`Client`。改名前不移动无关目录。
 
 ### 4.1 Go（`apps/host`）
 
@@ -323,15 +325,15 @@ Worker 在任何域都不再做业务授权：请求到达 Worker 时已由 Host
 
 ### 4.2 Rust（`apps/runtime`，改名后 `apps/worker`）
 
-| 模块                 | 文件                                                                                                                                                                                                       | 职责                                                                                                                                    |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `ownership/`         | `mod.rs`（记录读写，从现 `ownership.rs` 迁入）、`domains.rs`（六域枚举与路由守卫 `require_local_write(domain)`）、`export.rs`（按域导出，复用 `migration_export`）、`import.rs`（反向导入）、`tests.rs`    | 每个域切换只在对应路由模块加一行守卫                                                                                                    |
-| `routes/`            | `mod.rs`（拼装路由表，从 `lib.rs` 迁出）、`workspace.rs`、`files.rs`、`terminal.rs`、`agent.rs`、`git.rs`、`settings.rs`、`data.rs`、`usage.rs`；测试到 `tests/routes_*.rs`                                | 把 `api.rs`（5.7k 行）按域拆开与加守卫**同批进行**——守卫本来就要碰每条路由；这是 [仓库结构](./repository-structure.md) §5 第 6 步的前半 |
-| `worker/`            | `mod.rs`（分发，≤ 800 行）、`channel.rs`（帧复用、上行序号与 outbox 重放）、`socket.rs`（常驻 socket 承载）、`settings.rs`、`filesystem.rs`、`session.rs`、`agent.rs`、`git.rs`、`agent_bridge.rs`（保留） | 每域一文件，只做 Protobuf ↔ 内部调用的翻译                                                                                             |
-| `worker_settings.rs` | 本地设置文件的读写与从 `settings.json` 一次性拆分                                                                                                                                                          | settings 域切换的 Worker 侧                                                                                                             |
-| `hook/`              | `ingest.rs` 增加「归一化后上行」分支；`reduce.rs` 结果经 `worker::agent` 上报而不再直接落 `agent_status`（agent 域切换后）                                                                                 | 上报与本地 reduce 共存到改名前                                                                                                          |
-| `git_repository.rs`  | 拆 `git_repository/{status,refs,history,operations}.rs`（已有 `commits/refs/stash/integration` 子模块，补 `operations.rs` 承接 `RunOperation`）                                                            | [仓库结构](./repository-structure.md) §5 第 6 步后半                                                                                    |
-| `migrations/`        | `0010_domain_ownership.sql`、`0011_host_imports.sql`；`0012_retire_business_tables.sql` 只在改名步骤加入                                                                                                   | 已发布迁移字节不变                                                                                                                      |
+| 模块                 | 文件                                                                                                                                                                                                       | 职责                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ownership/`         | `mod.rs`（记录读写，从现 `ownership.rs` 迁入）、`domains.rs`（六域枚举与路由守卫 `require_local_write(domain)`）、`export.rs`（按域导出，复用 `migration_export`）、`import.rs`（反向导入）、`tests.rs`    | 每个域切换只在对应路由模块加一行守卫                                                                                                            |
+| `routes/`            | `mod.rs`（拼装路由表，从 `lib.rs` 迁出）、`workspace.rs`、`files.rs`、`terminal.rs`、`agent.rs`、`git.rs`、`settings.rs`、`data.rs`、`usage.rs`；测试到 `tests/routes_*.rs`                                | 把 `api.rs`（5.7k 行）按域拆开与加守卫**同批进行**——守卫本来就要碰每条路由；这是 [仓库结构](../design/repository-structure.md) §5 第 6 步的前半 |
+| `worker/`            | `mod.rs`（分发，≤ 800 行）、`channel.rs`（帧复用、上行序号与 outbox 重放）、`socket.rs`（常驻 socket 承载）、`settings.rs`、`filesystem.rs`、`session.rs`、`agent.rs`、`git.rs`、`agent_bridge.rs`（保留） | 每域一文件，只做 Protobuf ↔ 内部调用的翻译                                                                                                     |
+| `worker_settings.rs` | 本地设置文件的读写与从 `settings.json` 一次性拆分                                                                                                                                                          | settings 域切换的 Worker 侧                                                                                                                     |
+| `hook/`              | `ingest.rs` 增加「归一化后上行」分支；`reduce.rs` 结果经 `worker::agent` 上报而不再直接落 `agent_status`（agent 域切换后）                                                                                 | 上报与本地 reduce 共存到改名前                                                                                                                  |
+| `git_repository.rs`  | 拆 `git_repository/{status,refs,history,operations}.rs`（已有 `commits/refs/stash/integration` 子模块，补 `operations.rs` 承接 `RunOperation`）                                                            | [仓库结构](../design/repository-structure.md) §5 第 6 步后半                                                                                    |
+| `migrations/`        | `0010_domain_ownership.sql`、`0011_host_imports.sql`；`0012_retire_business_tables.sql` 只在改名步骤加入                                                                                                   | 已发布迁移字节不变                                                                                                                              |
 
 ### 4.3 TypeScript（`packages/`、`apps/web`）
 
@@ -355,7 +357,7 @@ Worker 在任何域都不再做业务授权：请求到达 Worker 时已由 Host
 | 六个域在参考安装与 `pnpm ownership:e2e`（§5.2）中均 `owner=host, phase=settled`，且每个域完成过一次 switch → rollback → switch 的往返 | e2e 输出的 `OwnershipService/List` 快照                 |
 | Runtime 业务写入路由全部返回 `ownership_moved`；`apps/web` 中对这些路由的调用为零（`grep` 清单为空）                                  | `routes/*.rs` 守卫测试；`scripts/repo-check` 新规则     |
 | 回滚窗口结束：距最后一个域切换 ≥ 1 个发布周期，或操作者显式关闭窗口（`ownership close-window`）                                       | `write_ownership.reason_code = ownership.window.closed` |
-| [仓库结构](./repository-structure.md) §5 第 1–6 步已完成（repo-check、根目录、包名、`tools/`、文档分目录、大文件拆分）                | 各步提交                                                |
+| [仓库结构](../design/repository-structure.md) §5 第 1–6 步已完成（repo-check、根目录、包名、`tools/`、文档分目录、大文件拆分）        | 各步提交                                                |
 | Windows 与 SSH 远端 Worker 至少各有一次真实进程验证（不要求全部实机验收，但改名会改二进制名，必须证明启动链路）                       | 实施记录                                                |
 
 步骤（每步单独提交并跑全量检查）：
@@ -420,7 +422,7 @@ B0b 已实施：`events.proto` 与三端契约、Host `internal/eventstream` 与
 
 ## 6. 验收
 
-### 6.1 [总纲](./canvas-platform-design.md) §10 场景 ↔ 域
+### 6.1 [总纲](../design/canvas-platform-design.md) §10 场景 ↔ 域
 
 | 场景 | 涉及域                          | 切换后必须成立的新断言                                                                                                                    |
 | ---- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -450,12 +452,12 @@ B0b 已实施：`events.proto` 与三端契约、Host `internal/eventstream` 与
 
 原则：同一套黑盒断言在 `owner=runtime` 与 `owner=host` 两种状态下各跑一遍，结果经规范化（去掉 id、时间戳、revision/updatedAt、序号）后逐字节相等。差异必须是本文明确声明的（例如 `revision` 取代 `updatedAt` CAS、事件来源不同），并登记在脚本的 `expectedDifferences` 表里；未登记的差异即失败。
 
-| 层次       | 手段                                                                                                                                                       | 覆盖                                                |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| 网关单元   | 各域 `gateway.test.ts` 用同一组用例分别注入 Runtime 假客户端与 Host 假客户端，断言网关返回的领域对象相等（沿用 `canvas-ownership/gateway.test.ts` 的做法） | 前端可观察的数据形状                                |
-| 端到端双跑 | `ownership-e2e --domain D --compare`：同一脚本先在 runtime 归属下执行场景并录制规范化响应与事件序列，切换后重放同一场景再录制，比对                        | HTTP 状态码与错误码、事件类型与顺序、最终数据库投影 |
-| 黄金文件   | `scripts/fixtures/ownership/<domain>/*.golden.json` 由 `--record` 生成、提交入库；CI 只比对                                                                | 防止切换后语义漂移被「测试也一起改」掩盖            |
-| 权限对照   | 同一设备授权集合下，切换前经 Host 代理访问 Runtime 路由与切换后访问 Host 方法，允许/拒绝结果表逐格相等（`scopes.go` 的分类表即黄金表）                     | `read/write/execute` 三类与工作空间收窄             |
-| 失败注入   | 切换前后各注入一次：Worker SIGKILL、Host SIGKILL、事件流断开、`expected_revision` 过期；断言用户可见状态一致（`unknown/stale/disconnected` 不显示为成功）  | [总纲](./canvas-platform-design.md) §8 的状态语义   |
+| 层次       | 手段                                                                                                                                                       | 覆盖                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 网关单元   | 各域 `gateway.test.ts` 用同一组用例分别注入 Runtime 假客户端与 Host 假客户端，断言网关返回的领域对象相等（沿用 `canvas-ownership/gateway.test.ts` 的做法） | 前端可观察的数据形状                                      |
+| 端到端双跑 | `ownership-e2e --domain D --compare`：同一脚本先在 runtime 归属下执行场景并录制规范化响应与事件序列，切换后重放同一场景再录制，比对                        | HTTP 状态码与错误码、事件类型与顺序、最终数据库投影       |
+| 黄金文件   | `scripts/fixtures/ownership/<domain>/*.golden.json` 由 `--record` 生成、提交入库；CI 只比对                                                                | 防止切换后语义漂移被「测试也一起改」掩盖                  |
+| 权限对照   | 同一设备授权集合下，切换前经 Host 代理访问 Runtime 路由与切换后访问 Host 方法，允许/拒绝结果表逐格相等（`scopes.go` 的分类表即黄金表）                     | `read/write/execute` 三类与工作空间收窄                   |
+| 失败注入   | 切换前后各注入一次：Worker SIGKILL、Host SIGKILL、事件流断开、`expected_revision` 过期；断言用户可见状态一致（`unknown/stale/disconnected` 不显示为成功）  | [总纲](../design/canvas-platform-design.md) §8 的状态语义 |
 
 对照测试的通过是每个域「可以切换」的门槛；§6.2 的清单是「切换后正确」的门槛；两者都通过并完成一次回滚往返，实施记录才把该域标为交付。
