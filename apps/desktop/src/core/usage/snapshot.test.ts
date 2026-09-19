@@ -99,7 +99,11 @@ describe("miniUsage", () => {
     const mini = miniUsage({
       refreshAvailableAt: null,
       providers: [
-        { ...ok("claude", [window("5h", 99)]), status: "error", reason: "unauthorized" },
+        {
+          ...ok("claude", [window("5h", 99)]),
+          status: "error",
+          reason: "unauthorized",
+        },
         { ...ok("codex", [window("5h", 10)]), status: "unavailable" },
         ok("copilot", [window("5h", 20)]),
       ],

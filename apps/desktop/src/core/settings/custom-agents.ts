@@ -84,7 +84,9 @@ export function validAgentId(value: string): boolean {
   if (!value.startsWith("custom:")) return false;
   const suffix = value.slice("custom:".length);
   return (
-    suffix.length > 0 && suffix.length <= 64 && /^[A-Za-z0-9.:_-]+$/.test(suffix)
+    suffix.length > 0 &&
+    suffix.length <= 64 &&
+    /^[A-Za-z0-9.:_-]+$/.test(suffix)
   );
 }
 
@@ -162,7 +164,16 @@ export function sanitizeCustomAgent(raw: JsonValue): CustomAgent | undefined {
         .slice(0, AGENT_CAPABILITIES.length)
     : [];
 
-  return { id, label, color, launchCmd, args, env, baseAgent, disabledCapabilities };
+  return {
+    id,
+    label,
+    color,
+    launchCmd,
+    args,
+    env,
+    baseAgent,
+    disabledCapabilities,
+  };
 }
 
 export function parseCustomAgents(document: JsonValue): CustomAgent[] {

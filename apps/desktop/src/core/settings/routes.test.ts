@@ -106,7 +106,9 @@ describe("PATCH /api/settings", () => {
       });
     }
     // An empty body is the same refusal: there is nothing to merge.
-    expect(patchSettings(deps(), emptyRequest("PATCH", "/api/settings")).status).toBe(400);
+    expect(
+      patchSettings(deps(), emptyRequest("PATCH", "/api/settings")).status,
+    ).toBe(400);
   });
 
   it("refuses a body that is not JSON", () => {
@@ -124,7 +126,9 @@ describe("PATCH /api/settings", () => {
     expect(
       patchSettings(deps(), request({ terminal: { backend: "screen" } })).body,
     ).toEqual({ code: "bad_request", message: "Unknown terminal backend" });
-    expect(patchSettings(deps(), request({ logs: { retentionDays: 45 } })).body).toEqual({
+    expect(
+      patchSettings(deps(), request({ logs: { retentionDays: 45 } })).body,
+    ).toEqual({
       code: "bad_request",
       message: "Unknown log retention",
     });
@@ -132,7 +136,9 @@ describe("PATCH /api/settings", () => {
     expect(
       patchSettings(deps(), request({ terminal: { backend: "tmux" } })).status,
     ).toBe(200);
-    expect(patchSettings(deps(), request({ logs: { retentionDays: 0 } })).status).toBe(200);
+    expect(
+      patchSettings(deps(), request({ logs: { retentionDays: 0 } })).status,
+    ).toBe(200);
   });
 });
 
@@ -180,7 +186,9 @@ describe("GET /api/execution-hosts", () => {
     expect(hosts[1]?.workerConfigured).toBe(false);
     expect(hosts[2]?.workerConfigured).toBe(true);
     expect(hosts[2]?.workspaceCount).toBe(2);
-    expect((hosts[2]?.ssh as JsonObject).worker).toEqual({ path: "/opt/armadra" });
+    expect((hosts[2]?.ssh as JsonObject).worker).toEqual({
+      path: "/opt/armadra",
+    });
   });
 });
 
@@ -200,7 +208,9 @@ describe("PUT /api/execution-hosts/{id}", () => {
     const hosts = list(answer);
     expect(hosts).toHaveLength(2);
     expect((hosts[1]?.ssh as JsonObject).name).toBe("Renamed");
-    expect((hosts[1]?.ssh as JsonObject).identityFile).toBe("/home/ada/.ssh/id");
+    expect((hosts[1]?.ssh as JsonObject).identityFile).toBe(
+      "/home/ada/.ssh/id",
+    );
   });
 
   it("refuses a mismatched id, this machine, and an invalid field", () => {
@@ -218,7 +228,11 @@ describe("PUT /api/execution-hosts/{id}", () => {
     // A refusal naming the field, rather than an entry that silently
     // disappears on the next read.
     expect(
-      putExecutionHost(context, "box", request({ ...valid, host: "a;rm -rf /" })).body,
+      putExecutionHost(
+        context,
+        "box",
+        request({ ...valid, host: "a;rm -rf /" }),
+      ).body,
     ).toEqual({
       code: "bad_request",
       message: "Invalid execution host field: host",
@@ -227,7 +241,9 @@ describe("PUT /api/execution-hosts/{id}", () => {
 });
 
 describe("DELETE /api/execution-hosts/{id}", () => {
-  const registry = { ssh: { hosts: [{ id: "box", name: "Box", host: "a.example" }] } };
+  const registry = {
+    ssh: { hosts: [{ id: "box", name: "Box", host: "a.example" }] },
+  };
 
   it("retires a host nothing runs on", () => {
     const context = hostDeps(registry);
@@ -264,18 +280,24 @@ describe("execution host export and import", () => {
     expect(body.version).toBe(1);
     // There is no field a password, passphrase or key could be carried in, so
     // moving this between two of a person's own machines moves no secret.
-    expect(JSON.stringify(body)).not.toMatch(/password|passphrase|secret|token/i);
+    expect(JSON.stringify(body)).not.toMatch(
+      /password|passphrase|secret|token/i,
+    );
     expect(body.hosts).toEqual([{ id: "box", name: "Box", host: "a.example" }]);
   });
 
   it("refuses a package written to a shape this build does not read", () => {
     expect(
-      importExecutionHosts(hostDeps(), request({ version: 2, hosts: [] })).status,
+      importExecutionHosts(hostDeps(), request({ version: 2, hosts: [] }))
+        .status,
     ).toBe(400);
     // `deny_unknown_fields`: importing the half we understand would be a
     // registry nobody chose.
     expect(
-      importExecutionHosts(hostDeps(), request({ version: 1, hosts: [], extra: 1 })).status,
+      importExecutionHosts(
+        hostDeps(),
+        request({ version: 1, hosts: [], extra: 1 }),
+      ).status,
     ).toBe(400);
   });
 
@@ -286,7 +308,9 @@ describe("execution host export and import", () => {
       request({ version: 1, hosts: [incoming] }),
     );
     expect(collision.status).toBe(409);
-    expect((collision.body as JsonObject).message).toContain("import with overwrite");
+    expect((collision.body as JsonObject).message).toContain(
+      "import with overwrite",
+    );
 
     const overwritten = list(
       importExecutionHosts(

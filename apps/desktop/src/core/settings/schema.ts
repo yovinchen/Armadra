@@ -12,16 +12,19 @@
  * unreadable.
  */
 
-import {
-  normalizeCustomAgents,
-} from "./custom-agents";
+import { normalizeCustomAgents } from "./custom-agents";
 import { clone, isJsonObject, type JsonObject, type JsonValue } from "./local";
 import { normalizeHosts } from "./ssh-hosts";
 
 /* --------------------------------- terminal -------------------------------- */
 
 /** `terminal.backend` — the user's choice, not necessarily what is in effect. */
-export const BACKEND_CHOICES = ["auto", "tmux", "direct", "sessionHost"] as const;
+export const BACKEND_CHOICES = [
+  "auto",
+  "tmux",
+  "direct",
+  "sessionHost",
+] as const;
 const DEFAULT_BACKEND = "auto";
 const DEFAULT_DETACHED_GRACE_MINUTES = 1_440;
 const MAX_DETACHED_GRACE_MINUTES = 525_600;
@@ -176,7 +179,8 @@ function normalizeTerminal(document: JsonObject): void {
   terminal.dormantAfterSeconds =
     dormant !== undefined &&
     (dormant === 0 ||
-      (dormant >= MIN_DORMANT_AFTER_SECONDS && dormant <= MAX_DORMANT_AFTER_SECONDS))
+      (dormant >= MIN_DORMANT_AFTER_SECONDS &&
+        dormant <= MAX_DORMANT_AFTER_SECONDS))
       ? dormant
       : DEFAULT_DORMANT_AFTER_SECONDS;
   document.terminal = terminal;
@@ -226,7 +230,11 @@ function normalizeUpdates(document: JsonObject): void {
   const updates = section(document, "updates");
   // An unknown channel snaps back to stable rather than being rejected: the
   // conservative reading of a broken value is the conservative channel.
-  updates.channel = choice(updates.channel, UPDATE_CHANNELS, DEFAULT_UPDATE_CHANNEL);
+  updates.channel = choice(
+    updates.channel,
+    UPDATE_CHANNELS,
+    DEFAULT_UPDATE_CHANNEL,
+  );
   updates.autoCheck = asBool(updates.autoCheck) ?? DEFAULT_UPDATE_AUTO_CHECK;
   updates.autoDownload =
     asBool(updates.autoDownload) ?? DEFAULT_UPDATE_AUTO_DOWNLOAD;
@@ -293,7 +301,8 @@ function normalizeLanguage(document: JsonObject): void {
       : rss === 0
         ? 0
         : Math.max(rss, MIN_NONZERO_MAX_RSS_BYTES);
-  language.formatOnSave = asBool(language.formatOnSave) ?? DEFAULT_FORMAT_ON_SAVE;
+  language.formatOnSave =
+    asBool(language.formatOnSave) ?? DEFAULT_FORMAT_ON_SAVE;
   document.language = language;
 }
 

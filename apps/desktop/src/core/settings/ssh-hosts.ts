@@ -70,9 +70,7 @@ export interface SshHost {
 
 function isId(value: string): boolean {
   return (
-    value.length > 0 &&
-    value.length <= MAX_ID &&
-    /^[A-Za-z0-9_-]+$/.test(value)
+    value.length > 0 && value.length <= MAX_ID && /^[A-Za-z0-9_-]+$/.test(value)
   );
 }
 
@@ -138,7 +136,9 @@ export function validateHost(host: SshHost): string | null {
   const identity = host.identityFile;
   if (
     identity !== undefined &&
-    (!identity.startsWith("/") || identity.length > MAX_PATH || !isClean(identity))
+    (!identity.startsWith("/") ||
+      identity.length > MAX_PATH ||
+      !isClean(identity))
   ) {
     return "identityFile";
   }
@@ -171,7 +171,9 @@ export function validateHost(host: SshHost): string | null {
     const stateDir = worker.stateDir;
     if (
       stateDir !== undefined &&
-      (!stateDir.startsWith("/") || stateDir.length > MAX_PATH || !isClean(stateDir))
+      (!stateDir.startsWith("/") ||
+        stateDir.length > MAX_PATH ||
+        !isClean(stateDir))
     ) {
       return "worker.stateDir";
     }
@@ -216,7 +218,8 @@ export function parseHost(raw: JsonValue): SshHost | undefined {
   let extraArgs: string[] | undefined;
   if (extraArgsRaw !== undefined && extraArgsRaw !== null) {
     if (!Array.isArray(extraArgsRaw)) return undefined;
-    if (!extraArgsRaw.every((entry) => typeof entry === "string")) return undefined;
+    if (!extraArgsRaw.every((entry) => typeof entry === "string"))
+      return undefined;
     extraArgs = extraArgsRaw as string[];
   }
   const workerRaw = raw.worker;
@@ -275,7 +278,8 @@ export function hostToJson(host: SshHost): JsonObject {
   }
   if (host.worker !== undefined) {
     const worker: JsonObject = { path: host.worker.path };
-    if (host.worker.stateDir !== undefined) worker.stateDir = host.worker.stateDir;
+    if (host.worker.stateDir !== undefined)
+      worker.stateDir = host.worker.stateDir;
     json.worker = worker;
   }
   return json;

@@ -92,7 +92,9 @@ export class SettingsStore {
    * rewritten straight away, so the move happens once instead of waiting for
    * whatever the next patch happens to be.
    */
-  static load(options: SettingsStoreFiles & SettingsStoreOptions): SettingsStore {
+  static load(
+    options: SettingsStoreFiles & SettingsStoreOptions,
+  ): SettingsStore {
     const shared = readJson(options.sharedFile);
     const local = readJson(options.localFile);
     const migrating = carriesLocal(shared);

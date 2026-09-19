@@ -9,7 +9,13 @@
  * the one that wrote the file a person's next start reads.
  */
 
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -39,7 +45,10 @@ function workspace(): { shared: string; local: string } {
 }
 
 function open(files: { shared: string; local: string }): SettingsStore {
-  return SettingsStore.load({ sharedFile: files.shared, localFile: files.local });
+  return SettingsStore.load({
+    sharedFile: files.shared,
+    localFile: files.local,
+  });
 }
 
 function readJson(file: string): JsonObject {
@@ -88,7 +97,10 @@ describe("the local split", () => {
 
   it("lets the local file win over a stale shared value", () => {
     expect(
-      overlay({ terminal: { backend: "direct" } }, { terminal: { backend: "tmux" } }),
+      overlay(
+        { terminal: { backend: "direct" } },
+        { terminal: { backend: "tmux" } },
+      ),
     ).toEqual({ terminal: { backend: "tmux" } });
     // And with nothing local, the stale shared value is dropped rather than
     // obeyed: these keys are answered by this machine or not at all. The
@@ -165,7 +177,9 @@ describe("SettingsStore", () => {
     // documented "detect a browser" and not a leak of the account's half.
     expect(Object.keys(local).sort()).toEqual(["browser", "power", "terminal"]);
     expect("usage" in local).toBe(false);
-    expect("detachedGraceMinutes" in (local.terminal as JsonObject)).toBe(false);
+    expect("detachedGraceMinutes" in (local.terminal as JsonObject)).toBe(
+      false,
+    );
 
     // And the two are one document again on the next start.
     const reloaded = open(files);
@@ -233,14 +247,26 @@ describe("SettingsStore", () => {
     let document = store.patch({
       ssh: {
         hosts: [
-          { id: "box", name: "Box", host: "example.com", user: "ada", port: 2222 },
+          {
+            id: "box",
+            name: "Box",
+            host: "example.com",
+            user: "ada",
+            port: 2222,
+          },
           { id: "evil", name: "Evil", host: "a;rm -rf /" },
         ],
       },
     });
     expect(document.ssh).toEqual({
       hosts: [
-        { id: "box", name: "Box", host: "example.com", port: 2222, user: "ada" },
+        {
+          id: "box",
+          name: "Box",
+          host: "example.com",
+          port: 2222,
+          user: "ada",
+        },
       ],
     });
     document = store.patch({ ssh: { hosts: [] } });
@@ -286,7 +312,9 @@ describe("SettingsStore", () => {
     const files = workspace();
     open(files).patch({ zebra: 1, alpha: 2, middle: { zzz: 1, aaa: 2 } });
     const text = readFileSync(files.shared, "utf8");
-    const keys = [...text.matchAll(/^ {2}"([^"]+)"/gm)].map((match) => match[1]);
+    const keys = [...text.matchAll(/^ {2}"([^"]+)"/gm)].map(
+      (match) => match[1],
+    );
     expect(keys).toEqual([...keys].sort());
     expect(text.indexOf('"aaa"')).toBeLessThan(text.indexOf('"zzz"'));
     // Two spaces, `": "`, and no trailing newline — `to_string_pretty`'s shape.
@@ -298,7 +326,7 @@ describe("SettingsStore", () => {
     // The two orders disagree above the basic plane: U+1F600 is one code point
     // whose UTF-8 bytes start at 0xF0, but two UTF-16 units starting at 0xD83D
     // — which sorts before U+FB00, not after it.
-    expect(Object.keys(sortJson({ "\u{1F600}": 1, "ﬀ": 2 }))).toEqual([
+    expect(Object.keys(sortJson({ "\u{1F600}": 1, ﬀ: 2 }))).toEqual([
       "ﬀ",
       "\u{1F600}",
     ]);

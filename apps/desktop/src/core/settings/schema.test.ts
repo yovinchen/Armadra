@@ -29,7 +29,11 @@ function object(value: JsonValue | undefined): JsonObject {
 function at(document: JsonObject, path: string): JsonValue | undefined {
   let current: JsonValue = document;
   for (const segment of path.split(".")) {
-    if (typeof current !== "object" || current === null || Array.isArray(current)) {
+    if (
+      typeof current !== "object" ||
+      current === null ||
+      Array.isArray(current)
+    ) {
       return undefined;
     }
     const next: JsonValue | undefined = current[segment];
@@ -61,10 +65,16 @@ describe("normalize", () => {
   it("keeps dormancy off when it was asked for, and clamps the rest", () => {
     // `0` is a real choice, so it survives where `1` would not.
     expect(
-      at(normalize({ terminal: { dormantAfterSeconds: 0 } }), "terminal.dormantAfterSeconds"),
+      at(
+        normalize({ terminal: { dormantAfterSeconds: 0 } }),
+        "terminal.dormantAfterSeconds",
+      ),
     ).toBe(0);
     expect(
-      at(normalize({ terminal: { dormantAfterSeconds: 1 } }), "terminal.dormantAfterSeconds"),
+      at(
+        normalize({ terminal: { dormantAfterSeconds: 1 } }),
+        "terminal.dormantAfterSeconds",
+      ),
     ).toBe(120);
     expect(
       at(
@@ -73,7 +83,10 @@ describe("normalize", () => {
       ),
     ).toBe(120);
     expect(
-      at(normalize({ terminal: { dormantAfterSeconds: 60 } }), "terminal.dormantAfterSeconds"),
+      at(
+        normalize({ terminal: { dormantAfterSeconds: 60 } }),
+        "terminal.dormantAfterSeconds",
+      ),
     ).toBe(60);
   });
 
@@ -123,7 +136,10 @@ describe("normalize", () => {
     expect(at(off, "usage.enabled")).toBe(false);
 
     const providers = object(
-      at(normalize({ usage: { providers: { claude: false, invented: true } } }), "usage.providers"),
+      at(
+        normalize({ usage: { providers: { claude: false, invented: true } } }),
+        "usage.providers",
+      ),
     );
     expect(providers.claude).toBe(false);
     // A switch for a provider the core cannot query would be a switch that
@@ -134,33 +150,55 @@ describe("normalize", () => {
   });
 
   it("snaps a refresh cadence and a retention outside the offered sets", () => {
-    expect(at(normalize({ usage: { refreshMinutes: 7 } }), "usage.refreshMinutes")).toBe(5);
-    expect(at(normalize({ usage: { refreshMinutes: 0 } }), "usage.refreshMinutes")).toBe(0);
-    expect(at(normalize({ logs: { retentionDays: 45 } }), "logs.retentionDays")).toBe(30);
-    expect(at(normalize({ logs: { retentionDays: 0 } }), "logs.retentionDays")).toBe(0);
+    expect(
+      at(normalize({ usage: { refreshMinutes: 7 } }), "usage.refreshMinutes"),
+    ).toBe(5);
+    expect(
+      at(normalize({ usage: { refreshMinutes: 0 } }), "usage.refreshMinutes"),
+    ).toBe(0);
+    expect(
+      at(normalize({ logs: { retentionDays: 45 } }), "logs.retentionDays"),
+    ).toBe(30);
+    expect(
+      at(normalize({ logs: { retentionDays: 0 } }), "logs.retentionDays"),
+    ).toBe(0);
   });
 
   it("clamps the resource sampling interval and snaps the power policy", () => {
     expect(at(normalize({}), "resources.intervalMs")).toBe(2_000);
-    expect(at(normalize({ resources: { intervalMs: 10 } }), "resources.intervalMs")).toBe(500);
     expect(
-      at(normalize({ resources: { intervalMs: 600_000 } }), "resources.intervalMs"),
+      at(normalize({ resources: { intervalMs: 10 } }), "resources.intervalMs"),
+    ).toBe(500);
+    expect(
+      at(
+        normalize({ resources: { intervalMs: 600_000 } }),
+        "resources.intervalMs",
+      ),
     ).toBe(60_000);
     // The safest reading of a broken value is the conservative default, not a
     // machine that refuses to sleep.
-    expect(at(normalize({ power: { policy: "always" } }), "power.policy")).toBe("manual");
-    expect(at(normalize({ power: { policy: "never" } }), "power.policy")).toBe("never");
+    expect(at(normalize({ power: { policy: "always" } }), "power.policy")).toBe(
+      "manual",
+    );
+    expect(at(normalize({ power: { policy: "never" } }), "power.policy")).toBe(
+      "never",
+    );
   });
 
   it("stores a browser path as written and defaults the two switches", () => {
-    const document = normalize({ browser: { executablePath: "  /opt/chrome  " } });
+    const document = normalize({
+      browser: { executablePath: "  /opt/chrome  " },
+    });
     expect(at(document, "browser.executablePath")).toBe("/opt/chrome");
     expect(at(document, "browser.keepAlive")).toBe(true);
     expect(at(document, "browser.headful")).toBe(false);
     // An empty string means "detect", and is what a cleared field becomes.
-    expect(at(normalize({ browser: { executablePath: "   " } }), "browser.executablePath")).toBe(
-      "",
-    );
+    expect(
+      at(
+        normalize({ browser: { executablePath: "   " } }),
+        "browser.executablePath",
+      ),
+    ).toBe("");
   });
 
   it("normalises the language scalars and leaves the server map alone", () => {
@@ -181,7 +219,9 @@ describe("normalize", () => {
     // `servers` is the user's map and may hold ids this build never heard of.
     expect(at(document, "language.servers.invented.path")).toBe("/x");
     // `0` is "no ceiling" and is kept.
-    expect(at(normalize({ language: { maxRssBytes: 0 } }), "language.maxRssBytes")).toBe(0);
+    expect(
+      at(normalize({ language: { maxRssBytes: 0 } }), "language.maxRssBytes"),
+    ).toBe(0);
   });
 });
 
@@ -190,7 +230,13 @@ describe("ssh hosts", () => {
     const document = normalize({
       ssh: {
         hosts: [
-          { id: "box", name: "Box", host: "example.com", user: "ada", port: 2222 },
+          {
+            id: "box",
+            name: "Box",
+            host: "example.com",
+            user: "ada",
+            port: 2222,
+          },
           { id: "evil", name: "Evil", host: "a;rm -rf /" },
         ],
       },
@@ -215,12 +261,20 @@ describe("ssh hosts", () => {
     expect(validateHost({ ...valid, port: 0 })).toBe("port");
     // A relative identity path would be resolved against whatever directory
     // `ssh` happened to start in.
-    expect(validateHost({ ...valid, identityFile: "key" })).toBe("identityFile");
-    expect(validateHost({ ...valid, identityFile: "/home/ada/.ssh/id" })).toBeNull();
+    expect(validateHost({ ...valid, identityFile: "key" })).toBe(
+      "identityFile",
+    );
+    expect(
+      validateHost({ ...valid, identityFile: "/home/ada/.ssh/id" }),
+    ).toBeNull();
     expect(validateHost({ ...valid, extraArgs: ["bare"] })).toBe("extraArgs");
     expect(validateHost({ ...valid, extraArgs: ["-o", "-4"] })).toBeNull();
-    expect(validateHost({ ...valid, worker: { path: "armadra" } })).toBe("worker.path");
-    expect(validateHost({ ...valid, worker: { path: "/opt/armadra" } })).toBeNull();
+    expect(validateHost({ ...valid, worker: { path: "armadra" } })).toBe(
+      "worker.path",
+    );
+    expect(
+      validateHost({ ...valid, worker: { path: "/opt/armadra" } }),
+    ).toBeNull();
   });
 
   /**
@@ -241,7 +295,9 @@ describe("ssh hosts", () => {
       // Case is not a defence.
       "-oproxycommand=nc",
     ]) {
-      expect(validateHost({ ...valid, extraArgs: [option] }), option).toBe("extraArgs");
+      expect(validateHost({ ...valid, extraArgs: [option] }), option).toBe(
+        "extraArgs",
+      );
     }
   });
 
@@ -299,7 +355,12 @@ describe("custom agents", () => {
       { id: "custom:no-command", label: "Nameless", launchCmd: "" },
       { id: "custom:newline", label: "Sneaky", launchCmd: "a\nrm -rf /" },
       { id: "custom:bad id!", label: "Bad", launchCmd: "a" },
-      { id: "custom:no-base", label: "Invented", launchCmd: "a", baseAgent: "invented" },
+      {
+        id: "custom:no-base",
+        label: "Invented",
+        launchCmd: "a",
+        baseAgent: "invented",
+      },
       "not an object",
     ]);
     const agents = parseCustomAgents(document);
