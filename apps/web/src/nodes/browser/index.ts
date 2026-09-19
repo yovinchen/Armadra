@@ -1,4 +1,8 @@
 export { BrowserNode, type BrowserMode } from "./BrowserNode";
+export { browserPartition, isDesktopShell } from "./desktop";
+export { WebviewSurface } from "./WebviewSurface";
+export { allowGuestNavigation, searchOrUrl } from "./webview";
+export { MAX_TABS } from "./webview-tabs";
 export { ActivityLine, LeaseBadge, controllerKey, sinceLabel } from "./Lease";
 export { UnsupportedPanel } from "./Managed";
 export { DialogPrompt, FileChooserPrompt } from "./Prompts";
