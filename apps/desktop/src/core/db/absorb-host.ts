@@ -56,7 +56,7 @@ import {
 /** 逐列照搬的表，顺序即插入顺序——外键要求被引用的行先进。 */
 export const ABSORBED_TABLES = [
   "store_meta",
-  "identity_owner",
+  "identity_principals",
   "identity_devices",
   "identity_sessions",
   "identity_bootstrap_tickets",
@@ -77,6 +77,17 @@ export const PROJECTED_TABLES = [
   "automation_runs",
   "automation_gates",
 ] as const;
+
+/**
+ * 统一库的表 → 旧 `host.db` 里对应的表。
+ *
+ * 只有一条：迁移 0019 把单行的 `identity_owner` 换成了多行的
+ * `identity_principals`（owner 行 `kind='owner'`）。Go Host 那边永远只有
+ * `identity_owner`，所以这一张是**投影**而不是拷贝：列不一样，行的含义一样。
+ */
+const LEGACY_SOURCE: Readonly<Record<string, string>> = {
+  identity_principals: "identity_owner",
+};
 
 /** Host 的实体 kind → 统一库里的表。投影只认这四种。 */
 const PROJECTIONS = [
@@ -147,8 +158,20 @@ export function absorbHostDatabase(options: {
     database.exec("BEGIN IMMEDIATE");
     try {
       for (const table of ABSORBED_TABLES) {
-        if (!present.has(table) || !tableExists(database, table)) {
+        const source = LEGACY_SOURCE[table] ?? table;
+        if (!present.has(source) || !tableExists(database, table)) {
           rows[table] = 0;
+          continue;
+        }
+        if (table === "identity_principals") {
+          // owner 那一行进新形状：标识、建立时间原样，`kind` 补成 'owner'，
+          // 显示名留空——Go Host 从来没有存过它。
+          database.exec(
+            "INSERT INTO main.identity_principals " +
+              "(principal_id, kind, display_name, created_at_ms, disabled_at_ms) " +
+              "SELECT principal_id, 'owner', '', created_at_ms, 0 FROM legacy.identity_owner",
+          );
+          rows[table] = count(database, table);
           continue;
         }
         // 列名逐条列出来，而不是 `INSERT INTO t SELECT * FROM legacy.t`：两边
@@ -167,8 +190,9 @@ export function absorbHostDatabase(options: {
       Object.assign(rows, projectAutomation(database, present));
       // 搬完逐张核对行数：目标行数必须等于原库行数，差一行就整体回滚。
       for (const table of ABSORBED_TABLES) {
-        if (!present.has(table) || !tableExists(database, table)) continue;
-        const expected = count(database, table, "legacy");
+        const source = LEGACY_SOURCE[table] ?? table;
+        if (!present.has(source) || !tableExists(database, table)) continue;
+        const expected = count(database, source, "legacy");
         if (rows[table] !== expected) {
           throw new Error(
             `${table} 搬运行数不符：原库 ${expected}，统一库 ${rows[table]}`,

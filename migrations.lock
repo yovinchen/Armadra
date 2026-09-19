@@ -19,7 +19,8 @@
     "0015_unified_core.sql": "a3aa5028cc99eb796fbe57f56366b924c8d4efe30dcefee05c6b7ca6390b86a6",
     "0016_agent_domain.sql": "1f509e6ec72592687e5ee6dcec6f8155e0a1abc89a4bca1258a8df43eb78c36d",
     "0017_event_outbox.sql": "0d411675f270a7e580bcbdb3c63812ba0b9543a4efb9e34bc348813339fc399d",
-    "0018_github.sql": "e400ff0c175c886fa7a81973a9ecba5ffc136d038713f8ab14f2052e54fb6086"
+    "0018_github.sql": "e400ff0c175c886fa7a81973a9ecba5ffc136d038713f8ab14f2052e54fb6086",
+    "0019_accounts.sql": "6fc29a329451dec03f7e935b859a6c52baa1971d70184680eeb1166a1b109461"
   },
   "apps/host/internal/migration/legacy": {
     "0001_initial.sql": "a9c77bb975e4faab517fe8ec7a5179455ff6c22dc5585c17e6d5e405c7180f63",

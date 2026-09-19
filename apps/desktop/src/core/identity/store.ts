@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { AccountsTx } from "./accounts-store";
 import { IdentityError } from "./errors";
 import { ID_PATTERN, newId } from "./tokens";
 
@@ -107,12 +108,25 @@ export class IdentityStore {
 }
 
 export class IdentityTx {
-  constructor(private readonly database: DatabaseSync) {}
+  /** 账号、组、授予与审计那几张表（迁移 0019），同一笔事务。 */
+  readonly accounts: AccountsTx;
 
+  constructor(private readonly database: DatabaseSync) {
+    this.accounts = new AccountsTx(database);
+  }
+
+  /**
+   * 这台机器的 owner。
+   *
+   * 0019 之后它是 `identity_principals` 里那一行 `kind='owner'`——单行表变成了
+   * 多行表，而「只有一个 owner」由唯一索引保住，所以这里仍然不存在「挑哪一个」
+   * 的问题。会话认证每个请求都要读它，所以它留在这个文件里，而不是和其余账号
+   * 表一起放 `accounts-store.ts`。
+   */
   owner(): IdentityOwner | undefined {
     const row = this.database
       .prepare(
-        "SELECT principal_id, created_at_ms FROM identity_owner WHERE singleton = 1",
+        "SELECT principal_id, created_at_ms FROM identity_principals WHERE kind = 'owner'",
       )
       .get() as { principal_id: string; created_at_ms: number } | undefined;
     return row === undefined
@@ -126,7 +140,8 @@ export class IdentityTx {
   createOwner(owner: IdentityOwner): void {
     this.database
       .prepare(
-        "INSERT INTO identity_owner(singleton, principal_id, created_at_ms) VALUES(1, ?, ?)",
+        "INSERT INTO identity_principals(principal_id, kind, display_name, created_at_ms, disabled_at_ms) " +
+          "VALUES(?, 'owner', '', ?, 0)",
       )
       .run(owner.principalId, owner.createdAtMs);
   }
