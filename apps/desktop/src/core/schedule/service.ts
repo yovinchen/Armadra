@@ -1,12 +1,9 @@
 import { createHash } from "node:crypto";
 import {
   AutomationCommandSessionState,
-  AutomationPlanConfigSchema,
-  CommandLaunchSpecSchema,
   type AutomationPlanConfig,
   type AutomationTarget,
-  fromBinary,
-  toBinary,
+  type CommandLaunchSpec,
 } from "@armadra/protocol";
 
 import { decodeScopes, encodeScopes, permits, scope } from "../identity/scopes";
@@ -20,6 +17,12 @@ import {
   invalid,
   num,
 } from "./plan";
+import {
+  launchSpecToJson,
+  planConfigFromJson,
+  planConfigToJson,
+  storedJson,
+} from "./json";
 import {
   type Authorization,
   type Authorizer,
@@ -196,14 +199,14 @@ export class ScheduleService implements Authorizer {
     caller: Caller,
     sessionId: string,
     rootPath: string,
-    launch: Uint8Array,
+    launch: CommandLaunchSpec,
   ): CommandSessionRecord {
     this.authorize(caller, SCOPE_MANAGE);
     if (
       !ID_PATTERN.test(sessionId) ||
       rootPath === "" ||
       rootPath.includes("\u0000") ||
-      launch.byteLength === 0
+      launch.executable === ""
     ) {
       throw invalid("命令会话的定义不完整");
     }
@@ -213,9 +216,9 @@ export class ScheduleService implements Authorizer {
     if (generation === undefined || generation <= 0) {
       throw new ScheduleError("unsupported", "这个终端会话现在没有在跑");
     }
-    // 走一遍解码：一份解不开的启动定义在这里被拒，而不是在第一次该跑的时候。
-    const spec = fromBinary(CommandLaunchSpecSchema, launch);
-    const frozen = toBinary(CommandLaunchSpecSchema, spec);
+    // 走一遍编码：一份编不出来的启动定义在这里被拒，而不是在第一次该跑的时候。
+    // 冻结的是**规范 JSON**（0020），所以身份摘要也按它算。
+    const frozen = storedJson(launchSpecToJson(launch));
     const rootId = `root-${createHash("sha256")
       .update(`${caller.workspaceId}\u0000${rootPath}`)
       .digest("hex")
@@ -228,8 +231,8 @@ export class ScheduleService implements Authorizer {
         rootId,
         workspaceId: caller.workspaceId,
         executionHostId: this.hostId,
-        launch: frozen,
-        launchSha256: createHash("sha256").update(frozen).digest(),
+        launch,
+        launchSha256: createHash("sha256").update(frozen, "utf8").digest(),
         generation,
         state: COMMAND_SESSION_READY,
         reasonCode: "",
@@ -289,10 +292,9 @@ export class ScheduleService implements Authorizer {
     ) {
       throw invalid("计划定义不完整");
     }
-    const prepared = fromBinary(
-      AutomationPlanConfigSchema,
-      toBinary(AutomationPlanConfigSchema, config),
-    );
+    // 深拷贝一份再改：调用方交来的那个对象不属于这里。走 JSON 一圈同时也验了
+    // 「这份配置编得出来」——编不出来的配置在这里被拒，而不是在第一次写库时。
+    const prepared = planConfigFromJson(planConfigToJson(config));
     prepared.workspaceId = caller.workspaceId;
     const target = prepared.target as AutomationTarget;
     if (target.executionHostId !== this.hostId) {

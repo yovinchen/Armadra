@@ -212,10 +212,7 @@ export class AutomationRpc {
           caller,
           input.sessionId,
           input.rootPath,
-          toBinary(
-            CommandLaunchSpecSchema,
-            input.launch ?? create(CommandLaunchSpecSchema, {}),
-          ),
+          input.launch ?? create(CommandLaunchSpecSchema, {}),
         );
         this.proto(
           response,
@@ -493,13 +490,13 @@ function digestOf(payload: Uint8Array): Uint8Array {
   return createHash("sha256").update(payload).digest();
 }
 
-function sessionMessage(record: CommandSessionRecord, rootPath: string) {
+export function sessionMessage(record: CommandSessionRecord, rootPath: string) {
   return create(AutomationCommandSessionSchema, {
     sessionId: record.sessionId,
     workspaceId: record.workspaceId,
     executionHostId: record.executionHostId,
     rootPath,
-    launch: fromBinary(CommandLaunchSpecSchema, record.launch),
+    launch: record.launch,
     generation: big(record.generation),
     launchSha256: record.launchSha256,
     state:

@@ -1,34 +1,40 @@
+import { createHash } from "node:crypto";
 import type { ServerResponse } from "node:http";
-import {
-  AutomationPlanConfigSchema,
-  type AutomationPlan,
-  type AutomationRun,
-  fromBinary,
+import type {
+  AutomationPlanConfig,
+  CommandLaunchSpec,
 } from "@armadra/protocol";
 
 import type { CoreRequest } from "../http/router";
 import type { IdentityService } from "../identity/service";
 import { bearerCredential } from "../identity/http";
 import { identityFailure, isIdentityError } from "../identity/errors";
+import {
+  commandSessionToJson,
+  launchSpecFromJson,
+  planConfigFromJson,
+  planToJson,
+  runToJson,
+} from "./json";
 import { ScheduleError, num } from "./plan";
+import { sessionMessage } from "./rpc";
 import type { PlanSnapshot, RunSnapshot } from "./engine";
 import { type Caller, ScheduleService } from "./service";
 
 /**
- * 自动化的 **新面**：`/api/automations/*`，JSON，`{ code, message }` 的错误信封。
+ * 自动化的 JSON 面：`/api/automations/*`，错误信封 `{ code, message }`。
  *
- * 设计 D9 里前端最终要收到的那一套。这一批 `apps/web` 一行不改，所以真正在用的
- * 还是隔壁 `rpc.ts` 的兼容面；这一面先落地，前端改打 `/api/` 的那一批就不必同时
- * 动两端。
+ * 这是页面今天打的那一面（R7a）。隔壁 `rpc.ts` 的 protobuf 兼容面还在，R7 收尾
+ * 删；在那之前两张面对同一条记录说的必须是同一句话，`api.test.ts` 有一条用例就
+ * 是逐字段比对它们。
  *
- * 形状直接从 protobuf 的消息对象转出来，不另手写一套 DTO：两面因此描述的是同
- * 一份记录，不会有一天多出一个只在其中一面出现的字段。`int64` 转成字符串，那是
- * JSON 里表示 64 位整数的唯一诚实做法——`number` 在 2^53 之上会悄悄改值。
+ * 形状由 `json.ts` 决定：**库里存的和线上发的是同一份 JSON**。写入那一侧因此收
+ * 的是一份普通的 JSON 配置，而不再是一段 base64 的 protobuf——0020 之前它收
+ * `configBase64` / `launchBase64` / `payloadBase64`，因为那时候库里存的就是字节。
+ * 逐字段的说明在 `docs/contracts/core-json-api.md` §4。
  *
- * 写入那一侧收的是 **protobuf 编码后的 base64**（`configBase64` / `launchBase64`）
- * 而不是一份 JSON 配置：`@armadra/protocol` 今天没有把 `fromJson` 再导出来，手写
- * 一个 JSON → 配置的转换等于把这个文件开头反对的那件事做一遍。前端改打 `/api/`
- * 的那一批把 JSON 映射导出来之后，这里换成一行。
+ * 载荷（stdin / prompt）在线上是 **UTF-8 文本**：它是用户自己敲进去的东西，
+ * base64 只会让一个人读不懂自己的计划。库里仍然是字节（§4.3）。
  */
 
 export const API_PREFIX = "/api/automations";
@@ -76,18 +82,15 @@ export class AutomationApi {
         handler: async (request, caller) => {
           const body = request.json<{
             planId?: string;
-            configBase64?: string;
-            payloadBase64?: string;
+            config?: unknown;
+            payload?: string;
             expectedRevision?: number;
           }>();
           const snapshot = await service.define(
             caller(true),
             body.planId ?? "",
-            fromBinary(
-              AutomationPlanConfigSchema,
-              Buffer.from(body.configBase64 ?? "", "base64"),
-            ),
-            Buffer.from(body.payloadBase64 ?? "", "base64"),
+            configOf(body.config),
+            Buffer.from(body.payload ?? "", "utf8"),
             Number(body.expectedRevision ?? 0),
           );
           return planJson(service, snapshot);
@@ -96,12 +99,14 @@ export class AutomationApi {
       {
         method: "GET",
         pattern: /^\/api\/automations\/plans\/(?<planId>[^/]+)\/payload$/,
-        handler: (_request, caller, groups) => ({
-          planId: groups.planId,
-          payloadBase64: Buffer.from(
-            service.payload(caller(false), groups.planId as string),
-          ).toString("base64"),
-        }),
+        handler: (_request, caller, groups) => {
+          const bytes = service.payload(caller(false), groups.planId as string);
+          return {
+            planId: groups.planId,
+            payload: Buffer.from(bytes).toString("utf8"),
+            payloadSha256: createHash("sha256").update(bytes).digest("base64"),
+          };
+        },
       },
       {
         method: "POST",
@@ -110,14 +115,14 @@ export class AutomationApi {
           const body = request.json<{
             expectedRevision?: number;
             configVersion?: number;
-            configSha256Base64?: string;
+            configSha256?: string;
           }>();
           const snapshot = await service.activate(
             caller(true),
             groups.planId as string,
             Number(body.expectedRevision ?? 0),
             Number(body.configVersion ?? 0),
-            Buffer.from(body.configSha256Base64 ?? "", "base64"),
+            Buffer.from(body.configSha256 ?? "", "base64"),
           );
           return planJson(service, snapshot);
         },
@@ -174,19 +179,14 @@ export class AutomationApi {
             request.query.get("after") ?? "",
             Number(request.query.get("limit") ?? 50),
           );
+          // 整条 `AutomationCommandSession`，不是它的一个摘要：新建计划的向导
+          // 要按冻结的启动定义核对目标，一份少了 `launch` 的列表答不了那个问题。
           return {
-            sessions: page.sessions.map((record) => ({
-              sessionId: record.sessionId,
-              workspaceId: record.workspaceId,
-              executionHostId: record.executionHostId,
-              rootPath: page.rootPaths.get(record.rootId) ?? "",
-              generation: record.generation,
-              state: record.state,
-              reasonCode: record.reasonCode,
-              revision: record.revision,
-              createdAtMs: record.createdAtMs,
-              updatedAtMs: record.updatedAtMs,
-            })),
+            sessions: page.sessions.map((record) =>
+              commandSessionToJson(
+                sessionMessage(record, page.rootPaths.get(record.rootId) ?? ""),
+              ),
+            ),
             nextId: page.nextId,
             hasMore: page.hasMore,
           };
@@ -199,19 +199,17 @@ export class AutomationApi {
           const body = request.json<{
             sessionId?: string;
             rootPath?: string;
-            launchBase64?: string;
+            launch?: unknown;
           }>();
           const record = service.defineCommandSession(
             caller(true),
             body.sessionId ?? "",
             body.rootPath ?? "",
-            Buffer.from(body.launchBase64 ?? "", "base64"),
+            launchOf(body.launch),
           );
-          return {
-            sessionId: record.sessionId,
-            generation: record.generation,
-            revision: record.revision,
-          };
+          return commandSessionToJson(
+            sessionMessage(record, body.rootPath ?? ""),
+          );
         },
       },
     ];
@@ -355,43 +353,34 @@ function headerOf(request: CoreRequest, name: string): string | undefined {
   return value;
 }
 
+function configOf(value: unknown): AutomationPlanConfig {
+  try {
+    return planConfigFromJson(value ?? {});
+  } catch {
+    throw new ScheduleError("invalid", "这份计划配置读不出来");
+  }
+}
+
+function launchOf(value: unknown): CommandLaunchSpec {
+  try {
+    return launchSpecFromJson(value ?? {});
+  } catch {
+    throw new ScheduleError("invalid", "这份启动定义读不出来");
+  }
+}
+
 function planJson(service: ScheduleService, snapshot: PlanSnapshot): unknown {
   return {
-    plan: messageJson(snapshot.plan),
+    plan: planToJson(snapshot.plan),
     revision: snapshot.revision,
-    configSha256Base64: Buffer.from(service.configDigest(snapshot)).toString(
+    configSha256: Buffer.from(service.configDigest(snapshot)).toString(
       "base64",
     ),
   };
 }
 
 function runJson(snapshot: RunSnapshot): unknown {
-  return { run: messageJson(snapshot.run), revision: snapshot.revision };
-}
-
-/**
- * 消息对象 → JSON。
- *
- * `bigint` 转字符串，`Uint8Array` 转 base64，`$typeName` 去掉（它是运行时的
- * 类型标记，不是记录的一部分）。其余原样——字段名本来就是 camelCase。
- */
-function messageJson(message: AutomationPlan | AutomationRun): unknown {
-  return plainJson(message);
-}
-
-function plainJson(value: unknown): unknown {
-  if (typeof value === "bigint") return value.toString();
-  if (value instanceof Uint8Array) return Buffer.from(value).toString("base64");
-  if (Array.isArray(value)) return value.map(plainJson);
-  if (value !== null && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(value)) {
-      if (key === "$typeName" || key === "$unknown") continue;
-      out[key] = plainJson(entry);
-    }
-    return out;
-  }
-  return value;
+  return { run: runToJson(snapshot.run), revision: snapshot.revision };
 }
 
 export { num };

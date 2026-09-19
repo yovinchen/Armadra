@@ -16,6 +16,7 @@ import {
 import { createHash } from "node:crypto";
 
 import { MAX_TIMESTAMP_MS, nextCron, parseCron } from "./cron";
+import { canonicalJson, planConfigFromJson, planConfigToJson } from "./json";
 
 /**
  * 计划配置的归一化、首次到期、以及一次 tick 该物化哪个槽位。
@@ -84,9 +85,17 @@ export function validTime(value: number): boolean {
   return value > 0 && value <= MAX_TIMESTAMP_MS;
 }
 
+/**
+ * 一份配置的摘要：**规范 JSON**（键按名字排序、无空白、UTF-8）的 SHA-256。
+ *
+ * 0020 之前它是 `toBinary(AutomationPlanConfig)` 的 SHA-256。换掉是因为 R7 要删
+ * protobuf，而一个只有 protobuf 序列化器才算得出来的数不能是「这份配置」的身份。
+ * 直接后果写在迁移 0020 与 `docs/contracts/core-json-api.md` §4.2 里：**同一份
+ * 配置算出来的是另一个数，已经激活的计划要重新授权一次**。
+ */
 export function configHash(config: AutomationPlanConfig): Buffer {
   return createHash("sha256")
-    .update(toBinary(AutomationPlanConfigSchema, config))
+    .update(canonicalJson(planConfigToJson(config)), "utf8")
     .digest();
 }
 
@@ -198,12 +207,9 @@ function normalizeTarget(target: AutomationTarget): void {
 const MAX_INT64 = 9_223_372_036_854_775_807n;
 
 export function normalize(input: AutomationPlanConfig): AutomationPlanConfig {
-  // protobuf-es 没有 `clone`：走一遍字节就是最诚实的深拷贝，而且顺带证明这份
-  // 配置真的能编码——一份编不出字节的配置算不出摘要，也就激活不了。
-  const config = fromBinary(
-    AutomationPlanConfigSchema,
-    toBinary(AutomationPlanConfigSchema, input),
-  );
+  // 走一遍 JSON 就是最诚实的深拷贝，而且顺带证明这份配置真的编得出来——一份
+  // 编不出 JSON 的配置算不出摘要，也就激活不了。
+  const config = planConfigFromJson(planConfigToJson(input));
   if (
     !validId(config.workspaceId) ||
     !validText(config.title, 256, false) ||

@@ -31,11 +31,16 @@ afterEach(() => {
   }
 });
 
-/** 一个只带 0019 之前那些迁移的目录。 */
+/**
+ * 一个只带 0019 之前那些迁移的目录。
+ *
+ * 按编号截断而不是只跳过 0019 那一个文件：账本要的是一段**连续前缀**，留着
+ * 0020 而没有 0019 会让升级前那一次打开就被拒。
+ */
 function beforeAccounts(): string {
   const directory = mkdtempSync(join(tmpdir(), "armadra-0019-overlay-"));
   for (const name of readdirSync(unifiedDir)) {
-    if (name.startsWith("0019")) continue;
+    if (Number(name.slice(0, 4)) >= 19) continue;
     copyFileSync(join(unifiedDir, name), join(directory, name));
   }
   return directory;

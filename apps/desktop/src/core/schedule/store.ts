@@ -5,18 +5,53 @@ import {
   AutomationReceiptSchema,
   AutomationRunSchema,
   AutomationTargetGateSchema,
+  CommandLaunchSpecSchema,
   type AutomationActivation,
   type AutomationPlan,
   type AutomationReceipt,
   type AutomationRun,
   type AutomationTargetGate,
+  type CommandLaunchSpec,
   create,
   fromBinary,
   toBinary,
 } from "@armadra/protocol";
 
 import { ScheduleError, gateId, gateIdentity, num } from "./plan";
+import {
+  activationFromJson,
+  activationToJson,
+  launchSpecFromJson,
+  launchSpecToJson,
+  parseStored,
+  planFromJson,
+  planToJson,
+  receiptFromJson,
+  receiptToJson,
+  runFromJson,
+  runToJson,
+  storedJson,
+} from "./json";
 import type { AutomationTarget } from "@armadra/protocol";
+
+/**
+ * 一行的载荷：优先读 JSON 列，只有还没转过的行才回落到 protobuf BLOB。
+ *
+ * 迁移 0020 只加列，不解码字节（SQL 里没有 protobuf 解码器），转换由
+ * `convert-legacy.ts` 在启动时做一遍。所以在那一遍跑完之前两种行并存，而**读
+ * 不能挑食**。**R7 删掉 `legacy` 这一支**，连同它的参数一起。
+ */
+function payloadOf<T>(
+  row: { payload_json?: string | null; payload?: Uint8Array | null },
+  fromJson: (value: unknown) => T,
+  legacy: (bytes: Uint8Array) => T,
+): T {
+  if (typeof row.payload_json === "string") {
+    return fromJson(parseStored(row.payload_json));
+  }
+  if (row.payload instanceof Uint8Array) return legacy(row.payload);
+  throw new ScheduleError("invalid", "这一行既没有 JSON 也没有字节");
+}
 
 /**
  * 自动化域的持久层。
@@ -65,7 +100,9 @@ export interface CommandSessionRecord {
   readonly rootId: string;
   readonly workspaceId: string;
   readonly executionHostId: string;
-  readonly launch: Uint8Array;
+  /** 冻结的启动定义本身。0020 之后库里存的是它的 JSON，不再是 protobuf 字节。 */
+  readonly launch: CommandLaunchSpec;
+  /** 那份定义的规范 JSON 的 SHA-256。会话的身份就是这个数。 */
   readonly launchSha256: Uint8Array;
   readonly generation: number;
   /** 1 = ready，2 = 不可重建。和 Host 的 `CommandSessionState` 同一组数。 */
@@ -78,6 +115,28 @@ export interface CommandSessionRecord {
 
 export const COMMAND_SESSION_READY = 1;
 export const COMMAND_SESSION_UNREBUILDABLE = 2;
+
+/** 命令会话那张表的一行。`launch` 是 0020 之前的 protobuf 字节，R7 删掉。 */
+interface CommandSessionRow extends Omit<CommandSessionRecord, "launch"> {
+  readonly launch: Uint8Array | null;
+  readonly launchJson: string | null;
+}
+
+function commandSessionRecord(row: CommandSessionRow): CommandSessionRecord {
+  return {
+    ...row,
+    launch: payloadOf(
+      { payload: row.launch, payload_json: row.launchJson },
+      launchSpecFromJson,
+      (bytes) => fromBinary(CommandLaunchSpecSchema, bytes),
+    ),
+    generation: Number(row.generation),
+    state: Number(row.state),
+    revision: Number(row.revision),
+    createdAtMs: Number(row.createdAtMs),
+    updatedAtMs: Number(row.updatedAtMs),
+  };
+}
 
 export class ScheduleStore {
   constructor(readonly database: DatabaseSync) {}
@@ -111,14 +170,21 @@ export class ScheduleStore {
   plan(workspaceId: string, planId: string): Snapshot<AutomationPlan> {
     const row = this.database
       .prepare(
-        "SELECT revision, payload FROM automation_plans WHERE workspace_id = ? AND plan_id = ?",
+        "SELECT revision, payload, payload_json FROM automation_plans " +
+          "WHERE workspace_id = ? AND plan_id = ?",
       )
       .get(workspaceId, planId) as
-      | { revision: number; payload: Uint8Array }
+      | {
+          revision: number;
+          payload: Uint8Array | null;
+          payload_json: string | null;
+        }
       | undefined;
     if (row === undefined) throw notFound("没有这个计划");
     return {
-      value: fromBinary(AutomationPlanSchema, row.payload),
+      value: payloadOf(row, planFromJson, (bytes) =>
+        fromBinary(AutomationPlanSchema, bytes),
+      ),
       revision: Number(row.revision),
     };
   }
@@ -139,14 +205,14 @@ export class ScheduleStore {
 
   writePlan(plan: AutomationPlan, expectedRevision: number): number {
     const workspaceId = plan.config?.workspaceId ?? "";
-    const payload = toBinary(AutomationPlanSchema, plan);
+    const payload = storedJson(planToJson(plan));
     const next = expectedRevision + 1;
     if (expectedRevision === 0) {
       this.database
         .prepare(
           "INSERT INTO automation_plans " +
-            "(workspace_id, plan_id, revision, payload, state, next_due_at_ms, updated_at_ms) " +
-            "VALUES (?, ?, 1, ?, ?, ?, ?)",
+            "(workspace_id, plan_id, revision, payload, payload_json, state, next_due_at_ms, updated_at_ms) " +
+            "VALUES (?, ?, 1, NULL, ?, ?, ?, ?)",
         )
         .run(
           workspaceId,
@@ -160,7 +226,7 @@ export class ScheduleStore {
     }
     const result = this.database
       .prepare(
-        "UPDATE automation_plans SET revision = ?, payload = ?, state = ?, " +
+        "UPDATE automation_plans SET revision = ?, payload = NULL, payload_json = ?, state = ?, " +
           "next_due_at_ms = ?, updated_at_ms = ? " +
           "WHERE workspace_id = ? AND plan_id = ? AND revision = ?",
       )
@@ -186,17 +252,20 @@ export class ScheduleStore {
     const page = Math.max(1, Math.min(limit, 200));
     const rows = this.database
       .prepare(
-        "SELECT plan_id, revision, payload FROM automation_plans " +
+        "SELECT plan_id, revision, payload, payload_json FROM automation_plans " +
           "WHERE workspace_id = ? AND plan_id > ? ORDER BY plan_id LIMIT ?",
       )
       .all(workspaceId, after, page + 1) as {
       plan_id: string;
       revision: number;
-      payload: Uint8Array;
+      payload: Uint8Array | null;
+      payload_json: string | null;
     }[];
     const hasMore = rows.length > page;
     const plans = rows.slice(0, page).map((row) => ({
-      value: fromBinary(AutomationPlanSchema, row.payload),
+      value: payloadOf(row, planFromJson, (bytes) =>
+        fromBinary(AutomationPlanSchema, bytes),
+      ),
       revision: Number(row.revision),
     }));
     return {
@@ -225,16 +294,23 @@ export class ScheduleStore {
   ): Snapshot<AutomationActivation> {
     const row = this.database
       .prepare(
-        "SELECT revision, payload FROM automation_activations WHERE workspace_id = ? AND plan_id = ?",
+        "SELECT revision, payload, payload_json FROM automation_activations " +
+          "WHERE workspace_id = ? AND plan_id = ?",
       )
       .get(workspaceId, planId) as
-      | { revision: number; payload: Uint8Array }
+      | {
+          revision: number;
+          payload: Uint8Array | null;
+          payload_json: string | null;
+        }
       | undefined;
     if (row === undefined) {
       return { value: create(AutomationActivationSchema, {}), revision: 0 };
     }
     return {
-      value: fromBinary(AutomationActivationSchema, row.payload),
+      value: payloadOf(row, activationFromJson, (bytes) =>
+        fromBinary(AutomationActivationSchema, bytes),
+      ),
       revision: Number(row.revision),
     };
   }
@@ -244,18 +320,19 @@ export class ScheduleStore {
     activation: AutomationActivation,
     expectedRevision: number,
   ): number {
-    const payload = toBinary(AutomationActivationSchema, activation);
+    const payload = storedJson(activationToJson(activation));
     if (expectedRevision === 0) {
       this.database
         .prepare(
-          "INSERT INTO automation_activations (workspace_id, plan_id, revision, payload) VALUES (?, ?, 1, ?)",
+          "INSERT INTO automation_activations (workspace_id, plan_id, revision, payload, payload_json) " +
+            "VALUES (?, ?, 1, NULL, ?)",
         )
         .run(workspaceId, activation.planId, payload);
       return 1;
     }
     const result = this.database
       .prepare(
-        "UPDATE automation_activations SET revision = ?, payload = ? " +
+        "UPDATE automation_activations SET revision = ?, payload = NULL, payload_json = ? " +
           "WHERE workspace_id = ? AND plan_id = ? AND revision = ?",
       )
       .run(
@@ -283,14 +360,21 @@ export class ScheduleStore {
   ): Snapshot<AutomationRun> | undefined {
     const row = this.database
       .prepare(
-        "SELECT revision, payload FROM automation_runs WHERE workspace_id = ? AND run_id = ?",
+        "SELECT revision, payload, payload_json FROM automation_runs " +
+          "WHERE workspace_id = ? AND run_id = ?",
       )
       .get(workspaceId, runId) as
-      | { revision: number; payload: Uint8Array }
+      | {
+          revision: number;
+          payload: Uint8Array | null;
+          payload_json: string | null;
+        }
       | undefined;
     if (row === undefined) return undefined;
     return {
-      value: fromBinary(AutomationRunSchema, row.payload),
+      value: payloadOf(row, runFromJson, (bytes) =>
+        fromBinary(AutomationRunSchema, bytes),
+      ),
       revision: Number(row.revision),
     };
   }
@@ -307,13 +391,13 @@ export class ScheduleStore {
   }
 
   writeRun(run: AutomationRun, expectedRevision: number): number {
-    const payload = toBinary(AutomationRunSchema, run);
+    const payload = storedJson(runToJson(run));
     if (expectedRevision === 0) {
       this.database
         .prepare(
           "INSERT INTO automation_runs " +
-            "(workspace_id, run_id, plan_id, operation_id, scheduled_at_ms, revision, payload) " +
-            "VALUES (?, ?, ?, ?, ?, 1, ?)",
+            "(workspace_id, run_id, plan_id, operation_id, scheduled_at_ms, revision, payload, payload_json) " +
+            "VALUES (?, ?, ?, ?, ?, 1, NULL, ?)",
         )
         .run(
           run.workspaceId,
@@ -327,7 +411,7 @@ export class ScheduleStore {
     }
     const result = this.database
       .prepare(
-        "UPDATE automation_runs SET revision = ?, payload = ? " +
+        "UPDATE automation_runs SET revision = ?, payload = NULL, payload_json = ? " +
           "WHERE workspace_id = ? AND run_id = ? AND revision = ?",
       )
       .run(
@@ -356,7 +440,7 @@ export class ScheduleStore {
     const page = Math.max(1, Math.min(limit, 200));
     const rows = this.database
       .prepare(
-        "SELECT run_id AS runId, scheduled_at_ms AS scheduledAtMs, revision, payload " +
+        "SELECT run_id AS runId, scheduled_at_ms AS scheduledAtMs, revision, payload, payload_json " +
           "FROM automation_runs WHERE workspace_id = ? AND plan_id = ? " +
           "ORDER BY scheduled_at_ms DESC, run_id LIMIT ?",
       )
@@ -364,12 +448,15 @@ export class ScheduleStore {
       runId: string;
       scheduledAtMs: number;
       revision: number;
-      payload: Uint8Array;
+      payload: Uint8Array | null;
+      payload_json: string | null;
     }[];
     const ordered = rows.map((row) => ({
       cursor: historyCursor(planId, Number(row.scheduledAtMs), row.runId),
       snapshot: {
-        value: fromBinary(AutomationRunSchema, row.payload),
+        value: payloadOf(row, runFromJson, (bytes) =>
+          fromBinary(AutomationRunSchema, bytes),
+        ),
         revision: Number(row.revision),
       },
     }));
@@ -602,9 +689,10 @@ export class ScheduleStore {
     this.database
       .prepare(
         "INSERT INTO command_sessions (session_id, root_id, workspace_id, execution_host_id, launch, " +
-          "launch_sha256, generation, state, reason_code, revision, created_at_ms, updated_at_ms) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
-          "ON CONFLICT(session_id) DO UPDATE SET root_id = excluded.root_id, launch = excluded.launch, " +
+          "launch_json, launch_sha256, generation, state, reason_code, revision, created_at_ms, updated_at_ms) " +
+          "VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?) " +
+          "ON CONFLICT(session_id) DO UPDATE SET root_id = excluded.root_id, launch = NULL, " +
+          "launch_json = excluded.launch_json, " +
           "launch_sha256 = excluded.launch_sha256, generation = excluded.generation, " +
           "state = excluded.state, reason_code = excluded.reason_code, " +
           "revision = command_sessions.revision + 1, updated_at_ms = excluded.updated_at_ms",
@@ -614,7 +702,7 @@ export class ScheduleStore {
         record.rootId,
         record.workspaceId,
         record.executionHostId,
-        record.launch,
+        storedJson(launchSpecToJson(record.launch)),
         record.launchSha256,
         record.generation,
         record.state,
@@ -630,21 +718,15 @@ export class ScheduleStore {
     const row = this.database
       .prepare(
         "SELECT session_id AS sessionId, root_id AS rootId, workspace_id AS workspaceId, " +
-          "execution_host_id AS executionHostId, launch, launch_sha256 AS launchSha256, " +
+          "execution_host_id AS executionHostId, launch, launch_json AS launchJson, " +
+          "launch_sha256 AS launchSha256, " +
           "generation, state, reason_code AS reasonCode, revision, " +
           "created_at_ms AS createdAtMs, updated_at_ms AS updatedAtMs " +
           "FROM command_sessions WHERE session_id = ?",
       )
-      .get(sessionId) as CommandSessionRecord | undefined;
+      .get(sessionId) as CommandSessionRow | undefined;
     if (row === undefined) return undefined;
-    return {
-      ...row,
-      generation: Number(row.generation),
-      state: Number(row.state),
-      revision: Number(row.revision),
-      createdAtMs: Number(row.createdAtMs),
-      updatedAtMs: Number(row.updatedAtMs),
-    };
+    return commandSessionRecord(row);
   }
 
   listCommandSessions(
@@ -656,22 +738,16 @@ export class ScheduleStore {
     const rows = this.database
       .prepare(
         "SELECT session_id AS sessionId, root_id AS rootId, workspace_id AS workspaceId, " +
-          "execution_host_id AS executionHostId, launch, launch_sha256 AS launchSha256, " +
+          "execution_host_id AS executionHostId, launch, launch_json AS launchJson, " +
+          "launch_sha256 AS launchSha256, " +
           "generation, state, reason_code AS reasonCode, revision, " +
           "created_at_ms AS createdAtMs, updated_at_ms AS updatedAtMs " +
           "FROM command_sessions WHERE workspace_id = ? AND session_id > ? " +
           "ORDER BY session_id LIMIT ?",
       )
-      .all(workspaceId, after, page + 1) as unknown as CommandSessionRecord[];
+      .all(workspaceId, after, page + 1) as unknown as CommandSessionRow[];
     const hasMore = rows.length > page;
-    const sessions = rows.slice(0, page).map((row) => ({
-      ...row,
-      generation: Number(row.generation),
-      state: Number(row.state),
-      revision: Number(row.revision),
-      createdAtMs: Number(row.createdAtMs),
-      updatedAtMs: Number(row.updatedAtMs),
-    }));
+    const sessions = rows.slice(0, page).map(commandSessionRecord);
     return {
       sessions,
       nextId:
@@ -687,25 +763,32 @@ export class ScheduleStore {
   putReceipt(receipt: AutomationReceipt): void {
     this.database
       .prepare(
-        "INSERT INTO automation_receipts (operation_id, request_sha256, payload, observed_at_ms) " +
-          "VALUES (?, ?, ?, ?) ON CONFLICT(operation_id) DO UPDATE SET " +
-          "payload = excluded.payload, observed_at_ms = excluded.observed_at_ms " +
+        "INSERT INTO automation_receipts (operation_id, request_sha256, payload, payload_json, observed_at_ms) " +
+          "VALUES (?, ?, NULL, ?, ?) ON CONFLICT(operation_id) DO UPDATE SET " +
+          "payload = NULL, payload_json = excluded.payload_json, " +
+          "observed_at_ms = excluded.observed_at_ms " +
           "WHERE excluded.observed_at_ms >= automation_receipts.observed_at_ms",
       )
       .run(
         receipt.operationId,
         receipt.requestSha256,
-        toBinary(AutomationReceiptSchema, receipt),
+        storedJson(receiptToJson(receipt)),
         Math.max(1, num(receipt.observedAtUnixMs)),
       );
   }
 
   receipt(operationId: string): AutomationReceipt | undefined {
     const row = this.database
-      .prepare("SELECT payload FROM automation_receipts WHERE operation_id = ?")
-      .get(operationId) as { payload: Uint8Array } | undefined;
+      .prepare(
+        "SELECT payload, payload_json FROM automation_receipts WHERE operation_id = ?",
+      )
+      .get(operationId) as
+      | { payload: Uint8Array | null; payload_json: string | null }
+      | undefined;
     return row === undefined
       ? undefined
-      : fromBinary(AutomationReceiptSchema, row.payload);
+      : payloadOf(row, receiptFromJson, (bytes) =>
+          fromBinary(AutomationReceiptSchema, bytes),
+        );
   }
 }

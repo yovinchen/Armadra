@@ -1,12 +1,24 @@
 import { existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { createHash } from "node:crypto";
 import {
+  AutomationActivationSchema,
   AutomationPlanSchema,
   AutomationRunSchema,
   AutomationTargetGateSchema,
+  CommandLaunchSpecSchema,
   fromBinary,
 } from "@armadra/protocol";
+
+import {
+  activationToJson,
+  canonicalJson,
+  launchSpecToJson,
+  planToJson,
+  runToJson,
+  storedJson,
+} from "../schedule/json";
 
 /**
  * 把旧 `host.db` 的身份记录搬进统一库，一次，不删原库。
@@ -174,6 +186,13 @@ export function absorbHostDatabase(options: {
           rows[table] = count(database, table);
           continue;
         }
+        if (table === "command_sessions") {
+          // 这一张的 `launch` 在旧库里是 protobuf 字节，在 0020 之后是 JSON，
+          // 所以它是一次**投影**而不是一次逐列拷贝。R7 删掉本分支的解码。
+          copyCommandSessions(database);
+          rows[table] = count(database, table);
+          continue;
+        }
         // 列名逐条列出来，而不是 `INSERT INTO t SELECT * FROM legacy.t`：两边
         // 列序一致是今天的事实，靠事实而不是靠约束搬数据，有一天列序变了就会
         // 悄悄把 `origin` 写进 `scopes`。
@@ -272,14 +291,14 @@ function insertProjected(
       const plan = fromBinary(AutomationPlanSchema, entity.payload);
       database
         .prepare(
-          "INSERT INTO automation_plans (workspace_id, plan_id, revision, payload, state, " +
-            "next_due_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO automation_plans (workspace_id, plan_id, revision, payload, payload_json, state, " +
+            "next_due_at_ms, updated_at_ms) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)",
         )
         .run(
           entity.workspaceId,
           entity.entityId,
           revision,
-          entity.payload,
+          storedJson(planToJson(plan)),
           plan.state,
           Number(plan.nextDueUnixMs),
           Number(plan.updatedAtUnixMs),
@@ -289,9 +308,19 @@ function insertProjected(
     case "automation_activations":
       database
         .prepare(
-          "INSERT INTO automation_activations (workspace_id, plan_id, revision, payload) VALUES (?, ?, ?, ?)",
+          "INSERT INTO automation_activations (workspace_id, plan_id, revision, payload, payload_json) " +
+            "VALUES (?, ?, ?, NULL, ?)",
         )
-        .run(entity.workspaceId, entity.entityId, revision, entity.payload);
+        .run(
+          entity.workspaceId,
+          entity.entityId,
+          revision,
+          storedJson(
+            activationToJson(
+              fromBinary(AutomationActivationSchema, entity.payload),
+            ),
+          ),
+        );
       return;
     case "automation_runs": {
       const run = fromBinary(AutomationRunSchema, entity.payload);
@@ -301,7 +330,7 @@ function insertProjected(
       database
         .prepare(
           "INSERT INTO automation_runs (workspace_id, run_id, plan_id, operation_id, " +
-            "scheduled_at_ms, revision, payload) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "scheduled_at_ms, revision, payload, payload_json) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
         )
         .run(
           entity.workspaceId,
@@ -310,7 +339,7 @@ function insertProjected(
           run.operationId,
           Number(run.scheduledAtUnixMs),
           revision,
-          entity.payload,
+          storedJson(runToJson(run)),
         );
       return;
     }
@@ -371,4 +400,60 @@ function quote(value: string): string {
 
 function quoteIdentifier(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+/**
+ * 冻结的命令会话：`launch` 从 protobuf 字节解成 JSON，身份摘要跟着按**规范
+ * JSON** 重算（迁移 0020）。
+ *
+ * 摘要重算的后果和计划的 `configSha256` 一样：搬过来的会话身份换了一个数。它只
+ * 被这个 core 自己用来核对「这还是当初冻结的那份定义」，所以重算之后仍然自洽。
+ *
+ * **R7 删除本函数**：那时候旧 `host.db` 已经不存在了。
+ */
+function copyCommandSessions(database: DatabaseSync): void {
+  const rows = database
+    .prepare(
+      "SELECT session_id AS sessionId, root_id AS rootId, workspace_id AS workspaceId, " +
+        "execution_host_id AS executionHostId, launch, generation, state, " +
+        "reason_code AS reasonCode, revision, created_at_ms AS createdAtMs, " +
+        "updated_at_ms AS updatedAtMs FROM legacy.command_sessions",
+    )
+    .all() as {
+    sessionId: string;
+    rootId: string;
+    workspaceId: string;
+    executionHostId: string;
+    launch: Uint8Array;
+    generation: number;
+    state: number;
+    reasonCode: string;
+    revision: number;
+    createdAtMs: number;
+    updatedAtMs: number;
+  }[];
+  const insert = database.prepare(
+    "INSERT INTO main.command_sessions (session_id, root_id, workspace_id, execution_host_id, " +
+      "launch, launch_json, launch_sha256, generation, state, reason_code, revision, " +
+      "created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+  );
+  for (const row of rows) {
+    const json = canonicalJson(
+      launchSpecToJson(fromBinary(CommandLaunchSpecSchema, row.launch)),
+    );
+    insert.run(
+      row.sessionId,
+      row.rootId,
+      row.workspaceId,
+      row.executionHostId,
+      json,
+      createHash("sha256").update(json, "utf8").digest(),
+      row.generation,
+      row.state,
+      row.reasonCode,
+      row.revision,
+      row.createdAtMs,
+      row.updatedAtMs,
+    );
+  }
 }
