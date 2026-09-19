@@ -50,9 +50,6 @@ import { DEFAULT_COLS, DEFAULT_ROWS, type TerminalManager } from "./manager";
 export const FLUSH_INTERVAL_MS = 16;
 export const FLUSH_BYTES = 64 * 1024;
 
-/** `last_output_at` is a row update, not a per-frame write. */
-export const OUTPUT_ROW_INTERVAL_MS = 1000;
-
 export interface HelloFrame {
   readonly type: "hello";
   readonly sessionId: string;
@@ -202,7 +199,7 @@ export async function serveTerminalSocket(
     return;
   }
 
-  const { attachment, record } = attached;
+  const { attachment, record, snapshot } = attached;
   const generation = attachment.generation;
   send({
     type: "hello",
@@ -213,13 +210,19 @@ export async function serveTerminalSocket(
     cols,
     alive: true,
     // A reconnecting client is told what its own writer already reached, so it
-    // resends only what never landed. This batch acknowledges within the
-    // connection but keeps no cross-connection ledger, so the honest answer is
-    // 0 — `transport.ts` treats that as "resend my own unacknowledged".
-    ...(writer === "" ? {} : { acknowledgedInput: 0 }),
+    // resends only what never landed instead of replaying keystrokes. The
+    // ledger outlives the connection, which is the whole point: the socket
+    // that sent those keystrokes is the one that is gone.
+    ...(writer === ""
+      ? {}
+      : { acknowledgedInput: manager.acknowledgedInput(sessionId, writer) }),
   });
-  // A tmux client redraws the real screen, so no `snapshot` frame is owed. The
-  // direct backend, which has no screen to re-read, is the one that sends one.
+  // A tmux client redraws the real screen and the session host replays down
+  // its own attach connection, so neither is owed a `snapshot`. The direct
+  // backend, which has no screen to re-read, is the one that sends one.
+  if (snapshot !== undefined && snapshot !== "") {
+    send({ type: "snapshot", data: snapshot });
+  }
 
   /* ------------------------------- output ------------------------------- */
 
@@ -227,7 +230,6 @@ export async function serveTerminalSocket(
   let pending = "";
   let pendingBytes = 0;
   let timer: NodeJS.Timeout | undefined;
-  let lastRowUpdate = 0;
   let closed = false;
 
   const flush = (): void => {
@@ -239,14 +241,13 @@ export async function serveTerminalSocket(
     send({ type: "output", data: pending });
     pending = "";
     pendingBytes = 0;
-    const now = Date.now();
-    if (now - lastRowUpdate >= OUTPUT_ROW_INTERVAL_MS) {
-      lastRowUpdate = now;
-      try {
-        manager.noteOutput(sessionId);
-      } catch (error) {
-        options.onError?.(error);
-      }
+    // `last_output_at` is a row update, not a row per frame — and the
+    // throttling lives in the manager rather than here, because a session with
+    // two sockets open would otherwise write twice as often as one with one.
+    try {
+      manager.noteOutput(sessionId);
+    } catch (error) {
+      options.onError?.(error);
     }
   };
 
@@ -293,6 +294,7 @@ export async function serveTerminalSocket(
             // acknowledged input is one this session will never accept again
             // from the same writer.
             if (frame.inputId !== undefined && frame.inputId > 0) {
+              manager.noteInputApplied(sessionId, writer, frame.inputId);
               send({ type: "ack", inputId: frame.inputId });
             }
             return;
