@@ -15,6 +15,9 @@
     "0013_agent_status_source.sql": "9d7c3dc119faf2fa321a1a204038b7e4ceba237f2cbfee122345d504a2d65c67",
     "0014_retire_gemini.sql": "ec1ffb5a11ec40c5b95b7d0f6b65a0f3d79ad0dd15d5be6b4f01402f632eaea8"
   },
+  "apps/desktop/src/core/db/migrations": {
+    "0015_unified_core.sql": "a3aa5028cc99eb796fbe57f56366b924c8d4efe30dcefee05c6b7ca6390b86a6"
+  },
   "apps/host/internal/migration/legacy": {
     "0001_initial.sql": "a9c77bb975e4faab517fe8ec7a5179455ff6c22dc5585c17e6d5e405c7180f63",
     "0002_agent_mailbox.sql": "f07f2561bd76d1de8a5d31599eee3480785388ddbaa4ac6a19b24c99a5d6d08d",
