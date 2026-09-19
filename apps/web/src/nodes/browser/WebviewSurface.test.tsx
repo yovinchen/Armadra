@@ -55,7 +55,9 @@ vi.mock("sonner", () => ({
 import { toast } from "sonner";
 
 import { usePreferencesStore } from "@/app/preferences-store";
+import { dispatchWorkspaceEvent } from "@/api/events";
 
+import { resetBrowserAlerts } from "./alerts";
 import { BrowserNode } from "./BrowserNode";
 import { BROWSER_DISCARD_MS, DISCARD_TICK_MS } from "./discard";
 
@@ -369,6 +371,7 @@ describe("请求落不了地时不再静默", () => {
 
   beforeEach(() => {
     drive = null;
+    resetBrowserAlerts();
     control.mockClear();
     vi.mocked(toast.error).mockClear();
     (window as unknown as Record<string, unknown>).armadra = {
@@ -421,6 +424,61 @@ describe("请求落不了地时不再静默", () => {
       drive!({ kind: "tabs", nodeId: "b1", action: "switch", tabId: "gone" });
     });
     expect(toast.error).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * #8：`ActivityStatus` 过去只在 `index.ts` 被 re-export，从未渲染过。
+   * 这一条钉住它确实挂在头部——Agent 的动作对人可见。
+   */
+  it("Agent 的动作与页面对话框出现在头部租约徽标旁", () => {
+    paint();
+    act(() => {
+      drive!({
+        kind: "lease",
+        nodeId: "b1",
+        lease: {
+          state: "agent",
+          generation: 1,
+          expiresAt: "",
+          holder: { kind: "agent", id: "a1", displayName: "Claude" },
+        },
+      } as never);
+    });
+    act(() =>
+      dispatchWorkspaceEvent({
+        type: "browser.activity",
+        sessionId: "s1",
+        actor: "agent",
+        actorId: "a1",
+        verb: "click",
+        target: "#submit",
+        outcome: "ok",
+        reasonCode: "",
+        at: new Date().toISOString(),
+      }),
+    );
+    const status = document.querySelector('[data-slot="browser-status"]');
+    expect(status).not.toBeNull();
+    expect(status!.textContent).toContain("click");
+
+    act(() =>
+      dispatchWorkspaceEvent({
+        type: "browser.dialog",
+        sessionId: "s1",
+        dialog: {
+          dialogId: "d1",
+          tabId: "t1",
+          kind: "confirm",
+          message: "真的要提交吗",
+          defaultPrompt: "",
+          url: "https://example.test/",
+          openedAt: new Date().toISOString(),
+        },
+      }),
+    );
+    expect(
+      document.querySelector('[data-slot="browser-prompt"]')!.textContent,
+    ).toBe("页面询问");
   });
 
   it("别的节点的标签请求既不执行也不提示", () => {

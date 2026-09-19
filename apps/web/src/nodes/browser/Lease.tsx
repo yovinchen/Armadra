@@ -81,6 +81,48 @@ export function LeaseBadge({
 }
 
 /**
+ * 租约徽标旁边那一行（复查 §7 的 #5 与 #8）。
+ *
+ * 两件事排在一行里：页面**现在**被什么挡着（对话框 / 文件选择器），以及
+ * Agent **刚才**做了什么。挡住的那一件排在前面并且不用等宽字体——它是一句
+ * 给人读的话，而动作流水是一串给人扫的记录。
+ *
+ * 这里不给任何按钮：对话框由主进程按 CDP 事件当场答复，人自己弹的那些走
+ * Chromium 的原生模态。这一行的职责只有「让人知道页面停在哪」。
+ */
+export function ActivityStatus({
+  activity,
+  dialog,
+  chooser,
+}: {
+  activity: BrowserActivity | null;
+  dialog: { kind: string } | null;
+  chooser: unknown | null;
+}) {
+  const t = useT();
+  const prompt = dialog
+    ? t(`browser.dialog.${dialog.kind}`)
+    : chooser
+      ? t("browser.chooser.title")
+      : "";
+  if (!prompt && !activity) return null;
+  return (
+    <span
+      className="flex min-w-0 max-w-[220px] items-center gap-1.5"
+      data-slot="browser-status"
+      data-no-drag="true"
+    >
+      {prompt && (
+        <span className="truncate text-[11px]" data-slot="browser-prompt">
+          {prompt}
+        </span>
+      )}
+      <ActivityLine activity={activity} />
+    </span>
+  );
+}
+
+/**
  * 最近一条动作。刷新时间只为了让「2s」不停在 2s——它不拉取任何东西。
  */
 export function ActivityLine({

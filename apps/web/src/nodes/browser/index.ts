@@ -9,4 +9,11 @@ export {
 export { WebviewSurface } from "./WebviewSurface";
 export { allowGuestNavigation, browserPartition, searchOrUrl } from "./webview";
 export { MAX_TABS, tabLetter } from "./webview-tabs";
-export { ActivityLine, LeaseBadge, controllerKey, sinceLabel } from "./Lease";
+export { useBrowserAlerts } from "./alerts";
+export {
+  ActivityLine,
+  ActivityStatus,
+  LeaseBadge,
+  controllerKey,
+  sinceLabel,
+} from "./Lease";
