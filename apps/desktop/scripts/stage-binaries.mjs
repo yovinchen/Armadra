@@ -21,7 +21,14 @@
  * `electron-vite build` smoke job uses to satisfy a check that never runs the
  * binary.
  */
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -88,6 +95,7 @@ export function stageBinaries({
       continue;
     }
     copyFileSync(source, destination);
+    waitUntilReadable(destination);
     staged.push(destination);
   }
   if (missing.length > 0) {
@@ -148,4 +156,27 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   main();
+}
+
+/**
+ * On Windows a freshly written executable is briefly held by the real-time
+ * scanner, and electron-builder's own copy of it into the unpacked app then
+ * fails with EBUSY. Waiting until the file can be opened for writing again
+ * (bounded, ~15 s) is what makes the packaging step deterministic on CI;
+ * elsewhere the first attempt succeeds and this returns at once.
+ */
+export function waitUntilReadable(file, { attempts = 60, delayMs = 250 } = {}) {
+  if (process.platform !== "win32") return;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      closeSync(openSync(file, "r+"));
+      return;
+    } catch (error) {
+      if (error?.code !== "EBUSY" && error?.code !== "EPERM") throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+    }
+  }
+  throw new Error(
+    `stage-binaries: ${file} stayed locked for ${(attempts * delayMs) / 1000}s`,
+  );
 }
