@@ -1,14 +1,9 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { BUILD, instanceId } from "../instance";
 import { NO_HOOK_SERVICE, healthDocument } from "./health";
 
-const here = dirname(fileURLToPath(import.meta.url));
-
 describe("the health document", () => {
-  it("reports the fields, in the order, the Rust Runtime reports them", () => {
+  it("reports the fields, in the order, the shell reads them", () => {
     const document = healthDocument({
       version: "0.1.0",
       hookHealth: () => NO_HOOK_SERVICE,
@@ -23,17 +18,6 @@ describe("the health document", () => {
     expect(document.status).toBe("ok");
     expect(document.instanceId).toBe(instanceId());
     expect(document.build).toBe(BUILD);
-  });
-
-  it("declares the same field names the Rust struct does", () => {
-    const rust = readFileSync(
-      resolve(here, "../../../../runtime/src/api/health.rs"),
-      "utf8",
-    );
-    for (const field of ["status", "version", "instance_id", "build", "hook"]) {
-      expect(rust).toContain(`${field}:`);
-    }
-    expect(rust).toContain('rename_all = "camelCase"');
   });
 
   it("reports a core with no hook service as not ok, with no transport", () => {

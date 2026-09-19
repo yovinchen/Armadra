@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   CORS_HEADERS,
@@ -11,8 +8,6 @@ import {
   isLoopbackOrigin,
   websocketOriginAllowed,
 } from "./cors";
-
-const here = dirname(fileURLToPath(import.meta.url));
 
 describe("which origins a loopback core answers", () => {
   it("accepts the four loopback forms and nothing else", () => {
@@ -34,21 +29,6 @@ describe("which origins a loopback core answers", () => {
       "",
     ]) {
       expect(isLoopbackOrigin(origin), origin).toBe(false);
-    }
-  });
-
-  it("spells the rule the same way the Rust Runtime does", () => {
-    const rust = readFileSync(
-      resolve(here, "../../../../runtime/src/api/support.rs"),
-      "utf8",
-    );
-    for (const literal of [
-      'origin.starts_with("http://127.0.0.1:")',
-      'origin.starts_with("http://localhost:")',
-      'origin == "http://127.0.0.1"',
-      'origin == "http://localhost"',
-    ]) {
-      expect(rust).toContain(literal);
     }
   });
 

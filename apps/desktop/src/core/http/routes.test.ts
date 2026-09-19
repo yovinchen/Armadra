@@ -1,91 +1,38 @@
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ROUTES } from "./routes";
 import { Router } from "./router";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const runtimeSrc = resolve(here, "../../../../runtime/src");
-
 /**
- * The table has to be the Rust Runtime's route set, not an approximation of
- * it. So the Rust sources are parsed here and the two sets are compared, which
- * is the same check `tools/route-parity.mjs` will run in `pnpm check` — with
- * the difference that this one fails the moment somebody edits either side.
- */
-function rustRoutes(): { path: string; methods: string[] }[] {
-  const found: { path: string; methods: string[] }[] = [];
-  for (const file of ["lib.rs", "hook/mod.rs"]) {
-    const source = readFileSync(resolve(runtimeSrc, file), "utf8");
-    const pattern = /\.route\(\s*"([^"]+)"\s*,/g;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(source)) !== null) {
-      let index = pattern.lastIndex;
-      let depth = 1;
-      let chain = "";
-      while (index < source.length && depth > 0) {
-        const character = source[index] as string;
-        if (character === "(") depth += 1;
-        else if (character === ")") {
-          depth -= 1;
-          if (depth === 0) break;
-        }
-        chain += character;
-        index += 1;
-      }
-      found.push({
-        path: match[1] as string,
-        methods: [
-          ...new Set(
-            [...chain.matchAll(/\b(get|post|put|patch|delete)\s*\(/g)].map(
-              (verb) => (verb[1] as string).toUpperCase(),
-            ),
-          ),
-        ],
-      });
-    }
-  }
-  return found;
-}
-
-/** `{workspace_id}` in Rust is `{workspaceId}` here. */
-function camel(path: string): string {
-  return path.replace(
-    /\{([a-z_]+)\}/g,
-    (_whole, name: string) =>
-      `{${name.replace(/_([a-z])/g, (_m, letter: string) => letter.toUpperCase())}}`,
-  );
-}
-
-/**
- * The Runtime's contract, and the few paths that are deliberately not in it.
+ * The contract, and the few paths that are deliberately outside it.
  *
- * R6 gives the core a route the Rust build cannot have — the remote browser
- * node's frame stream, which needs a headless backend Rust never grew. Rather
- * than loosening the comparison, those entries carry `beyondContract` and are
- * subtracted here by name, so adding a second one is a decision somebody makes
- * in this file rather than a diff that slips through a relaxed assertion.
+ * The contract is the 161 routes the core inherited unchanged; anything the
+ * core answers beyond them carries `beyondContract` and is listed by name
+ * below, so adding a second one is a decision somebody makes in this file
+ * rather than a diff nothing notices.
+ *
+ * Until R7d the counts here were checked against the Rust sources themselves
+ * (`apps/runtime/src/lib.rs` was parsed for `.route(...)` calls). That
+ * implementation is gone, so the numbers below are the contract now.
  */
 const beyond = ROUTES.filter((route) => route.beyondContract);
 const contractual = ROUTES.filter((route) => !route.beyondContract);
 
 /**
- * Paths the Rust Runtime still registers and this table deliberately does not.
+ * Paths the contract had and this table deliberately does not.
  *
  * `/api/ownership*` answered "which of the two processes may write?" — a
  * question with no second answer inside one core, so R7c deleted the mechanism
- * on both sides of the wire (design §4.2 / §4.3). The Rust routes go with the
- * crate in R7; until then they are subtracted by name here rather than by a
- * looser comparison, so a second retirement is a decision made in this file.
+ * on both sides of the wire (design §4.2 / §4.3) and R7d deleted the other
+ * side outright. Listed by name so a second retirement is a decision made in
+ * this file.
  */
 const RETIRED = ["/api/ownership", "/api/ownership/domains"];
 
 describe("the route table", () => {
-  it("names every path the Rust Runtime never had", () => {
-    // 四条，各自的理由写在 `routes.ts` 上：R6c 的远程浏览器画面流（Rust 那边
-    // 没有 headless 后端），以及 R7a 的三张 JSON 面（GitHub 与自动化在 Rust
-    // 时代活在 Go Host 的 protobuf 面上，Hello 的 JSON 形状是新加的）。
+  it("names every path outside the inherited contract", () => {
+    // 四条，各自的理由写在 `routes.ts` 上：R6c 的远程浏览器画面流（那时的实现
+    // 没有 headless 后端），以及 R7a 的三张 JSON 面（GitHub 与自动化在分进程
+    // 时代活在另一个进程的 protobuf 面上，Hello 的 JSON 形状是新加的）。
     expect(beyond.map((route) => route.path)).toEqual([
       "/api/workspaces/{workspaceId}/browser/{nodeId}/stream",
       "/api/github/{verb}",
@@ -94,10 +41,8 @@ describe("the route table", () => {
     ]);
   });
 
-  it("retires the two ownership paths the Rust Runtime still registers", () => {
-    const rust = rustRoutes().map((route) => camel(route.path));
+  it("keeps the retired ownership paths out of the table", () => {
     for (const path of RETIRED) {
-      expect(rust, path).toContain(path);
       expect(
         ROUTES.map((route) => route.path),
         path,
@@ -113,29 +58,6 @@ describe("the route table", () => {
     expect(
       contractual.filter((route) => route.surface === "hook"),
     ).toHaveLength(15);
-  });
-
-  it("is exactly what the Rust Runtime registers, path for path", () => {
-    const rust = rustRoutes()
-      .map((route) => camel(route.path))
-      .filter((path) => !RETIRED.includes(path))
-      .sort();
-    const ours = contractual.map((route) => route.path).sort();
-    expect(ours).toEqual(rust);
-  });
-
-  it("agrees with the Rust Runtime on every path's methods", () => {
-    const rust = new Map(
-      rustRoutes().map((route) => [
-        camel(route.path),
-        [...route.methods].sort(),
-      ]),
-    );
-    for (const route of contractual) {
-      expect([...route.methods].sort(), route.path).toEqual(
-        rust.get(route.path),
-      );
-    }
   });
 
   it("lists no path twice", () => {

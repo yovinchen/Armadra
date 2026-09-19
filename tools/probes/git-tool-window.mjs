@@ -185,8 +185,7 @@ async function main() {
   const endpoints = join(data, "endpoints.json");
   let origin = "";
   for (let attempt = 0; attempt < 300 && !origin; attempt += 1) {
-    if (runtime.exitCode !== null)
-      throw new Error(`core 退出：${diagnostics}`);
+    if (runtime.exitCode !== null) throw new Error(`core 退出：${diagnostics}`);
     try {
       origin = JSON.parse(readFileSync(endpoints, "utf8")).runtime.http;
     } catch {

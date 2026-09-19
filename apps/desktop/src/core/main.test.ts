@@ -178,7 +178,10 @@ describe("the core process", () => {
     await expect(
       run({
         argv: ["--listen", `tcp:127.0.0.1:${held}`, "--data-dir", second],
-        env: { ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
+        env: {
+          ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir,
+          ARMADRA_LOG: "error",
+        },
         stdout: () => {},
       }),
     ).rejects.toThrow(/already in use/);

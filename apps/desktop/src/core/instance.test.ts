@@ -31,20 +31,11 @@ describe("instance identity", () => {
   });
 
   it("prints the announcement line the shell already parses", () => {
-    // Byte-for-byte the Rust Runtime's prefix; the shell has one reader, and
-    // the literal is checked against the Rust source rather than against a
-    // second TypeScript copy of it, which would only prove the copies agree.
+    // The prefix is a wire literal, not a name: the shell's reader
+    // (`main/runtime-process.ts`) matches it byte for byte, and an installed
+    // shell keeps matching the old one. R7d deleted the implementation it was
+    // copied from, so this is now the only place the literal is written down.
     expect(ANNOUNCE_PREFIX).toBe("armadra-runtime instance ");
-    const rust = readFileSync(
-      resolve(here, "../../../runtime/src/instance.rs"),
-      "utf8",
-    );
-    expect(rust).toContain(
-      `pub const ANNOUNCE_PREFIX: &str = "${ANNOUNCE_PREFIX}";`,
-    );
-    expect(rust).toContain(
-      `format!("{ANNOUNCE_PREFIX}{} build {BUILD}", instance_id())`,
-    );
     expect(announcement()).toBe(
       `${ANNOUNCE_PREFIX}${instanceId()} build ${BUILD}`,
     );
