@@ -5,7 +5,10 @@ import { asRefused } from "../collab/refusals";
 import type { CoreContext } from "../main";
 import type { ArgSource } from "./args";
 import { VERBS } from "./args";
+import type { DriveBackend } from "./backend";
 import { DriveClient } from "./client";
+import { HeadlessBackend } from "./headless";
+import { BROWSER_STREAM_PATH, attachStream, streamGuard } from "./stream";
 import { type BrowserContext, browserContext } from "./context";
 import { onShellEvent } from "./events";
 import { runBrowserVerb } from "./verbs";
@@ -97,16 +100,28 @@ export function browserDomain(): BrowserContext | undefined {
   return assembled;
 }
 
+/**
+ * Which backend holds the page.
+ *
+ * The question is settled by HOW THIS PROCESS WAS STARTED, not by a setting: a
+ * core an Electron shell started has a drive channel in its environment and a
+ * window full of `<webview>` guests to drive, and starting a second, invisible
+ * browser beside it would be two browsers where the user sees one. A core with
+ * no shell has no window, so the page has to live somewhere, and that is a
+ * headless Chromium of its own — one per node, with its own profile, started
+ * on the first verb or the first viewer.
+ */
+export function chooseBackend(context: CoreContext): DriveBackend | undefined {
+  const log = (message: string, detail?: Record<string, unknown>) => {
+    context.log.info(message, detail);
+  };
+  const shell = DriveClient.fromEnvironment(process.env, { log });
+  if (shell !== undefined) return shell;
+  return new HeadlessBackend({ dataDir: context.dataDir, log });
+}
+
 export function install(context: CoreContext): BrowserContext {
-  // The channel is a property of how this process was started, not of any one
-  // request: a core nobody's shell started has no channel at all, and every
-  // verb then answers `browser_unavailable` rather than reaching for a second
-  // browser nobody is looking at.
-  const client = DriveClient.fromEnvironment(process.env, {
-    log: (message, detail) => {
-      context.log.info(message, detail);
-    },
-  });
+  const client = chooseBackend(context);
   const state = browserContext({
     database: context.db.database,
     // Read through the settings store on every call rather than snapshotted: a
@@ -129,6 +144,19 @@ export function install(context: CoreContext): BrowserContext {
   client?.connect((event) => {
     onShellEvent(state, event);
   });
+
+  // The stream exists only for the headless backend: with a desktop shell the
+  // page is a guest in the window the person is already looking at, and this
+  // route answers 501 rather than a second copy of it.
+  const headless = client instanceof HeadlessBackend ? client : undefined;
+  const deps = { database: context.db.database, backend: headless };
+  context.server.stream(
+    BROWSER_STREAM_PATH,
+    (socket, params) => {
+      attachStream(deps, socket, params);
+    },
+    (params) => streamGuard(deps, params),
+  );
   return state;
 }
 
@@ -137,3 +165,5 @@ export { browserContext } from "./context";
 export { onShellEvent } from "./events";
 export { runBrowserVerb } from "./verbs";
 export { VERBS } from "./args";
+export type { DriveBackend } from "./backend";
+export { BROWSER_STREAM_PATH } from "./stream";

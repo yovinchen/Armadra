@@ -1,5 +1,6 @@
 import { WebSocket } from "ws";
 import { Refusal } from "../collab/refusals";
+import type { BackendStatus, DriveBackend, EventSink } from "./backend";
 
 /**
  * The core's end of `browser:drive`.
@@ -37,11 +38,7 @@ const CALL_TIMEOUT_MS = 50_000;
 const RECONNECT_MIN_MS = 250;
 const RECONNECT_MAX_MS = 10_000;
 
-/**
- * An event the shell pushed: a guest navigated, a person touched a page, a
- * lease should end.
- */
-export type EventSink = (event: Record<string, unknown>) => void;
+export type { EventSink };
 
 export function unavailable(): Refusal {
   return Refusal.conflict(
@@ -80,7 +77,8 @@ export interface WebSocketLike {
   on(event: "error", handler: (error: Error) => void): void;
 }
 
-export class DriveClient {
+export class DriveClient implements DriveBackend {
+  readonly kind = "shell" as const;
   private readonly address: string;
   private readonly token: string;
   private readonly dial: (address: string) => WebSocketLike;
@@ -130,6 +128,15 @@ export class DriveClient {
 
   isConnected(): boolean {
     return this.ready;
+  }
+
+  status(): BackendStatus {
+    return {
+      kind: "shell",
+      available: this.ready,
+      ...(this.ready ? {} : { reason: UNAVAILABLE }),
+      detail: { address: this.address },
+    };
   }
 
   /**

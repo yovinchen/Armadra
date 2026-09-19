@@ -5,7 +5,12 @@ import { basename, dirname } from "node:path";
 import { BROWSER_KEYS, MAX_INSERT_TEXT } from "./allowlist";
 import { CdpRefusal, DRIVE_CODES, refuse } from "./codes";
 import { allowGuestNavigation } from "./navigation";
-import { parseRef, staleRefMessage, unknownRefMessage, verifyIdentity } from "./refs";
+import {
+  parseRef,
+  staleRefMessage,
+  unknownRefMessage,
+  verifyIdentity,
+} from "./refs";
 import type { RefRecord } from "./refs";
 import type { CdpSession } from "./session";
 import { jailMessage, jailReadPath, jailWritePath } from "./workspace-path";

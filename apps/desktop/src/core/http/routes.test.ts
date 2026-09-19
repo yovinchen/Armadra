@@ -58,20 +58,40 @@ function camel(path: string): string {
   );
 }
 
+/**
+ * The Runtime's contract, and the few paths that are deliberately not in it.
+ *
+ * R6 gives the core a route the Rust build cannot have — the remote browser
+ * node's frame stream, which needs a headless backend Rust never grew. Rather
+ * than loosening the comparison, those entries carry `beyondContract` and are
+ * subtracted here by name, so adding a second one is a decision somebody makes
+ * in this file rather than a diff that slips through a relaxed assertion.
+ */
+const beyond = ROUTES.filter((route) => route.beyondContract);
+const contractual = ROUTES.filter((route) => !route.beyondContract);
+
 describe("the route table", () => {
+  it("adds exactly one path the Rust Runtime never had", () => {
+    expect(beyond.map((route) => route.path)).toEqual([
+      "/api/workspaces/{workspaceId}/browser/{nodeId}/stream",
+    ]);
+  });
+
   it("holds the contractual 163, split 148 on the main surface and 15 on the hook one", () => {
-    expect(ROUTES).toHaveLength(163);
-    expect(ROUTES.filter((route) => route.surface === "runtime")).toHaveLength(
-      148,
-    );
-    expect(ROUTES.filter((route) => route.surface === "hook")).toHaveLength(15);
+    expect(contractual).toHaveLength(163);
+    expect(
+      contractual.filter((route) => route.surface === "runtime"),
+    ).toHaveLength(148);
+    expect(
+      contractual.filter((route) => route.surface === "hook"),
+    ).toHaveLength(15);
   });
 
   it("is exactly what the Rust Runtime registers, path for path", () => {
     const rust = rustRoutes()
       .map((route) => camel(route.path))
       .sort();
-    const ours = ROUTES.map((route) => route.path).sort();
+    const ours = contractual.map((route) => route.path).sort();
     expect(ours).toEqual(rust);
   });
 
@@ -82,7 +102,7 @@ describe("the route table", () => {
         [...route.methods].sort(),
       ]),
     );
-    for (const route of ROUTES) {
+    for (const route of contractual) {
       expect([...route.methods].sort(), route.path).toEqual(
         rust.get(route.path),
       );
@@ -100,7 +120,7 @@ describe("the route table", () => {
       // handler landed. Only the unwritten ones have to carry a phase.
       if (route.implemented) continue;
       expect(route.feature, route.path).toBeTruthy();
-      expect([1, 2, 3, 4, 5], route.path).toContain(route.phase);
+      expect([1, 2, 3, 4, 5, 6], route.path).toContain(route.phase);
     }
   });
 
@@ -112,7 +132,7 @@ describe("the route table", () => {
     // is what keeps a handler from being bound to a path nobody claimed.
     for (const route of implemented) {
       if (route.path === "/health" || route.path === "/api/health") continue;
-      expect([1, 2, 3, 4, 5], route.path).toContain(route.phase);
+      expect([1, 2, 3, 4, 5, 6], route.path).toContain(route.phase);
     }
   });
 
@@ -155,7 +175,7 @@ describe("the route table", () => {
     for (const phase of [1, 2, 3, 4, 5]) {
       expect(counts.get(phase), `R${phase}`).toBeGreaterThan(0);
     }
-    expect([...counts.values()].reduce((a, b) => a + b, 0)).toBe(161);
+    expect([...counts.values()].reduce((a, b) => a + b, 0)).toBe(162);
   });
 
   it("keeps the three inbound WebSocket paths in the table", () => {
