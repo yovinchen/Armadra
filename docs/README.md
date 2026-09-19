@@ -56,6 +56,7 @@
 | [桌面壳原生 Host 会话](design/host-native-session.md)           | 打包桌面壳经私有通道取票、Bearer 会话                          |
 | [全面修改方案（2026-09）](design/overhaul-plan.md)              | 本轮总纲：界面补齐、Mermaid、功能复查、TS 核心、收尾与多端编译 |
 | [桌面壳迁移到 Electron](design/electron-migration.md)           | 换壳、`<webview>` 浏览器节点、画布性能前置与六条工作流         |
+| [TypeScript Core](design/typescript-core.md)                    | Go Host 与 Rust Runtime 合一为一个 TS core，两种壳、R0–R7      |
 
 ## status/ 已验证进度
 
