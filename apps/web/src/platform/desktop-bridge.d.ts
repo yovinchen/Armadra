@@ -3,9 +3,9 @@
  * (`apps/desktop/src/preload/index.ts`, table in
  * docs/design/electron-migration.md §2.2).
  *
- * Only the two domains W1.2 needs are declared. The rest of the table
- * (dialog, shell, updates, shortcuts, window, app, browser) is W2.1's, and is
- * added there rather than guessed at here — a declaration for a method the
+ * Only the two domains W1.2 needs are declared here, on the shared
+ * `ArmadraBridge` name so TypeScript merges it with the shell and updates
+ * halves (`desktop-bridge-shell.d.ts`, `desktop-bridge-updates.d.ts`) — a declaration for a method the
  * preload does not expose is worse than no declaration, because it typechecks.
  *
  * The bridge is absent in a browser and in the Tauri shell, so every field is
@@ -45,7 +45,7 @@ type ArmadraTicketAnswer =
       readonly error: { readonly code: string; readonly message: string };
     };
 
-interface ArmadraDesktopBridge {
+interface ArmadraBridge {
   readonly transport: {
     endpoints(): Promise<ArmadraTransportEndpoints>;
     /**
@@ -63,5 +63,5 @@ interface ArmadraDesktopBridge {
 }
 
 interface Window {
-  readonly armadra?: ArmadraDesktopBridge;
+  readonly armadra?: ArmadraBridge;
 }
