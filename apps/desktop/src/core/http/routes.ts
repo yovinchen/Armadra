@@ -889,6 +889,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 接入安装",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/agents/{agentId}/integration/install",
@@ -896,6 +897,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 接入安装",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/agents/{agentId}/integration/uninstall",
@@ -903,6 +905,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 接入安装",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/agents/{agentId}/integration/repair",
@@ -910,6 +913,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 接入安装",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/agent-status/{nodeId}/read",
