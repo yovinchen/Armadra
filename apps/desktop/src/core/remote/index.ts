@@ -1,0 +1,236 @@
+/**
+ * The SSH and remote-execution domain's one assembly point.
+ *
+ * It owns two things that only exist together: the `ssh` a terminal runs, and
+ * the `ssh` a remote Worker runs. They share the host registry, the host-key
+ * file, the askpass helper and the prompt registry, so splitting them into two
+ * `install`s would mean two copies of each or a fifth thing to thread between
+ * them.
+ *
+ * Nine routes are claimed here:
+ *
+ *   * `POST /api/ssh/hosts/{id}/test` — reachability;
+ *   * `POST /api/ssh/hosts/{id}/worker/test` — reachability *and* handshake;
+ *   * `POST /api/ssh/hosts/{id}/host-keys/scan` — scan and show;
+ *   * `POST|DELETE /api/ssh/hosts/{id}/host-keys` — trust and forget;
+ *   * `GET /api/ssh/prompts` — what is still waiting;
+ *   * `POST|DELETE /api/ssh/hosts/{id}/prompts/{promptId}` — answer, cancel;
+ *   * `POST /api/execution-hosts/{id}/validate` — the settings page's button.
+ *
+ * What is **not** claimed, and why, is as much a part of this file:
+ *
+ *   * `/api/ssh/askpass/prompts` and `…/{id}` stay 501. The helper reaches
+ *     this core over a 0600 unix socket of its own (`terminal/ssh/askpass.ts`),
+ *     so the prompt-opening endpoint is not on the general HTTP surface at
+ *     all. Nothing else ever called those paths.
+ *   * `POST /api/workspaces/remote` and `PATCH …/execution-host` stay 501.
+ *     The decision half of a switch is written and tested here
+ *     ({@link ./switch}), but committing one needs the remote Worker's
+ *     *service* surface — `registerRoot` to prove the new root exists,
+ *     `listDirectory` and `gitHeadCommit` to fingerprint it — and those
+ *     operations are R4 and R5's. Answering them now would mean rebinding a
+ *     workspace to a directory nothing verified, which is the one outcome
+ *     `switch.rs` exists to prevent.
+ */
+
+import { VERSION } from "../instance";
+import { coreError } from "../http/errors";
+import type { CoreContext } from "../main";
+import { settingsDomain } from "../settings";
+import { parseHosts, type SshHost } from "../settings/ssh-hosts";
+import { AskpassService } from "../terminal/ssh/askpass";
+import {
+  answerPrompt,
+  asError,
+  cancelPrompt,
+  forgetHostKeys,
+  listPrompts,
+  scanHostKeys,
+  testHost,
+  testWorker,
+  trustHostKey,
+  type SshRouteDeps,
+} from "../terminal/ssh/routes";
+import { probeHost, validateExecutionHost, ValidationRefused } from "./validate";
+import { RemoteWorker, RemoteWorkers } from "./worker";
+
+/**
+ * Substitutes argv[0] of every `ssh` this domain starts.
+ *
+ * The same variable the Rust Runtime reads, so a person who reaches their
+ * hosts through a wrapper — and the integration tests, which reach a temporary
+ * sshd — configure both implementations the same way.
+ */
+export const LAUNCHER_OVERRIDE = "ARMADRA_REMOTE_WORKER_LAUNCHER";
+
+export interface RemoteDomain {
+  readonly askpass: AskpassService;
+  readonly workers: RemoteWorkers;
+  /** The registry read fresh, so a settings edit is visible immediately. */
+  readonly host: (hostId: string) => SshHost | undefined;
+  stop(): Promise<void>;
+}
+
+export function install(context: CoreContext): RemoteDomain {
+  const launcher = accepted(process.env[LAUNCHER_OVERRIDE]);
+  const askpass = new AskpassService({
+    dataDir: context.dataDir,
+    // A prompt is broadcast rather than answered: the secret belongs to a
+    // person, and the text is already redacted by the time it gets here. There
+    // is no workspace on an `ssh` child, so it goes to every workspace stream
+    // — which is what the Rust `EventHub::publish_all` does with it too.
+    onPrompt: (prompt) => {
+      context.bus.emit("workspace.event", {
+        workspaceId: "",
+        // Spread into a plain record: the bus carries the payload as an opaque
+        // JSON object, and a readonly interface is not one by assignment.
+        event: { type: "ssh.prompt", prompt: { ...prompt } },
+      });
+      context.log.info("ssh is asking for a secret", {
+        hostId: prompt.hostId,
+        kind: prompt.kind,
+      });
+    },
+  });
+
+  const host = (hostId: string): SshHost | undefined => {
+    const settings = settingsDomain();
+    if (settings === undefined) return undefined;
+    return parseHosts(settings.settings.snapshot()).find(
+      (entry) => entry.id === hostId,
+    );
+  };
+
+  const workers = new RemoteWorkers(
+    (entry, worker) =>
+      new RemoteWorker({
+        dataDir: context.dataDir,
+        host: entry,
+        worker,
+        askpass,
+        version: VERSION,
+        ...(launcher === undefined ? {} : { launcher }),
+      }),
+  );
+
+  const deps: SshRouteDeps = {
+    dataDir: context.dataDir,
+    askpass,
+    host,
+    probe: async (entry) => await probeHost(context.dataDir, entry, launcher),
+    workerTest: async (entry) => {
+      // The askpass socket has to exist before an `ssh` child is told to use
+      // it, and nothing else in this path starts it.
+      await askpass.start();
+      return await workers.get(entry, entry.id).probe();
+    },
+  };
+
+  const { router } = context.server;
+  const answered =
+    <T extends unknown[]>(
+      handler: (...args: T) => Promise<unknown> | unknown,
+    ) =>
+    async (...args: T) => {
+      try {
+        return (await handler(...args)) as never;
+      } catch (failure) {
+        return asError(failure) as never;
+      }
+    };
+
+  router.handle(
+    "POST",
+    "/api/ssh/hosts/{hostId}/test",
+    answered((match) => testHost(deps, match.params.hostId ?? "")),
+  );
+  router.handle(
+    "POST",
+    "/api/ssh/hosts/{hostId}/worker/test",
+    answered((match) => testWorker(deps, match.params.hostId ?? "")),
+  );
+  router.handle(
+    "POST",
+    "/api/ssh/hosts/{hostId}/host-keys/scan",
+    answered((match) => scanHostKeys(deps, match.params.hostId ?? "")),
+  );
+  router.handle(
+    "POST",
+    "/api/ssh/hosts/{hostId}/host-keys",
+    answered((match, request) =>
+      trustHostKey(deps, match.params.hostId ?? "", request),
+    ),
+  );
+  router.handle(
+    "DELETE",
+    "/api/ssh/hosts/{hostId}/host-keys",
+    answered((match) => forgetHostKeys(deps, match.params.hostId ?? "")),
+  );
+  router.handle("GET", "/api/ssh/prompts", answered(() => listPrompts(deps)));
+  router.handle(
+    "POST",
+    "/api/ssh/hosts/{hostId}/prompts/{promptId}",
+    answered((match, request) =>
+      answerPrompt(
+        deps,
+        match.params.hostId ?? "",
+        match.params.promptId ?? "",
+        request,
+      ),
+    ),
+  );
+  router.handle(
+    "DELETE",
+    "/api/ssh/hosts/{hostId}/prompts/{promptId}",
+    answered((match) => cancelPrompt(deps, match.params.promptId ?? "")),
+  );
+
+  router.handle(
+    "POST",
+    "/api/execution-hosts/{hostId}/validate",
+    async (match) => {
+      const hostId = match.params.hostId ?? "";
+      try {
+        await askpass.start();
+        return {
+          status: 200,
+          body: await validateExecutionHost(hostId, {
+            dataDir: context.dataDir,
+            host: host(hostId),
+            worker: (entry) => workers.get(entry, entry.id),
+            ...(launcher === undefined ? {} : { launcher }),
+          }),
+        };
+      } catch (failure) {
+        if (failure instanceof ValidationRefused) {
+          return coreError(failure.status, failure.code, failure.message);
+        }
+        return asError(failure);
+      }
+    },
+  );
+
+  return {
+    askpass,
+    workers,
+    host,
+    stop: async () => {
+      workers.closeAll();
+      await askpass.stop();
+    },
+  };
+}
+
+/**
+ * Only an absolute path with no whitespace replaces the program: a bare name
+ * would resolve through `PATH`, and an argument smuggled through a space would
+ * become part of the command line rather than part of the program name. The
+ * same rule `known-hosts` applies to its own override.
+ */
+function accepted(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value.startsWith("/") && !/\s/u.test(value) ? value : undefined;
+}
+
+export { SshBackend } from "../terminal/ssh/backend";
+export type { SshTerminalSpec } from "../terminal/ssh/backend";

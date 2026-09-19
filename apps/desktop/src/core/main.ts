@@ -29,6 +29,7 @@ import {
   logLevel,
   nodePlatform,
 } from "./platform";
+import { install as installRemote } from "./remote";
 import { install as installTerminals } from "./terminal/install";
 
 /**
@@ -104,6 +105,9 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installUsage,
   installIdentity,
   installTerminals,
+  // Last: it reads the settings store `installSettings` assembled, and it
+  // starts nothing until a route is called.
+  installRemote,
 ];
 
 export async function run(options: RunOptions = {}): Promise<RunningCore> {
