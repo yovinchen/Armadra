@@ -5,9 +5,16 @@
 // which a permissioned method answers, that a browser origin cannot spend the
 // same ticket, that the ticket cannot be spent twice, and that nothing
 // authenticates on the native origin without a bearer.
+//
+// A shell origin is no longer one fixed spelling: the Electron shell serves
+// its page over loopback HTTP on a kernel-assigned port
+// (docs/design/electron-migration.md §2.1), so the same ticket flow is proved
+// a second time for `http://127.0.0.1:NNNN`, over raw requests because the
+// host-client transport still spells out the Tauri origins.
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,8 +38,22 @@ const binary = join(
   process.platform === "win32" ? "armadra-host.exe" : "armadra-host",
 );
 const NATIVE = "tauri://localhost";
-const BROWSER = "http://127.0.0.1:1420";
+// A real browser origin: off this machine, so never a shell origin however
+// explicitly it is allowed. A loopback HTTP origin is a shell origin now.
+const BROWSER = "https://armadra.example";
 const MEDIA = "application/x-protobuf";
+
+/** The port the Electron shell's static server would have been given. */
+async function freeLoopbackOrigin() {
+  const probe = createServer();
+  const port = await new Promise((resolve, reject) => {
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => resolve(probe.address().port));
+  });
+  await new Promise((resolve) => probe.close(resolve));
+  return `http://127.0.0.1:${port}`;
+}
+const ELECTRON = await freeLoopbackOrigin();
 
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
@@ -61,6 +82,8 @@ async function startHost() {
       "127.0.0.1:0",
       "--allow-origin",
       NATIVE,
+      "--allow-origin",
+      ELECTRON,
       "--allow-origin",
       BROWSER,
     ],
@@ -120,6 +143,7 @@ try {
     fromBinary,
     PairDeviceRequestSchema,
     CurrentSessionRequestSchema,
+    AuthenticatedSessionSchema,
     ErrorResponseSchema,
   } = protocol;
 
@@ -150,6 +174,14 @@ try {
   const browserHello = await hello(BROWSER);
   assert.ok(!browserHello.capabilities.includes("identity.native-session.v1"));
   assert.ok(!browserHello.capabilities.includes("settings.documents.v1"));
+  // The Electron shell's loopback HTTP origin is offered the same surfaces as
+  // the Tauri one, and still never the cookie session.
+  const electronHello = await hello(ELECTRON);
+  assert.ok(electronHello.capabilities.includes("identity.native-session.v1"));
+  assert.ok(electronHello.capabilities.includes("settings.documents.v1"));
+  assert.ok(
+    !electronHello.capabilities.includes("identity.browser-session.v1"),
+  );
 
   // 2. The shell's step: one ticket over the private control channel. The
   //    same CLI refuses a browser origin on a plain-HTTP Host.
@@ -179,7 +211,7 @@ try {
   assert.equal(ticket.hostInstanceId, nativeHello.hostInstanceId);
   assert.equal(ticket.origin, NATIVE);
 
-  const rawPair = async (origin) => {
+  const rawPair = async (origin, spend = ticket) => {
     const response = await fetchAs(origin)(
       `${endpoint}/rpc/armadra.v1.IdentityService/Pair`,
       {
@@ -189,9 +221,9 @@ try {
           toBinary(
             PairDeviceRequestSchema,
             create(PairDeviceRequestSchema, {
-              expectedHostId: ticket.hostId,
-              expectedInstanceId: ticket.hostInstanceId,
-              ticket: ticket.ticket,
+              expectedHostId: spend.hostId,
+              expectedInstanceId: spend.hostInstanceId,
+              ticket: spend.ticket,
             }),
           ),
         ),
@@ -202,6 +234,7 @@ try {
       status: response.status,
       code: response.ok ? "" : fromBinary(ErrorResponseSchema, body).code,
       cookies: response.headers.getSetCookie(),
+      body,
     };
   };
 
@@ -296,8 +329,35 @@ try {
   assert.ok(!credentials.signedIn);
   assert.equal(await rawCurrent(NATIVE, lastAccess), 401);
 
+  // 8. The Electron shape: the very same flow on the shell's loopback HTTP
+  //    origin, with no custom scheme anywhere. Raw requests, because the
+  //    host-client transport still spells out the Tauri origins.
+  const electronTicket = JSON.parse(mint(ELECTRON));
+  assert.equal(electronTicket.origin, ELECTRON);
+  const stolen = await rawPair(BROWSER, electronTicket);
+  assert.equal(stolen.status, 403);
+  assert.equal(stolen.code, "PERMISSION_DENIED");
+  const electronPair = await rawPair(ELECTRON, electronTicket);
+  assert.equal(electronPair.status, 200);
+  assert.equal(electronPair.cookies.length, 0);
+  const electronSession = fromBinary(
+    AuthenticatedSessionSchema,
+    electronPair.body,
+  );
+  assert.equal(electronSession.device.displayName, "本机桌面");
+  const electronAccess = electronSession.native?.accessToken ?? "";
+  assert.ok(electronAccess);
+  assert.equal(await rawCurrent(ELECTRON, electronAccess), 200);
+  assert.equal(await rawCurrent(ELECTRON, ""), 401);
+  // The session is bound to its origin, and the browser origin is still
+  // stopped at the gate.
+  assert.equal(await rawCurrent(NATIVE, electronAccess), 401);
+  assert.equal(await rawCurrent(BROWSER, electronAccess), 403);
+  // The ticket was consumed by the one origin that could spend it.
+  assert.equal((await rawPair(ELECTRON, electronTicket)).status, 401);
+
   console.log(
-    "PASS: native origin + control-channel ticket → bearer session → ListDevices; browser origin refused the same ticket; ticket single-use; no bearer, no session; logout revokes.",
+    "PASS: shell origin (Tauri scheme and loopback HTTP) + control-channel ticket → bearer session → ListDevices; browser origin refused the same ticket; ticket single-use; no bearer, no session; logout revokes.",
   );
 } finally {
   await stopHost();

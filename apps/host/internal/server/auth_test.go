@@ -231,7 +231,10 @@ func TestAuthRejectsWrongOriginAuthorityAndPlainHTTP(t *testing.T) {
 	}
 	// Even a configured CORS exception and forwarded HTTPS claim cannot upgrade
 	// an actual plaintext request into a credential transport.
-	for _, options := range []Options{{Identity: f.identity}, {Identity: f.identity, AllowedOrigins: []string{"http://127.0.0.1:1420"}}, {Identity: f.identity, PublicOrigin: f.origin}} {
+	// The allowlisted origin here is an HTTPS one on purpose: a loopback HTTP
+	// origin is a shell origin and gets the bearer transport instead, which
+	// TestNativeSession... covers. Neither one ever becomes a cookie.
+	for _, options := range []Options{{Identity: f.identity}, {Identity: f.identity, AllowedOrigins: []string{"https://browser.example"}}, {Identity: f.identity, PublicOrigin: f.origin}} {
 		handler, err := NewHandlerWithOptions(Identity{HostID: authHost, InstanceID: authInstance}, options)
 		if err != nil {
 			t.Fatal(err)
