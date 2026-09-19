@@ -22,8 +22,6 @@ use crate::{
     error::{AppError, AppResult},
 };
 
-use super::Live;
-
 /// A person's lease lapses this long after their last input, so an agent that
 /// is waiting gets going again without anybody pressing anything.
 pub const HUMAN_IDLE_SECONDS: i64 = 10;
@@ -34,9 +32,6 @@ pub const AGENT_IDLE_SECONDS: i64 = 30;
 /// refused (§2.6). Refusing is the design: a queue that grows without bound
 /// turns "the human is typing" into "the agent hung".
 pub const AGENT_QUEUE: Duration = Duration::from_secs(5);
-/// How often a waiting agent re-checks. The wait is also woken directly when
-/// the lease is released, so this is only the ceiling on noticing an expiry.
-const QUEUE_POLL: Duration = Duration::from_millis(100);
 
 /* ------------------------------- reason codes ----------------------------- */
 
@@ -319,149 +314,11 @@ impl Machine {
     }
 }
 
-/* --------------------------------- the wait -------------------------------- */
-
-/// Takes the lease for one action, waiting out a person's ordinary input for
-/// at most [`AGENT_QUEUE`].
-///
-/// Returns the generation the caller now holds, which is what its answer
-/// carries so the next request can be checked against it.
-pub async fn acquire(live: &Live, actor: &Actor, expected: Option<u64>) -> AppResult<u64> {
-    let deadline = tokio::time::Instant::now() + AGENT_QUEUE;
-    loop {
-        let (grant, lease) = {
-            let mut machine = live.lease_machine();
-            let grant = machine.request(actor, Utc::now(), expected);
-            (grant, machine.snapshot())
-        };
-        match grant {
-            Grant::Granted => {
-                let generation = lease.generation;
-                publish(live, lease).await;
-                return Ok(generation);
-            }
-            Grant::Refused(code) => return Err(refusal(code)),
-            Grant::Queue => {
-                if tokio::time::Instant::now() >= deadline {
-                    return Err(refusal(LEASE_HELD_BY_HUMAN));
-                }
-                let _ = tokio::time::timeout(QUEUE_POLL, live.lease_wake.notified()).await;
-            }
-        }
-    }
-}
-
-/// Publishes the lease to every client, and stores the generation so a
-/// restart cannot hand out a number that has already been used.
-///
-/// Both halves are best effort in the same way [`Live::publish`] is: a
-/// database hiccup must not take down a browser somebody is using.
-pub async fn publish(live: &Live, lease: Lease) {
-    if !live.remember_lease(&lease) {
-        return;
-    }
-    if let Err(error) =
-        crate::browser::persist_lease_generation(&live.pool, &live.session_id, lease.generation)
-            .await
-    {
-        tracing::warn!(%error, session = %live.session_id, "could not store the lease generation");
-    }
-    live.events.publish(
-        &live.workspace_id,
-        crate::events::WorkspaceEvent::BrowserLease {
-            session_id: live.session_id.clone(),
-            lease: Box::new(lease),
-        },
-    );
-    live.lease_wake.notify_waiters();
-}
-
-/* -------------------------------- the routes ------------------------------- */
-
-/// `POST …/sessions/{id}/lease` — status, take over, or hand back.
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LeaseRequest {
-    /// `status` | `takeover` | `release`
-    pub action: String,
-    #[serde(default)]
-    pub lease_generation: Option<u64>,
-    #[serde(default)]
-    pub device_id: String,
-    #[serde(default)]
-    pub display_name: String,
-}
-
-/// The lease as it stands, with anything that has lapsed already expired.
-///
-/// Reading is free for both sides: an agent that has just been refused needs
-/// to be able to say *who* is driving without taking anything itself (§2.7).
-pub fn status(live: &Live) -> Lease {
-    let mut machine = live.lease_machine();
-    machine.expire(Utc::now());
-    machine.snapshot()
-}
-
-/// Hands back a lease this actor holds. Holding none is a refusal rather than
-/// a silent success, so `lease --release` cannot look like it freed a lease
-/// somebody else is holding.
-pub async fn release(live: &Live, actor: &Actor) -> AppResult<Lease> {
-    let lease = {
-        let mut machine = live.lease_machine();
-        machine.release(actor)?;
-        machine.snapshot()
-    };
-    publish(live, lease.clone()).await;
-    Ok(lease)
-}
-
-/// Takes over or hands back on behalf of a person at a client.
-pub async fn control(live: &Live, request: &LeaseRequest) -> AppResult<Lease> {
-    let actor = Actor::human(
-        device_or_local(&request.device_id),
-        truncate_name(&request.display_name),
-    );
-    match request.action.as_str() {
-        "status" => Ok(status(live)),
-        "takeover" => {
-            let (lease, revoked) = {
-                let mut machine = live.lease_machine();
-                if let Some(expected) = request.lease_generation
-                    && expected != machine.generation()
-                {
-                    return Err(refusal(LEASE_GENERATION));
-                }
-                let revoked = machine.takeover(&actor, Utc::now());
-                (machine.snapshot(), revoked)
-            };
-            // An action the revoked agent had already dispatched cannot be
-            // taken back, so it is recorded as `unknown` rather than as
-            // something that succeeded or failed (§2.6).
-            if let Some(holder) = revoked {
-                live.record_activity(crate::browser::Activity {
-                    session_id: live.session_id.clone(),
-                    actor: "agent",
-                    actor_id: holder.id,
-                    verb: "lease".into(),
-                    target: String::new(),
-                    outcome: "unknown",
-                    reason_code: LEASE_REVOKED.into(),
-                    at: Utc::now().to_rfc3339(),
-                });
-            }
-            publish(live, lease.clone()).await;
-            Ok(lease)
-        }
-        "release" => release(live, &actor).await,
-        other => Err(AppError::BadRequest(format!(
-            "Unknown lease action `{other}`; expected status, takeover or release"
-        ))),
-    }
-}
+/* -------------------------------- the client ------------------------------ */
 
 /// A client that sends no id is "the person at this machine". They are not
-/// told apart from each other, which only matters when two of them use the
-/// HTTP fallback at once — the stream carries an id.
+/// told apart from each other, which only matters when two of them drive the
+/// same node at once.
 pub fn device_or_local(device_id: &str) -> &str {
     let trimmed = device_id.trim();
     if trimmed.is_empty() { "local" } else { trimmed }

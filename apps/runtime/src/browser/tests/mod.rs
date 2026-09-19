@@ -1,27 +1,16 @@
-//! B01 tests.
+//! B01 tests, as they stand after W3.5.
 //!
-//! The CDP half needs a real Chromium-family browser, and there is no bundled
-//! one yet (design §5 leaves the managed download to a later round). Those
-//! tests therefore **skip loudly** when [`launch::availability`] finds nothing,
-//! printing which paths were looked at — a silent pass would be worse than no
-//! test. Everything that does not need a browser runs everywhere.
+//! Nothing here needs a browser any more, and that is the point of the split:
+//! the page lives in the Electron shell, so what a click does to a document is
+//! tested where the click happens (`apps/desktop/src/main/browser/`). What is
+//! tested here is what did *not* move — the three authorization rules, the
+//! lease state machine, the argument surface of the drive channel, and the
+//! prose a verb answers with.
 //!
-//! No test reaches the public internet: the page under test is served by an
-//! axum listener on `127.0.0.1:0`, and the profile is a throwaway directory
-//! inside the test's own temporary data directory.
+//! No test reaches the network, opens a socket or starts a process.
 
-mod budget;
-mod dialogs;
-mod frames;
 mod lease;
-mod live;
-mod managed;
-mod persistence;
 mod policy;
-mod process;
 mod shell;
-mod streaming;
 mod support;
-mod tabs;
-mod transfers;
 mod verbs;
