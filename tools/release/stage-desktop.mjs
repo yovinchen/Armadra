@@ -70,12 +70,37 @@ export function isReleaseAsset(name) {
   return true;
 }
 
-/** The one file of this kind in the output directory, or null. */
-export function findBundle({ bundle, kind }) {
+/**
+ * Whether a packager name belongs to the given target's architecture.
+ *
+ * electron-builder names the 64-bit Intel build with NO architecture token at
+ * all (`Armadra-0.1.0.dmg`, `armadra_0.1.0_amd64.deb`) and the ARM one with an
+ * explicit one (`Armadra-0.1.0-arm64.dmg`, `armadra-0.1.0.aarch64.rpm`). So the
+ * check is one-sided: ARM demands the token, Intel demands its absence.
+ *
+ * In CI a runner builds one architecture and the directory holds one file of
+ * each kind, so this changes nothing there. It matters locally, where one
+ * `dist` produces both: sorted by name, `Armadra-0.1.0-arm64.dmg` comes before
+ * `Armadra-0.1.0.dmg`, so without this the x64 target would be published with
+ * the arm64 bundle under it — an installer that cannot run on the machine its
+ * name promises.
+ */
+export function matchesArch(name, target) {
+  const arm = /(^|[^a-z0-9])(arm64|aarch64)([^a-z0-9]|$)/i.test(name);
+  return target.endsWith("-aarch64") ? arm : !arm;
+}
+
+/** The one file of this kind for this target, or null. */
+export function findBundle({ bundle, kind, target }) {
   const spec = BUNDLE_KINDS[kind];
   if (!spec || !existsSync(bundle)) return null;
   const matches = readdirSync(bundle)
-    .filter((name) => isReleaseAsset(name) && name.endsWith(spec.suffix))
+    .filter(
+      (name) =>
+        isReleaseAsset(name) &&
+        name.endsWith(spec.suffix) &&
+        (target === undefined || matchesArch(name, target)),
+    )
     .sort();
   return matches.length === 0 ? null : join(bundle, matches[0]);
 }
@@ -102,7 +127,7 @@ export function stageDesktop({
   const staged = [];
   const missing = [];
   for (const asset of desktopAssets(version, target)) {
-    const source = findBundle({ bundle, kind: asset.kind });
+    const source = findBundle({ bundle, kind: asset.kind, target });
     if (!source) {
       if (asset.updater && !requireUpdater) continue;
       missing.push(`${asset.kind} (for ${asset.name})`);
