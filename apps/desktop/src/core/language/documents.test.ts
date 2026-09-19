@@ -94,7 +94,12 @@ describe("language/documents", () => {
     const documents = new Documents();
     // `注` and `释` are one UTF-16 unit each; `📘` is two. A byte-offset
     // implementation gets every one of these wrong.
-    documents.openDocument("a", "armadra:///x.md", "markdown", "注释📘尾\nsecond");
+    documents.openDocument(
+      "a",
+      "armadra:///x.md",
+      "markdown",
+      "注释📘尾\nsecond",
+    );
     documents.change("a", "armadra:///x.md", range([0, 2], [0, 4], "X"));
     expect(documents.get("armadra:///x.md")?.text).toBe("注释X尾\nsecond");
     documents.change("a", "armadra:///x.md", range([1, 0], [1, 6], "2nd"));

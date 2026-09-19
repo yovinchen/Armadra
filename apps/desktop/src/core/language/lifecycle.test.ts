@@ -12,7 +12,11 @@ import type { JsonObject, JsonValue } from "./jsonrpc";
 import { reason } from "./limits";
 import { MAX_RESTARTS } from "./limits";
 import { expireRequests, restartDelay } from "./mux";
-import { initializeParams, isRuntimeVariable, serverEnvironment } from "./server";
+import {
+  initializeParams,
+  isRuntimeVariable,
+  serverEnvironment,
+} from "./server";
 
 let harness: Harness | undefined;
 

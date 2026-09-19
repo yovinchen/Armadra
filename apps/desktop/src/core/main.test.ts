@@ -266,12 +266,16 @@ describe("what the core answers", () => {
     );
   });
 
-  it("refuses an upgrade to a stream no phase has written yet", async () => {
+  it("refuses an upgrade the core has no stream for", async () => {
     const { core } = await start(temporary());
+    // Both streams in the table — the workspace event one and the language
+    // session one — are written now, so the case this covers is an upgrade to
+    // a path the table does not carry at all: refused outright, rather than a
+    // socket left hanging open.
     expect(
       await upgrade(
         core,
-        "/api/workspaces/ws-1/language/sessions/session-1/stream",
+        "/api/workspaces/ws-1/not-a-stream",
         "http://127.0.0.1:1420",
       ),
     ).toMatch(/^HTTP\/1\.1 501/);

@@ -94,7 +94,13 @@ export function handleSessionMessage(
   const denial = check(message.method, allowWrite);
   if (denial !== undefined) {
     if (message.kind === "request") {
-      refuse(hub, sessionId, message, denialCode(denial), denialMessage(denial));
+      refuse(
+        hub,
+        sessionId,
+        message,
+        denialCode(denial),
+        denialMessage(denial),
+      );
     }
     return "refused";
   }
@@ -178,7 +184,9 @@ function cancel(hub: Hub, sessionId: string, message: Message): Outcome {
 }
 
 function didOpen(hub: Hub, sessionId: string, message: Message): Outcome {
-  const document = asObject(asObject(message.value["params"])?.["textDocument"]);
+  const document = asObject(
+    asObject(message.value["params"])?.["textDocument"],
+  );
   if (document === undefined) return "refused";
   const rawUri = document["uri"];
   const uri = typeof rawUri === "string" ? rawUri : "";

@@ -86,9 +86,9 @@ describe("language/jsonrpc", () => {
     expect(first).toEqual({ kind: "error", error: "tooLarge" });
     const next = decoder.next();
     expect(next.kind).toBe("frame");
-    expect(
-      parseMessage((next as { frame: Frame }).frame.body)?.method,
-    ).toBe("after");
+    expect(parseMessage((next as { frame: Frame }).frame.body)?.method).toBe(
+      "after",
+    );
   });
 
   it("a namespaced id names exactly one session", () => {

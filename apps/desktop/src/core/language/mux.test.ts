@@ -8,12 +8,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  Harness,
-  diagnosticsFor,
-  didOpen,
-  isResponse,
-} from "./fixture";
+import { Harness, diagnosticsFor, didOpen, isResponse } from "./fixture";
 import { METHOD_NOT_FOUND, REQUEST_FAILED } from "./jsonrpc";
 import type { JsonObject, JsonValue } from "./jsonrpc";
 
@@ -29,7 +24,11 @@ function start(extra: readonly string[] = []): Harness {
   return harness;
 }
 
-function requestOf(id: JsonValue, method: string, params: JsonValue): JsonValue {
+function requestOf(
+  id: JsonValue,
+  method: string,
+  params: JsonValue,
+): JsonValue {
   return { jsonrpc: "2.0", id, method, params };
 }
 
@@ -126,7 +125,10 @@ describe("language/mux", () => {
     await test.expect("a", diagnosticsFor("armadra:///notes.md"));
     test.send("a", hoverOf(4));
     const answer = await test.expect("a", isResponse("4"));
-    expect(answer, "the session is told rather than left waiting").toBeDefined();
+    expect(
+      answer,
+      "the session is told rather than left waiting",
+    ).toBeDefined();
     expect((answer?.["error"] as JsonObject)["code"]).toBe(REQUEST_FAILED);
     expect(answer?.["result"]).toBeUndefined();
   });
