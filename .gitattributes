@@ -1,11 +1,9 @@
 # Line endings are part of the build here, not a preference.
 #
 # The Windows runner checks out with `core.autocrlf=true` unless told
-# otherwise, and three checks compare bytes: `prettier --check`,
-# `cargo fmt --check` and `tools/protocol.mjs check`, which diffs freshly
-# generated Go/TypeScript against the committed files. Any of them fails on a
-# CRLF working copy. Normalising to LF in the repository and on checkout keeps
-# the three platforms byte-identical.
+# otherwise, and `prettier --check` compares bytes, so a CRLF working copy
+# fails it. Normalising to LF in the repository and on checkout keeps the
+# three platforms byte-identical.
 * text=auto eol=lf
 
 # Binary assets are never text, whatever the heuristic decides.

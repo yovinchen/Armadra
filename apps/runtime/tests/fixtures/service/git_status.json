@@ -1,9 +1,0 @@
-{
-  "capability": null,
-  "operation": 10,
-  "replay": "safe",
-  "request": {
-    "path": "src/main.rs"
-  },
-  "responseType": "git::RepositoryStatus"
-}

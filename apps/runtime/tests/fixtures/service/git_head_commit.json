@@ -1,9 +1,0 @@
-{
-  "capability": null,
-  "operation": 11,
-  "replay": "safe",
-  "request": {
-    "path": "src/main.rs"
-  },
-  "responseType": "git::HeadCommit"
-}

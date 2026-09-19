@@ -1,9 +1,0 @@
-{
-  "capability": "remote.git.panel.v1",
-  "operation": 37,
-  "replay": "never",
-  "request": {
-    "id": "op-1"
-  },
-  "responseType": "git_repository::OperationSnapshot"
-}

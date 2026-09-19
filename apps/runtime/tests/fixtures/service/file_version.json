@@ -1,9 +1,0 @@
-{
-  "capability": null,
-  "operation": 1,
-  "replay": "safe",
-  "request": {
-    "path": "src/main.rs"
-  },
-  "responseType": "file_watch::FileVersion"
-}

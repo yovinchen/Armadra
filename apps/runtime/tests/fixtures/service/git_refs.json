@@ -1,7 +1,0 @@
-{
-  "capability": "remote.git.panel.v1",
-  "operation": 55,
-  "replay": "safe",
-  "request": {},
-  "responseType": "Vec<git_repository::RefsSnapshot>"
-}
