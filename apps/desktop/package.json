@@ -1,5 +1,6 @@
 {
   "name": "@armadra/desktop",
+  "homepage": "https://github.com/yovinchen/Armadra",
   "version": "0.1.0",
   "private": true,
   "main": "./out/main/index.js",

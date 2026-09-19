@@ -6,7 +6,7 @@
  * *before* anything is built, so a build that cannot be signed says so in the
  * first second rather than after a multi-minute `electron-vite build` +
  * packaging run; the renderer/main/preload bundle is built next; the sidecar
- * binaries are staged last, immediately before electron-builder needs them,
+ * binaries are staged first (see the note in `main` about Windows file locks),
  * so a stale `resources/` directory from an earlier target never survives
  * into a new one silently (`stageBinaries` always copies fresh).
  *
@@ -93,15 +93,20 @@ export async function dist({ env = process.env, local = true } = {}) {
     `${plan.mode === "skip" ? "!" : "→"} ${plan.message}`,
   );
 
+  // Staged BEFORE the renderer/main build on purpose: on Windows a freshly
+  // copied executable stays locked by the real-time scanner for a while, and
+  // electron-builder's own copy of it fails with EBUSY. The build takes long
+  // enough that the lock is gone by the time the packager runs;
+  // `stageBinaries` also waits until each file opens again before returning.
+  const target = selectTarget({ host: rustHost(), env, native: true });
+  for (const path of stageBinaries({ env, target }))
+    console.log(`Staged binary: ${path}`);
+
   execFileSync(process.execPath, [electronViteEntry(), "build"], {
     cwd: app,
     stdio: "inherit",
     env,
   });
-
-  const target = selectTarget({ host: rustHost(), env, native: true });
-  for (const path of stageBinaries({ env, target }))
-    console.log(`Staged binary: ${path}`);
 
   // Imported lazily: electron-builder pulls in a large dependency tree, and
   // every other script in this file (and its tests) should be importable

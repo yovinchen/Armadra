@@ -24,7 +24,13 @@ import { build } from "vite";
 const here = import.meta.dirname;
 const desktop = path.resolve(here, "../../..");
 const repository = path.resolve(desktop, "../..");
-const rustClient = path.join(repository, "target/debug/armadra-hook");
+// The Rust client's location follows `CARGO_TARGET_DIR` like every cargo
+// invocation in this repository does; a stale binary in the default target
+// directory would otherwise be compared against the current wire format.
+const rustClient = path.join(
+  process.env.CARGO_TARGET_DIR ?? path.join(repository, "target"),
+  "debug/armadra-hook",
+);
 const hasRustClient = fs.existsSync(rustClient);
 
 let bundle = "";
