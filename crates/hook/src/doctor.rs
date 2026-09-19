@@ -1,8 +1,8 @@
 //! `armadra-hook doctor` — four lines that answer "why is my agent grey?".
 
-use crate::endpoint::{endpoint_file_path, env_var, Endpoint};
+use crate::endpoint::{self, endpoint_file_path, env_var, Endpoint};
 use crate::http::{self, Request};
-use crate::{Session, HOOK_CLIENT_REVISION};
+use crate::HOOK_CLIENT_REVISION;
 
 pub fn run() -> i32 {
     let node_id = env_var("ARMADRA_NODE_ID");
@@ -34,13 +34,25 @@ pub fn run() -> i32 {
         None => println!("endpoint load: skipped (no path)"),
     }
 
-    println!(
-        "verify: {}",
-        verify(
-            loaded.as_ref().and_then(|r| r.as_ref().ok()),
-            node_id.as_deref()
-        )
-    );
+    // Failover candidates (W0.3): every place this invocation would try, in
+    // order, which can differ from the single `path` above once
+    // ARMADRA_ENDPOINT_FILE is stale or unset — `context`/`canvas`/hook
+    // reports all walk this same list via `Session::send`.
+    let candidates = endpoint::discover_candidates();
+    if candidates.is_empty() {
+        println!("candidates: none (no endpoint is advertised anywhere)");
+    } else {
+        println!(
+            "candidates: {}",
+            candidates
+                .iter()
+                .map(|candidate| candidate.path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    println!("verify: {}", verify(&candidates, node_id.as_deref()));
 
     match (&node_id, loaded.as_ref().and_then(|r| r.as_ref().ok())) {
         (Some(node_id), Some(endpoint)) => println!(
@@ -59,35 +71,49 @@ pub fn run() -> i32 {
     }
 }
 
-fn verify(endpoint: Option<&Endpoint>, node_id: Option<&str>) -> String {
-    let Some(endpoint) = endpoint else {
-        return "skipped (no endpoint)".to_string();
-    };
-    let headers = match (node_id, Session::load()) {
-        (Some(_), Ok(session)) => session.headers(),
-        _ => vec![
+/// Same transport-failure-only failover as [`crate::Session::send`], but
+/// usable without a node id (`doctor` is often run to find out *why*
+/// `ARMADRA_NODE_ID` looks wrong in the first place).
+fn verify(candidates: &[Endpoint], node_id: Option<&str>) -> String {
+    if candidates.is_empty() {
+        return "skipped (no candidate endpoint)".to_string();
+    }
+    let mut last_error = String::new();
+    for candidate in candidates {
+        let mut headers = vec![
             (
                 "X-Armadra-Hook-Client".to_string(),
                 HOOK_CLIENT_REVISION.to_string(),
             ),
             (
                 "X-Armadra-Hook-Token".to_string(),
-                endpoint.hook_token.clone().unwrap_or_default(),
+                candidate.hook_token.clone().unwrap_or_default(),
             ),
-        ],
-    };
-    match http::send(endpoint, &Request::get("/verify", headers)) {
-        Ok(response) => {
-            let body = response.body.trim().replace('\n', " ");
-            let body = if body.len() > 200 {
-                &body[..200]
-            } else {
-                &body[..]
-            };
-            format!("GET /verify -> {} {body}", response.status)
+        ];
+        if let Some(token) = node_id.and_then(|node_id| candidate.node_token(node_id)) {
+            headers.push(("X-Armadra-Node-Token".to_string(), token));
         }
-        Err(error) => format!("GET /verify failed ({error})"),
+        match http::send(candidate, &Request::get("/verify", headers)) {
+            Ok(response) => {
+                let body = response.body.trim().replace('\n', " ");
+                let body = if body.len() > 200 {
+                    &body[..200]
+                } else {
+                    &body[..]
+                };
+                return format!(
+                    "GET /verify -> {} {body} (via {})",
+                    response.status,
+                    candidate.path.display()
+                );
+            }
+            Err(error) => last_error = error,
+        }
     }
+    format!(
+        "GET /verify failed on all {} candidate(s) (last error: {last_error})",
+        candidates.len()
+    )
 }
 
 fn present(value: bool) -> &'static str {

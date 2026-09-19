@@ -111,32 +111,47 @@ Hook mode always exits 0. `context`, `canvas` and `doctor` exit 1 on failure.
 ";
 
 /// Everything the client needs to talk to the runtime for one invocation.
+///
+/// `candidates` is the bounded, ordered list built by
+/// [`endpoint::discover_candidates`] (W0.3): the address this terminal's
+/// environment was told to use, then a couple of fallbacks for when that
+/// address no longer answers. [`Session::send`] is what walks it.
+#[derive(Clone)]
 pub struct Session {
     pub node_id: String,
-    pub endpoint: endpoint::Endpoint,
-    pub node_token: Option<String>,
+    pub candidates: Vec<endpoint::Endpoint>,
 }
 
 impl Session {
-    /// Loads the endpoint file and the per-node token from the environment.
+    /// Loads the node id and discovers the candidate endpoints. Distinct from
+    /// [`Session::send`] finding every candidate unreachable: this is the
+    /// "nowhere advertises an endpoint at all" case (docs/research/nodeterm/
+    /// agent-integration.md §2.5 / §8 批 0), diagnosed before any network call
+    /// is attempted.
     pub fn load() -> Result<Session, String> {
         let node_id = endpoint::env_var("ARMADRA_NODE_ID").ok_or_else(|| {
             "ARMADRA_NODE_ID is not set (not running inside a canvas node)".to_string()
         })?;
-        let path = endpoint::endpoint_file_path()
-            .ok_or_else(|| "ARMADRA_ENDPOINT_FILE is not set".to_string())?;
-        let endpoint = endpoint::Endpoint::load(&path)?;
-        let node_token = endpoint.node_token(&node_id);
+        let candidates = endpoint::discover_candidates();
+        if candidates.is_empty() {
+            return Err(
+                "no hook endpoint is advertised anywhere (checked ARMADRA_ENDPOINT_FILE and the \
+                 default data directory)"
+                    .to_string(),
+            );
+        }
         Ok(Session {
             node_id,
-            endpoint,
-            node_token,
+            candidates,
         })
     }
 
-    /// Header list shared by every route, in a fixed order so the bytes on the
-    /// wire are reproducible.
-    pub fn headers(&self) -> Vec<(String, String)> {
+    /// Header list for one specific candidate, in a fixed order so the bytes
+    /// on the wire are reproducible. The node token is re-read from that
+    /// candidate's own token directory every call — never cached across
+    /// candidates — so an adopted endpoint is always presented with its own
+    /// token, not a stale one from a different directory.
+    pub fn headers_for(&self, candidate: &endpoint::Endpoint) -> Vec<(String, String)> {
         let mut headers = vec![
             (
                 "X-Armadra-Hook-Client".to_string(),
@@ -144,12 +159,42 @@ impl Session {
             ),
             (
                 "X-Armadra-Hook-Token".to_string(),
-                self.endpoint.hook_token.clone().unwrap_or_default(),
+                candidate.hook_token.clone().unwrap_or_default(),
             ),
         ];
-        if let Some(token) = &self.node_token {
-            headers.push(("X-Armadra-Node-Token".to_string(), token.clone()));
+        if let Some(token) = candidate.node_token(&self.node_id) {
+            headers.push(("X-Armadra-Node-Token".to_string(), token));
         }
         headers
+    }
+
+    /// Tries each candidate in order, building a fresh request for each one
+    /// via `build`. Only a transport-layer failure (refused connection,
+    /// timeout, missing socket or port) advances to the next candidate — any
+    /// HTTP answer at all, including a 4xx/5xx, is authoritative and ends the
+    /// search immediately (agent-integration.md §2.5: "任何 HTTP 应答码都是
+    /// 权威的").
+    ///
+    /// The error case here — every candidate existed but none is listening —
+    /// is deliberately worded differently from [`Session::load`]'s "nowhere
+    /// advertises an endpoint at all", so a person (or `doctor`) reading the
+    /// message can tell "nothing to try" from "found something, but it is
+    /// dead" (W0.3).
+    pub fn send(
+        &self,
+        build: impl Fn(&Session, &endpoint::Endpoint) -> http::Request,
+    ) -> Result<(http::Response, &endpoint::Endpoint), String> {
+        let mut last_error = String::new();
+        for candidate in &self.candidates {
+            let request = build(self, candidate);
+            match http::send(candidate, &request) {
+                Ok(response) => return Ok((response, candidate)),
+                Err(error) => last_error = error,
+            }
+        }
+        Err(format!(
+            "found {} hook endpoint candidate(s) but none is listening (last error: {last_error})",
+            self.candidates.len()
+        ))
     }
 }

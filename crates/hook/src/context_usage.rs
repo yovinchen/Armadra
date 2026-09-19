@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use crate::{
     endpoint::{env_var, is_valid_node_id},
-    http::{self, Request},
+    http::Request,
     Session, MAX_PAYLOAD_BYTES,
 };
 use serde_json::{json, Value};
@@ -43,23 +43,31 @@ pub fn run() -> i32 {
             "sourceRevision": revision.to_string(), "data": data,
         }} });
     if let Ok(bytes) = serde_json::to_vec(&body) {
-        let _ = http::send(
-            &session.endpoint,
-            &Request::post_json("/hook/claude", session.headers(), bytes),
-        );
+        let _ = session.send(|session, candidate| {
+            Request::post_json(
+                "/hook/claude",
+                session.headers_for(candidate),
+                bytes.clone(),
+            )
+        });
     }
     0
 }
 
 pub(crate) fn load_binding() -> Option<(Session, String, u64, u64)> {
     let session = Session::load().ok()?;
-    session.node_token.as_ref()?;
+    // The sequence file has to live at one fixed path for the life of a
+    // generation, so it is anchored to the first (preferred) candidate rather
+    // than whichever one a later `send` happens to succeed through — the
+    // ordering `discover_candidates` produces is itself stable across calls.
+    let primary = session.candidates.first()?;
+    primary.node_token(&session.node_id)?;
     let session_id = env_var("ARMADRA_SESSION_ID").filter(|id| is_valid_node_id(id))?;
     let generation = env_var("ARMADRA_SESSION_GENERATION")?
         .parse::<u64>()
         .ok()
         .filter(|value| *value <= MAX_COUNT)?;
-    let parent = session.endpoint.path.parent()?;
+    let parent = primary.path.parent()?;
     let directory = parent.join("context-sequences");
     let metadata = fs::symlink_metadata(&directory).ok()?;
     if !metadata.is_dir() || metadata.file_type().is_symlink() {

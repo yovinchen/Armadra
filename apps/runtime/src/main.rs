@@ -321,7 +321,7 @@ async fn main() -> anyhow::Result<()> {
         reason = reason => reason.context("shutdown controller disappeared")?,
         result = &mut serving => {
             result?;
-            release_endpoints(&endpoints_file, &bound);
+            release_endpoints(&endpoints_file, &bound, &shutdown_state.hooks);
             return Ok(());
         },
     };
@@ -372,7 +372,7 @@ async fn main() -> anyhow::Result<()> {
     let drained = tokio::time::timeout(Duration::from_secs(2), &mut serving).await;
     // Whether or not the drain finished, this process is on its way out: an
     // address it no longer answers on must not stay in the discovery file.
-    release_endpoints(&endpoints_file, &bound);
+    release_endpoints(&endpoints_file, &bound, &shutdown_state.hooks);
     match drained {
         Ok(result) => {
             result?;
@@ -543,8 +543,15 @@ fn runtime_endpoint(instance_id: &str, bound: &[listen::ListenSpec]) -> endpoint
     endpoint
 }
 
-/// Withdraws our record and removes the socket files we created.
-fn release_endpoints(endpoints_file: &std::path::Path, bound: &[listen::ListenSpec]) {
+/// Withdraws our record, removes the socket files we created, and deletes the
+/// hook endpoint file (W0.3): a clean shutdown must not leave a dead
+/// advertisement for the next terminal's hook to find and silently fail
+/// against (docs/research/nodeterm/agent-integration.md §2.5 / §8 批 0).
+fn release_endpoints(
+    endpoints_file: &std::path::Path,
+    bound: &[listen::ListenSpec],
+    hooks: &HookService,
+) {
     if let Err(error) = endpoints::withdraw(endpoints_file, endpoints::RUNTIME_SERVICE) {
         tracing::warn!(%error, "could not withdraw the Runtime endpoint");
     }
@@ -553,6 +560,7 @@ fn release_endpoints(endpoints_file: &std::path::Path, bound: &[listen::ListenSp
             listen::release(path);
         }
     }
+    hooks.withdraw();
 }
 
 #[derive(Clone, Copy)]
