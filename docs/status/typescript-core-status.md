@@ -202,7 +202,7 @@ mv <数据目录>/host.db.absorbed-<时间戳> <数据目录>/host.db
 
 **两张面**：新面 `/api/identity/*`（JSON，`{ code, message }`）是设计 D9 的目标；兼容面 `/rpc/armadra.v1.{HostService,IdentityService}/…`（二进制 protobuf）覆盖 `packages/host-client` 今天发的 8 个方法，让前端在不改一行的情况下走通登录，活到 R7。
 
-验证：`node tools/core-identity-smoke.mjs`（真进程跑完 Hello → 取票 → 配对 → 重放被拒 → 撤销 → 401），以及 `pnpm --filter @armadra/desktop test` 里的身份与迁移用例。
+验证：`pnpm --filter @armadra/desktop test` 里的身份与迁移用例，以及 `identity/accounts.integration.test.ts` 真起 core 走完取票 → 配对 → 重放被拒 → 撤销 → 401（原先的 `core-identity-smoke` 工具走的是 `/rpc/` 面，随那一面一起删除）。
 
 ## 9. R3 与 R5c：Hook 面上的三个动词家族
 

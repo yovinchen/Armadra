@@ -105,7 +105,7 @@ TOKEN / SECRET / PASSWORD / CREDENTIAL 字样一律拒绝。
 | 桌面构建（不打包） | `pnpm --filter @armadra/desktop build`                                                         |
 | 桌面打包           | `pnpm --filter @armadra/desktop dist`                                                          |
 
-`pnpm core:identity-smoke` 对着一个真的 core 走一遍身份域：临时数据目录、单向门、配对与会话。
+身份域的端到端在 `apps/desktop/src/core/identity/accounts.integration.test.ts`：真起 core，走完取票、配对、重放被拒、撤销。
 `tools/probes/` 下的探针跑的也是真的 core（`apps/desktop/out/core/main.js`）：终端的冒烟、
 生命周期与打包后验证，以及三个用无头 Chrome 驱动真实页面的 UI 探针（连线拖拽、Git 工具窗口、
 画布压力）。运行入口见 [探针说明](../../tools/probes/README.md)。
