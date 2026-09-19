@@ -1,5 +1,6 @@
 import { BrowserWindow, session } from "electron";
 import { join } from "node:path";
+import { APP_NAME, iconPath } from "./branding";
 import { traceLifecycle } from "./trace";
 import { createCrashReloadPolicy } from "../shell-core/crash-reload";
 import { contentSecurityPolicy, isPageUrl } from "../shell-core/csp";
@@ -108,6 +109,13 @@ export function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1440,
     height: 920,
+    title: APP_NAME,
+    // macOS gets its window icon from the Dock (`branding.ts`'s
+    // `setDockIcon`/electron-builder's `mac.icon`); Linux and Windows have no
+    // such surface, so the window needs its own, the same set
+    // electron-builder packages from (`build/icons/`, shared with the tray —
+    // see `tray.ts`'s `icon()`).
+    ...(darwin ? {} : { icon: iconPath() }),
     // The canvas is the product; the window opens on it rather than on a
     // white flash while the bundle parses.
     show: false,
