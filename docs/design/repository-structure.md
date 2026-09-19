@@ -3,6 +3,7 @@
 > 状态：**部分实施**。方案本身（目标结构、六类规则、校验入口、七步顺序）保持完整；现状描述以源码为准，调整顺序见 §5。
 > 2026-09-06：§5 第 1–5 步已实施；第 6 步（大文件拆分）另行进行；第 7 步延后。
 > 目的：让 Desktop、Web、Go 中转服务、Rust 执行层各自打包在固定位置，文档与脚本有统一登记规则，并由一条命令校验仓库完整性。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 ## 1. 现状评估
 
@@ -23,7 +24,7 @@
 ```text
 .
 ├── apps/                      可运行产物，每个目录独立打包
-│   ├── desktop/               Tauri 壳：窗口、托盘、sidecar、更新（不写业务）
+│   ├── desktop/               Electron 壳：窗口、托盘、受管二进制、更新（不写业务）
 │   ├── web/                   React / React Flow 前端（唯一页面）
 │   ├── host/                  Go 中转服务：身份、调度、事件、业务状态、Worker 管理
 │   └── worker/                Rust 执行层（由 apps/runtime 演进）：终端、文件、Git、Hook、进程测量

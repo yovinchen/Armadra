@@ -44,17 +44,17 @@
 
 按域展开的实施方案：
 
-| 文档                                                            | 内容                                                               |
-| --------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Host 业务所有权迁移](design/host-business-migration.md)        | H01 第二阶段：其余五个业务域的六步切换                             |
-| [语言服务](design/language-service.md)                          | 编辑器 LSP 集成的接口、文件与批次                                  |
-| [浏览器与远端执行补全](design/remote-and-browser-completion.md) | B01 / H02 首轮之外的剩余部分                                       |
-| [发布、更新与服务安装](design/updates-and-service-install.md)   | S03：下载、自动更新、签名发布与系统服务                            |
-| [React Flow 画布](design/canvas-react-flow.md)                  | 画布换成 React Flow：能力映射与批次                                |
-| [Agent 协作通道](design/agent-collaboration-channels.md)        | Pi / OMP / Copilot 的 Hook 适配与省资源通道                        |
-| [Agent 接入统一管理](design/agent-integration.md)               | Hook + 技能一个安装单元、启动时注入、旧残留修复                    |
-| [桌面壳原生 Host 会话](design/host-native-session.md)           | 打包桌面壳经私有通道取票、Bearer 会话                              |
-| [桌面壳迁移到 Electron](design/electron-migration.md)           | Tauri → Electron、`<webview>` 浏览器节点、画布性能前置与六条工作流 |
+| 文档                                                            | 内容                                                   |
+| --------------------------------------------------------------- | ------------------------------------------------------ |
+| [Host 业务所有权迁移](design/host-business-migration.md)        | H01 第二阶段：其余五个业务域的六步切换                 |
+| [语言服务](design/language-service.md)                          | 编辑器 LSP 集成的接口、文件与批次                      |
+| [浏览器与远端执行补全](design/remote-and-browser-completion.md) | B01 / H02 首轮之外的剩余部分                           |
+| [发布、更新与服务安装](design/updates-and-service-install.md)   | S03：下载、自动更新、签名发布与系统服务                |
+| [React Flow 画布](design/canvas-react-flow.md)                  | 画布换成 React Flow：能力映射与批次                    |
+| [Agent 协作通道](design/agent-collaboration-channels.md)        | Pi / OMP / Copilot 的 Hook 适配与省资源通道            |
+| [Agent 接入统一管理](design/agent-integration.md)               | Hook + 技能一个安装单元、启动时注入、旧残留修复        |
+| [桌面壳原生 Host 会话](design/host-native-session.md)           | 打包桌面壳经私有通道取票、Bearer 会话                  |
+| [桌面壳迁移到 Electron](design/electron-migration.md)           | 换壳、`<webview>` 浏览器节点、画布性能前置与六条工作流 |
 
 ## status/ 已验证进度
 

@@ -36,7 +36,7 @@
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
-    "check:rust": "pnpm --filter @armadra/desktop prepare:sidecar && cargo check --workspace"
+    "check:rust": "cargo check --workspace --all-targets"
   },
   "devDependencies": {
     "prettier": "3.6.2",

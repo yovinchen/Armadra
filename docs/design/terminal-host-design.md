@@ -2,6 +2,7 @@
 
 > 状态：目标设计，待实施。
 > 本文扩展并更新 [Windows 会话守护进程早期设计](./windows-session-daemon.md) 的目标；其中“本轮不实现 Windows”的旧范围不再适用于本轮。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 ## 1. 必须区分的四种生命周期
 
@@ -25,7 +26,7 @@
 | 独立 Rust Session Host 拥有 ConPTY | 生命周期独立，可共享终端执行逻辑     | 本轮目标方案                       |
 | Go Host 同时管理 ConPTY            | 将业务服务与终端生命周期重新绑定     | 不采用                             |
 
-独立可执行文件 `armadra-session-host.exe`，每个 Windows 用户一个活动协议主版本实例，通过命名管道服务 Worker；不依赖 Node.js 或 Tauri UI 存活。只在相同用户上下文运行，默认不以管理员权限运行。
+独立可执行文件 `armadra-session-host.exe`，每个 Windows 用户一个活动协议主版本实例，通过命名管道服务 Worker；不依赖 Node.js 或桌面壳 UI 存活。只在相同用户上下文运行，默认不以管理员权限运行。
 
 ConPTY 的创建、双向流和子进程必须由宿主维护；输入/输出分开处理，退出时继续排空输出以避免阻塞。依据 [Microsoft 创建伪控制台说明](https://learn.microsoft.com/en-us/windows/console/creating-a-pseudoconsole-session)。
 
@@ -34,7 +35,7 @@ ConPTY 的创建、双向流和子进程必须由宿主维护；输入/输出分
 1. Worker 查找命名管道并 Hello；无宿主时通过每用户互斥锁协调启动，避免同时打开两份服务。
 2. Session Host 使用 Windows CreateProcessW 与明确的 argv 编码创建 Shell/CLI，建立 ConPTY 并持有 HPCON；环境以独立块传入，工作目录是执行主机的真实路径。
 3. ConPTY 输入、输出、控制分别使用独立循环/线程；阻塞 Win32 I/O 不占 Tokio 异步线程。输出始终被读取，与 UI 是否附着无关。
-4. 进程树 Job Object 由 Session Host 持有，绝不能由会退出的 Tauri/Worker 持有；不能让 Worker 的临时 job 在退出时杀掉持久宿主。宿主异常死亡时策略是回收其子进程，避免不可控孤儿，UI 诚实报告运行丢失。
+4. 进程树 Job Object 由 Session Host 持有，绝不能由会退出的桌面壳/Worker 持有；不能让 Worker 的临时 job 在退出时杀掉持久宿主。宿主异常死亡时策略是回收其子进程，避免不可控孤儿，UI 诚实报告运行丢失。
 5. 会话结束按“CLI 友好退出 → 有界等待 → 终止进程树 → 关闭 ConPTY → 排空/关闭管道”处理。不要把直接关闭 HPCON 当 detach。
 
 关闭 ConPTY 会结束附着的控制台进程，因此只有显式终止会话才走该路径；依据 [ClosePseudoConsole 文档](https://learn.microsoft.com/en-us/windows/console/closepseudoconsole)。

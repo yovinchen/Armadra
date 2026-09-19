@@ -172,6 +172,11 @@ async function main(argv) {
     const publicKeyPath = join(sideDirectory, "armadra-release.pub");
     writeFileSync(publicKeyPath, publicKeyFile(key));
 
+    // The same order `assemble.mjs` runs in, and for the same reason: the
+    // packager writes no detached signature, so `latest.json` can only quote
+    // one this step just produced.
+    signDirectory({ directory, key, version });
+
     const manifest = writeManifest({
       directory,
       version,
@@ -184,7 +189,8 @@ async function main(argv) {
       problems.push(`latest.json skipped ${skip.asset}: ${skip.reason}`);
 
     const checksums = await writeChecksums(directory);
-    signDirectory({ directory, key, version });
+    // latest.json and SHA256SUMS did not exist during the first pass.
+    signDirectory({ directory, key, version, onlyMissing: true });
     problems.push(
       ...(await auditRelease({
         directory,

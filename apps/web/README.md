@@ -20,7 +20,7 @@ pnpm --filter @armadra/web typecheck
 | `src/terminal`、`src/api`     | 终端与 Runtime 通信                 |
 | `src/shell`、`src/panels`     | 应用壳、设置、文件与 Git 面板       |
 | `src/sidebar`、`src/sessions` | 工作空间与会话                      |
-| `src/i18n`、`src/platform`    | 双语文案、桌面壳 / 浏览器适配      |
+| `src/i18n`、`src/platform`    | 双语文案、桌面壳 / 浏览器适配       |
 
 画布写入经 `canvas-store`；文案使用 `useT()`，组件复用现有 shadcn 实现。
 完整边界见[项目约定](../../AGENTS.md)。

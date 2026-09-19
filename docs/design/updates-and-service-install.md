@@ -1,4 +1,5 @@
 > 状态：目标设计。本文是 S03（[平台总纲 §3](./canvas-platform-design.md#3-范围矩阵)）与路线图 [§3.8](../status/feature-roadmap.md#38-github)、[§3.12](../status/feature-roadmap.md#312-桌面壳服务集成与项目结构本轮新增详见-44-45) 中「下载 / 安装 / 签名发布 / 真正注册系统服务」的完整方案；已交付部分以 [实施记录 S03 行](../status/platform-implementation-status.md) 与源码为准。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 # 应用发布、自动更新与服务器模式安装
 

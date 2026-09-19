@@ -1,5 +1,11 @@
 import { strict as assert } from "node:assert";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -47,7 +53,10 @@ test("a bundle is found by extension, not by the packager's own name", () => {
     assert.match(findBundle({ bundle, kind: "deb" }), /_amd64\.deb$/);
     assert.equal(findBundle({ bundle, kind: "rpm" }), null);
     assert.equal(findBundle({ bundle, kind: "nonsense" }), null);
-    assert.equal(findBundle({ bundle: join(root, "nowhere"), kind: "deb" }), null);
+    assert.equal(
+      findBundle({ bundle: join(root, "nowhere"), kind: "deb" }),
+      null,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -118,10 +127,11 @@ test("a Linux release is renamed to the three names it publishes", () => {
         `Armadra_${VERSION}_linux-x86_64.rpm`,
       ].sort(),
     );
-    assert.deepEqual(
-      staged.map((item) => item.kind).sort(),
-      ["AppImage", "deb", "rpm"],
-    );
+    assert.deepEqual(staged.map((item) => item.kind).sort(), [
+      "AppImage",
+      "deb",
+      "rpm",
+    ]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -2,12 +2,13 @@
 
 > 状态：目标方案，待实施。需求范围以[总纲](./canvas-platform-design.md)为准。
 > 核心决定：Go 管理服务与业务状态，Rust 管理执行；前端是可随时断开的客户端。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 ## 1. 拓扑与职责
 
 ```mermaid
 flowchart TD
-  Desktop[Tauri 桌面客户端] --> Host[Go armadra-host]
+  Desktop[桌面客户端] --> Host[Go armadra-host]
   Web[浏览器客户端] --> Host
   Mobile[移动端响应式页面] --> Host
   Host --> DB[(host.db / 事件 / 调度 / 身份)]

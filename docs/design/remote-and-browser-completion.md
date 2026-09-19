@@ -1,4 +1,5 @@
 > 状态：目标设计。承接 [编辑器与浏览器](./editor-browser-design.md) §5–§9 的 B01 首轮与 [Host 与协议](./host-protocol-design.md) §5.1 的 H02 首轮，只写两条线各自「已交付之外」的部分；现状以 [实施记录](../status/platform-implementation-status.md) 的 B01 / H02 / H03 行为准，本文不重复已实现的内容。
+> 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
 
 # 受控浏览器补全与远端执行补全设计
 
