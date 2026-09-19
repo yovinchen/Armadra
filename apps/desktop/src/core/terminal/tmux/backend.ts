@@ -4,12 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hardenFile, writeSecret } from "../../paths";
 import {
+  type AdoptableBackend,
   type Attachment,
   type BackendCapabilities,
   type BackendKind,
+  type BackendNotice,
   type BackendRef,
   type ForegroundInfo,
-  NotImplemented,
   type SessionKey,
   type TerminalBackend,
   type TerminalHandle,
@@ -22,9 +23,12 @@ import {
   notFound,
   sanitizePaste,
   sessionName,
+  stripEscapes,
+  tailLines,
+  trimCaptured,
 } from "../backend";
 import { asRecord, childEnvironment } from "../environment";
-import { terminateTree } from "../process";
+import { childCommands, terminateTree } from "../process";
 import { type Pty, openPty, releasePty } from "../pty";
 import {
   LIST_ALIVE_FORMAT,
@@ -38,11 +42,11 @@ import { detect, ensureConf } from "./config";
 /**
  * The primary backend: a private tmux server (contract §15.3).
  *
- * This batch implements create / attach / detach / input / paste / resize /
- * terminate / list and a real `getCapabilities`. `capture`, `signal` and
- * `getForeground` throw {@link NotImplemented}: they are reads and signals the
- * front end degrades on, and shipping half of each would be worse than a 501
- * that says so.
+ * All twelve methods plus the three later ones are real here. The tmux server
+ * is a second process that owns the pane, which is what every difference from
+ * {@link DirectBackend} comes from: `capture` reads a real screen rather than
+ * a replay, `scroll` has a history the page cannot see, `detachAll` drops the
+ * clients and keeps the sessions, and the pane survives the core.
  */
 
 interface TmuxClient {
@@ -64,10 +68,11 @@ export interface TmuxBackendOptions {
   readonly hookBin?: string | undefined;
 }
 
-export class TmuxBackend implements TerminalBackend {
+export class TmuxBackend implements TerminalBackend, AdoptableBackend {
   readonly kind: BackendKind = "tmux";
   private readonly control: TmuxControl;
   private readonly sessions = new Map<SessionKey, TmuxSession>();
+  private readonly sinks: ((notice: BackendNotice) => void)[] = [];
   private nextClientId = 1;
   private readonly options: TmuxBackendOptions;
 
@@ -148,13 +153,50 @@ export class TmuxBackend implements TerminalBackend {
    * tmux server still has it but this map does not. Startup recovery (the rest
    * of R2) is the caller.
    */
-  adopt(key: SessionKey, name: string, generation: number): void {
+  async adopt(
+    key: SessionKey,
+    name: string,
+    generation: number,
+  ): Promise<number | undefined> {
     this.sessions.set(key, {
       name,
       generation,
       clients: new Map(),
       inCopyMode: false,
     });
+    return this.control.panePid(name);
+  }
+
+  /**
+   * Start-up check on a server that was already running.
+   *
+   * A server started by another build (a development core beside the packaged
+   * one, both on the same data directory) carries that process’ environment
+   * and, on macOS, its sandbox — every session created under it would inherit
+   * both. An empty foreign server is therefore replaced; one that still has
+   * sessions is kept, because those sessions are the user’s, and the mismatch
+   * is reported instead.
+   */
+  async adoptServer(): Promise<string | undefined> {
+    const owner = await this.control.serverOwner();
+    // No server, or an unstamped one from before this check existed. The next
+    // `new-session` stamps it.
+    if (owner === undefined) return undefined;
+    const ours = coreFingerprint(this.options.version);
+    if (owner === ours) return undefined;
+    if ((await this.list()).length === 0) {
+      await this.control.tryRun(["kill-server"]);
+      return `replaced the empty tmux server of ${owner}`;
+    }
+    return `the tmux server was started by ${owner}; keeping its sessions`;
+  }
+
+  notices(listener: (notice: BackendNotice) => void): void {
+    this.sinks.push(listener);
+  }
+
+  private announce(notice: BackendNotice): void {
+    for (const sink of this.sinks) sink(notice);
   }
 
   /* --------------------------------- attach ------------------------------- */
@@ -217,6 +259,11 @@ export class TmuxBackend implements TerminalBackend {
         if (alive) return;
         this.sessions.delete(key);
         for (const listener of exitListeners) listener(undefined);
+        this.announce({
+          type: "exited",
+          key,
+          generation: session.generation,
+        });
       });
     });
 
@@ -343,7 +390,8 @@ export class TmuxBackend implements TerminalBackend {
   async terminate(key: SessionKey, mode: TerminateMode): Promise<void> {
     const session = this.require(key);
     if (mode === "interrupt") {
-      throw new NotImplemented("终端中断");
+      await this.signal(key, "interrupt");
+      return;
     }
     if (mode === "process") {
       const pid = await this.control.panePid(session.name);
@@ -389,26 +437,92 @@ export class TmuxBackend implements TerminalBackend {
     }
   }
 
-  /* ------------------------------ not this batch --------------------------- */
-  //
-  // Each of these is a 501 that names itself rather than a half-answer. The
-  // pieces they need already exist — `control.paneForeground` reads
-  // `#{pane_pid} #{pane_current_command}` and `process.childCommands` walks
-  // the tree below it — so what is missing is the decision about the rest of
-  // R2's shape (the wheel bridge and the reaper use the same reads), not the
-  // mechanics.
+  /* ---------------------------------- reads -------------------------------- */
 
-  async capture(): Promise<string> {
-    throw new NotImplemented("终端截屏");
+  /**
+   * `capture-pane -p -J`, i.e. the real screen tmux is holding — not a replay.
+   * `-J` joins wrapped lines so a paragraph a CLI printed across the width of
+   * the pane comes back as one line rather than as the pane’s geometry.
+   */
+  async capture(
+    key: SessionKey,
+    lines: number,
+    withEscapes: boolean,
+  ): Promise<string> {
+    const session = this.require(key);
+    const args = ["capture-pane", "-p", "-J"];
+    if (withEscapes) args.push("-e");
+    args.push("-t", session.name, "-S", lines === 0 ? "-" : `-${lines}`);
+    const raw = await this.control.run(args);
+    const text = withEscapes ? raw : stripEscapes(raw);
+    return tailLines(trimCaptured(text), lines);
   }
 
-  async signal(): Promise<void> {
-    throw new NotImplemented("终端信号");
+  async getForeground(key: SessionKey): Promise<ForegroundInfo> {
+    const session = this.require(key);
+    const pane = await this.control.paneForeground(session.name);
+    return {
+      ...(pane.pid === undefined ? {} : { pid: pane.pid }),
+      ...(pane.command === undefined ? {} : { command: pane.command }),
+      children: pane.pid === undefined ? [] : childCommands(pane.pid),
+    };
   }
 
-  async getForeground(): Promise<ForegroundInfo> {
-    throw new NotImplemented("终端前台进程");
+  /**
+   * `send-keys C-c`. tmux delivers it through the pane’s line discipline, so
+   * the signal lands on the foreground process group rather than on the shell.
+   */
+  async signal(key: SessionKey, _signal: "interrupt"): Promise<void> {
+    const session = this.require(key);
+    await this.control.run(["send-keys", "-t", session.name, "C-c"]);
   }
+
+  /**
+   * The wheel bridge of contract §18.5. The client is deliberately not in
+   * mouse mode, so a wheel event never reaches tmux on its own; the page turns
+   * it into whole lines and posts them here.
+   *
+   * `copy-mode -e` is the “exit when you scroll back to the bottom” variant,
+   * which is exactly what a wheel should do. `#{pane_in_mode}` is re-read
+   * afterwards because that automatic exit is the one transition this side
+   * does not initiate itself.
+   */
+  async scroll(key: SessionKey, lines: number): Promise<void> {
+    if (lines === 0) return;
+    const session = this.require(key);
+    if (!(await this.control.paneInMode(session.name))) {
+      // Entering copy-mode to scroll *down* would bounce straight back out;
+      // there is nothing below the live screen.
+      if (lines < 0) {
+        session.inCopyMode = false;
+        return;
+      }
+      await this.control.run(["copy-mode", "-e", "-t", session.name]);
+    }
+    const count = String(Math.min(Math.abs(Math.trunc(lines)), 10_000));
+    await this.control.run([
+      "send-keys",
+      "-X",
+      "-N",
+      count,
+      "-t",
+      session.name,
+      lines > 0 ? "scroll-up" : "scroll-down",
+    ]);
+    session.inCopyMode = await this.control.paneInMode(session.name);
+  }
+
+  /** Destroys any `armadra-*` session the caller does not know about. */
+  async destroyByReference(reference: string): Promise<void> {
+    await this.control.run(["kill-session", "-t", reference]);
+  }
+
+  /**
+   * Nothing to slow down: a detached tmux session has no client of ours at
+   * all, so its bytes are already costing this process nothing. tmux keeps the
+   * screen either way, which is what makes waking free.
+   */
+  async setDormant(_key: SessionKey, _dormant: boolean): Promise<void> {}
 
   /* --------------------------------- helpers ------------------------------- */
 

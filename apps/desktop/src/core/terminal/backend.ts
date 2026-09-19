@@ -2,9 +2,9 @@
  * The backend contract of contract §15.4, in TypeScript.
  *
  * Everything above this interface — the REST handlers, the socket, the
- * database rows, the reaper — is written once against every backend. R2's
- * remaining backends (`direct`, `sessionHost`, `ssh`) implement the same
- * twelve methods; this batch ships only {@link TmuxBackend}.
+ * database rows, the reaper — is written once against every backend. Three
+ * implement it today: `TmuxBackend`, `DirectBackend` and
+ * `SessionHostBackend`; `ssh` (R2b) is the fourth and reuses the same shape.
  *
  * ## The twelve, and where each came from
  *
@@ -31,10 +31,21 @@
  * | `getCapabilities`  | `kind` + `BackendKind::persistent`            |
  *
  * `detach` is a method here rather than a guard because TypeScript has no
- * `Drop`: the socket handler owns the lifetime and says when it is over. The
- * Rust members with no entry above — `scroll`, `destroy_by_reference`,
- * `set_dormant` — belong to the rest of R2 (the wheel bridge, the GC, the
- * dormancy budget) and are added to this interface by whoever writes them.
+ * `Drop`: the socket handler owns the lifetime and says when it is over.
+ *
+ * Three more arrived with the rest of R2, and they map one to one as well:
+ *
+ * | this interface       | Rust `TerminalBackend`  | who calls it            |
+ * | -------------------- | ----------------------- | ----------------------- |
+ * | `scroll`             | `scroll`                | the wheel bridge (§18.5)|
+ * | `destroyByReference` | `destroy_by_reference`  | the orphan sweep (§15.6)|
+ * | `setDormant`         | `set_dormant`           | the dormancy budget     |
+ * | `notices`            | the `BackendNotice` mpsc| the manager's exit loop |
+ *
+ * `adopt` is deliberately **not** on this interface — only a backend whose
+ * sessions outlive the core has anything to adopt, and a default here would
+ * invite `DirectBackend` to pretend it does. It lives on
+ * {@link AdoptableBackend} instead, exactly as the Rust `Adoptable` trait does.
  *
  * Nothing in here touches the database or the event bus. A backend knows
  * about processes and bytes; the manager knows about rows.
@@ -159,6 +170,23 @@ export interface BackendCapabilities {
   readonly usable: boolean;
 }
 
+/**
+ * Sessions end without anybody asking: the shell exits, the user types
+ * `exit`, the machine kills the process. Backends report that through
+ * {@link TerminalBackend.notices} and the manager turns it into a database
+ * row, a `status` frame and a `terminal.exit` workspace event.
+ *
+ * A notice is not addressed to a socket. A session nobody is watching still
+ * has to stop claiming to be running, which is the whole reason this channel
+ * exists beside {@link Attachment.onExit}.
+ */
+export type BackendNotice = {
+  readonly type: "exited";
+  readonly key: SessionKey;
+  readonly generation: number;
+  readonly exitCode?: number | undefined;
+};
+
 /* --------------------------------- errors --------------------------------- */
 
 /**
@@ -187,16 +215,17 @@ export const internal = (message: string): TerminalError =>
   new TerminalError(500, "internal", message);
 
 /**
- * What every method this batch does not implement throws.
+ * What a backend method that this build cannot answer throws.
  *
  * It is a 501 with the feature named, the same answer the route table gives
  * for a path nobody has written: the front end already knows how to degrade on
  * that shape, and a backend that silently did nothing would look like a
- * terminal that ignores you.
+ * terminal that ignores you. Nothing in the three backends here raises it any
+ * more; the remote backend of R2b is the next user.
  */
 export class NotImplemented extends TerminalError {
-  constructor(what: string) {
-    super(501, "not_implemented", `${what}（R2 余下部分）`);
+  constructor(what: string, phase = "R2b") {
+    super(501, "not_implemented", `${what}（${phase}）`);
     this.name = "NotImplemented";
   }
 }
@@ -247,8 +276,68 @@ export interface TerminalBackend {
 
   getCapabilities(): BackendCapabilities;
 
+  /**
+   * The wheel bridge of contract §18.5. Positive `lines` scrolls towards older
+   * output. Only tmux has history the browser cannot see; the other backends
+   * hand their scrollback to xterm and do nothing here.
+   */
+  scroll(key: SessionKey, lines: number): Promise<void>;
+
+  /**
+   * Destroy a session by the backend's own handle rather than by key — the
+   * orphan case, where no database row points at it any more (contract §15.6).
+   */
+  destroyByReference(reference: string): Promise<void>;
+
+  /**
+   * Nothing has been attached to this session for a while, or something just
+   * attached again.
+   *
+   * Dormancy is about **resources, not execution**: the process keeps running,
+   * the screen or replay buffer the next attach needs is kept, and waking is
+   * never a create. What a backend may release is everything downstream of
+   * that — per-frame delivery and the wakeups it costs.
+   */
+  setDormant(key: SessionKey, dormant: boolean): Promise<void>;
+
+  /** Subscribe to unsolicited session news. Several listeners are allowed. */
+  notices(listener: (notice: BackendNotice) => void): void;
+
+  /**
+   * The replay this backend keeps, as one string, for a backend that has no
+   * screen to redraw. Absent when there is nothing to replay — which is also
+   * the honest answer for tmux, whose client repaints the real pane.
+   *
+   * Optional rather than returning `undefined` everywhere: a backend that owns
+   * no buffer should not have to say so in code, and `redrawsOnAttach` already
+   * tells the socket layer whether to ask.
+   */
+  snapshot?(key: SessionKey): string | undefined;
+
   /** Release process-local resources without ending persistent sessions. */
   detachAll(): Promise<void>;
+}
+
+/**
+ * A backend that can take a session it finds at start-up back under
+ * management, and say what pid is behind it.
+ *
+ * Separate from {@link TerminalBackend} on purpose: `DirectBackend` has
+ * nothing to adopt — its sessions died with whoever wrote the row — and a
+ * default implementation would let it claim otherwise.
+ */
+export interface AdoptableBackend extends TerminalBackend {
+  adopt(
+    key: SessionKey,
+    reference: string,
+    generation: number,
+  ): Promise<number | undefined>;
+}
+
+export function isAdoptable(
+  backend: TerminalBackend,
+): backend is AdoptableBackend {
+  return typeof (backend as AdoptableBackend).adopt === "function";
 }
 
 /* ------------------------------- shared helpers ---------------------------- */
@@ -260,6 +349,26 @@ export interface TerminalBackend {
  */
 export const PASTE_START = "\u001b[200~";
 export const PASTE_END = "\u001b[201~";
+
+/**
+ * How many output batches a backend with no real screen keeps for `capture`
+ * and for the `snapshot` frame. The same 128 the Rust `REPLAY_CHUNKS` keeps:
+ * enough to redraw a full-screen TUI, small enough that thirty idle terminals
+ * are not a memory plan.
+ */
+export const REPLAY_CHUNKS = 128;
+
+/**
+ * The delivery cadence of an attached session, and of one nothing is watching.
+ *
+ * 16 ms is a display frame (contract §18.3, 输出吞吐). Half a second is what a
+ * dormant session falls back to: every byte is still kept — the process is
+ * running and its screen is what the next attach replays — but nobody is
+ * waiting for those bytes at display latency.
+ */
+export const OUTPUT_FLUSH_INTERVAL_MS = 16;
+export const DORMANT_FLUSH_INTERVAL_MS = 500;
+export const OUTPUT_FLUSH_BYTES = 64 * 1024;
 
 /**
  * Pasted text must not be able to close the bracket itself or inject its own
