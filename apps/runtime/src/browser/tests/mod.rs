@@ -19,6 +19,7 @@ mod managed;
 mod persistence;
 mod policy;
 mod process;
+mod shell;
 mod streaming;
 mod support;
 mod tabs;

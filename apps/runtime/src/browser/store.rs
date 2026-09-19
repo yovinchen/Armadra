@@ -221,6 +221,27 @@ pub async fn persist_process(
     Ok(())
 }
 
+/// Records where the active tab is now.
+///
+/// Its own statement rather than part of [`persist_process`] because under the
+/// Electron shell there is no process of ours to record: the page is a guest in
+/// the window, and this column is the only thing about it this side stores.
+/// It is also the reason the column has ONE writer — the node's own `data.url`
+/// is what the page draws, and a second writer would be a second truth.
+pub async fn persist_active_tab_url(
+    pool: &SqlitePool,
+    session_id: &str,
+    url: &str,
+) -> AppResult<()> {
+    sqlx::query("UPDATE browser_sessions SET active_tab_url = ?, updated_at = ? WHERE id = ?")
+        .bind(url)
+        .bind(Utc::now().to_rfc3339())
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Moves the lease generation forward. It is stored rather than derived so a
 /// client that slept through a restart cannot present a generation that has
 /// come back around to being current.

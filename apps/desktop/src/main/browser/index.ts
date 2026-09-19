@@ -49,7 +49,14 @@ export interface BrowserWiring {
  */
 export async function installBrowser(dataDir: string): Promise<BrowserWiring> {
   configureStaging(dataDir);
-  server = await startDriveServer(runVerb);
+  server = await startDriveServer(runVerb, (notice, nodeId, detail) => {
+    if (notice !== "revoke") return;
+    const reason =
+      typeof detail === "object" && detail !== null && "reason" in detail
+        ? String((detail as { reason: unknown }).reason)
+        : "agent control ended";
+    revokeNode(nodeId, reason);
+  });
   setPublisher((event) => server?.publish(event));
 
   // A guest going away for ANY reason drops the lease. The registry calls this

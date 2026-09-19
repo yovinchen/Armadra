@@ -43,6 +43,17 @@ export type VerbRunner = (request: {
   args: Record<string, unknown>;
 }) => Promise<unknown>;
 
+/**
+ * Something the Runtime tells the shell without asking for an answer.
+ *
+ * There is exactly one today, and it is the important one: `revoke`. The lease
+ * ended — a person clicked into the page, or pressed Stop — and every debugger
+ * attached to that node must go NOW. It is a notice rather than a verb because
+ * the Runtime is not asking permission and must not wait: a revocation that can
+ * be delayed by a busy page is a revocation that has not happened.
+ */
+export type NoticeHandler = (notice: string, nodeId: string, detail: unknown) => void;
+
 export interface DriveServer {
   readonly address: string;
   readonly token: string;
@@ -57,7 +68,10 @@ interface Peer {
   authenticated: boolean;
 }
 
-export function startDriveServer(run: VerbRunner): Promise<DriveServer> {
+export function startDriveServer(
+  run: VerbRunner,
+  notice: NoticeHandler = () => {},
+): Promise<DriveServer> {
   const token = randomBytes(32).toString("hex");
   let peer: Peer | null = null;
 
@@ -140,6 +154,13 @@ export function startDriveServer(run: VerbRunner): Promise<DriveServer> {
       peer?.socket.destroy();
       peer = self;
       send(self, { type: "ready" });
+      return;
+    }
+    if (envelope.type === "notice") {
+      // No answer, and no chance for a page to hold it up.
+      if (typeof envelope.notice === "string" && typeof envelope.nodeId === "string") {
+        notice(envelope.notice, envelope.nodeId, envelope.detail);
+      }
       return;
     }
     const request = parseDriveRequest(parsed);
