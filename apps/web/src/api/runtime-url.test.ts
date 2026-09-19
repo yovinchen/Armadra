@@ -1,13 +1,47 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hostServedOrigin,
   isShellTransport,
   nativeShellRuntimeUrl,
+  resetShellEndpoints,
   resolveRuntimeUrl,
   resolveSocketBase,
   runtimeSocketUrl,
+  shellEndpoints,
   TRANSPORT_PATH,
 } from "./runtime-url";
+
+/** Stands in for the Electron preload bridge. */
+function electronShell(
+  endpoints: Partial<{
+    httpBase: string;
+    wsBase: string;
+    hostBase: string;
+    dataDir: string;
+  }> = {},
+): void {
+  resetShellEndpoints();
+  vi.stubGlobal("window", {
+    armadra: {
+      transport: {
+        endpointsSync: () => ({
+          httpBase: "http://127.0.0.1:52341",
+          wsBase: "ws://127.0.0.1:52341",
+          hostBase: "http://127.0.0.1:43121",
+          dataDir: "/tmp/armadra",
+          ...endpoints,
+        }),
+        endpoints: () => Promise.resolve({}),
+      },
+      identity: { ticket: () => Promise.resolve({ ok: false }) },
+    },
+  });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  resetShellEndpoints();
+});
 
 describe("Runtime addresses across desktop and web", () => {
   it("keeps the loopback default for a local development page", () => {
@@ -84,6 +118,99 @@ describe("Runtime addresses across desktop and web", () => {
     expect(() =>
       resolveRuntimeUrl("file:///tmp/runtime", "https://canvas.example"),
     ).toThrow();
+  });
+});
+
+/**
+ * The Electron shell (docs/design/electron-migration.md §2.1). The page is
+ * served over loopback HTTP and talks to the Runtime directly; the Runtime's
+ * port is the kernel's, so the only thing that knows it is the shell.
+ */
+describe("Runtime addresses inside the Electron shell", () => {
+  it("takes the base from the shell, not from the page's own address", () => {
+    // In development the page is on Vite's port — which is not the Runtime's
+    // and is not the documented default either.
+    electronShell();
+    expect(resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/")).toBe(
+      "http://127.0.0.1:52341",
+    );
+    // And once packaged, from the shell's own static server.
+    expect(resolveRuntimeUrl(undefined, "http://127.0.0.1:61000/")).toBe(
+      "http://127.0.0.1:52341",
+    );
+  });
+
+  it("reads the bridge once and remembers the answer", () => {
+    let reads = 0;
+    resetShellEndpoints();
+    vi.stubGlobal("window", {
+      armadra: {
+        transport: {
+          endpointsSync: () => {
+            reads += 1;
+            return {
+              httpBase: "http://127.0.0.1:52341",
+              wsBase: "ws://127.0.0.1:52341",
+              hostBase: "http://127.0.0.1:43121",
+              dataDir: "/tmp",
+            };
+          },
+        },
+      },
+    });
+    for (let attempt = 0; attempt < 3; attempt += 1) shellEndpoints();
+    expect(reads).toBe(1);
+  });
+
+  it("lets an explicit address win, as it always has", () => {
+    electronShell();
+    expect(
+      resolveRuntimeUrl("http://127.0.0.1:43120", "http://127.0.0.1:1420/"),
+    ).toBe("http://127.0.0.1:43120");
+  });
+
+  it("uses the shell's WebSocket base without asking for a forwarder", async () => {
+    electronShell();
+    const fetcher = vi.fn();
+    const base = resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/");
+    // There is no custom scheme and no forwarding port any more: the socket
+    // base came with the HTTP one.
+    expect(await resolveSocketBase(base, fetcher)).toBe("ws://127.0.0.1:52341");
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(isShellTransport(base)).toBe(true);
+    expect(isShellTransport("http://127.0.0.1:43120")).toBe(false);
+  });
+
+  it("never follows the shell to an address that is not loopback", () => {
+    for (const httpBase of [
+      "https://armadra.example",
+      "http://10.0.0.5:43120",
+      "http://user:pass@127.0.0.1:43120",
+      "not a url",
+    ]) {
+      electronShell({ httpBase });
+      // The bridge is refused outright rather than half-believed, so the page
+      // falls back exactly as it would in a browser.
+      expect(shellEndpoints(), httpBase).toBeNull();
+      expect(resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/")).toBe(
+        "http://127.0.0.1:43120",
+      );
+    }
+  });
+
+  it("derives the socket base when the shell's is unusable", async () => {
+    electronShell({ wsBase: "wss://armadra.example" });
+    const base = resolveRuntimeUrl(undefined, "http://127.0.0.1:1420/");
+    expect(await resolveSocketBase(base, vi.fn())).toBe("ws://127.0.0.1:52341");
+  });
+
+  it("is absent in a browser and in the Tauri shell", () => {
+    vi.stubGlobal("window", {});
+    resetShellEndpoints();
+    expect(shellEndpoints()).toBeNull();
+    expect(resolveRuntimeUrl(undefined, "tauri://localhost/")).toBe(
+      "armadra://localhost",
+    );
   });
 });
 

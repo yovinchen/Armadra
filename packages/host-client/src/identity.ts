@@ -21,6 +21,7 @@ import {
 } from "@armadra/protocol";
 import type { HostClientErrorCode } from "./index.js";
 import type { HostNativeCredentials } from "./native.js";
+import { isNativePageOrigin } from "./origins.js";
 
 /** Secrets never reach a caller: neither the CSRF nor the native bearers. */
 export type HostIdentitySession = Omit<
@@ -92,11 +93,6 @@ const remoteCodes = new Set([
 ]);
 /** IdentityService methods whose bearer is the refresh secret, not access. */
 const refreshBearer = new Set(["Refresh", "RenewCsrf", "Logout"]);
-const nativePageOrigins = new Set([
-  "tauri://localhost",
-  "http://tauri.localhost",
-  "https://tauri.localhost",
-]);
 function invalid(): never {
   throw new HostIdentityError("INVALID_OPTIONS");
 }
@@ -159,8 +155,7 @@ function identityEndpoint(
     if (
       url.protocol !== "http:" ||
       !loopbackHost(url.hostname) ||
-      !pageOrigin ||
-      !nativePageOrigins.has(pageOrigin)
+      !isNativePageOrigin(pageOrigin)
     )
       invalid();
   } else if (url.protocol !== "https:" || pageOrigin !== url.origin) invalid();

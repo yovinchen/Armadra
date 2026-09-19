@@ -177,9 +177,13 @@ describe("native transport configuration", () => {
     ["http://user:secret@127.0.0.1:43121", pageOrigin],
     ["http://127.0.0.1:43121?ticket=x", pageOrigin],
     ["http://127.0.0.1:43121#x", pageOrigin],
-    [hostUrl, "http://127.0.0.1:1420"],
     [hostUrl, "https://host.test"],
-    [hostUrl, "http://127.0.0.1:43121"],
+    // HTTPS on loopback is a browser deployment; only plain loopback HTTP is
+    // a shell origin (docs/design/electron-migration.md §2.1).
+    [hostUrl, "https://127.0.0.1:1420"],
+    [hostUrl, "http://192.168.1.20:1420"],
+    [hostUrl, "http://127.0.0.1.evil.example"],
+    [hostUrl, "http://127.0.0.1:1420/app"],
     [hostUrl, "tauri://other"],
     [hostUrl, undefined],
   ])("refuses %s from page %s without a request", (baseUrl, origin) => {
@@ -228,11 +232,59 @@ describe("native transport configuration", () => {
     expect(() => new HostNativeCredentials({} as never)).toThrow(
       HostIdentityError,
     );
-    expect(isNativePageOrigin("tauri://localhost")).toBe(true);
-    expect(isNativePageOrigin("http://127.0.0.1:1420")).toBe(false);
     function store() {
       return credentials().store;
     }
+  });
+
+  /**
+   * The Electron shell serves its page from a loopback HTTP static server on
+   * a kernel-assigned port, so a shell origin can no longer be one of three
+   * fixed spellings (docs/design/electron-migration.md §2.1). The same table
+   * is pinned on the other two sides that have to agree with it:
+   * `apps/host/internal/server/native.go` and the desktop shell's
+   * `shell-core/host/config.ts`.
+   *
+   * Widening the spelling moves no trust boundary: a browser page CAN hold a
+   * loopback HTTP origin, and still cannot mint the ticket a session starts
+   * from — only the shell's same-user control channel does that.
+   */
+  it("treats the Tauri spellings and any loopback HTTP origin as a shell's", () => {
+    for (const origin of [
+      ...NATIVE_PAGE_ORIGINS,
+      "http://127.0.0.1:1420",
+      "http://127.0.0.1:54321",
+      "http://127.5.5.5:8080",
+      "http://localhost:3000",
+      "http://[::1]:9000",
+    ])
+      expect(isNativePageOrigin(origin), origin).toBe(true);
+
+    for (const origin of [
+      "https://127.0.0.1:54321",
+      "http://192.168.1.20:54321",
+      "https://host.test",
+      "http://127.0.0.1.evil.example",
+      "http://localhost.evil.example",
+      "http://127.0.0.1:54321/app",
+      "http://user:pass@127.0.0.1:54321",
+      "tauri://other",
+      "",
+      "not a url",
+      undefined,
+    ])
+      expect(isNativePageOrigin(origin), String(origin)).toBe(false);
+  });
+
+  it("accepts the Electron shell's page origin end to end", () => {
+    // The port is the kernel's, so nothing may compare against a constant.
+    for (const origin of ["http://127.0.0.1:54321", "http://localhost:61234"])
+      expect(() =>
+        client(vi.fn(), credentials().store, {
+          baseUrl: hostUrl,
+          pageOrigin: origin,
+        }),
+      ).not.toThrow();
   });
   it("derives a Tauri page origin from protocol and host when URL.origin is null", () => {
     vi.stubGlobal("location", {
