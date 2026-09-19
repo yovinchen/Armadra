@@ -95,14 +95,28 @@ function seedWorkspace(dataDir) {
   database.close();
 }
 
-/** One CDP connection to the first renderer page the app exposes. */
+/**
+ * One CDP connection to the **application shell's** page.
+ *
+ * Not simply the first `page` target: an Armadra window can carry other pages
+ * (a `<webview>`, an about:blank opener), and which one `/json/list` puts
+ * first varies between runs. A `file://` page has the origin `null`, which the
+ * core refuses exactly as the Rust face does — so attaching to the wrong
+ * target reports a CORS refusal that reads like a product bug. The shell
+ * serves its renderer over loopback HTTP, so that is what this matches.
+ */
 async function attachToRenderer(port) {
+  let seen = [];
   for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`);
       const targets = await response.json();
+      seen = targets.map((target) => `${target.type} ${target.url}`);
       const page = targets.find(
-        (target) => target.type === "page" && target.webSocketDebuggerUrl,
+        (target) =>
+          target.type === "page" &&
+          target.webSocketDebuggerUrl &&
+          /^https?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(target.url ?? ""),
       );
       if (page) return page.webSocketDebuggerUrl;
     } catch {
@@ -110,7 +124,9 @@ async function attachToRenderer(port) {
     }
     await delay(500);
   }
-  throw new Error(`no renderer appeared on the debugging port ${port}`);
+  throw new Error(
+    `no loopback renderer on the debugging port ${port}; saw ${JSON.stringify(seen)}`,
+  );
 }
 
 function cdp(url) {
