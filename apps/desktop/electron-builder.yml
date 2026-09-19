@@ -14,9 +14,12 @@ productName: Armadra
 # the Linux binary name from it — `@armadradesktop`, which AppImage refuses as
 # a file name. Every platform gets the same short executable name.
 executableName: armadra
-# Windows only in effect: waits until nothing holds the staged sidecar
-# binaries, and names the holder when something does (scripts/before-pack.mjs).
-beforePack: ./scripts/before-pack.mjs
+# The staged sidecar binaries (`resources/<binary>[.exe]`) are placed into the
+# unpacked app by this hook, not by `extraResources`: electron-builder copies
+# once, and on the Windows runners that one copy meets a transient sharing
+# violation. The hook retries (scripts/after-pack.mjs). It runs before
+# signing, so the binaries are signed with the bundle as before.
+afterPack: ./scripts/after-pack.mjs
 
 directories:
   # Named to match the blacklist entry `apps/desktop/release/` already
@@ -57,100 +60,31 @@ files:
 asarUnpack:
   - node_modules/node-pty/**
 
-# The four sidecar binaries `scripts/stage-binaries.mjs` stages into
-# `resources/` before packaging. Electron's `process.resourcesPath` is exactly
-# this directory on every platform, which is what `runtime-process.ts`'s
+# The sidecar binaries `scripts/stage-binaries.mjs` stages into `resources/`
+# before packaging are placed into the bundle by `scripts/after-pack.mjs`
+# (see `afterPack` above). Electron's `process.resourcesPath` is exactly
+# that directory on every platform, which is what `runtime-process.ts`'s
 # `runtimeExecutable()` already resolves against — no `-<triple>` suffix
 # needed, unlike the `<name>-<triple>` convention the previous bundler imposed
 # (armadra-inventory.md §2 item 29).
 #
-# Listed by exact name per platform, not a `*` glob and not shared at the top
-# level: electron-builder resolves a `{from, to}` pair's `from` as a literal
-# path (file or directory) before any pattern matching runs —
-# `resources/armadra-runtime*` is not a glob here, it is a literal filename
-# that does not exist, and electron-builder logs "file source doesn't exist"
-# and silently packages without it rather than failing the build. Windows
-# binaries carry `.exe` (`stage-binaries.mjs`'s `goTarget().extension`) and
-# only Windows ships `armadra-session-host` (T01: ConPTY sessions have to
-# outlive the Worker there; tmux already does that job on macOS/Linux), so
-# each platform section lists its own four names in full rather than
-# layering a shared top-level list under a platform-specific one.
-mac:
-  extraResources:
-    - from: resources/armadra-runtime
-      to: .
-    - from: resources/armadra-host
-      to: .
-    - from: resources/armadra-hook
-      to: .
-    # The TypeScript hook client (R3c). Unlike the three above it is not a
-    # binary: it is one CJS file the installer's generated launcher runs as
-    # `ELECTRON_RUN_AS_NODE=1 <Electron> <resources>/cli/armadra-hook.js`,
-    # because a packaged machine is not guaranteed to have a system `node`.
-    # Outside the asar so that path is a real file on disk — the Electron
-    # binary is the only interpreter we can count on, and asking it to read an
-    # entry point out of an archive is a dependency this does not need.
-    - from: out/cli/armadra-hook.js
-      to: cli/armadra-hook.js
-  category: public.developer-tools
-  icon: build/icons/icon.icns
-  hardenedRuntime: true
-  gatekeeperAssess: false
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
-  # Whether this build actually notarizes is decided by
-  # `scripts/signing-electron.mjs` before packaging starts (three-state
-  # sign / skip / refuse): it reads APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
-  # APPLE_TEAM_ID from the
-  # environment and disables notarization here via `-c.mac.notarize=false`
-  # when they are absent, the same "decide before the twenty-minute build, not
-  # after" reasoning as docs/guides/ci-release.md §2.6.
-  notarize: true
-  extendInfo:
-    # macOS 15+ gates any connection to an address on the user's own subnet
-    # behind Local Network privacy, attributed to the RESPONSIBLE PROCESS —
-    # for everything this shell spawns (the Runtime, the Go Host, agent CLIs)
-    # that is Armadra.app, not the child. Without this string there is no
-    # prompt and no row in System Settings → Privacy & Security → Local
-    # Network: the denial is silent and ungrantable, and it surfaces as
-    # `EHOSTUNREACH` from an agent session while Apple-signed `/usr/bin/curl`
-    # succeeds at the same instant. The reviewed allowlist is enforced by
-    # `scripts/info-plist.test.mjs`.
-    NSLocalNetworkUsageDescription: "Armadra 的 Runtime 与已连接的 Agent CLI 需要访问本机局域网内的设备与服务。"
-    # The name macOS shows under the Dock icon, in Spotlight and in the Force
-    # Quit list — distinct from `CFBundleName` (electron-builder derives that
-    # from `productName` above), which is the shorter internal name the
-    # system falls back to when this key is absent. Without it a build whose
-    # `productName` ever needs a short/long split would silently show the
-    # short form everywhere a user actually reads the app's name.
-    CFBundleDisplayName: Armadra
-  target:
-    - target: dmg
-      arch: [arm64, x64]
-    - target: zip
-      arch: [arm64, x64]
+# Windows binaries carry `.exe` (`stage-binaries.mjs`'s `goTarget().extension`)
+# and only Windows ships `armadra-session-host` (T01: ConPTY sessions have to
+# outlive the Worker there; tmux already does that job on macOS/Linux); the
+# per-platform list is `binariesFor()` in stage-binaries.mjs, which the hook
+# reads, so nothing here can drift from what was staged.
 
 win:
   icon: build/icons/icon.ico
   extraResources:
-    - from: resources/armadra-runtime.exe
-      to: .
-    - from: resources/armadra-host.exe
-      to: .
-    - from: resources/armadra-hook.exe
-      to: .
-    # Windows-only sidecar: ConPTY sessions have to outlive the Worker and the
-    # shell, a job tmux already does on macOS/Linux (T01,
-    # apps/desktop/scripts/sidecar-targets.mjs `rustSidecars()`).
-    - from: resources/armadra-session-host.exe
-      to: .
     # See the macOS entry: the launcher is `armadra-hook.cmd` here, and it
     # names this exact path.
     - from: out/cli/armadra-hook.js
       to: cli/armadra-hook.js
-    # The TypeScript session host (R6d), and the reason the Rust sidecar
-    # above is still listed: both speak the same wire, `ARMADRA_SESSION_HOST`
-    # picks one, and the default is this bundle. R7 deletes the `.exe` entry
+    # The TypeScript session host (R6d). The Rust `armadra-session-host.exe`
+    # is still placed by after-pack.mjs: both speak the same wire,
+    # `ARMADRA_SESSION_HOST` picks one, and the default is this bundle. R7
+    # deletes the Rust one
     # together with `crates/session-host`. Windows only — the daemon exists
     # because ConPTY sessions must outlive the shell, which tmux already
     # handles elsewhere. `apps/desktop/scripts/sidecar-targets.mjs`'
@@ -181,12 +115,6 @@ linux:
   icon: build/icons/icon.png
   category: Development
   extraResources:
-    - from: resources/armadra-runtime
-      to: .
-    - from: resources/armadra-host
-      to: .
-    - from: resources/armadra-hook
-      to: .
     # See the macOS entry.
     - from: out/cli/armadra-hook.js
       to: cli/armadra-hook.js
