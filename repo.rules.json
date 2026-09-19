@@ -31,6 +31,8 @@
     "output/",
     "dist/",
     "target/",
+    "out/",
+    "apps/desktop/release/",
     ".idea/",
     ".playwright-cli/",
     "*.db",
@@ -54,7 +56,8 @@
       "tools/"
     ],
     "exclude": [".claude/"],
-    "ignoreTargets": []
+    "$ignoreTargetsComment": "链接提取器不跳过围栏代码块，所以代码块里的正则片段会被当成链接目标。`\\.\\.\\/` 来自 docs/research/nodeterm/process-model-and-platform.md 里引用的 no-electron 扫描正则，不是链接。真正的修法是让 localLinks() 跳过代码块（tools/repo-check.mjs），在那之前先豁免这一个目标。",
+    "ignoreTargets": ["\\.\\.\\/"]
   },
   "naming": [
     {

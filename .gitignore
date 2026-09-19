@@ -10,6 +10,9 @@ apps/desktop/src-tauri/gen/schemas/
 dist/
 coverage/
 target/
+# electron-vite 的产物与 electron-builder 的打包输出（repo.rules.json 也拒绝跟踪）
+out/
+apps/desktop/release/
 
 .env
 .env.*

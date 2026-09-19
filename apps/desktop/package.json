@@ -2,16 +2,33 @@
   "name": "@armadra/desktop",
   "version": "0.1.0",
   "private": true,
+  "main": "./out/main/index.js",
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "predev": "pnpm prepare:host --native",
+    "pretauri:dev": "pnpm prepare:host --native",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "node scripts/build.mjs",
     "prepare:sidecar": "node scripts/prepare-sidecar.mjs",
     "prepare:sidecar-placeholders": "node scripts/stage-sidecar-placeholders.mjs",
-    "build": "node scripts/build.mjs",
-    "predev": "pnpm prepare:host --native",
     "prepare:host": "node scripts/prepare-host.mjs",
-    "test": "node --test scripts/*.test.mjs"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run && node --test scripts/*.test.mjs"
+  },
+  "dependencies": {
+    "@armadra/protocol": "workspace:*"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.11.4"
+    "@tailwindcss/vite": "4.3.3",
+    "@tauri-apps/cli": "2.11.4",
+    "@types/node": "24.3.0",
+    "@vitejs/plugin-react": "6.0.5",
+    "electron": "42.11.6",
+    "electron-vite": "6.0.0-beta.1",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.2",
+    "vite": "8.2.1",
+    "vitest": "4.1.11"
   }
 }
