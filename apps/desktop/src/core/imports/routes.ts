@@ -11,7 +11,7 @@ import {
   validWorkspaceName,
 } from "../workspaces/table";
 import { ImportBatch } from "./batch";
-import { MAX_FILES } from "./limits";
+import { MAX_BATCH_BYTES, MAX_FILES } from "./limits";
 import { parseMultipart } from "./multipart";
 import { readManifest, receiveFiles } from "./receive";
 
@@ -30,9 +30,21 @@ import { readManifest, receiveFiles } from "./receive";
  * domains, and one process has one answer (design §6, D4).
  */
 
+/**
+ * What the two multipart routes may carry: a full batch plus room for the
+ * manifest and the boundaries. The same figure `apps/runtime/src/lib.rs` gave
+ * axum's `DefaultBodyLimit` for exactly these two routes.
+ */
+export const MAX_IMPORT_BODY_BYTES = MAX_BATCH_BYTES + 1024 * 1024;
+
 export function install(context: CoreContext): void {
   const database = context.db.database;
   const { server } = context;
+  server.bodyLimit("/api/workspaces/import", MAX_IMPORT_BODY_BYTES);
+  server.bodyLimit(
+    "/api/workspaces/{workspaceId}/imports",
+    MAX_IMPORT_BODY_BYTES,
+  );
 
   server.router.handle(
     "POST",
