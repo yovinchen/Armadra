@@ -17,8 +17,13 @@ import (
 )
 
 const (
-	nativeOrigin  = "tauri://localhost"
-	browserOrigin = "http://127.0.0.1:1420"
+	nativeOrigin = "tauri://localhost"
+	// electronOrigin is the shape the Electron shell presents: plain loopback
+	// HTTP on the port its own static server was given by the kernel.
+	electronOrigin = "http://127.0.0.1:54321"
+	// browserOrigin is a real browser origin — off this machine, so never a
+	// shell origin however explicitly it is allowed.
+	browserOrigin = "https://browser.example"
 )
 
 // nativeFixture is the desktop shape: a plain loopback listener whose
@@ -40,7 +45,7 @@ func newNativeFixture(t *testing.T, origins ...string) *nativeFixture {
 		t.Fatal(err)
 	}
 	if origins == nil {
-		origins = []string{nativeOrigin, browserOrigin}
+		origins = []string{nativeOrigin, electronOrigin, browserOrigin}
 	}
 	handler, err := NewHandlerWithOptions(Identity{HostID: authHost, InstanceID: authInstance}, Options{Identity: identity, AllowedOrigins: origins})
 	if err != nil {
@@ -354,6 +359,129 @@ func TestBearerCredentialParsing(t *testing.T) {
 		}
 		if got := bearerCredential(r); got != tc.want {
 			t.Errorf("%v: got %q, want %q", tc.values, got, tc.want)
+		}
+	}
+}
+
+// The Electron shell has no custom scheme: its page comes from a loopback
+// HTTP static server on a kernel-assigned port, so what marks a shell origin
+// is "loopback HTTP and in --allow-origin", not a fixed spelling
+// (docs/design/electron-migration.md §2.1).
+func TestLoopbackHTTPOriginIsAShellOrigin(t *testing.T) {
+	f := newNativeFixture(t)
+	if !hasCapability(f.hello(t, electronOrigin).Capabilities, "identity.native-session.v1") {
+		t.Fatal("the loopback HTTP shell origin was not offered the native session")
+	}
+	// The Tauri spellings keep working while both shells exist.
+	for _, origin := range []string{"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"} {
+		if !NativeOrigin(origin) {
+			t.Fatalf("the Tauri origin %s stopped being a shell origin", origin)
+		}
+	}
+	if !hasCapability(f.hello(t, nativeOrigin).Capabilities, "identity.native-session.v1") {
+		t.Fatal("the Tauri origin lost the native session")
+	}
+	// An allowlisted origin that is not on this machine stays a browser
+	// origin, and browser origins still require configured HTTPS.
+	if hasCapability(f.hello(t, browserOrigin).Capabilities, "identity.native-session.v1") {
+		t.Fatal("a remote origin was offered the native session")
+	}
+
+	ticket := f.ticket(t, electronOrigin)
+	pair := &pb.PairDeviceRequest{ExpectedHostId: authHost, ExpectedInstanceId: authInstance, Ticket: ticket}
+	expectNativeStatus(t, f.post(t, browserOrigin, "Pair", pair, "", ""), 403, "PERMISSION_DENIED")
+	// A loopback HTTP origin the operator never allowed is a plain
+	// cross-origin request: the port is exactly what the allowlist pins.
+	expectNativeStatus(t, f.post(t, "http://127.0.0.1:1420", "Pair", pair, "", ""), 403, "PERMISSION_DENIED")
+
+	reply := f.post(t, electronOrigin, "Pair", pair, "", "")
+	expectNativeStatus(t, reply, 200, "")
+	if len(reply.header.Values("Set-Cookie")) != 0 {
+		t.Fatal("the loopback HTTP shell was given cookies")
+	}
+	if reply.header.Get("Access-Control-Allow-Origin") != electronOrigin || reply.header.Get("Access-Control-Allow-Credentials") != "" {
+		t.Fatalf("unexpected CORS headers: %v", reply.header)
+	}
+	access := reply.session.GetNative().GetAccessToken()
+	if access == "" || reply.session.GetCsrfToken() == "" {
+		t.Fatal("the loopback HTTP shell was not given bearer credentials")
+	}
+	current := &pb.CurrentSessionRequest{}
+	expectNativeStatus(t, f.post(t, electronOrigin, "Current", current, access, ""), 200, "")
+	expectNativeStatus(t, f.post(t, electronOrigin, "Current", current, "", ""), 401, "UNAUTHENTICATED")
+	// The session records its origin, so the other shell's origin — allowed
+	// and native in its own right — cannot spend this bearer.
+	expectNativeStatus(t, f.post(t, nativeOrigin, "Current", current, access, ""), 401, "UNAUTHENTICATED")
+}
+
+// A Host that was configured for browsers keeps the browser rule for every
+// origin, including a shell's: --public-origin and TLS are what decide.
+func TestConfiguredHTTPSKeepsTheBrowserRuleForLoopbackOrigins(t *testing.T) {
+	secure := newAuthFixture(t, func(_ *authFixture, options *Options) {
+		options.AllowedOrigins = []string{electronOrigin}
+	})
+	request, _ := http.NewRequest("POST", secure.origin+HelloPath, bytes.NewReader(helloBytes(t, 1, ProtocolMinor)))
+	request.Header.Set("Origin", electronOrigin)
+	request.Header.Set("Content-Type", MediaType)
+	response, err := secure.server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	hello := new(pb.HelloResponse)
+	if err := proto.Unmarshal(data, hello); err != nil {
+		t.Fatal(err)
+	}
+	if hasCapability(hello.Capabilities, "identity.native-session.v1") {
+		t.Fatal("an HTTPS Host advertised the native session to a loopback origin")
+	}
+	request, _ = http.NewRequest("POST", secure.origin+AuthPrefix+"Pair", bytes.NewReader(authWire(t, &pb.PairDeviceRequest{})))
+	request.Header.Set("Origin", electronOrigin)
+	request.Header.Set("Content-Type", MediaType)
+	response, err = secure.server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.Copy(io.Discard, response.Body)
+	response.Body.Close()
+	if response.StatusCode != 403 {
+		t.Fatalf("an HTTPS Host let a loopback origin authenticate: %d", response.StatusCode)
+	}
+
+	// The same conclusion from the other side: once --public-origin exists, a
+	// plain HTTP request is refused before any session rule is consulted.
+	handler, err := NewHandlerWithOptions(Identity{HostID: authHost, InstanceID: authInstance}, Options{Identity: secure.identity, PublicOrigin: "https://armadra.example", AllowedOrigins: []string{electronOrigin}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := httptest.NewRequest("POST", "http://127.0.0.1:43121"+AuthPrefix+"Pair", bytes.NewReader(authWire(t, &pb.PairDeviceRequest{})))
+	plain.Header.Set("Origin", electronOrigin)
+	plain.Header.Set("Content-Type", MediaType)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, plain)
+	if recorder.Code != 403 || len(recorder.Result().Cookies()) != 0 {
+		t.Fatalf("a public-origin Host answered plain HTTP: %d", recorder.Code)
+	}
+}
+
+func TestNativeOriginSpellings(t *testing.T) {
+	for _, origin := range []string{
+		"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost",
+		"http://127.0.0.1:54321", "http://127.0.0.1", "http://127.0.0.2:8080",
+		"http://localhost:1420", "http://[::1]:54321",
+	} {
+		if !NativeOrigin(origin) {
+			t.Errorf("%s should be a shell origin", origin)
+		}
+	}
+	for _, origin := range []string{
+		"", "null", "https://127.0.0.1:54321", "https://localhost:1420",
+		"http://192.168.1.20:54321", "http://browser.example", "https://browser.example",
+		"http://127.0.0.1:54321/", "HTTP://127.0.0.1:54321", "http://127.0.0.1:54321?x=1",
+	} {
+		if NativeOrigin(origin) {
+			t.Errorf("%s should not be a shell origin", origin)
 		}
 	}
 }

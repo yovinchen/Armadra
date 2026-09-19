@@ -2,33 +2,63 @@ package server
 
 import (
 	"net/http"
+	"net/netip"
+	"net/url"
 	"strings"
 )
 
-// The origins a packaged desktop shell's WebView presents: Tauri's own scheme
-// on macOS and Linux, and the two spellings WebView2 uses on Windows. They
-// are the only origins the native session transport exists for
-// (docs/design/host-native-session.md §2).
-var nativeOrigins = map[string]bool{
+// The custom-scheme origins the Tauri shell's WebView presents: Tauri's own
+// scheme on macOS and Linux, and the two spellings WebView2 uses on Windows.
+// The Electron shell serves its page over loopback HTTP instead and is
+// covered by loopbackHTTPOrigin; these three stay accepted while both shells
+// exist (docs/design/electron-migration.md §2.1).
+var shellSchemeOrigins = map[string]bool{
 	"tauri://localhost":       true,
 	"http://tauri.localhost":  true,
 	"https://tauri.localhost": true,
 }
 
+// loopbackHTTPOrigin reports whether a canonical origin is plain HTTP on a
+// loopback host. The Electron shell serves its own bundle from a kernel
+// assigned port, so the origin cannot be a fixed constant; what makes it a
+// shell origin is that nothing off this machine can be behind it.
+func loopbackHTTPOrigin(origin string) bool {
+	canonical, err := ParseOrigin(origin)
+	if err != nil || canonical != origin {
+		return false
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Scheme != "http" {
+		return false
+	}
+	host := parsed.Hostname()
+	if host == "localhost" {
+		return true
+	}
+	address, err := netip.ParseAddr(host)
+	return err == nil && address.IsLoopback()
+}
+
 // NativeOrigin reports whether a canonical origin is one a desktop shell
-// presents. It is a spelling check, not an authorization: the shell still has
-// to be listed with --allow-origin, and a request still has to be a native
-// session request, before anything is answered to it.
+// presents: a custom-scheme Tauri origin, or the loopback HTTP origin an
+// Electron shell's static server binds. It is a spelling check, not an
+// authorization: the shell still has to be listed with --allow-origin, and a
+// request still has to be a native session request, before anything is
+// answered to it. A browser page can hold a loopback HTTP origin, but it
+// still cannot mint the ticket a session starts from — only the same-user
+// control channel does that.
 func NativeOrigin(origin string) bool {
-	return nativeOrigins[origin]
+	return shellSchemeOrigins[origin] || loopbackHTTPOrigin(origin)
 }
 
 // nativeSession reports whether a request may use the native session
 // transport: the Host serves plain loopback HTTP (no public HTTPS origin and
 // no TLS on this connection), it has an identity service, and the request's
-// exact Origin is a native origin the operator explicitly allowed. A browser
-// page cannot present one of these origins, and a local process that forges
-// one still needs a ticket from the same-user control channel.
+// exact Origin is a native origin the operator explicitly allowed. Reaching
+// this gate is not a session: every credential the transport carries comes
+// from a ticket only the same-user control channel mints, so a browser page
+// that does hold the shell's loopback origin, and a local process that forges
+// any of them, are both left with nothing to present.
 func nativeSession(r *http.Request, origin string, explicit bool, options Options) bool {
 	return options.Identity != nil && options.PublicOrigin == "" && r.TLS == nil && explicit && NativeOrigin(origin)
 }
