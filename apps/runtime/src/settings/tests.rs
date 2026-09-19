@@ -214,13 +214,13 @@ fn the_store_answers_which_built_in_agent_a_custom_one_borrows() {
     let store = SettingsStore::in_memory(serde_json::json!({
         "agents": { "custom": [
             { "id": "custom:echo", "label": "Echo", "launchCmd": "/bin/echo",
-              "baseAgent": "gemini", "env": { "GREETING": "hi" } },
+              "baseAgent": "copilot", "env": { "GREETING": "hi" } },
         ] }
     }));
     assert_eq!(store.custom_agents().len(), 1);
     assert_eq!(store.custom_agent("custom:echo").unwrap().label, "Echo");
     assert!(store.custom_agent("custom:nope").is_none());
-    assert_eq!(store.base_agent("custom:echo"), "gemini");
+    assert_eq!(store.base_agent("custom:echo"), "copilot");
     // Built-ins are their own base; an unknown custom id falls back.
     assert_eq!(store.base_agent("codex"), "codex");
     assert_eq!(store.base_agent("custom:nope"), "claude");

@@ -167,16 +167,17 @@ fn the_dated_entries_are_newest_first_between_the_cli_and_the_fallback() {
 
 #[test]
 fn only_models_the_cli_can_be_asked_to_run_reach_the_menu() {
-    let models = assemble("gemini", &[], &catalog());
-    // Google publishes image and video models in the same provider entry.
+    let models = assemble("codex", &[], &catalog());
+    // OpenAI publishes embedding and audio models in the same provider entry.
     assert!(
-        ids(&models).iter().all(|id| id.starts_with("gemini")),
+        ids(&models)
+            .iter()
+            .all(|id| !id.contains("embedding") && !id.contains("audio")),
         "{:?}",
         ids(&models)
     );
-    assert!(!is_selectable("google", "lyria-3-clip-preview"));
-    assert!(!is_selectable("google", "gemini-3-pro-image"));
     assert!(!is_selectable("openai", "text-embedding-3-large"));
+    assert!(!is_selectable("openai", "gpt-image-1"));
     assert!(is_selectable("openai", "gpt-6-astra"));
 }
 

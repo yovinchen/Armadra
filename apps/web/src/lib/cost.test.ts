@@ -28,7 +28,7 @@ describe("usage dashboard maths", () => {
     expect(windowSeconds("5h")).toBe(18_000);
     expect(windowSeconds("7d")).toBe(604_800);
     expect(windowSeconds("90m")).toBe(5_400);
-    // Copilot 的桶名与 Gemini 的 `quota` 都没有时长，不能瞎猜一个。
+    // Copilot 的桶名和 `quota` 这类标签都没有时长，不能瞎猜一个。
     expect(windowSeconds("quota")).toBeNull();
     expect(windowSeconds("premium interactions")).toBeNull();
     expect(windowSeconds("0h")).toBeNull();

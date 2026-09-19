@@ -19,7 +19,6 @@ pub mod claude;
 pub mod codex;
 pub mod copilot;
 pub mod extension_template;
-pub mod gemini;
 pub mod integration;
 pub mod omp;
 pub mod opencode;
@@ -98,7 +97,7 @@ pub fn injection_mode(agent_id: &str) -> InjectionMode {
         "claude" => InjectionMode::Launch,
         // Generated modules the CLI discovers in its own extension directory.
         "opencode" | "pi" | "omp" => InjectionMode::Extension,
-        // Codex `hooks.json`, Gemini `settings.json`, Copilot `hooks/armadra.json`.
+        // Codex `hooks.json`, Copilot `hooks/armadra.json`.
         _ => InjectionMode::File,
     }
 }
@@ -126,15 +125,6 @@ pub const CODEX_HOOK_EVENTS: &[&str] = &[
     "SessionEnd",
     "SubagentStart",
     "SubagentStop",
-];
-pub const GEMINI_HOOK_EVENTS: &[&str] = &[
-    "SessionStart",
-    "BeforeAgent",
-    "AfterAgent",
-    "BeforeTool",
-    "AfterTool",
-    "Notification",
-    "SessionEnd",
 ];
 /// Pi — handler names the generated TS extension registers, not keys in a
 /// settings file (协作通道 §3.3). `agent_settled` is the one the idle gate
@@ -324,17 +314,6 @@ pub fn config_home_with(
         "codex" => from_env("CODEX_HOME").unwrap_or_else(|| home.join(".codex")),
         // Copilot's own override, documented alongside `~/.copilot/hooks/`.
         "copilot" => from_env("COPILOT_HOME").unwrap_or_else(|| home.join(".copilot")),
-        // `GEMINI_CLI_HOME` replaces the *home directory*, not `~/.gemini`:
-        // gemini-cli's `paths.ts` returns it from its own `homedir()` and
-        // `storage.ts` then joins `GEMINI_DIR` (`.gemini`) onto whatever that
-        // gave. Its configuration reference says the same in words — the CLI
-        // "will create a `.gemini` folder inside this directory". Treating the
-        // variable as the config directory itself wrote our hook into
-        // `$GEMINI_CLI_HOME/settings.json`, one level above the only file the
-        // CLI reads, which looks exactly like a successful install.
-        "gemini" => from_env("GEMINI_CLI_HOME")
-            .unwrap_or_else(|| home.to_path_buf())
-            .join(".gemini"),
         "opencode" => from_env("OPENCODE_CONFIG_DIR")
             .or_else(|| from_env("XDG_CONFIG_HOME").map(|path| path.join("opencode")))
             .unwrap_or_else(|| home.join(".config").join("opencode")),
@@ -371,7 +350,6 @@ pub fn install(agent_id: &str, client_bin: &Path) -> AppResult<InstallReport> {
         "claude" => claude::install(&home, client_bin),
         "codex" => codex::install(&home, client_bin),
         "copilot" => copilot::install(&home, client_bin),
-        "gemini" => gemini::install(&home, client_bin),
         "opencode" => opencode::install(&home, client_bin),
         "pi" => pi::install(&home, client_bin),
         "omp" => omp::install(&home, client_bin),
@@ -388,7 +366,6 @@ pub fn uninstall(agent_id: &str) -> AppResult<InstallReport> {
         "claude" => claude::uninstall(&home),
         "codex" => codex::uninstall(&home),
         "copilot" => copilot::uninstall(&home),
-        "gemini" => gemini::uninstall(&home),
         "opencode" => opencode::uninstall(&home),
         "pi" => pi::uninstall(&home),
         "omp" => omp::uninstall(&home),
@@ -465,8 +442,8 @@ pub fn write_atomically(path: &Path, contents: &[u8]) -> AppResult<()> {
     Ok(())
 }
 
-/// The `{ "<Event>": [ { "matcher"?, "hooks": [...] } ] }` shape Claude, Codex
-/// and Gemini all use. Removes every handler whose command is ours, drops the
+/// The `{ "<Event>": [ { "matcher"?, "hooks": [...] } ] }` shape Claude and
+/// Codex both use. Removes every handler whose command is ours, drops the
 /// groups that are left empty, and returns how many handlers went away.
 pub fn strip_managed_handlers(events: &mut Map<String, Value>) -> usize {
     let mut removed = 0;
@@ -666,10 +643,6 @@ mod tests {
             home.join(".codex")
         );
         assert_eq!(
-            config_home_with("gemini", none, home).unwrap(),
-            home.join(".gemini")
-        );
-        assert_eq!(
             config_home_with("opencode", none, home).unwrap(),
             home.join(".config/opencode")
         );
@@ -690,7 +663,6 @@ mod tests {
         let overridden = |name: &str| match name {
             "CLAUDE_CONFIG_DIR" => Some(PathBuf::from("/tmp/claude-home")),
             "CODEX_HOME" => Some(PathBuf::from("/tmp/codex-home")),
-            "GEMINI_CLI_HOME" => Some(PathBuf::from("/tmp/gemini-home")),
             "XDG_CONFIG_HOME" => Some(PathBuf::from("/tmp/xdg")),
             "COPILOT_HOME" => Some(PathBuf::from("/tmp/copilot-home")),
             _ => None,
@@ -702,23 +674,6 @@ mod tests {
         assert_eq!(
             config_home_with("codex", overridden, home).unwrap(),
             Path::new("/tmp/codex-home")
-        );
-        // `GEMINI_CLI_HOME` is a home, so `.gemini` still hangs off it. The
-        // CLI's own docs put it this way: it "will create a `.gemini` folder
-        // inside this directory".
-        assert_eq!(
-            config_home_with("gemini", overridden, home).unwrap(),
-            Path::new("/tmp/gemini-home/.gemini")
-        );
-        // A name gemini-cli does not read must not move the file either: its
-        // `GEMINI_DIR` is the string `.gemini` in source, never an override.
-        let gemini_dir_only = |name: &str| match name {
-            "GEMINI_DIR" => Some(PathBuf::from("/tmp/not-a-variable")),
-            _ => None,
-        };
-        assert_eq!(
-            config_home_with("gemini", gemini_dir_only, home).unwrap(),
-            home.join(".gemini")
         );
         // XDG_CONFIG_HOME is a directory of config directories, not opencode's.
         assert_eq!(

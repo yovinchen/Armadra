@@ -171,19 +171,13 @@ pub(super) fn clean_title(title: &str) -> Result<String, Refusal> {
 /// canvas's business.
 pub fn launch_command(agent_id: &str, prompt: Option<&str>) -> (String, Option<String>) {
     let program = match agent_id {
-        "claude" | "codex" | "gemini" | "opencode" | "pi" | "omp" | "copilot" => {
-            agent_id.to_owned()
-        }
+        "claude" | "codex" | "opencode" | "pi" | "omp" | "copilot" => agent_id.to_owned(),
         other => other.strip_prefix("custom:").unwrap_or(other).to_owned(),
     };
     let Some(prompt) = prompt.map(collapse_newlines).filter(|p| !p.is_empty()) else {
         return (program, None);
     };
     match agent_id {
-        "gemini" => (
-            format!("{program} --prompt-interactive {}", quote(&prompt)),
-            None,
-        ),
         "opencode" => (format!("{program} --prompt {}", quote(&prompt)), None),
         "copilot" => (format!("{program} --interactive {}", quote(&prompt)), None),
         _ => (format!("{program} {}", quote(&prompt)), None),

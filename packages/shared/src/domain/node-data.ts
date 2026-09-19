@@ -12,15 +12,8 @@ export const agentIdSchema = z
   .max(80)
   .refine(
     (value) =>
-      [
-        "claude",
-        "codex",
-        "gemini",
-        "opencode",
-        "pi",
-        "omp",
-        "copilot",
-      ].includes(value) || /^custom:[A-Za-z0-9._:-]{1,64}$/.test(value),
+      ["claude", "codex", "opencode", "pi", "omp", "copilot"].includes(value) ||
+      /^custom:[A-Za-z0-9._:-]{1,64}$/.test(value),
     { message: "Unknown agent id" },
   );
 

@@ -29,10 +29,10 @@ const probe = (patch: Partial<AgentProbe> = {}): AgentProbe =>
 
 describe("capability intersection", () => {
   it("never grants a capability the base adapter did not declare", () => {
-    // gemini has no account-usage adapter; nothing downstream can add one.
+    // opencode has no account-usage adapter; nothing downstream can add one.
     const resolved = resolveAgentCapabilities({
-      baseAgent: "gemini",
-      probe: probe({ agentId: "gemini" }),
+      baseAgent: "opencode",
+      probe: probe({ agentId: "opencode" }),
     });
     const usage = resolved.find((entry) => entry.capability === "usage");
     expect(usage).toEqual({
@@ -41,7 +41,7 @@ describe("capability intersection", () => {
       source: "base",
     });
     expect(
-      effectiveCapabilities({ baseAgent: "gemini", probe: probe() }),
+      effectiveCapabilities({ baseAgent: "opencode", probe: probe() }),
     ).not.toContain("usage");
   });
 
@@ -100,7 +100,7 @@ describe("capability intersection", () => {
   });
 
   it("never claims nativeRecurrence for a built-in adapter", () => {
-    for (const agent of ["claude", "codex", "gemini", "opencode"] as const) {
+    for (const agent of ["claude", "codex", "opencode"] as const) {
       expect(
         effectiveCapabilities({ baseAgent: agent, probe: probe() }),
       ).not.toContain("nativeRecurrence");
@@ -134,8 +134,7 @@ describe("model context windows", () => {
     expect(modelContextCapacity("sonnet")).toBe(200_000);
     expect(modelContextCapacity("claude-opus-5[1m]")).toBe(1_000_000);
     expect(modelContextCapacity("gpt-5-codex")).toBe(400_000);
-    expect(modelContextCapacity("gemini-2.5-pro")).toBe(1_048_576);
-    expect(modelContextCapacity("gemini-1.5-pro")).toBe(2_097_152);
+    expect(modelContextCapacity("gpt-4.1-mini")).toBe(1_047_576);
     expect(modelContextCapacity("some-local-llm")).toBeNull();
     expect(modelContextCapacity(null)).toBeNull();
     expect(modelContextCapacity("")).toBeNull();

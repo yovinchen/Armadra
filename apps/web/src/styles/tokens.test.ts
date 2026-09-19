@@ -63,7 +63,6 @@ const Z_SCALE: Array<[string, number]> = [
 const AGENT_COLORS: Record<string, string> = {
   "--agent-claude": "#d97757",
   "--agent-codex": "#10a37f",
-  "--agent-gemini": "#4285f4",
   "--agent-opencode": "#a78bfa",
   "--agent-pi": "#e8b86d",
   "--agent-omp": "#d4a373",

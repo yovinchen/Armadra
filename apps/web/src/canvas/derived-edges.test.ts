@@ -52,8 +52,8 @@ describe("derived edges", () => {
         terminal(A, { id: "claude" }),
         terminal(B, { id: "codex" }),
         terminal(C, {
-          id: "gemini",
-          pendingLaunch: { command: "gemini", after: [A, B] },
+          id: "copilot",
+          pendingLaunch: { command: "copilot", after: [A, B] },
         }),
       ],
       launchedAfter: {},
@@ -76,7 +76,7 @@ describe("derived edges", () => {
 
   it("keeps the rope solid after the node launched", () => {
     const edges = deriveEdges({
-      nodes: [terminal(A, { id: "claude" }), terminal(C, { id: "gemini" })],
+      nodes: [terminal(A, { id: "claude" }), terminal(C, { id: "copilot" })],
       launchedAfter: { [C]: [A] },
       cards: {},
     });
@@ -88,8 +88,8 @@ describe("derived edges", () => {
     const edges = deriveEdges({
       nodes: [
         terminal(C, {
-          id: "gemini",
-          pendingLaunch: { command: "gemini", after: [A, B] },
+          id: "copilot",
+          pendingLaunch: { command: "copilot", after: [A, B] },
         }),
         terminal(B, { id: "codex" }),
       ],

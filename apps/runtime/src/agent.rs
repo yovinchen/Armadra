@@ -9,9 +9,7 @@ use serde::Serialize;
 /// needs lives here — ids, labels, launch programs and capabilities. The
 /// canonical registry (flags, prompt assembly, hook events) stays in shared;
 /// the launch line is assembled in the web app and typed into the PTY.
-pub const AGENT_IDS: &[&str] = &[
-    "claude", "codex", "gemini", "opencode", "pi", "omp", "copilot",
-];
+pub const AGENT_IDS: &[&str] = &["claude", "codex", "opencode", "pi", "omp", "copilot"];
 pub const AGENT_CAPABILITIES: &[&str] = &[
     "hooks",
     // B01: may drive a linked browser node's session through `armadra-hook
@@ -51,7 +49,7 @@ pub const OBSERVED: &str = "observed";
 /// ever whatever §3.4 observes.
 pub fn state_source_for(provider: &str) -> Option<&'static str> {
     match provider {
-        "claude" | "codex" | "gemini" | "copilot" => Some(STATE_SOURCE_HOOK),
+        "claude" | "codex" | "copilot" => Some(STATE_SOURCE_HOOK),
         // Pi, Oh My Pi and — since B3 — opencode report from a module inside
         // the CLI's own process (协作通道 §3.1 channel B). Same socket, same
         // bearer, same node token: a different transport, not a different
@@ -115,22 +113,6 @@ pub const AGENT_REGISTRY: &[AgentDefinition] = &[
             "hooks",
             "resume",
             "subagent",
-            "contextLink",
-            "browser",
-            "contextUsage",
-            "structuredInputAck",
-            "supportsModelSelection",
-        ],
-    },
-    AgentDefinition {
-        id: "gemini",
-        label: "Gemini CLI",
-        color: "#4285f4",
-        launch_cmd: "gemini",
-        prompt_mode: "flag-prompt",
-        capabilities: &[
-            "hooks",
-            "resume",
             "contextLink",
             "browser",
             "contextUsage",
@@ -472,7 +454,7 @@ mod tests {
             assert!(agent.capabilities.contains(&"contextLink"));
         }
         assert_eq!(definition("claude").unwrap().launch_cmd, "claude");
-        assert_eq!(definition("gemini").unwrap().prompt_mode, "flag-prompt");
+        assert_eq!(definition("opencode").unwrap().prompt_mode, "flag-prompt");
         assert_eq!(definition("pi").unwrap().launch_cmd, "pi");
         assert_eq!(definition("omp").unwrap().launch_cmd, "omp");
         assert_eq!(definition("copilot").unwrap().launch_cmd, "copilot");
@@ -564,7 +546,7 @@ mod tests {
             launch_cmd: program.clone(),
             args: vec!["hello".into()],
             env: serde_json::Map::new(),
-            base_agent: "gemini".into(),
+            base_agent: "codex".into(),
             disabled_capabilities: vec![],
         };
         let info = custom_info(&custom);
@@ -572,9 +554,9 @@ mod tests {
         assert_eq!(info.label, "Echo");
         assert_eq!(info.launch_cmd, program);
         assert_eq!(info.args, vec!["hello".to_owned()]);
-        assert_eq!(info.base_agent, Some("gemini"));
+        assert_eq!(info.base_agent, Some("codex"));
         // Prompt mode, capabilities and colour come from the base agent.
-        let base = definition("gemini").unwrap();
+        let base = definition("codex").unwrap();
         assert_eq!(info.prompt_mode, base.prompt_mode);
         assert_eq!(info.capabilities, base.capabilities);
         assert_eq!(info.color, base.color);

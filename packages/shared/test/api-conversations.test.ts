@@ -21,11 +21,11 @@ describe("runtime conversations API", () => {
     expect(row!.title).toBe("对比两种实现方式");
     expect(row).not.toHaveProperty("path");
 
-    // Gemini records no working directory, so an empty string is legal.
+    // A transcript may record no working directory; an empty string is legal.
     expect(
       conversationsResponseSchema.safeParse([
         {
-          provider: "gemini",
+          provider: "claude",
           sessionId: "s",
           title: "t",
           cwd: "",

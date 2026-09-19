@@ -48,7 +48,6 @@ fn revision_marker(revision: u32) -> String {
 /// | claude   | `$CLAUDE_CONFIG_DIR`/`~/.claude` + `skills` |
 /// | codex    | `$CODEX_HOME`/`~/.codex` + `skills`         |
 /// | copilot  | `$COPILOT_HOME`/`~/.copilot` + `skills`     |
-/// | gemini   | `~/.gemini` + `skills`                      |
 /// | opencode | `~/.config/opencode` + `skills`             |
 /// | pi       | `$PI_CODING_AGENT_DIR`/`~/.pi/agent` + `skills` |
 /// | omp      | `~/.omp/agent` (profile-aware) + `skills`   |
@@ -204,11 +203,8 @@ fn remove_legacy_block(agent_id: &str, config_home: &Path) -> AppResult<()> {
     Ok(())
 }
 
-pub fn instruction_file(agent_id: &str, config_home: &Path) -> PathBuf {
-    match agent_id {
-        "gemini" => config_home.join("GEMINI.md"),
-        _ => config_home.join("AGENTS.md"),
-    }
+pub fn instruction_file(_agent_id: &str, config_home: &Path) -> PathBuf {
+    config_home.join("AGENTS.md")
 }
 
 /* --------------------------------- merging -------------------------------- */

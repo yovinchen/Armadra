@@ -1475,7 +1475,7 @@ type HookEvent struct {
 	SessionId   string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Generation  uint64                 `protobuf:"varint,4,opt,name=generation,proto3" json:"generation,omitempty"`
 	WorkspaceId string                 `protobuf:"bytes,5,opt,name=workspace_id,json=workspaceId,proto3" json:"workspace_id,omitempty"`
-	// `claude`, `codex`, `gemini`, … The Host records it and routes on it; it
+	// `claude`, `codex`, `copilot`, … The Host records it and routes on it; it
 	// does not interpret it.
 	Provider         string        `protobuf:"bytes,10,opt,name=provider,proto3" json:"provider,omitempty"`
 	Payload          []byte        `protobuf:"bytes,11,opt,name=payload,proto3" json:"payload,omitempty"`

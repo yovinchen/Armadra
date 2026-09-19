@@ -3,7 +3,7 @@
 //! Every provider needs the same four things: a bounded list of candidate
 //! files, each file's mtime and size, a bounded read of the file's head, and a
 //! title that has been collapsed and cut. None of it is provider-specific, so
-//! it lives here and `claude.rs` / `codex.rs` / `gemini.rs` only describe the
+//! it lives here and `claude.rs` / `codex.rs` only describe the
 //! shape of their own JSON.
 //!
 //! Everything is bounded, because these directories belong to other programs:

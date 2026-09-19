@@ -51,7 +51,7 @@ pub const USAGE_REFRESH_CHOICES: &[u64] = &[0, 1, 2, 5, 15];
 const DEFAULT_USAGE_REFRESH_MINUTES: u64 = 5;
 /// `usage.providers.<id>` — per-provider switches. A provider that is off is
 /// never contacted and reports `unavailable`, exactly like a missing CLI.
-pub const USAGE_PROVIDER_IDS: &[&str] = &["claude", "codex", "gemini", "copilot"];
+pub const USAGE_PROVIDER_IDS: &[&str] = &["claude", "codex", "copilot"];
 /// `usage.codexCliFallback` — opt-in: when the OAuth route yields nothing, ask
 /// the local `codex` CLI over its app-server RPC instead. Off by default
 /// because it spawns a child process on every refresh.

@@ -22,7 +22,7 @@ import {
 import { Switch } from "@/ui/switch";
 
 /** 逐个 provider 的开关顺序，和画布里的卡片顺序一致。 */
-const PROVIDERS: UsageProviderId[] = ["claude", "codex", "gemini", "copilot"];
+const PROVIDERS: UsageProviderId[] = ["claude", "codex", "copilot"];
 
 /**
  * 刷新节奏（§4.2）。`0` = 只手动刷新；其余是后台自动刷新的分钟数。

@@ -69,7 +69,7 @@ export async function suggestTitle(nodeId: string): Promise<string> {
 /**
  * 恢复某条历史对话的启动行（§17）。
  *
- * 拼行规则全在 shared 的 `assembleLaunchCommand`（claude/gemini 是 `--resume`
+ * 拼行规则全在 shared 的 `assembleLaunchCommand`（claude 是 `--resume`
  * flag，codex 是 `resume` 子命令，opencode 没有这个能力位）。这里只负责在
  * provider 不认识或不支持恢复时返回 `null`，让调用方把那一行禁掉。
  */

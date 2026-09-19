@@ -26,12 +26,7 @@ export const usageWindowSchema = z.object({
   resetsAt: z.string().nullable(),
 });
 
-export const usageProviderIdSchema = z.enum([
-  "claude",
-  "codex",
-  "gemini",
-  "copilot",
-]);
+export const usageProviderIdSchema = z.enum(["claude", "codex", "copilot"]);
 
 /**
  * `unavailable` = 本机没有该 provider 的凭据；`error` = 有凭据但取不到

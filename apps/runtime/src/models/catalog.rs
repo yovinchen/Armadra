@@ -88,7 +88,7 @@ const MAX_RESPONSE_BYTES: u64 = 32 * 1024 * 1024;
 /// Providers kept from the upstream document.
 ///
 /// One per CLI we ship an adapter for: Claude Code (anthropic), Codex
-/// (openai), Gemini CLI (google) and GitHub Copilot, whose catalog re-lists
+/// (openai) and GitHub Copilot, whose catalog re-lists
 /// other vendors' models under its own entitlement. A CLI that can be pointed
 /// at any provider (opencode, pi, omp) is not enumerated here: its model list
 /// is whatever its own configuration says, and guessing a provider for it

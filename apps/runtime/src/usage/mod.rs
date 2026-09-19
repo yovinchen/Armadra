@@ -21,7 +21,6 @@ pub mod codex;
 pub mod copilot;
 pub mod copilot_login;
 pub mod cost;
-pub mod gemini;
 pub mod secret_store;
 
 use std::{
@@ -226,7 +225,6 @@ impl UsageSnapshot {
             providers: vec![
                 ProviderUsage::unavailable(claude::ID),
                 ProviderUsage::unavailable(codex::ID),
-                ProviderUsage::unavailable(gemini::ID),
                 ProviderUsage::unavailable(copilot::ID),
             ],
         }
@@ -402,13 +400,12 @@ impl UsageService {
         // that was never installed.
         let enabled = |id: &str| self.settings.usage_provider_enabled(id);
         let codex_fallback = self.settings.codex_cli_fallback();
-        let (claude, codex, gemini, copilot) = tokio::join!(
+        let (claude, codex, copilot) = tokio::join!(
             optional(enabled(claude::ID), claude::fetch(&self.client)),
             optional(
                 enabled(codex::ID),
                 codex::fetch(&self.client, codex_fallback)
             ),
-            optional(enabled(gemini::ID), gemini::fetch(&self.client)),
             optional(enabled(copilot::ID), copilot::fetch(&self.client)),
         );
         let snapshot = UsageSnapshot {
@@ -418,7 +415,6 @@ impl UsageService {
             providers: vec![
                 finish(claude::ID, claude.0, claude.1),
                 finish(codex::ID, codex.0, codex.1),
-                finish(gemini::ID, gemini.0, gemini.1),
                 finish(copilot::ID, copilot.0, copilot.1),
             ],
         };
@@ -632,7 +628,7 @@ mod tests {
                 // `quota` has no duration and an unlimited bucket has no
                 // pressure; neither may win a bar.
                 provider(
-                    "gemini",
+                    "copilot",
                     vec![window("quota", 99.0), {
                         let mut unlimited = window("5h", 100.0);
                         unlimited.unlimited = true;
@@ -688,7 +684,7 @@ mod tests {
     #[test]
     fn an_empty_snapshot_hides_the_pill() {
         let snapshot = UsageSnapshot::empty();
-        assert_eq!(snapshot.providers.len(), 4);
+        assert_eq!(snapshot.providers.len(), 3);
         assert!(
             snapshot
                 .providers

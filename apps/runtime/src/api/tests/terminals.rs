@@ -54,7 +54,7 @@ async fn a_custom_agent_terminal_carries_its_own_id_and_env() {
         "terminal": { "backend": "direct" },
         "agents": { "custom": [{
             "id": "custom:echo", "label": "Echo", "launchCmd": "/bin/echo",
-            "baseAgent": "gemini",
+            "baseAgent": "codex",
             "env": { "GREETING": "hi", "HOME_WAS": "${env:NO_SUCH_TEST_VAR:none}" },
         }] },
     }));
@@ -82,7 +82,7 @@ async fn a_custom_agent_terminal_carries_its_own_id_and_env() {
     assert_eq!(lookup("ARMADRA_NODE_ID").as_deref(), Some("node-1"));
     assert_eq!(lookup("GREETING").as_deref(), Some("hi"));
     assert_eq!(lookup("HOME_WAS").as_deref(), Some("none"));
-    // Gemini has no reply-approval wait; a claude-based one would.
+    // Codex has no reply-approval wait; a claude-based one would.
     assert!(lookup("ARMADRA_PERM_WAIT_SECS").is_none());
     assert!(
         agent_session_environment(&state, "node-1", "claude")

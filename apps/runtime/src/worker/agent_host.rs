@@ -213,8 +213,8 @@ impl Bridge {
 ///
 ///   * a provider that **reports its own transcript path** through the Hook
 ///     (Claude Code, and any custom agent wrapping one) is read at that path;
-///   * **Codex** and **Gemini CLI** write structured session files under their
-///     own home, found by session id;
+///   * **Codex** writes structured session files under its own home, found by
+///     session id;
 ///   * everything else is refused with the reason, because there is nothing to
 ///     read rather than nothing to say. OpenCode keeps its history in a private
 ///     store only its own CLI exports; Pi and Oh My Pi report a live context

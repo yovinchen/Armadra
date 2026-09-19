@@ -6,13 +6,12 @@ use std::path::PathBuf;
 use super::support::*;
 
 /// Every provider, with the skills root it reads relative to its config home.
-/// All seven scan `skills/`; what differs is the config home in front of it,
+/// All six scan `skills/`; what differs is the config home in front of it,
 /// which is why the table is spelled out rather than derived.
-const SKILL_ROOTS: [(&str, &str); 7] = [
+const SKILL_ROOTS: [(&str, &str); 6] = [
     ("claude", "skills"),
     ("codex", "skills"),
     ("copilot", "skills"),
-    ("gemini", "skills"),
     ("opencode", "skills"),
     ("pi", "skills"),
     ("omp", "skills"),
@@ -178,7 +177,4 @@ fn standalone_skills_preserve_user_instructions_and_retire_only_the_legacy_block
     assert_eq!(std::fs::read_to_string(&agents).unwrap(), original);
     skills::uninstall("codex", home.path()).unwrap();
     assert_eq!(std::fs::read_to_string(&agents).unwrap(), original);
-    skills::install("gemini", home.path()).unwrap();
-    assert!(!home.path().join("GEMINI.md").exists());
-    assert!(home.path().join("skills/armadra/SKILL.md").is_file());
 }

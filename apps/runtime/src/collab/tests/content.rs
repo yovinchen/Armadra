@@ -185,9 +185,9 @@ fn the_transcript_renderer_handles_both_content_shapes() {
 
 #[test]
 fn the_renderer_reads_a_whole_file_document_and_a_codex_wrapper() {
-    let gemini =
+    let document =
         r#"{"messages":[{"role":"user","content":"hello"},{"role":"model","content":"hi"}]}"#;
-    let lines = transcript::render(gemini);
+    let lines = transcript::render(document);
     assert_eq!(lines.first().map(String::as_str), Some("[用户] hello"));
 
     let codex = r#"{"type":"response_item","payload":{"type":"assistant","content":[{"type":"output_text","text":"done"}]}}"#;
@@ -197,24 +197,6 @@ fn the_renderer_reads_a_whole_file_document_and_a_codex_wrapper() {
     let thinking =
         r#"{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"secret"}]}}"#;
     assert!(transcript::render(thinking).is_empty());
-}
-
-/// `GEMINI_CLI_HOME` replaces the *home*, not `~/.gemini`: gemini-cli's own
-/// `homedir()` returns the variable and `Storage::getGlobalGeminiDir()` joins
-/// `.gemini` onto whatever that gave, which its configuration reference states
-/// in words — the CLI "will create a `.gemini` folder inside this directory".
-/// Read the other way, every transcript lookup starts one directory too high
-/// and comes back empty, which is indistinguishable from "this session has no
-/// transcript".
-#[test]
-fn the_gemini_root_is_a_home_with_dot_gemini_under_it() {
-    use std::path::{Path, PathBuf};
-    let home = Path::new("/home/dev");
-    assert_eq!(transcript::gemini_home_in(None, home), home.join(".gemini"));
-    assert_eq!(
-        transcript::gemini_home_in(Some(PathBuf::from("/tmp/gemini-job-123")), home),
-        Path::new("/tmp/gemini-job-123/.gemini")
-    );
 }
 
 #[test]

@@ -78,7 +78,6 @@ pub fn expected_processes(agent_id: &str) -> Vec<String> {
     match agent_id {
         "claude" => vec!["claude".to_owned()],
         "codex" => vec!["codex".to_owned()],
-        "gemini" => vec!["gemini".to_owned()],
         "opencode" => vec!["opencode".to_owned()],
         "pi" | "omp" | "copilot" => vec![agent_id.to_owned()],
         // `custom:<name>` — the suffix is the best guess we have.

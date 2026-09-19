@@ -2,8 +2,8 @@
 //!
 //! The transcript fixtures below are hand-written in the shape the real files
 //! on disk have (claude: one JSONL record per line with a top-level `cwd`;
-//! codex: `session_meta` then `response_item` envelopes; gemini: one JSON
-//! document). Nothing here reads the developer's own `~/.claude`: the roots are
+//! codex: `session_meta` then `response_item` envelopes). Nothing here reads
+//! the developer's own `~/.claude`: the roots are
 //! parameters precisely so the tests own their tree.
 
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use sqlx::SqlitePool;
 use tempfile::TempDir;
 
-use super::{claude, codex, gemini, scan};
+use super::{claude, codex, scan};
 
 /* --------------------------------- parsers -------------------------------- */
 
@@ -121,22 +121,6 @@ fn codex_session_ids_come_out_of_the_file_name() {
     );
 }
 
-#[test]
-fn gemini_reads_the_first_user_turn_and_has_no_cwd() {
-    let document = serde_json::json!({
-        "sessionId": "330ff951-252b-4ab6-9c46-5735f970946a",
-        "projectHash": "1cc8697",
-        "messages": [
-            { "type": "user", "content": [{ "text": "编写一个水仙花数" }] },
-            { "type": "gemini", "content": "sure" },
-        ],
-    });
-    let parsed = gemini::parse_document("330ff951".into(), &document);
-    assert_eq!(parsed.title, "编写一个水仙花数");
-    // The CLI only records a hash of the project directory.
-    assert!(parsed.cwd.is_empty());
-}
-
 /* ---------------------------------- reader -------------------------------- */
 
 #[test]
@@ -184,7 +168,6 @@ impl Fixture {
         vec![
             ("claude", self.root("claude")),
             ("codex", self.root("codex")),
-            ("gemini", self.root("gemini")),
         ]
     }
 }
@@ -226,27 +209,19 @@ async fn a_scan_indexes_every_provider_and_skips_unchanged_files() {
 {"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"codex question"}]}}
 "#,
     );
-    write(
-        &fixture
-            .root("gemini")
-            .join("hash")
-            .join("chats")
-            .join("session-2026-04-05.json"),
-        r#"{"sessionId":"33333333-3333-4333-8333-333333333333","messages":[{"type":"user","content":[{"text":"gemini question"}]}]}"#,
-    );
 
     let report = super::refresh_roots(&fixture.pool, &fixture.roots())
         .await
         .unwrap();
     assert_eq!(
-        report.scanned, 3,
+        report.scanned, 2,
         "the sub-agent transcript is not a session"
     );
-    assert_eq!(report.indexed, 3);
-    assert_eq!(report.total, 3);
+    assert_eq!(report.indexed, 2);
+    assert_eq!(report.total, 2);
 
     let rows = super::list(&fixture.pool, None, 50).await.unwrap();
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 2);
     let codex_row = rows.iter().find(|row| row.provider == "codex").unwrap();
     assert_eq!(codex_row.session_id, "22222222-2222-4222-8222-222222222222");
     assert_eq!(codex_row.title, "codex question");
@@ -259,7 +234,7 @@ async fn a_scan_indexes_every_provider_and_skips_unchanged_files() {
         .unwrap();
     assert_eq!(again.indexed, 0);
     assert_eq!(again.removed, 0);
-    assert_eq!(again.total, 3);
+    assert_eq!(again.total, 2);
 
     // A transcript that is gone loses its row.
     std::fs::remove_file(&claude_file).unwrap();
@@ -267,7 +242,7 @@ async fn a_scan_indexes_every_provider_and_skips_unchanged_files() {
         .await
         .unwrap();
     assert_eq!(pruned.removed, 1);
-    assert_eq!(pruned.total, 2);
+    assert_eq!(pruned.total, 1);
 }
 
 #[tokio::test]

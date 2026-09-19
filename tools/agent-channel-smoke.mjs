@@ -52,9 +52,6 @@
  *     8 hooks are new or changed": the `trusted_hash` `hook/install/codex.rs`
  *     reproduces (verified byte-for-byte against 0.149.1) no longer matches, so
  *     nothing fires until a person presses `t`. See that module's note.
- *   * `gemini` 0.58.0 installs both halves and then cannot run a turn on this
- *     machine at all — `IneligibleTierError: this client is no longer supported
- *     for Gemini Code Assist for individuals`. An account fact, not a channel.
  *   * `opencode` cannot start: its npm postinstall was never run, so the entry
  *     point exits before parsing arguments.
  *
@@ -63,7 +60,7 @@
  * resets the node by design, so the `working` this script sees on the event
  * socket lives about 20 ms in the row a reloading client would read.
  *
- * Usage: node tools/agent-channel-smoke.mjs <armadra-runtime> <armadra-hook> <claude|codex|gemini|pi|omp|copilot|opencode>
+ * Usage: node tools/agent-channel-smoke.mjs <armadra-runtime> <armadra-hook> <claude|codex|pi|omp|copilot|opencode>
  */
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
@@ -165,26 +162,6 @@ const PROVIDERS = {
       mkdirSync(join(path, ".."), { recursive: true });
       writeFileSync(path, text, { mode: 0o600 });
     },
-  },
-  gemini: {
-    // `--skip-trust`: the pane opens in a throwaway directory the CLI has never
-    // seen, and headless Gemini refuses to work in an untrusted one.
-    deliver: "argv",
-    args: (prompt) => ["--skip-trust", "-p", prompt],
-    // `settings.json` carries the auth method as well as the hooks; without it
-    // gemini refuses to start ("Please set an Auth method"). It is therefore
-    // both seeded *and* declared as a file the installer edits.
-    seed: [
-      ".gemini/oauth_creds.json",
-      ".gemini/google_accounts.json",
-      ".gemini/installation_id",
-      ".gemini/settings.json",
-    ],
-    configHome: ".gemini",
-    edits: ["settings.json"],
-    stateSource: ["hook"],
-    contextUsage: null,
-    transcript: true,
   },
   pi: {
     // `-p` is Pi's non-interactive mode; the extension loads the same way.
@@ -790,7 +767,6 @@ function cleanEnvironment() {
     "CLAUDE_CONFIG_DIR",
     "CODEX_HOME",
     "COPILOT_HOME",
-    "GEMINI_CLI_HOME",
     "OPENCODE_CONFIG_DIR",
     "PI_CODING_AGENT_DIR",
     "PI_CONFIG_DIR",

@@ -115,7 +115,7 @@ async fn an_answer_with_nobody_waiting_falls_back_to_the_terminal() {
     assert_eq!(approvals::answer_keys("claude", "allow"), "1\r");
     assert_eq!(approvals::answer_keys("claude", "deny"), "3\r");
     assert_eq!(approvals::answer_keys("codex", "allow"), "y\r");
-    assert_eq!(approvals::answer_keys("gemini", "deny"), "n\r");
+    assert_eq!(approvals::answer_keys("codex", "deny"), "n\r");
 }
 
 #[test]

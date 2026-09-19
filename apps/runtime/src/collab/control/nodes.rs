@@ -97,14 +97,12 @@ pub(super) async fn open_agent(
     let agent_id = args
         .text("agent")
         .ok_or_else(|| {
-            Refusal::bad_request(
-                "open-agent 需要 --agent claude|codex|gemini|opencode|pi|omp|copilot。",
-            )
+            Refusal::bad_request("open-agent 需要 --agent claude|codex|opencode|pi|omp|copilot。")
         })?
         .to_owned();
     if !db::valid_agent_id(&agent_id) {
         return Err(Refusal::bad_request(format!(
-            "不认识的 agent `{agent_id}`；可用：claude / codex / gemini / opencode / pi / omp / copilot。"
+            "不认识的 agent `{agent_id}`；可用：claude / codex / opencode / pi / omp / copilot。"
         )));
     }
     let prompt = args.text("prompt").map(collapse_newlines);

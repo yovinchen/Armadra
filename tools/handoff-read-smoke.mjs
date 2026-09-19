@@ -62,13 +62,6 @@ const EVENTS = {
     '{"hook_event_name":"UserPromptSubmit"}',
     '{"hook_event_name":"Stop"}',
   ],
-  // Gemini shares Claude's payload schema but not its event names: the agent
-  // loop is bracketed by `BeforeAgent` / `AfterAgent` (`normalize/gemini.rs`).
-  gemini: [
-    '{"hook_event_name":"SessionStart"}',
-    '{"hook_event_name":"BeforeAgent"}',
-    '{"hook_event_name":"AfterAgent"}',
-  ],
   // The generated extension posts flat camelCase names over the same socket.
   // Pi settles through `agent_settled`, which is the event that carries `idle`.
   pi: [

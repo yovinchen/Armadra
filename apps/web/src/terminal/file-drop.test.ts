@@ -413,7 +413,7 @@ describe("terminal file drop user-visible boundaries", () => {
     },
   );
 
-  it.each(["claude", "codex", "gemini", "opencode", "pi", "omp", "copilot"])(
+  it.each(["claude", "codex", "opencode", "pi", "omp", "copilot"])(
     "allows the identified built-in %s Agent",
     async (agentId) => {
       const paste = vi.fn();

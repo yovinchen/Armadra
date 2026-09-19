@@ -135,10 +135,6 @@ fn the_launch_line_follows_each_cli_prompt_mode() {
         control::launch_command("claude", Some("it's fine")).0,
         r"claude 'it'\''s fine'"
     );
-    assert_eq!(
-        control::launch_command("gemini", Some("看一下")).0,
-        "gemini --prompt-interactive '看一下'"
-    );
     // OpenCode and Copilot keep prompts in their interactive interfaces.
     let (command, warning) = control::launch_command("opencode", Some("看一下"));
     assert_eq!(command, "opencode --prompt '看一下'");
