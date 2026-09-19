@@ -45,11 +45,16 @@ function field(value: JsonValue, key: string): JsonValue | undefined {
 
 describe("payload", () => {
   it("has the pending id shape <nodeId>-<epochMs>-<pid>", () => {
-    expect(pendingId("node-7", 1_725_000_000_123, 4242)).toBe("node-7-1725000000123-4242");
+    expect(pendingId("node-7", 1_725_000_000_123, 4242)).toBe(
+      "node-7-1725000000123-4242",
+    );
   });
 
   it("uses JSON stdin verbatim", () => {
-    const payload = buildPayload(Buffer.from('{"hook_event_name":"Stop"}'), false);
+    const payload = buildPayload(
+      Buffer.from('{"hook_event_name":"Stop"}'),
+      false,
+    );
     expect(field(payload, "hook_event_name")).toBe("Stop");
   });
 
@@ -85,7 +90,9 @@ describe("hook body", () => {
     expect(field(plain, "pendingId")).toBeUndefined();
     expect(field(plain, "answered")).toBeUndefined();
 
-    const answered = parseJson(hookBody("n1", payload, "p1", "deny").toString("utf8"));
+    const answered = parseJson(
+      hookBody("n1", payload, "p1", "deny").toString("utf8"),
+    );
     expect(field(answered, "pendingId")).toBe("p1");
     expect(field(answered, "answered")).toBe("deny");
   });
@@ -122,7 +129,9 @@ describe("path segments", () => {
 
 describe("permission files", () => {
   it("polls to nothing without an answer", async () => {
-    expect(await pollForAnswer(path.join(tempdir(), "missing.answer"), 10)).toBeUndefined();
+    expect(
+      await pollForAnswer(path.join(tempdir(), "missing.answer"), 10),
+    ).toBeUndefined();
   });
 
   it("reads the answer file", async () => {
@@ -135,7 +144,9 @@ describe("permission files", () => {
     const root = tempdir();
     const pending = path.join(root, "pending");
     const file = path.join(pending, "n1-1-2.json");
-    expect(writeRequestFile(pending, file, parseJson('{"a":1}'))).toBeUndefined();
+    expect(
+      writeRequestFile(pending, file, parseJson('{"a":1}')),
+    ).toBeUndefined();
     expect(fs.readFileSync(file, "utf8")).toBe('{"a":1}');
     if (process.platform !== "win32") {
       expect(fs.statSync(file).mode & 0o777).toBe(0o600);
@@ -153,7 +164,9 @@ describe("context usage", () => {
         '"cache_creation_input_tokens":20,"cache_read_input_tokens":30,"output_tokens":90}}}',
     );
     const output = filterData(input)!;
-    const usage = asObject(field(asObject(output)!["context_window"]!, "current_usage"))!;
+    const usage = asObject(
+      field(asObject(output)!["context_window"]!, "current_usage"),
+    )!;
     expect(Object.keys(usage).length).toBe(3);
     const text = canonicalJson(output);
     expect(text).not.toContain("private");
@@ -162,7 +175,9 @@ describe("context usage", () => {
 
     const compact = asObject(parseJson(canonicalJson(input)))!;
     asObject(compact["context_window"])!["current_usage"] = null;
-    expect(field(asObject(filterData(compact))!["context_window"]!, "current_usage")).toBeNull();
+    expect(
+      field(asObject(filterData(compact))!["context_window"]!, "current_usage"),
+    ).toBeNull();
   });
 
   it("keeps revisions monotonic across parallel allocations", () => {
@@ -196,7 +211,10 @@ describe("launcher", () => {
 
   it("re-enters Electron as a Node interpreter", () => {
     const script = launcherScript(
-      { runner: "/Applications/Armadra.app/Contents/MacOS/Armadra", bundle: "/res/cli/armadra-hook.js" },
+      {
+        runner: "/Applications/Armadra.app/Contents/MacOS/Armadra",
+        bundle: "/res/cli/armadra-hook.js",
+      },
       "darwin",
     );
     expect(script.startsWith("#!/bin/sh\n")).toBe(true);
@@ -207,12 +225,18 @@ describe("launcher", () => {
   });
 
   it("quotes a path with a space on both platforms", () => {
-    const target = { runner: "C:\\Program Files\\Armadra\\Armadra.exe", bundle: "C:\\res\\cli\\armadra-hook.js" };
+    const target = {
+      runner: "C:\\Program Files\\Armadra\\Armadra.exe",
+      bundle: "C:\\res\\cli\\armadra-hook.js",
+    };
     expect(launcherScript(target, "win32")).toContain(
       '"C:\\Program Files\\Armadra\\Armadra.exe" "C:\\res\\cli\\armadra-hook.js" %*',
     );
-    expect(launcherScript({ runner: "/opt/A B/armadra", bundle: "/opt/a.js" }, "linux")).toContain(
-      'exec "/opt/A B/armadra" "/opt/a.js" "$@"',
-    );
+    expect(
+      launcherScript(
+        { runner: "/opt/A B/armadra", bundle: "/opt/a.js" },
+        "linux",
+      ),
+    ).toContain('exec "/opt/A B/armadra" "/opt/a.js" "$@"');
   });
 });

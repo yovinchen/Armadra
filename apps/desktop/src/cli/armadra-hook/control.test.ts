@@ -22,7 +22,9 @@ describe("flag parsing", () => {
   });
 
   it("collects repeated flags into an array", () => {
-    expect(flags(["--after", "a", "--after", "b", "--after=c"])["after"]).toEqual(["a", "b", "c"]);
+    expect(
+      flags(["--after", "a", "--after", "b", "--after=c"])["after"],
+    ).toEqual(["a", "b", "c"]);
   });
 
   it("treats a flag followed by a flag as boolean", () => {
@@ -49,19 +51,31 @@ describe("control body", () => {
   });
 
   it("keeps an empty args object", () => {
-    expect(controlBody("n1", {}).toString("utf8")).toBe('{"args":{},"nodeId":"n1"}');
+    expect(controlBody("n1", {}).toString("utf8")).toBe(
+      '{"args":{},"nodeId":"n1"}',
+    );
   });
 });
 
-function response(status: number, contentType: string | undefined, body: string): HookResponse {
+function response(
+  status: number,
+  contentType: string | undefined,
+  body: string,
+): HookResponse {
   return { status, contentType, body };
 }
 
 describe("rendering", () => {
   it("reduces JSON responses to their message", () => {
-    expect(render(response(200, "application/json", '{"ok":true,"message":"opened 2 nodes"}'))).toBe(
-      "opened 2 nodes",
-    );
+    expect(
+      render(
+        response(
+          200,
+          "application/json",
+          '{"ok":true,"message":"opened 2 nodes"}',
+        ),
+      ),
+    ).toBe("opened 2 nodes");
   });
 
   it("lets mailbox and delivery protocol fields survive CLI rendering", () => {
@@ -79,10 +93,14 @@ describe("rendering", () => {
   });
 
   it("carries the status on errors", () => {
-    expect(renderError(response(403, "application/json", '{"error":"node is not linked"}'))).toBe(
-      "node is not linked (403)",
-    );
+    expect(
+      renderError(
+        response(403, "application/json", '{"error":"node is not linked"}'),
+      ),
+    ).toBe("node is not linked (403)");
     expect(renderError(response(500, "text/plain", "boom"))).toBe("boom (500)");
-    expect(renderError(response(502, undefined, ""))).toBe("hook endpoint answered 502");
+    expect(renderError(response(502, undefined, ""))).toBe(
+      "hook endpoint answered 502",
+    );
   });
 });

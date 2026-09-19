@@ -61,13 +61,17 @@ describe("response parsing", () => {
     const raw = Buffer.from(
       "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n2\r\n, \r\n0\r\n\r\n",
     );
-    expect((parseResponse(raw) as { ok: { body: string } }).ok.body).toBe("hello, ");
+    expect((parseResponse(raw) as { ok: { body: string } }).ok.body).toBe(
+      "hello, ",
+    );
   });
 
   it("parses a bodyless 204", () => {
-    const parsed = (parseResponse(Buffer.from("HTTP/1.1 204 No Content\r\n\r\n")) as {
-      ok: { status: number; body: string };
-    }).ok;
+    const parsed = (
+      parseResponse(Buffer.from("HTTP/1.1 204 No Content\r\n\r\n")) as {
+        ok: { status: number; body: string };
+      }
+    ).ok;
     expect(parsed.status).toBe(204);
     expect(parsed.body).toBe("");
     expect(isSuccess(parsed as never)).toBe(true);
@@ -85,7 +89,9 @@ describe("response parsing", () => {
       expect(response!.body).toBe("");
     }
     // A body-carrying status with no framing still has to read to EOF.
-    expect(tryParse(Buffer.from("HTTP/1.1 200 OK\r\n\r\npartial"))).toBeUndefined();
+    expect(
+      tryParse(Buffer.from("HTTP/1.1 200 OK\r\n\r\npartial")),
+    ).toBeUndefined();
   });
 });
 
@@ -139,12 +145,16 @@ describe("serde-compatible JSON", () => {
   });
 
   it("keeps an integer an integer and a float a float", () => {
-    expect(canonicalJson(parseJson('{"a":1,"b":1.0,"c":1e3,"d":18446744073709551615}'))).toBe(
-      '{"a":1,"b":1.0,"c":1000.0,"d":18446744073709551615}',
-    );
+    expect(
+      canonicalJson(
+        parseJson('{"a":1,"b":1.0,"c":1e3,"d":18446744073709551615}'),
+      ),
+    ).toBe('{"a":1,"b":1.0,"c":1000.0,"d":18446744073709551615}');
   });
 
   it("escapes strings the way serde does", () => {
-    expect(canonicalJson({ text: '中文 "quoted"\n\t' })).toBe('{"text":"中文 \\"quoted\\"\\n\\t"}');
+    expect(canonicalJson({ text: '中文 "quoted"\n\t' })).toBe(
+      '{"text":"中文 \\"quoted\\"\\n\\t"}',
+    );
   });
 });

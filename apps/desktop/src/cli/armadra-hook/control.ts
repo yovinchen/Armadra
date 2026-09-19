@@ -31,7 +31,9 @@ export async function runContext(args: string[]): Promise<number> {
     );
   }
   if (!(CONTEXT_VERBS as readonly string[]).includes(verb)) {
-    return fail(`unknown context verb \`${verb}\`; expected one of ${CONTEXT_VERBS.join(", ")}`);
+    return fail(
+      `unknown context verb \`${verb}\`; expected one of ${CONTEXT_VERBS.join(", ")}`,
+    );
   }
 
   let node: string | undefined;
@@ -40,7 +42,10 @@ export async function runContext(args: string[]): Promise<number> {
   while (index < args.length) {
     const arg = args[index]!;
     const separator = arg.indexOf("=");
-    const inline = separator > 0 && arg.startsWith("-") ? arg.slice(separator + 1) : undefined;
+    const inline =
+      separator > 0 && arg.startsWith("-")
+        ? arg.slice(separator + 1)
+        : undefined;
     const flag = inline === undefined ? arg : arg.slice(0, separator);
     if (flag === "--node") {
       const cursor = { index };
@@ -54,7 +59,8 @@ export async function runContext(args: string[]): Promise<number> {
       index = cursor.index;
       if (value === undefined) return fail("-n needs a number");
       const parsed = parseInteger(value);
-      if (parsed === undefined) return fail(`-n needs a number, got \`${value}\``);
+      if (parsed === undefined)
+        return fail(`-n needs a number, got \`${value}\``);
       lines = parsed;
     } else {
       return fail(`unknown option \`${flag}\` for \`context ${verb}\``);
@@ -71,8 +77,10 @@ export async function runContext(args: string[]): Promise<number> {
 /** `armadra-hook canvas <verb> [--flag value | --flag=value | --flag]...` */
 export async function runCanvas(args: string[]): Promise<number> {
   const verb = args[0];
-  if (verb === undefined) return fail("usage: armadra-hook canvas <verb> [--flag value]...");
-  if (verb.startsWith("-")) return fail(`expected a canvas verb, got \`${verb}\``);
+  if (verb === undefined)
+    return fail("usage: armadra-hook canvas <verb> [--flag value]...");
+  if (verb.startsWith("-"))
+    return fail(`expected a canvas verb, got \`${verb}\``);
   const parsed = parseFlags(args.slice(1));
   if ("error" in parsed) return fail(parsed.error);
   const map = parsed.ok;
@@ -85,7 +93,9 @@ export async function runCanvas(args: string[]): Promise<number> {
       map["sessionId"] = session;
       map["generation"] = generation;
     } else if (verb === "handoff-read") {
-      return fail("A current terminal session binding is required; restart an older terminal.");
+      return fail(
+        "A current terminal session binding is required; restart an older terminal.",
+      );
     }
   }
   return request(`/control/${percentEncodeSegment(verb)}`, map);
@@ -100,10 +110,14 @@ export async function runCanvas(args: string[]): Promise<number> {
 export async function runBrowser(args: string[]): Promise<number> {
   const verb = args[0];
   if (verb === undefined) {
-    return fail(`usage: armadra-hook browser <${BROWSER_VERBS.join("|")}> [--flag value]...`);
+    return fail(
+      `usage: armadra-hook browser <${BROWSER_VERBS.join("|")}> [--flag value]...`,
+    );
   }
   if (!(BROWSER_VERBS as readonly string[]).includes(verb)) {
-    return fail(`unknown browser verb \`${verb}\`; expected one of ${BROWSER_VERBS.join(", ")}`);
+    return fail(
+      `unknown browser verb \`${verb}\`; expected one of ${BROWSER_VERBS.join(", ")}`,
+    );
   }
   const parsed = parseFlags(args.slice(1));
   if ("error" in parsed) return fail(parsed.error);
@@ -121,7 +135,8 @@ export function parseFlags(args: string[]): { ok: Args } | { error: string } {
   let index = 0;
   while (index < args.length) {
     const arg = args[index]!;
-    if (!arg.startsWith("--")) return { error: `expected a --flag, got \`${arg}\`` };
+    if (!arg.startsWith("--"))
+      return { error: `expected a --flag, got \`${arg}\`` };
     const separator = arg.indexOf("=");
     const inline = separator >= 0 ? arg.slice(separator + 1) : undefined;
     const flag = separator >= 0 ? arg.slice(0, separator) : arg;
@@ -201,7 +216,8 @@ async function request(path: string, args: Args): Promise<number> {
   if ("error" in outcome) return fail(outcome.error);
   if (!isSuccess(outcome.ok)) return fail(renderError(outcome.ok));
   const text = render(outcome.ok);
-  if (text !== "") process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
+  if (text !== "")
+    process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
   return 0;
 }
 
@@ -212,7 +228,12 @@ async function request(path: string, args: Args): Promise<number> {
 export function render(response: HookResponse): string {
   if (!isJson(response)) return response.body;
   const value = tryParseJson(response.body);
-  if (value === undefined || value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
     return response.body;
   }
   const object = value as Record<string, JsonValue>;
@@ -237,11 +258,18 @@ function jsonToString(value: JsonValue | undefined): string {
 export function renderError(response: HookResponse): string {
   const fallback = (): string => {
     const body = response.body.trim();
-    return body === "" ? `hook endpoint answered ${response.status}` : `${body} (${response.status})`;
+    return body === ""
+      ? `hook endpoint answered ${response.status}`
+      : `${body} (${response.status})`;
   };
   if (!isJson(response)) return fallback();
   const value = tryParseJson(response.body);
-  if (value === undefined || value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
     return fallback();
   }
   const object = value as Record<string, JsonValue>;

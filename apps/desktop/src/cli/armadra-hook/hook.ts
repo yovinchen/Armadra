@@ -81,7 +81,8 @@ export async function run(agentId: string): Promise<number> {
   }
 
   const seconds = permissionWaitSecs(agentId, payload);
-  if (seconds !== undefined) return runPermissionWait(session, agentId, payload, seconds);
+  if (seconds !== undefined)
+    return runPermissionWait(session, agentId, payload, seconds);
 
   const body = hookBody(nodeId, payload, undefined, undefined, terminalBinding);
   const outcome = await postHook(session, agentId, body);
@@ -123,7 +124,10 @@ async function postHook(
 }
 
 /** Reads stdin with a hard cap, reporting whether anything was dropped. */
-export async function readStdinCapped(): Promise<{ bytes: Buffer; truncated: boolean }> {
+export async function readStdinCapped(): Promise<{
+  bytes: Buffer;
+  truncated: boolean;
+}> {
   const chunks: Buffer[] = [];
   let kept = 0;
   let total = 0;
@@ -146,7 +150,10 @@ export async function readStdinCapped(): Promise<{ bytes: Buffer; truncated: boo
   }
   const truncated = total > MAX_PAYLOAD_BYTES;
   const bytes = Buffer.concat(chunks);
-  return { bytes: truncated ? bytes.subarray(0, MAX_PAYLOAD_BYTES) : bytes, truncated };
+  return {
+    bytes: truncated ? bytes.subarray(0, MAX_PAYLOAD_BYTES) : bytes,
+    truncated,
+  };
 }
 
 async function drainStdin(): Promise<void> {
@@ -181,10 +188,17 @@ export function buildPayload(bytes: Buffer, truncated: boolean): JsonValue {
  * Returns the wait budget when this invocation should answer a Claude
  * permission request in-hook, otherwise `undefined`.
  */
-export function permissionWaitSecs(agentId: string, payload: JsonValue): number | undefined {
+export function permissionWaitSecs(
+  agentId: string,
+  payload: JsonValue,
+): number | undefined {
   if (agentId !== "claude") return undefined;
-  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return undefined;
-  if ((payload as Record<string, JsonValue>)["hook_event_name"] !== "PermissionRequest") {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload))
+    return undefined;
+  if (
+    (payload as Record<string, JsonValue>)["hook_event_name"] !==
+    "PermissionRequest"
+  ) {
     return undefined;
   }
   const raw = envVar("ARMADRA_PERM_WAIT_SECS");
@@ -201,7 +215,11 @@ export function permissionWaitSecs(agentId: string, payload: JsonValue): number 
  * Node id plus wall clock plus pid is unique enough: a single node cannot run
  * two hooks in the same millisecond from the same process.
  */
-export function pendingId(nodeId: string, epochMs: number, pid: number): string {
+export function pendingId(
+  nodeId: string,
+  epochMs: number,
+  pid: number,
+): string {
   return `${nodeId}-${epochMs}-${pid}`;
 }
 
@@ -250,7 +268,16 @@ async function runPermissionWait(
       postJsonRequest(route, headersFor(session, candidate), body),
     );
     if ("ok" in outcome && outcome.ok.status === 204) {
-      return awaitDecision(session, candidate, agentId, payload, id, requestPath, answerPath, seconds);
+      return awaitDecision(
+        session,
+        candidate,
+        agentId,
+        payload,
+        id,
+        requestPath,
+        answerPath,
+        seconds,
+      );
     }
     if ("ok" in outcome) {
       // Reached the runtime and it answered — authoritative, per §2.5. Fall

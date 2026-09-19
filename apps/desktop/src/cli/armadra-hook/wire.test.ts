@@ -62,7 +62,11 @@ beforeAll(async () => {
       minify: false,
       rollupOptions: {
         input: { "armadra-hook": path.join(here, "main.ts") },
-        output: { format: "cjs", entryFileNames: "[name].js", codeSplitting: false },
+        output: {
+          format: "cjs",
+          entryFileNames: "[name].js",
+          codeSplitting: false,
+        },
       },
     },
     ssr: { noExternal: true },
@@ -130,7 +134,8 @@ async function serve(response: string): Promise<Server> {
       const lengthLine = head
         .split("\r\n")
         .find((line) => line.toLowerCase().startsWith("content-length:"));
-      const length = lengthLine === undefined ? 0 : Number(lengthLine.split(":")[1]!.trim());
+      const length =
+        lengthLine === undefined ? 0 : Number(lengthLine.split(":")[1]!.trim());
       const body = raw.subarray(headEnd + 4);
       if (body.length < length) return;
       const entry = { head, body: body.subarray(0, length).toString("utf8") };
@@ -219,7 +224,10 @@ function runProgram(
   stdin: string,
 ): Promise<Output> {
   const isolated = tempdir();
-  const environment: Record<string, string> = { ...process.env } as Record<string, string>;
+  const environment: Record<string, string> = { ...process.env } as Record<
+    string,
+    string
+  >;
   for (const name of CLEARED) delete environment[name];
   environment["ARMADRA_DATA_DIR"] = isolated;
   Object.assign(environment, env);
@@ -246,11 +254,19 @@ function runProgram(
   });
 }
 
-function run(args: string[], env: Record<string, string>, stdin: string): Promise<Output> {
+function run(
+  args: string[],
+  env: Record<string, string>,
+  stdin: string,
+): Promise<Output> {
   return runProgram([process.execPath, bundle], args, env, stdin);
 }
 
-function runRust(args: string[], env: Record<string, string>, stdin: string): Promise<Output> {
+function runRust(
+  args: string[],
+  env: Record<string, string>,
+  stdin: string,
+): Promise<Output> {
   return runProgram([rustClient], args, env, stdin);
 }
 
@@ -293,7 +309,9 @@ describe("hook mode", () => {
     expect(captured.body).toBe(
       '{"nodeId":"node-7","payload":{"hook_event_name":"PreToolUse","tool_name":"Bash"},"version":1}',
     );
-    expect(header(captured, "Content-Length")).toBe(String(Buffer.byteLength(captured.body)));
+    expect(header(captured, "Content-Length")).toBe(
+      String(Buffer.byteLength(captured.body)),
+    );
     server.close();
   });
 
@@ -406,7 +424,11 @@ describe("context-usage", () => {
     const captured = await server.request();
     const body = JSON.parse(captured.body) as {
       payload: {
-        armadraContextUsage: { sessionId: string; generation: number; sourceRevision: string };
+        armadraContextUsage: {
+          sessionId: string;
+          generation: number;
+          sourceRevision: string;
+        };
       };
     };
     const report = body.payload.armadraContextUsage;
@@ -463,7 +485,9 @@ describe("control", () => {
 
     const captured = await server.request();
     expect(requestLine(captured)).toBe("POST /context-link/summary HTTP/1.1");
-    expect(captured.body).toBe('{"args":{"n":20,"node":"api"},"nodeId":"node-7"}');
+    expect(captured.body).toBe(
+      '{"args":{"n":20,"node":"api"},"nodeId":"node-7"}',
+    );
     server.close();
   });
 
@@ -527,7 +551,9 @@ describe("control", () => {
     );
     expect(output.stderr).toBe("");
     expect(output.code).toBe(0);
-    expect(requestLine(await server.request())).toBe("POST /control/list HTTP/1.1");
+    expect(requestLine(await server.request())).toBe(
+      "POST /control/list HTTP/1.1",
+    );
     server.close();
   });
 });
@@ -569,7 +595,10 @@ describe("permission wait", () => {
     const answered = await answering;
     expect(answered, "a request file appeared").toBeDefined();
     const [id, requestJson] = answered!;
-    expect(id.startsWith("node-7-"), `pending id is <nodeId>-<epochMs>-<pid>, got ${id}`).toBe(true);
+    expect(
+      id.startsWith("node-7-"),
+      `pending id is <nodeId>-<epochMs>-<pid>, got ${id}`,
+    ).toBe(true);
     expect(id.split("-").length).toBe(4);
     expect(requestJson).toContain("PermissionRequest");
 
@@ -583,7 +612,10 @@ describe("permission wait", () => {
     expect(fs.existsSync(path.join(pending, `${id}.answer`))).toBe(false);
 
     const captured = await server.request();
-    const body = JSON.parse(captured.body) as { pendingId: string; answered?: string };
+    const body = JSON.parse(captured.body) as {
+      pendingId: string;
+      answered?: string;
+    };
     expect(body.pendingId).toBe(id);
     expect(body.answered, "first POST is the request").toBeUndefined();
     server.close();
@@ -604,7 +636,10 @@ describe("permission wait", () => {
       '{"hook_event_name":"PermissionRequest"}',
     );
     expect(output.code).toBe(0);
-    expect(output.stdout, "a timeout must leave the CLI's own prompt in charge").toBe("");
+    expect(
+      output.stdout,
+      "a timeout must leave the CLI's own prompt in charge",
+    ).toBe("");
     server.close();
   }, 30_000);
 });
@@ -613,8 +648,18 @@ describe("permission wait", () => {
 
 describe.skipIf(!hasRustClient)("matches the Rust client byte for byte", () => {
   it("prints the same usage and version", async () => {
-    for (const args of [["--help"], ["-h"], ["help"], ["--version"], ["-V"], []]) {
-      const [ts, rust] = await Promise.all([run(args, {}, ""), runRust(args, {}, "")]);
+    for (const args of [
+      ["--help"],
+      ["-h"],
+      ["help"],
+      ["--version"],
+      ["-V"],
+      [],
+    ]) {
+      const [ts, rust] = await Promise.all([
+        run(args, {}, ""),
+        runRust(args, {}, ""),
+      ]);
       expect(ts.stdout, args.join(" ")).toBe(rust.stdout);
       expect(ts.stderr, args.join(" ")).toBe(rust.stderr);
       expect(ts.code, args.join(" ")).toBe(rust.code);
@@ -635,7 +680,10 @@ describe.skipIf(!hasRustClient)("matches the Rust client byte for byte", () => {
       ["-x"],
     ];
     for (const args of cases) {
-      const [ts, rust] = await Promise.all([run(args, {}, ""), runRust(args, {}, "")]);
+      const [ts, rust] = await Promise.all([
+        run(args, {}, ""),
+        runRust(args, {}, ""),
+      ]);
       expect(ts.stderr, args.join(" ")).toBe(rust.stderr);
       expect(ts.stdout, args.join(" ")).toBe(rust.stdout);
       expect(ts.code, args.join(" ")).toBe(rust.code);
@@ -646,7 +694,8 @@ describe.skipIf(!hasRustClient)("matches the Rust client byte for byte", () => {
     const cases: { args: string[]; stdin: string; response: string }[] = [
       {
         args: ["claude"],
-        stdin: '{"hook_event_name":"PreToolUse","tool_name":"Bash","n":1,"f":1.5}',
+        stdin:
+          '{"hook_event_name":"PreToolUse","tool_name":"Bash","n":1,"f":1.5}',
         response: "HTTP/1.1 204 No Content\r\n\r\n",
       },
       {
@@ -697,10 +746,14 @@ describe.skipIf(!hasRustClient)("matches the Rust client byte for byte", () => {
       expect(tsOutput.code, label).toBe(rustOutput.code);
 
       const tsCaptured = await tsServer.request().catch(() => {
-        throw new Error(`${label}: the TypeScript client sent nothing (${JSON.stringify(tsOutput)})`);
+        throw new Error(
+          `${label}: the TypeScript client sent nothing (${JSON.stringify(tsOutput)})`,
+        );
       });
       const rustCaptured = await rustServer.request().catch(() => {
-        throw new Error(`${label}: the Rust client sent nothing (${JSON.stringify(rustOutput)})`);
+        throw new Error(
+          `${label}: the Rust client sent nothing (${JSON.stringify(rustOutput)})`,
+        );
       });
       expect(tsCaptured.head, label).toBe(rustCaptured.head);
       expect(tsCaptured.body, label).toBe(rustCaptured.body);
@@ -715,7 +768,10 @@ describe.skipIf(!hasRustClient)("matches the Rust client byte for byte", () => {
       "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nok",
     );
     const endpoint = writeEndpointFile(directory, server.port);
-    const environment = { ARMADRA_NODE_ID: "node-7", ARMADRA_ENDPOINT_FILE: endpoint };
+    const environment = {
+      ARMADRA_NODE_ID: "node-7",
+      ARMADRA_ENDPOINT_FILE: endpoint,
+    };
     const [ts, rust] = await Promise.all([
       run(["doctor"], environment, ""),
       runRust(["doctor"], environment, ""),
@@ -727,11 +783,16 @@ describe.skipIf(!hasRustClient)("matches the Rust client byte for byte", () => {
   });
 
   it("prints the same doctor report with nothing configured", async () => {
-    const [ts, rust] = await Promise.all([run(["doctor"], {}, ""), runRust(["doctor"], {}, "")]);
+    const [ts, rust] = await Promise.all([
+      run(["doctor"], {}, ""),
+      runRust(["doctor"], {}, ""),
+    ]);
     // The isolated data directory differs per invocation, so compare the
     // shape: every line but the candidate list is identical text.
     const shape = (text: string): string[] =>
-      text.split("\n").map((line) => line.replace(/\/[^ ,]*armadra[^ ,]*/gi, "<dir>"));
+      text
+        .split("\n")
+        .map((line) => line.replace(/\/[^ ,]*armadra[^ ,]*/gi, "<dir>"));
     expect(shape(ts.stdout)).toEqual(shape(rust.stdout));
     expect(ts.code).toBe(rust.code);
   });
