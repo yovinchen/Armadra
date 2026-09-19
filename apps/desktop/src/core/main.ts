@@ -109,10 +109,12 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // cache have to exist before a PTY can report into them, and the terminal
   // domain hands its bridge back through `agent/setTerminalBridge`.
   installAgents,
-  installTerminals,
-  // Last: it reads the settings store `installSettings` assembled, and it
-  // starts nothing until a route is called.
+  // Remote before the terminals: an SSH terminal is decorated with this
+  // domain's askpass service and host registry, which `remoteDomain()` hands
+  // over the same way `settingsDomain()` does. It reads the settings store
+  // `installSettings` assembled, and it starts nothing until it is asked to.
   installRemote,
+  installTerminals,
 ];
 
 export async function run(options: RunOptions = {}): Promise<RunningCore> {

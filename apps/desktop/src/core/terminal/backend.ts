@@ -108,6 +108,18 @@ export interface TerminalSpec {
    */
   readonly env: readonly (readonly [string, string])[];
   readonly size: TerminalSize;
+  /**
+   * `settings.ssh.hosts[].id`, when this session is to run `ssh …` rather than
+   * a local shell.
+   *
+   * Declared here, and optional, so that one spec type travels through every
+   * backend: only the decorator in `ssh/backend.ts` reads it, and the other
+   * three pass it through without knowing what it means. Declaring it only on
+   * `SshTerminalSpec` would make the manager — which has no business knowing
+   * what an SSH host is — need two spec types and a branch to choose between
+   * them.
+   */
+  readonly sshHostId?: string | undefined;
 }
 
 /** The program the session runs: an explicit command, else the shell. */

@@ -8,8 +8,10 @@ import {
   type TerminalBackend,
   type TerminateMode,
 } from "./backend";
+import { remoteDomain } from "../remote";
 import { DirectBackend } from "./direct";
 import { agentEnvironment } from "./environment";
+import { SshBackend } from "./ssh/backend";
 import { TerminalManager } from "./manager";
 import {
   type BackendChoice,
@@ -88,8 +90,7 @@ export function install(
   const selection = selectBackend({ configured, detection });
 
   const backends = new Map<BackendKind, TerminalBackend>();
-  const direct = new DirectBackend();
-  backends.set("direct", direct);
+  backends.set("direct", new DirectBackend());
   let tmux: TmuxBackend | undefined;
   if (process.platform !== "win32") {
     tmux = new TmuxBackend({ dataDir: context.dataDir, version: VERSION });
@@ -100,6 +101,18 @@ export function install(
       "sessionHost",
       new SessionHostBackend({ dataDir: context.dataDir, version: VERSION }),
     );
+  }
+  // An SSH terminal is a normal session whose command is `ssh …`, so the
+  // decorator goes *around* a backend rather than beside it: a spec with no
+  // `sshHostId` passes straight through, and the row still names the backend
+  // that is really behind the session.
+  //
+  // **Every** backend is wrapped, not just the persistent one. A terminal
+  // created with an `ssh` host under a backend the decorator had skipped would
+  // silently run a local shell instead — a "remote" pane that is quietly on
+  // this machine is the one outcome that must not happen.
+  for (const [kind, backend] of [...backends]) {
+    backends.set(kind, wrapSsh(context, backend));
   }
   // A selection this build cannot honour falls back rather than throwing at
   // assembly time: an unusable effective backend would take the whole core
@@ -137,12 +150,22 @@ export function install(
     },
   });
 
-  // Start-up recovery runs before the listeners bind (`install` is called from
-  // step 2 of `main`), so no request can observe a row that still claims a
-  // session this core lost. A failure here must not stop the core: the rows
-  // are left as they are and the log says why, which is the same outcome as a
-  // backend that cannot be reached.
-  void manager
+  /**
+   * Start-up recovery, and the gate every terminal answer waits behind.
+   *
+   * `install` is synchronous — that is the `DOMAINS` contract — and recovery
+   * is not: it asks a tmux server what it still holds. The listeners bind as
+   * soon as `install` returns, so without this gate the first request after a
+   * restart races the adoption, and the page that reconnected half a second
+   * too early is told its live pane is not running. That is not a test
+   * artefact; it is what a user sees on every restart.
+   *
+   * So the promise is kept and awaited, once, by every handler below and by
+   * the socket's guard. It never rejects: a recovery that fails leaves the
+   * rows exactly as they are — they may describe sessions alive under a
+   * backend this process merely failed to reach — and the log says why.
+   */
+  const ready: Promise<void> = manager
     .start()
     .then((report) => {
       context.log.info("终端启动对账完成", {
@@ -175,6 +198,7 @@ export function install(
     ) => Promise<Answer> | Answer,
   ): void => {
     context.server.router.handle(method, path, async (match, request) => {
+      await ready;
       try {
         return await handler(match.params, request);
       } catch (failure) {
@@ -209,6 +233,7 @@ export function install(
       kind: "terminal",
       ...(body.nodeId === undefined ? {} : { ownerNodeId: body.nodeId }),
       ...(body.agent === undefined ? {} : { agentId: body.agent.id }),
+      ...(body.ssh === undefined ? {} : { sshHostId: body.ssh.hostId }),
       env,
     });
     return { status: 200, body: session };
@@ -354,7 +379,10 @@ export function install(
     // Refused before the upgrade, the way the Rust face does it: an unknown
     // session is an HTTP 404, not a socket that opens and closes, and a
     // malformed `writer` is a 400 rather than a label nobody validated.
-    (params, request) => {
+    async (params, request) => {
+      // Behind the same gate as the routes: a socket that opened before the
+      // adoption finished would be told its live pane is not running.
+      await ready;
       if (!manager.exists(params.sessionId as string)) {
         return { status: 404, reason: "Not Found" };
       }
@@ -366,6 +394,30 @@ export function install(
   );
 
   return { manager, backends, stop: () => manager.shutdown() };
+}
+
+/**
+ * The SSH decorator, when this core has a remote domain to decorate with.
+ *
+ * `remoteDomain()` is `undefined` in the suites that install the terminal
+ * domain alone. A missing remote domain is not an error: it means this build
+ * has no askpass service and no host registry, so an SSH terminal could not be
+ * started anyway, and the undecorated backend is exactly right. What must not
+ * happen is the opposite — an `ssh` that silently runs a local shell — and
+ * that cannot: `create` refuses an unknown host id rather than falling back.
+ */
+function wrapSsh(
+  context: CoreContext,
+  inner: TerminalBackend,
+): TerminalBackend {
+  const remote = remoteDomain();
+  if (remote === undefined) return inner;
+  return new SshBackend({
+    dataDir: context.dataDir,
+    inner,
+    hosts: remote.host,
+    askpass: remote.askpass,
+  });
 }
 
 /* --------------------------------- sessions -------------------------------- */
@@ -460,6 +512,15 @@ interface CreateTerminalRequest {
   readonly args?: readonly string[];
   readonly nodeId?: string;
   readonly agent?: { readonly id: string };
+  /**
+   * `ssh: { hostId }` — the session runs `ssh …` instead of a shell.
+   *
+   * **Only the id travels.** Everything else comes from
+   * `settings.ssh.hosts[]`, so a client can never dictate the command line,
+   * and an unknown id is refused by the backend rather than quietly falling
+   * back to a local shell.
+   */
+  readonly ssh?: { readonly hostId?: string };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -476,6 +537,12 @@ function validateCreate(body: CreateTerminalRequest): string | undefined {
     // Without a node there is nothing to attribute hook reports to, and the
     // hook client would refuse to report anyway.
     return "An agent terminal requires the owning nodeId";
+  }
+  if (
+    body.ssh !== undefined &&
+    (typeof body.ssh.hostId !== "string" || body.ssh.hostId === "")
+  ) {
+    return "Unknown SSH host";
   }
   return undefined;
 }

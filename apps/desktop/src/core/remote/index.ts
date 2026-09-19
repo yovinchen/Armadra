@@ -75,6 +75,23 @@ export interface RemoteDomain {
   stop(): Promise<void>;
 }
 
+let assembled: RemoteDomain | undefined;
+
+/**
+ * The remote domain of the running core.
+ *
+ * A module-level handle for the same reason `settingsDomain()` is one: the
+ * terminal domain needs the askpass service and the host registry to decorate
+ * an SSH terminal, and threading a fifth thing through `CoreContext` would put
+ * it in every domain's signature to serve one. It is `undefined` until
+ * `install` runs, which is exactly the window in which no terminal exists.
+ *
+ * `main`'s `DOMAINS` therefore installs this **before** the terminal domain.
+ */
+export function remoteDomain(): RemoteDomain | undefined {
+  return assembled;
+}
+
 export function install(context: CoreContext): RemoteDomain {
   const launcher = accepted(process.env[LAUNCHER_OVERRIDE]);
   const askpass = new AskpassService({
@@ -218,15 +235,18 @@ export function install(context: CoreContext): RemoteDomain {
     },
   );
 
-  return {
+  const domain: RemoteDomain = {
     askpass,
     workers,
     host,
     stop: async () => {
+      if (assembled === domain) assembled = undefined;
       workers.closeAll();
       await askpass.stop();
     },
   };
+  assembled = domain;
+  return domain;
 }
 
 /**

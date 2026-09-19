@@ -101,6 +101,16 @@ export interface SpawnRequest {
   readonly ownerNodeId?: string | undefined;
   readonly agentId?: string | undefined;
   readonly env?: EnvPairs;
+  /**
+   * `ssh: { hostId }` — this session runs `ssh …` instead of a shell.
+   *
+   * It travels as an extra field on the spec rather than as a decision here:
+   * the manager does not know what an SSH host is, and the backend decorator
+   * that does (`ssh/backend.ts`) rewrites the command from the *stored* host.
+   * A spec without it passes through every backend untouched, which is what
+   * lets one decorated backend serve every terminal.
+   */
+  readonly sshHostId?: string | undefined;
 }
 
 export interface SessionRecord {
@@ -343,6 +353,11 @@ export class TerminalManager {
         args: request.args ?? [],
         env,
         size: { cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
+        // Carried, never interpreted. It is kept on the record so a recycle
+        // reaches the same host rather than dropping back to a local shell.
+        ...(request.sshHostId === undefined
+          ? {}
+          : { sshHostId: request.sshHostId }),
       };
       const kind = this.effective;
       const handle = await this.backend(kind).create(spec);
