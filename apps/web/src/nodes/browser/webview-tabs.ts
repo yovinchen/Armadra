@@ -3,13 +3,11 @@ import * as React from "react";
 /**
  * Electron 分支的标签模型（W3.1）。
  *
- * screencast 那条路上标签是 Runtime 的东西（一个进程、若干个 CDP target，
- * `TabStrip.tsx` + `browser.tabs` 事件）。`<webview>` 上没有那个进程，一个标
- * 签就是一个 guest 元素，所以模型只能住在渲染侧——**这不是重复实现**，两条
- * 路的标签根本不是同一种东西。
+ * 一个标签就是一个 guest 元素，所以模型住在渲染侧：没有进程、没有 CDP
+ * target，也没有一条会话通道可以问。
  *
- * 上限沿用 Runtime 的 `MAX_TABS`（`apps/runtime/src/browser/model.rs:136`）：
- * 两条路给人的感觉应当一样，而 16 个 guest 已经是十几个渲染进程。
+ * 上限 16 是原来 Runtime 侧 `MAX_TABS` 定的同一个数——换了实现之后给人的感
+ * 觉不该变，而 16 个 guest 已经是十几个渲染进程。
  */
 export const MAX_TABS = 16;
 

@@ -10,8 +10,8 @@ import { WebviewSurface } from "./WebviewSurface";
  * 浏览器节点（§3.4 / B01）。
  *
  * 页面住在本窗口的一个 `<webview>` guest 里（electron-migration.md §4）。旧
- * 的 screencast 路径——Runtime 托管的 Chromium、帧流、兼容模式 iframe——在
- * W3.5 一起删掉了，所以这里只剩一个判定：宿主有没有 `<webview>`。
+ * 的那条路——Runtime 托管的 Chromium、画面帧流、兼容模式 iframe——在 W3.5 一
+ * 起删掉了，所以这里只剩一个判定：宿主有没有 `<webview>`。
  *
  * 判定在渲染期间做一次就够：一个页面不会在运行中从 Electron 变成浏览器。
  */

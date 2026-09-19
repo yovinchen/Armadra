@@ -24,10 +24,9 @@ import { useWebviewTabs } from "./webview-tabs";
 /**
  * Electron 壳里的浏览器节点（W3.1 / W3.2）。
  *
- * 和 screencast 那条路的区别不只是「画面从哪来」：这里没有会话、没有租约、
- * 没有 Runtime 里的那个 Chromium 进程，页面就在本窗口的一个 OOPIF 里。因此
- * 这个文件**不碰** `runtimeApi` 的任何一个浏览器端点——W3.5 之前两条路并存，
- * 互相不知道对方存在是它们能各自独立回退的前提。
+ * 页面就在本窗口的一个 OOPIF 里：没有 Runtime 托管的 Chromium，也没有一条
+ * HTTP 的浏览器端点可打——W3.5 把那一整条路删掉了。Runtime 仍然持有授权与
+ * 租约，走的是 `browser:drive` 这条窄通道（`./drive`）。
  *
  * 标签：每个标签一个 `<webview>`，非活动的用 `display:none` 留在 DOM 里。卸
  * 载一个后台标签等于杀掉那个渲染进程，切回来就是整页重载（browser-node §1.2）。

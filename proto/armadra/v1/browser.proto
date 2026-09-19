@@ -59,8 +59,8 @@ message BrowserSession {
   bool keep_alive = 12;
   int64 created_at_unix_ms = 13;
   int64 updated_at_unix_ms = 14;
-  // The tab screencast, input and viewport apply to. One session is one
-  // browser process and one profile; tabs live inside it (§2.2).
+  // The tab every unaddressed action lands on. One session is one browser
+  // node; tabs live inside it (§2.2).
   string active_tab_id = 15;
   uint32 tab_count = 16;
   BrowserLease lease = 17;
@@ -85,26 +85,6 @@ message BrowserAvailability {
   // The build-pinned Chrome for Testing install, which is preferred over a
   // detected system browser because its CDP surface is the tested one (§2.1).
   BrowserManagedState managed = 6;
-}
-
-// One screencast image. The payload is an encoded image rather than a video
-// frame in this round; a later video channel replaces `data` and keeps the
-// session and input contracts (§8).
-message BrowserFrame {
-  string session_id = 1;
-  uint64 generation = 2;
-  uint64 frame_seq = 3;
-  uint64 navigation_epoch = 4;
-  uint32 viewport_width = 5;
-  uint32 viewport_height = 6;
-  double device_scale_factor = 7;
-  // "jpeg" | "webp" — negotiated per session (§2.9). The workspace event
-  // channel only ever carries JPEG: it exists for clients that predate the
-  // dedicated stream, and those cannot say what they can decode.
-  string encoding = 8;
-  bytes data = 9;
-  int64 captured_at_unix_ms = 10;
-  string tab_id = 11;
 }
 
 /* -------------------------------- navigation ------------------------------ */

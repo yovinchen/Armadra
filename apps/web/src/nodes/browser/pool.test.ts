@@ -70,7 +70,7 @@ function webviewIds(nodes: CanvasFlowNode[]): string[] {
 }
 
 describe("applyWebviewPool", () => {
-  it("非 Electron 壳原样返回——旧 screencast 路径一个字节都不变", () => {
+  it("非 Electron 壳原样返回——那里根本没有 guest", () => {
     delete (window as unknown as Record<string, unknown>).armadra;
     const input = [terminal("t1"), browser("b1"), terminal("t2")];
     expect(applyWebviewPool(input)).toBe(input);
