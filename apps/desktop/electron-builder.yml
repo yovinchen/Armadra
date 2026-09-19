@@ -34,6 +34,11 @@ files:
   # invite someone to point a hook at the one that needs asar support to be
   # readable.
   - "!out/cli/**/*"
+  # `out/session-host/` is out for the same reason (R6d): the daemon is
+  # started as `ELECTRON_RUN_AS_NODE=1 <Electron> <resources>/session-host/host.cjs`,
+  # and that path has to be a real file on disk rather than an entry in an
+  # archive only an asar-aware require can read.
+  - "!out/session-host/**/*"
 
 # `node-pty` is the one native Node addon in this shell (R2, the TypeScript
 # core's terminal domain). It must be OUTSIDE the asar: the addon resolves
@@ -139,6 +144,15 @@ win:
     # names this exact path.
     - from: out/cli/armadra-hook.js
       to: cli/armadra-hook.js
+    # The TypeScript session host (R6d), and the reason the Rust sidecar
+    # above is still listed: both speak the same wire, `ARMADRA_SESSION_HOST`
+    # picks one, and the default is this bundle. R7 deletes the `.exe` entry
+    # together with `crates/session-host`. Windows only — the daemon exists
+    # because ConPTY sessions must outlive the shell, which tmux already
+    # handles elsewhere. `apps/desktop/scripts/sidecar-targets.mjs`'
+    # `bundleResources()` holds this list.
+    - from: out/session-host/host.cjs
+      to: session-host/host.cjs
   target:
     - target: nsis
       arch: [x64, arm64]

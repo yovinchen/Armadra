@@ -151,6 +151,45 @@ const cliConfig: UserConfig = {
   ssr: { noExternal: true },
 };
 
+/**
+ * The sixth target: the Windows session host (R6d).
+ *
+ * A separate *program*, like the hook client and for the same reason: it is a
+ * long-lived daemon started with `ELECTRON_RUN_AS_NODE=1 <Electron>
+ * <resources>/session-host/host.cjs <userDataDir>`, and it must start without
+ * loading a line of the core's route table or opening a database.
+ *
+ * `.cjs` rather than `.js` so the extension itself says how it must be
+ * loaded: this file is named on a command line by a launcher, not resolved
+ * through a `package.json` whose `type` field would otherwise decide.
+ *
+ * `node-pty` is external here for exactly the reason it is external
+ * everywhere else in this file — it resolves `build/Release/pty.node`
+ * relative to its own directory — and it is the *only* thing this bundle
+ * needs from `node_modules`. `electron` is external as a tripwire: the daemon
+ * must never import it, and `src/shell-core/no-electron.test.ts` scans this
+ * directory to make sure it does not.
+ */
+const sessionHostConfig: UserConfig = {
+  build: {
+    outDir: resolve(here, "out/session-host"),
+    emptyOutDir: true,
+    target: "node22",
+    ssr: true,
+    minify: false,
+    rollupOptions: {
+      input: { host: resolve(here, "src/session-host/main.ts") },
+      external: EXTERNAL,
+      output: {
+        format: "cjs" as const,
+        entryFileNames: "[name].cjs",
+        codeSplitting: false,
+      },
+    },
+  },
+  ssr: { noExternal: true },
+};
+
 function buildCore(): Plugin {
   return {
     name: "armadra-core-bundle",
@@ -158,6 +197,7 @@ function buildCore(): Plugin {
     async closeBundle() {
       await build(coreConfig);
       await build(cliConfig);
+      await build(sessionHostConfig);
     },
   };
 }
