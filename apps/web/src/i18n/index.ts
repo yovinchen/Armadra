@@ -25,6 +25,7 @@ import { hostIdentity } from "./host-identity";
 import { hostNative } from "./host-native";
 import { legacyArchives } from "./legacy-archives";
 import { contextUsage } from "./context-usage";
+import { desktop } from "./desktop";
 import { gitHunks } from "./git-hunks";
 import { handoff } from "./handoff";
 import { gitCommit } from "./git-commit";
@@ -106,6 +107,7 @@ export const MESSAGE_MODULES = {
   meta,
   updates,
   usage,
+  desktop,
   ownership,
 } satisfies Record<string, MessageModule>;
 
