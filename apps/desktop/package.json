@@ -18,7 +18,7 @@
     "@armadra/protocol": "workspace:*",
     "electron-updater": "6.8.9",
     "node-pty": "1.1.0",
-    "ws": "8.18.3"
+    "ws": "8.21.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
