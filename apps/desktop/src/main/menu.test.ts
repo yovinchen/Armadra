@@ -80,15 +80,18 @@ class FakeWindow {
   /** Presses a chord; returns whether the shell claimed it. */
   press(input: Partial<Input> = {}): boolean {
     let prevented = false;
-    this.listener?.({ preventDefault: () => (prevented = true) }, {
-      type: "keyDown",
-      key: "w",
-      meta: process.platform === "darwin",
-      control: process.platform !== "darwin",
-      shift: false,
-      alt: false,
-      ...input,
-    });
+    this.listener?.(
+      { preventDefault: () => (prevented = true) },
+      {
+        type: "keyDown",
+        key: "w",
+        meta: process.platform === "darwin",
+        control: process.platform !== "darwin",
+        shift: false,
+        alt: false,
+        ...input,
+      },
+    );
     return prevented;
   }
 }

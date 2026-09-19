@@ -20,7 +20,10 @@ function installBridge(shell: Record<string, unknown>): void {
 }
 
 afterEach(() => {
-  Reflect.deleteProperty(window as unknown as Record<string, unknown>, "armadra");
+  Reflect.deleteProperty(
+    window as unknown as Record<string, unknown>,
+    "armadra",
+  );
   vi.restoreAllMocks();
 });
 

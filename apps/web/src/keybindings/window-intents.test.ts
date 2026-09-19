@@ -1,9 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  clearCanvasCommands,
-  registerCanvasCommand,
-} from "../canvas/commands";
+import { clearCanvasCommands, registerCanvasCommand } from "../canvas/commands";
 import { useCanvasStore } from "../store/canvas-store";
 import { subscribeWindowIntents } from "./window-intents";
 
@@ -27,7 +24,9 @@ function installBridge(): void {
           intentListeners.push(listener);
           return () => intentListeners.splice(0, intentListeners.length);
         },
-        onNotificationClick: (listener: (event: { nodeId: string }) => void) => {
+        onNotificationClick: (
+          listener: (event: { nodeId: string }) => void,
+        ) => {
           clickListeners.push(listener);
           return () => clickListeners.splice(0, clickListeners.length);
         },
