@@ -1,17 +1,15 @@
 /**
- * GitHub 域的两张面。
+ * GitHub 域的那一面：`/api/github/<verb>`，JSON。
  *
- * **兼容面** `/rpc/armadra.v1.GithubService/…`：二进制 protobuf，24 个方法，
- * `packages/host-client/src/github` 今天发的就是它。本批前端一行不改，所以这一面
- * 必须逐字对上：路径、`application/x-protobuf`、消息形状、`Origin` 与 CSRF 的门，
- * 以及 `{ code, message }` 的拒绝形状。它活到 R7。
+ * 24 个动词各一条 `POST`，请求体是那个动词自己的参数，响应是它的返回记录，两者
+ * 都按 `schema.ts` 的字段表编解码——形状逐字段写在
+ * `docs/contracts/core-json-api.md` §5，页面那一侧是
+ * `apps/web/src/api/github.ts` 的 zod。
  *
- * **新面** `/api/github/*`：JSON，同一批动词，设计 D9 里前端最终要收到的那一套。
- * 请求体是 protobuf 消息的 JSON 形式（`fromJson`），响应是 `toJson`——用同一份
- * schema 而不是手写一遍 camelCase，这样两张面不可能对同一个字段有两种说法。
+ * `/rpc/armadra.v1.GithubService/*` 的 protobuf 兼容面在 R7 删掉了。
  *
- * 身份从**核验过的会话**来，从不从消息里来。请求里的 scope 只挑工作空间；一个
- * 不是这台机器的 host 被拒绝，而不是被重新解释成本地。
+ * 身份从**核验过的会话**来，从不从请求里来：工作空间跟着查询串走，一次调用可以
+ * 说它想操作哪个工作空间，不能说它有什么权限。
  */
 
 import type { ServerResponse } from "node:http";
@@ -26,10 +24,10 @@ import {
   GetGithubChecksRequestSchema,
   GetGithubCredentialRequestSchema,
   GetGithubIssueRequestSchema,
-  GetGithubStatusMappingRequestSchema,
   GetGithubIssueResponseSchema,
   GetGithubPullRequestSchema,
   GetGithubPullResponseSchema,
+  GetGithubStatusMappingRequestSchema,
   GithubCheckSummarySchema,
   GithubCommentSchema,
   GithubCredentialStatusSchema,
@@ -45,7 +43,6 @@ import {
   ListGithubPullsResponseSchema,
   ListGithubReferencesRequestSchema,
   ListGithubReferencesResponseSchema,
-  MAX_FRAME_BYTES,
   MergeGithubPullRequestSchema,
   MergeGithubPullResponseSchema,
   MoveGithubIssueRequestSchema,
@@ -61,19 +58,8 @@ import {
   UnlinkGithubReferenceRequestSchema,
   UnlinkGithubReferenceResponseSchema,
   UpdateGithubIssueRequestSchema,
-  fromBinary,
-  toBinary,
-  type CommandMeta,
-} from "@armadra/protocol";
-// `fromJson` / `toJson` 走上游包：`@armadra/protocol` 的 barrel 只转出
-// `create` / `fromBinary` / `toBinary`，而新面要的是同一份 schema 的 JSON 形式。
-// 用同一个版本（2.2.5）的同一个运行时，两张面不可能对一个字段有两种说法。
-import {
-  fromJson,
-  toJson,
-  type DescMessage,
-  type MessageShape,
-} from "@bufbuild/protobuf";
+} from "./schema";
+import { fromJson, toJson, type MessageDesc } from "../contract/message";
 
 import { bearerCredential, credential, nativeRequest } from "../identity/http";
 import { IdentityError } from "../identity/errors";
@@ -116,15 +102,10 @@ import {
   type GithubService,
 } from "./service";
 
-export const MEDIA_TYPE = "application/x-protobuf";
-export const RPC_PREFIX = "/rpc/armadra.v1.GithubService/";
 export const API_PREFIX = "/api/github/";
 
-/**
- * 兼容面覆盖的 24 个方法，顺序照 `apps/host/internal/server/github.go` 的
- * `githubMethod`。少一个，面板的某一步就断在那里。
- */
-export const RPC_METHODS = [
+/** 这一面覆盖的 24 个动词。少一个，面板的某一步就断在那里。 */
+export const GITHUB_METHODS = [
   "GetCredential",
   "ConfigureCredential",
   "RevokeCredential",
@@ -151,11 +132,11 @@ export const RPC_METHODS = [
   "ListReferences",
 ] as const;
 
-export type RpcMethod = (typeof RPC_METHODS)[number];
+export type GithubMethod = (typeof GITHUB_METHODS)[number];
 
 /** 每个方法要哪个权限，以及它是不是一次写（写要 CSRF）。 */
 const PERMISSIONS: Record<
-  RpcMethod,
+  GithubMethod,
   { permission: string; mutating: boolean }
 > = {
   GetCredential: { permission: SCOPE_READ, mutating: false },
@@ -186,8 +167,9 @@ const PERMISSIONS: Record<
 
 /** 每个方法的请求与响应 schema。 */
 const SCHEMAS: Record<
-  RpcMethod,
-  { request: DescMessage; response: DescMessage }
+  GithubMethod,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  { request: MessageDesc<any>; response: MessageDesc<any> }
 > = {
   GetCredential: {
     request: GetGithubCredentialRequestSchema,
@@ -296,7 +278,7 @@ export interface GithubHttpOptions {
  * 列表响应里不带正文。一百条 Issue 的正文装不进一帧，而一个被截断的正文比一个
  * 缺席的更糟：详情请求会把整份拿回来。
  */
-function withoutBodies(method: RpcMethod, message: unknown): unknown {
+function withoutBodies(method: GithubMethod, message: unknown): unknown {
   if (method === "ListIssues") {
     for (const issue of (message as { issues: { body: string }[] }).issues) {
       issue.body = "";
@@ -313,104 +295,7 @@ function withoutBodies(method: RpcMethod, message: unknown): unknown {
 export class GithubHttp {
   constructor(private readonly options: GithubHttpOptions) {}
 
-  /** 兼容面。前端发什么，这里就得收什么。 */
-  async rpc(
-    request: CoreRequest,
-    response: ServerResponse,
-    cors: Record<string, string>,
-  ): Promise<void> {
-    const method = request.path.slice(RPC_PREFIX.length) as RpcMethod;
-    if (request.method === "OPTIONS") {
-      response.writeHead(204, cors);
-      response.end();
-      return;
-    }
-    if (request.method !== "POST") {
-      this.fail(response, cors, {
-        status: 405,
-        code: "UNSUPPORTED",
-        message: "A POST is required",
-      });
-      return;
-    }
-    if (!(RPC_METHODS as readonly string[]).includes(method)) {
-      this.fail(response, cors, {
-        status: 404,
-        code: "NOT_FOUND",
-        message: "No such method",
-      });
-      return;
-    }
-    const type = (request.headers["content-type"] ?? "").toString();
-    if (!type.startsWith(MEDIA_TYPE)) {
-      this.fail(response, cors, {
-        status: 415,
-        code: "INVALID_ARGUMENT",
-        message: "A Protobuf request is required",
-      });
-      return;
-    }
-    if (request.body.byteLength > MAX_FRAME_BYTES) {
-      this.fail(response, cors, {
-        status: 413,
-        code: "RESOURCE_EXHAUSTED",
-        message: "GitHub request exceeds its limit",
-      });
-      return;
-    }
-    const schema = SCHEMAS[method];
-    let input: MessageShape<DescMessage>;
-    try {
-      input = fromBinary(schema.request, new Uint8Array(request.body));
-    } catch {
-      this.fail(response, cors, {
-        status: 400,
-        code: "INVALID_ARGUMENT",
-        message: "Invalid GitHub request",
-      });
-      return;
-    }
-    let caller: Caller;
-    try {
-      caller = this.caller(request, method, input);
-    } catch (error) {
-      this.fail(response, cors, this.authFailure(error));
-      return;
-    }
-    try {
-      const result = withoutBodies(
-        method,
-        await this.invoke(method, caller, input),
-      );
-      const wire = toBinary(
-        schema.response,
-        result as MessageShape<DescMessage>,
-      );
-      if (wire.byteLength > MAX_FRAME_BYTES) {
-        // 一个不合规的客户端读不了的帧不发出去：超出预算是调用方能应对的错误，
-        // 不是一段会被截成它认不出的东西的正文。
-        this.fail(response, cors, {
-          status: 413,
-          code: "RESOURCE_EXHAUSTED",
-          message:
-            "The GitHub result exceeds the frame budget; narrow the request",
-        });
-        return;
-      }
-      response.writeHead(200, { ...cors, "content-type": MEDIA_TYPE });
-      response.end(Buffer.from(wire));
-    } catch (error) {
-      this.fail(response, cors, githubFailure(error));
-    } finally {
-      // 粘进来的令牌在调用返回之后就从这个进程手里这份请求上抹掉，不论结果如何。
-      if (method === "ConfigureCredential") {
-        (input as unknown as { token: string }).token = "";
-      }
-    }
-  }
-
-  /** 新面。同一批动词，JSON 的外衣。 */
-  async api(
+  async handle(
     request: CoreRequest,
     response: ServerResponse,
     cors: Record<string, string>,
@@ -430,7 +315,7 @@ export class GithubHttp {
       return;
     }
     const schema = SCHEMAS[method];
-    let input: MessageShape<DescMessage>;
+    let input: unknown;
     try {
       input = fromJson(
         schema.request,
@@ -445,7 +330,7 @@ export class GithubHttp {
     }
     let caller: Caller;
     try {
-      caller = this.apiCaller(request, method);
+      caller = this.caller(request, method);
     } catch (error) {
       const failure = this.authFailure(error);
       this.json(response, cors, failure.status, {
@@ -465,9 +350,7 @@ export class GithubHttp {
         response,
         cors,
         200,
-        toJson(schema.response, result as MessageShape<DescMessage>, {
-          alwaysEmitImplicit: true,
-        }),
+        toJson(schema.response, result),
       );
     } catch (error) {
       const failure = githubFailure(error);
@@ -483,65 +366,18 @@ export class GithubHttp {
   }
 
   /**
-   * 从核验过的会话里推出调用方。请求里的 scope 只挑工作空间；它从不提供身份，而
-   * 一个不是这台机器的 host 被拒绝，而不是被重新解释成本地。
-   */
-  private caller(
-    request: CoreRequest,
-    method: RpcMethod,
-    input: MessageShape<DescMessage>,
-  ): Caller {
-    const origin = header(request, "origin");
-    if (origin === undefined || countHeader(request, "origin") !== 1) {
-      throw new IdentityError("permission");
-    }
-    if (countHeader(request, "x-armadra-csrf") > 1) {
-      throw new IdentityError("permission");
-    }
-    const meta = (input as unknown as { meta?: CommandMeta }).meta;
-    const workspaceId = meta?.scope?.workspaceId ?? "";
-    if (workspaceId === "") throw new IdentityError("invalid");
-    const hostId = this.options.service.hostId;
-    if ((meta?.scope?.hostId ?? "") !== "" && meta?.scope?.hostId !== hostId) {
-      throw new IdentityError("permission");
-    }
-    if (
-      (meta?.scope?.executionHostId ?? "") !== "" &&
-      meta?.scope?.executionHostId !== hostId
-    ) {
-      throw new IdentityError("permission");
-    }
-    const rule = PERMISSIONS[method];
-    const principal = this.options.identity.authenticate({
-      accessToken: bearerCredential(request),
-      hostId: this.options.identity.hostId(),
-      origin,
-      csrfToken: header(request, "x-armadra-csrf") ?? "",
-      requireCsrf: rule.mutating,
-      requiredScopes: [scope(rule.permission, workspaceId, hostId)],
-    });
-    return {
-      principalId: principal.principalId,
-      deviceId: principal.deviceId,
-      deviceEpoch: principal.deviceEpoch,
-      workspaceId,
-      scopes: principal.scopes,
-    };
-  }
-
-  /**
-   * JSON 面的调用方。
+   * 这一面的调用方。
    *
-   * 和兼容面的两处不同：
+   * 两条规矩：
    *
-   *   1. **工作空间跟着查询串走**，不再藏在消息的 `meta.scope` 里。一次调用可以
-   *      说它想操作哪个工作空间，不能说它有什么权限——那仍然只来自会话。
+   *   1. **工作空间跟着查询串走**。一次调用可以说它想操作哪个工作空间，不能说它
+   *      有什么权限——那仍然只来自会话。
    *   2. **明文回环上的无凭据调用按本机主人处理**（{@link IdentityService.localOwner}）。
    *      页面经 `apps/web/src/api/request.ts` 打这一面，而桌面壳的会话是原生的，
    *      密钥在壳里：既不发 Cookie，也到不了那个 `fetch`。TLS 的服务器壳上这条
    *      路不存在，凭据仍然是必须的。
    */
-  private apiCaller(request: CoreRequest, method: RpcMethod): Caller {
+  private caller(request: CoreRequest, method: GithubMethod): Caller {
     const origin = header(request, "origin");
     if (origin === undefined || countHeader(request, "origin") !== 1) {
       throw new IdentityError("permission");
@@ -598,9 +434,9 @@ export class GithubHttp {
 
   /** 一个方法名到它的实现。25 条，一条不少。 */
   private invoke(
-    method: RpcMethod,
+    method: GithubMethod,
     caller: Caller,
-    input: MessageShape<DescMessage>,
+    input: unknown,
   ): Promise<unknown> | unknown {
     const service = this.options.service;
     /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -690,12 +526,9 @@ export class GithubHttp {
   }
 }
 
-/**
- * 新面的动词名。它们是 RPC 方法名的 kebab-case——同一批动词、同一批 schema，只是
- * 拼法跟着 `/api/` 的习惯。
- */
-export const API_METHODS: Record<string, RpcMethod> = Object.fromEntries(
-  RPC_METHODS.map((method) => [kebab(method), method]),
+/** 路径上的动词名：方法名的 kebab-case。 */
+export const API_METHODS: Record<string, GithubMethod> = Object.fromEntries(
+  GITHUB_METHODS.map((method) => [kebab(method), method]),
 );
 
 function kebab(value: string): string {

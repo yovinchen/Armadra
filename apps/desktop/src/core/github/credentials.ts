@@ -30,11 +30,13 @@ import { join } from "node:path";
 
 import {
   GithubCredentialSource,
-  GithubCredentialStatusSchema,
   GithubSecretStore,
-  create,
   type GithubCredentialStatus,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  GithubCredentialStatusSchema,
+} from "./schema";
+import { create } from "../contract/message";
 
 import { GithubClient, type GithubClientOptions } from "./client";
 import { codeOf, githubError } from "./errors";

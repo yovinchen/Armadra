@@ -4,11 +4,13 @@
  */
 
 import {
-  GithubStatusMappingSchema,
-  create,
   type GithubRepositoryRef,
   type GithubStatusMapping,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  GithubStatusMappingSchema,
+} from "./schema";
+import { create } from "../contract/message";
 
 import { githubError } from "./errors";
 import { validateMapping } from "./mapping";

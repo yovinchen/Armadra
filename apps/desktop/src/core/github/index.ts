@@ -17,20 +17,14 @@ import {
   identityInstanceId,
 } from "../identity";
 import { CredentialService, openSecretStore } from "./credentials";
-import { API_PREFIX, GithubHttp, RPC_METHODS, RPC_PREFIX } from "./http";
+import { API_PREFIX, GITHUB_METHODS, GithubHttp } from "./http";
 import { GithubService } from "./service";
 import { GithubStore } from "./store";
 
 export { GithubClient } from "./client";
 export { CredentialService, openSecretStore, validToken } from "./credentials";
 export { GithubError, githubError, githubFailure } from "./errors";
-export {
-  API_METHODS,
-  API_PREFIX,
-  GithubHttp,
-  RPC_METHODS,
-  RPC_PREFIX,
-} from "./http";
+export { API_METHODS, API_PREFIX, GITHUB_METHODS, GithubHttp } from "./http";
 export { checkMapping, validateMapping } from "./mapping";
 export {
   belongsTo,
@@ -84,13 +78,10 @@ export function install(context: CoreContext): GithubDomain | undefined {
     identity: new IdentityService(identityStore, identityInstanceId()),
   });
 
-  context.server.raw(RPC_PREFIX, (request, response, cors) =>
-    http.rpc(request, response, cors),
-  );
   context.server.raw(API_PREFIX, (request, response, cors) =>
-    http.api(request, response, cors),
+    http.handle(request, response, cors),
   );
-  context.log.info("GitHub 域已装配", { methods: RPC_METHODS.length });
+  context.log.info("GitHub 域已装配", { methods: GITHUB_METHODS.length });
 
   assembled = { service, credentials };
   return assembled;

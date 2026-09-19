@@ -6,16 +6,12 @@
  */
 
 import {
-  GetGithubPullResponseSchema,
   GithubCheckConclusion,
   GithubMergeMethod,
   GithubMergeableState,
   GithubPullState,
   GithubReferenceKind,
   GithubReviewState,
-  ListGithubPullsResponseSchema,
-  MergeGithubPullResponseSchema,
-  create,
   type CreateGithubPullRequest,
   type GetGithubChecksRequest,
   type GetGithubPullRequest,
@@ -29,7 +25,13 @@ import {
   type MergeGithubPullRequest,
   type MergeGithubPullResponse,
   type SubmitGithubReviewRequest,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  GetGithubPullResponseSchema,
+  ListGithubPullsResponseSchema,
+  MergeGithubPullResponseSchema,
+} from "./schema";
+import { create } from "../contract/message";
 
 import type { GithubClient } from "./client";
 import * as api from "./endpoints";

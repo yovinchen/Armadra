@@ -1,26 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  GithubIssueState,
+  GithubIssueStateReason,
+  GithubReferenceKind,
+  GithubReferenceTargetKind,
+  GithubStatusSource,
+  GithubWriteState,
+} from "./types";
+import {
   CommentGithubIssueRequestSchema,
   CreateGithubIssueRequestSchema,
   GetGithubIssueRequestSchema,
-  GithubIssueState,
-  GithubReferenceKind,
-  GithubReferenceTargetKind,
-  GithubRepositoryRefSchema,
   GithubExternalReferenceSchema,
+  GithubRepositoryRefSchema,
   GithubStatusGroupSchema,
   GithubStatusMappingSchema,
-  GithubStatusSource,
-  GithubWriteState,
   LinkGithubReferenceRequestSchema,
   ListGithubIssuesRequestSchema,
   ListGithubReferencesRequestSchema,
   MoveGithubIssueRequestSchema,
   SetGithubIssueStateRequestSchema,
   UnlinkGithubReferenceRequestSchema,
-  create,
-} from "@armadra/protocol";
+} from "./schema";
+import { create } from "../contract/message";
 
 import { githubError } from "./errors";
 import { configureToken, githubFixture, type GithubFixture } from "./fixture";
@@ -272,7 +275,7 @@ describe("GitHub 服务", () => {
         repository: REF,
         number: 7n,
         state: GithubIssueState.CLOSED,
-        reason: 1, // COMPLETED
+        reason: GithubIssueStateReason.COMPLETED,
         expectedUpdatedAtUnixMs: BigInt(Date.parse("2026-09-02T00:00:00Z")),
       }),
     );

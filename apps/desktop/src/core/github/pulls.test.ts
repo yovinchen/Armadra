@@ -1,21 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  GithubCheckConclusion,
+  GithubMergeMethod,
+  GithubReviewState,
+} from "./types";
+import {
   CreateGithubPullRequestSchema,
   DeleteGithubBranchRequestSchema,
   GetGithubPullRequestSchema,
-  GithubCheckConclusion,
   GithubCheckRunSchema,
   GithubCheckSummarySchema,
-  GithubMergeMethod,
   GithubRepositoryRefSchema,
-  GithubReviewState,
   ListGithubPullsRequestSchema,
   MergeGithubPullRequestSchema,
   RerunGithubChecksRequestSchema,
   SubmitGithubReviewRequestSchema,
-  create,
-} from "@armadra/protocol";
+} from "./schema";
+import { create } from "../contract/message";
 
 import { deleteBranch, rerunChecks, rerunTargets } from "./cleanup";
 import { githubError } from "./errors";
