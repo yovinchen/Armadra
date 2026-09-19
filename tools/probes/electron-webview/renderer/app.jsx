@@ -6,21 +6,21 @@
  * Everything the main process needs is exposed on `window.__canvas`; the main
  * process never touches the DOM directly.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createRoot } from 'react-dom/client';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
   applyNodeChanges,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 
 const NODE_W = 520;
 const NODE_H = 360;
 const HEADER_H = 28;
 
-const FIXTURE_BASE = new URLSearchParams(location.search).get('fixture') || '';
+const FIXTURE_BASE = new URLSearchParams(location.search).get("fixture") || "";
 
 /** Registry of live <webview> elements, keyed by node id. */
 const guests = new Map();
@@ -33,11 +33,14 @@ function WebviewNode({ id, data }) {
     if (!host || host.firstChild) return;
     // Create the element imperatively and set `src` as an attribute: React must
     // never own this node, and navigation is src-driven (nodeterm §2.4).
-    const el = document.createElement('webview');
-    el.setAttribute('src', `${FIXTURE_BASE}?tag=${encodeURIComponent(data.tag)}`);
-    el.style.width = '100%';
-    el.style.height = '100%';
-    el.style.display = 'flex';
+    const el = document.createElement("webview");
+    el.setAttribute(
+      "src",
+      `${FIXTURE_BASE}?tag=${encodeURIComponent(data.tag)}`,
+    );
+    el.style.width = "100%";
+    el.style.height = "100%";
+    el.style.display = "flex";
     host.appendChild(el);
     guests.set(id, el);
     return () => {
@@ -51,32 +54,36 @@ function WebviewNode({ id, data }) {
       style={{
         width: NODE_W,
         height: NODE_H,
-        background: '#fff',
-        border: '1px solid #94a3b8',
+        background: "#fff",
+        border: "1px solid #94a3b8",
         borderRadius: 6,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <div
         className="probe-header"
         style={{
           height: HEADER_H,
-          flex: '0 0 auto',
-          background: '#334155',
-          color: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 8px',
+          flex: "0 0 auto",
+          background: "#334155",
+          color: "#fff",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 8px",
           fontSize: 12,
-          cursor: 'grab',
+          cursor: "grab",
         }}
       >
         {data.tag}
       </div>
       {/* nodrag nowheel, no hover-guard overlay, no mask — exactly nodeterm §2.2 */}
-      <div ref={hostRef} className="nodrag nowheel" style={{ flex: '1 1 auto', minHeight: 0 }} />
+      <div
+        ref={hostRef}
+        className="nodrag nowheel"
+        style={{ flex: "1 1 auto", minHeight: 0 }}
+      />
     </div>
   );
 }
@@ -87,12 +94,12 @@ function PlainNode({ data }) {
       style={{
         width: 200,
         height: 90,
-        background: '#fff7ed',
-        border: '1px solid #fb923c',
+        background: "#fff7ed",
+        border: "1px solid #fb923c",
         borderRadius: 6,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         fontSize: 14,
       }}
     >
@@ -104,9 +111,26 @@ function PlainNode({ data }) {
 const nodeTypes = { wv: WebviewNode, plain: PlainNode };
 
 const INITIAL_NODES = [
-  { id: 'wv-1', type: 'wv', position: { x: 40, y: 40 }, data: { tag: 'alpha' }, draggable: true },
-  { id: 'wv-2', type: 'wv', position: { x: 620, y: 40 }, data: { tag: 'beta' }, draggable: true },
-  { id: 'plain-1', type: 'plain', position: { x: 40, y: 460 }, data: { tag: 'sibling' } },
+  {
+    id: "wv-1",
+    type: "wv",
+    position: { x: 40, y: 40 },
+    data: { tag: "alpha" },
+    draggable: true,
+  },
+  {
+    id: "wv-2",
+    type: "wv",
+    position: { x: 620, y: 40 },
+    data: { tag: "beta" },
+    draggable: true,
+  },
+  {
+    id: "plain-1",
+    type: "plain",
+    position: { x: 40, y: 460 },
+    data: { tag: "sibling" },
+  },
 ];
 
 function Canvas() {
@@ -131,11 +155,12 @@ function Canvas() {
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
         isTrusted: event.isTrusted,
-        targetClass: (event.target && event.target.className) || '',
+        targetClass: (event.target && event.target.className) || "",
       };
     };
-    window.addEventListener('wheel', onWheel, { capture: true, passive: true });
-    return () => window.removeEventListener('wheel', onWheel, { capture: true });
+    window.addEventListener("wheel", onWheel, { capture: true, passive: true });
+    return () =>
+      window.removeEventListener("wheel", onWheel, { capture: true });
   }, []);
 
   useEffect(() => {
@@ -157,9 +182,9 @@ function Canvas() {
         if (!el) return null;
         return {
           tag: el.tagName,
-          className: String(el.className || ''),
-          isPane: Boolean(el.closest('.react-flow__pane')),
-          isNode: Boolean(el.closest('.react-flow__node')),
+          className: String(el.className || ""),
+          isPane: Boolean(el.closest(".react-flow__pane")),
+          isNode: Boolean(el.closest(".react-flow__node")),
         };
       },
       resetHostWheelCount: () => {
@@ -201,8 +226,8 @@ function Canvas() {
       },
       headerRect: (id) => {
         const el = guests.get(id);
-        const node = el && el.closest('.react-flow__node');
-        const header = node && node.querySelector('.probe-header');
+        const node = el && el.closest(".react-flow__node");
+        const header = node && node.querySelector(".probe-header");
         if (!header) return null;
         const r = header.getBoundingClientRect();
         return { x: r.x, y: r.y, w: r.width, h: r.height };
@@ -214,36 +239,48 @@ function Canvas() {
           for (let x = m; x < window.innerWidth - m; x += 40) {
             const ex = x + dx;
             const ey = y + dy;
-            if (ex < m || ey < m || ex > window.innerWidth - m || ey > window.innerHeight - m) {
+            if (
+              ex < m ||
+              ey < m ||
+              ex > window.innerWidth - m ||
+              ey > window.innerHeight - m
+            ) {
               continue;
             }
             const el = document.elementFromPoint(x, y);
-            if (el && !el.closest('.react-flow__node')) return { x, y };
+            if (el && !el.closest(".react-flow__node")) return { x, y };
           }
         }
         return null;
       },
       /** DOM order of the webview hosts inside .react-flow__nodes. */
       domOrder: () => {
-        const container = document.querySelector('.react-flow__nodes');
+        const container = document.querySelector(".react-flow__nodes");
         if (!container) return [];
-        return Array.from(container.children).map((el) => el.getAttribute('data-id'));
+        return Array.from(container.children).map((el) =>
+          el.getAttribute("data-id"),
+        );
       },
       // ---- the three node-array mutations of acceptance item 6 ----
       insertFront: () => {
         setNodes((cur) => [
-          { id: 'ins-1', type: 'plain', position: { x: 620, y: 460 }, data: { tag: 'inserted' } },
+          {
+            id: "ins-1",
+            type: "plain",
+            position: { x: 620, y: 460 },
+            data: { tag: "inserted" },
+          },
           ...cur,
         ]);
       },
       deleteSibling: () => {
-        setNodes((cur) => cur.filter((n) => n.id !== 'plain-1'));
+        setNodes((cur) => cur.filter((n) => n.id !== "plain-1"));
       },
       swapWebviews: () => {
         setNodes((cur) => {
           const next = cur.slice();
-          const a = next.findIndex((n) => n.id === 'wv-1');
-          const b = next.findIndex((n) => n.id === 'wv-2');
+          const a = next.findIndex((n) => n.id === "wv-1");
+          const b = next.findIndex((n) => n.id === "wv-2");
           if (a < 0 || b < 0) return cur;
           const tmp = next[a];
           next[a] = next[b];
@@ -274,10 +311,17 @@ function Canvas() {
     [],
   );
 
-  return <ReactFlow nodes={nodes} edges={[]} onNodesChange={onNodesChange} {...flowProps} />;
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={[]}
+      onNodesChange={onNodesChange}
+      {...flowProps}
+    />
+  );
 }
 
-createRoot(document.getElementById('root')).render(
+createRoot(document.getElementById("root")).render(
   <ReactFlowProvider>
     <Canvas />
   </ReactFlowProvider>,

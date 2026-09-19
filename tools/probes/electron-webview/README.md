@@ -33,16 +33,16 @@ node node_modules/electron/install.js
 
 ## 结构
 
-| 文件                   | 作用                                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------------------- |
-| `main.cjs`             | 起静态服务与窗口，按顺序跑第 0–6 条，写 `out/result.json`，按第 3/6 条定退出码                    |
-| `lib/http.cjs`         | 回环随机端口静态服务（fixture 需要真 http origin，`sessionStorage` 才有稳定 origin）              |
-| `lib/driver.cjs`       | 合成输入与截图。输入走宿主窗口的 **CDP `Input.*`**，不走 `sendInputEvent`——原因见下                |
-| `lib/metrics.cjs`      | 第 3 条的像素统计（中间灰阶占比、最大相邻梯度），判据写在文件头、先于测量                          |
-| `lib/steps-a.cjs`      | 第 0（输入路由）、1（缩放命中）、2（平移命中）、3（栅格化）条                                     |
-| `lib/steps-b.cjs`      | 第 4（页内交互）、5（滚轮归属）、6（guest 生命周期）条                                            |
-| `renderer/app.jsx`     | 最小 React Flow 画布，`minZoom 0.01` / `maxZoom 2`，`<webview>` 装在 `nodrag nowheel` 容器里、无遮罩 |
-| `fixture/index.html`   | guest 页面：四角+中心按钮自报 `clientX/Y`、可滚动区、`<select>`、IME 输入框、两个加载计数器        |
+| 文件                 | 作用                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `main.cjs`           | 起静态服务与窗口，按顺序跑第 0–6 条，写 `out/result.json`，按第 3/6 条定退出码                       |
+| `lib/http.cjs`       | 回环随机端口静态服务（fixture 需要真 http origin，`sessionStorage` 才有稳定 origin）                 |
+| `lib/driver.cjs`     | 合成输入与截图。输入走宿主窗口的 **CDP `Input.*`**，不走 `sendInputEvent`——原因见下                  |
+| `lib/metrics.cjs`    | 第 3 条的像素统计（中间灰阶占比、最大相邻梯度），判据写在文件头、先于测量                            |
+| `lib/steps-a.cjs`    | 第 0（输入路由）、1（缩放命中）、2（平移命中）、3（栅格化）条                                        |
+| `lib/steps-b.cjs`    | 第 4（页内交互）、5（滚轮归属）、6（guest 生命周期）条                                               |
+| `renderer/app.jsx`   | 最小 React Flow 画布，`minZoom 0.01` / `maxZoom 2`，`<webview>` 装在 `nodrag nowheel` 容器里、无遮罩 |
+| `fixture/index.html` | guest 页面：四角+中心按钮自报 `clientX/Y`、可滚动区、`<select>`、IME 输入框、两个加载计数器          |
 
 ## 两条实现上的坑（都是被测出来的，不是设计出来的）
 
