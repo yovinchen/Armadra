@@ -307,7 +307,9 @@ export function importExecutionHosts(
     hosts.push(host);
   }
   if (hosts.length > MAX_IMPORT_HOSTS) {
-    return badRequest("Importing these hosts would exceed the registry ceiling");
+    return badRequest(
+      "Importing these hosts would exceed the registry ceiling",
+    );
   }
   writeHosts(deps, hosts);
   return { status: 200, body: listing(deps) };

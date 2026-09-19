@@ -19,7 +19,9 @@ import type { DatabaseSync } from "node:sqlite";
 const QUERY =
   "SELECT execution_host_id, count(*) AS total FROM workspaces GROUP BY execution_host_id";
 
-export function workspaceCounts(database: DatabaseSync): ReadonlyMap<string, number> {
+export function workspaceCounts(
+  database: DatabaseSync,
+): ReadonlyMap<string, number> {
   const counts = new Map<string, number>();
   let rows: Record<string, unknown>[];
   try {

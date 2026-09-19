@@ -11,7 +11,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { EventBus, WORKSPACE_EVENT_TYPES, type WorkspaceEvent } from "../bus";
-import { MAX_QUEUED_FRAMES, WorkspaceEventStream, type EventSink } from "./stream";
+import {
+  MAX_QUEUED_FRAMES,
+  WorkspaceEventStream,
+  type EventSink,
+} from "./stream";
 
 /** A sink that writes straight through — the fast client. */
 function immediate(): { sink: EventSink; frames: string[] } {
@@ -116,10 +120,16 @@ describe("WorkspaceEventStream", () => {
       size: null,
       mtime: null,
     });
-    const exit = JSON.parse(client.frames[0] as string) as Record<string, unknown>;
+    const exit = JSON.parse(client.frames[0] as string) as Record<
+      string,
+      unknown
+    >;
     expect("nodeId" in exit).toBe(false);
     expect("exitCode" in exit).toBe(false);
-    const changed = JSON.parse(client.frames[1] as string) as Record<string, unknown>;
+    const changed = JSON.parse(client.frames[1] as string) as Record<
+      string,
+      unknown
+    >;
     expect(changed.sha256).toBeNull();
     expect(changed.size).toBeNull();
     expect(changed.mtime).toBeNull();
@@ -200,7 +210,9 @@ describe("WorkspaceEventStream", () => {
     }
     // One frame is in flight and 256 are queued, so 257 are still held and the
     // bound has bitten on the remaining 49.
-    expect(stream.droppedFrames("ws-1")).toEqual([total - MAX_QUEUED_FRAMES - 1]);
+    expect(stream.droppedFrames("ws-1")).toEqual([
+      total - MAX_QUEUED_FRAMES - 1,
+    ]);
     expect(slow.frames).toHaveLength(1);
 
     slow.flush();
@@ -232,7 +244,10 @@ describe("WorkspaceEventStream", () => {
     }
     expect(fast.frames).toHaveLength(1_000);
     expect(slow.frames).toHaveLength(1);
-    expect(stream.droppedFrames("ws-1")).toEqual([1_000 - 1 - MAX_QUEUED_FRAMES, 0]);
+    expect(stream.droppedFrames("ws-1")).toEqual([
+      1_000 - 1 - MAX_QUEUED_FRAMES,
+      0,
+    ]);
   });
 
   it("serialises one event once however many clients are watching", () => {

@@ -134,7 +134,10 @@ describe("the workspace event socket", () => {
       workspaceId: "ws-1",
       event: { type: "workspace.updated", workspaceId: "ws-1" },
     });
-    expect(await arrived).toEqual({ type: "workspace.updated", workspaceId: "ws-1" });
+    expect(await arrived).toEqual({
+      type: "workspace.updated",
+      workspaceId: "ws-1",
+    });
     expect(other).toEqual([]);
   });
 
@@ -152,7 +155,11 @@ describe("the workspace event socket", () => {
     const arrived = next(socket);
     core.bus.emit("workspace.event", {
       workspaceId: "ws-1",
-      event: { type: "board.changed", boardId: "b", updatedAt: "2026-09-19T10:00:00Z" },
+      event: {
+        type: "board.changed",
+        boardId: "b",
+        updatedAt: "2026-09-19T10:00:00Z",
+      },
     });
     expect(arrived).resolves.toMatchObject({ type: "board.changed" });
     await arrived;
@@ -162,7 +169,9 @@ describe("the workspace event socket", () => {
     const core = await start();
     createWorkspace(core, "ws-1");
     const socket = await open(core, "ws-1");
-    const closed = new Promise<void>((resolve_) => socket.once("close", () => resolve_()));
+    const closed = new Promise<void>((resolve_) =>
+      socket.once("close", () => resolve_()),
+    );
     socket.close();
     await closed;
     // A close on the client takes a turn of the loop to reach the server.

@@ -117,7 +117,8 @@ export class WorkspaceEventStream {
       closed: false,
       dropped: 0,
     };
-    const watchers = this.subscriptions.get(workspaceId) ?? new Set<Subscription>();
+    const watchers =
+      this.subscriptions.get(workspaceId) ?? new Set<Subscription>();
     watchers.add(subscription);
     this.subscriptions.set(workspaceId, watchers);
     return () => {

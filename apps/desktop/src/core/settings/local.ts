@@ -81,11 +81,16 @@ export function isLocal(path: string): boolean {
   );
 }
 
-export function isJsonObject(value: JsonValue | undefined): value is JsonObject {
+export function isJsonObject(
+  value: JsonValue | undefined,
+): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function take(document: JsonObject, path: readonly string[]): JsonValue | undefined {
+function take(
+  document: JsonObject,
+  path: readonly string[],
+): JsonValue | undefined {
   const [head, ...rest] = path;
   if (head === undefined) return undefined;
   if (rest.length === 0) {
@@ -104,7 +109,11 @@ function take(document: JsonObject, path: readonly string[]): JsonValue | undefi
   return taken;
 }
 
-function put(document: JsonObject, path: readonly string[], value: JsonValue): void {
+function put(
+  document: JsonObject,
+  path: readonly string[],
+  value: JsonValue,
+): void {
   const [head, ...rest] = path;
   if (head === undefined) return;
   if (rest.length === 0) {
@@ -117,7 +126,10 @@ function put(document: JsonObject, path: readonly string[], value: JsonValue): v
   put(nested, rest, value);
 }
 
-function read(document: JsonObject, path: readonly string[]): JsonValue | undefined {
+function read(
+  document: JsonObject,
+  path: readonly string[],
+): JsonValue | undefined {
   const [head, ...rest] = path;
   if (head === undefined) return undefined;
   const value = document[head];
@@ -128,9 +140,11 @@ function read(document: JsonObject, path: readonly string[]): JsonValue | undefi
 
 /** A structural clone that keeps the JSON typing. */
 export function clone<T extends JsonValue>(value: T): T {
-  return (value === null || typeof value !== "object"
-    ? value
-    : JSON.parse(JSON.stringify(value))) as T;
+  return (
+    value === null || typeof value !== "object"
+      ? value
+      : JSON.parse(JSON.stringify(value))
+  ) as T;
 }
 
 /**

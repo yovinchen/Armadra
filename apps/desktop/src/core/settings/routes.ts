@@ -95,7 +95,11 @@ export function patchSettings(
     return badRequest("Settings patch must be an object");
   }
   const terminal = patch.terminal;
-  if (typeof terminal === "object" && terminal !== null && !Array.isArray(terminal)) {
+  if (
+    typeof terminal === "object" &&
+    terminal !== null &&
+    !Array.isArray(terminal)
+  ) {
     const backend = terminal.backend;
     if (
       typeof backend === "string" &&
