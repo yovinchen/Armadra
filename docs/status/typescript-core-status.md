@@ -5,12 +5,15 @@
 
 ## 1. 阶段状态
 
-| 阶段   | 范围                                                 | 状态                  |
-| ------ | ---------------------------------------------------- | --------------------- |
-| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本      | 已合入（`c1644c10d`） |
-| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移            | 进行中                |
-| **R2** | 终端域                                               | **纵切已完成**，见下  |
-| R3–R7  | Hook / Agent、Git / 文件、语言服务等、服务器壳、收尾 | 未开始                |
+| 阶段   | 范围                                                 | 状态                   |
+| ------ | ---------------------------------------------------- | ---------------------- |
+| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本      | 已合入（`c1644c10d`）  |
+| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移            | 已合入（`0b098c650`）  |
+| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC     | 已合入（`aa180c6e7`）  |
+| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`             | 已合入（`aa180c6e7`）  |
+| **R4** | Git、文件 / 导入导出、定时与事件 outbox              | 进行中                 |
+| **R5** | 语言服务、GitHub / 资源监控，浏览器授权与租约（R5c） | R5c 已合入，其余进行中 |
+| R6–R7  | 服务器壳、收尾                                       | 未开始                 |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -197,3 +200,11 @@ mv <数据目录>/host.db.absorbed-<时间戳> <数据目录>/host.db
 **两张面**：新面 `/api/identity/*`（JSON，`{ code, message }`）是设计 D9 的目标；兼容面 `/rpc/armadra.v1.{HostService,IdentityService}/…`（二进制 protobuf）覆盖 `packages/host-client` 今天发的 8 个方法，让前端在不改一行的情况下走通登录，活到 R7。
 
 验证：`node tools/core-identity-smoke.mjs`（真进程跑完 Hello → 取票 → 配对 → 重放被拒 → 撤销 → 401），以及 `pnpm --filter @armadra/desktop test` 里的身份与迁移用例。
+
+## 9. R3 与 R5c：Hook 面上的三个动词家族
+
+Hook 服务（`apps/desktop/src/core/hook/`）只认证——bearer、per-node token、请求体上限——然后把 `{ nodeId, verified }` 交给 `hook/collab.ts` 登记的家族分发器。三个家族都由 `core/agent/hook-bridge.ts` 接入：`context-link` 与 `browser` 应答 prose（客户端原样打印），`control` 应答 JSON。`browser` 家族的动词表在 `core/browser/`（授权三规则、租约状态机、URL 策略、`browser:drive` 回环 WS 客户端），桥只负责解析 `Caller` 并把 `args` 原样转交。
+
+TS `armadra-hook` 客户端由安装步骤写成 `<dataDir>/bin/armadra-hook` 启动器；启动约 79 ms（Rust 3.7 ms），输出字节一致。
+
+验证：`pnpm --filter @armadra/desktop test`（含 `hook-bridge.test.ts`、`core/browser/**` 60 例，以及对 Rust 用例的移植）。
