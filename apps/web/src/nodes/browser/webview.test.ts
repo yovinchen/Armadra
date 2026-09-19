@@ -82,6 +82,7 @@ describe("allowGuestNavigation", () => {
 describe("shouldDiscard", () => {
   const base = {
     enabled: true,
+    discardMs: BROWSER_DISCARD_MS,
     loading: false,
     audible: false,
     driven: false,

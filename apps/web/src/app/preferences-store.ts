@@ -30,6 +30,11 @@ import {
   writeStored,
 } from "./preferences/storage";
 import {
+  storedBrowserPreferences,
+  BROWSER_KEYS,
+  type BrowserPreferences,
+} from "./preferences/browser";
+import {
   storedTerminalPreferences,
   TERMINAL_KEYS,
   type TerminalPreferences,
@@ -46,6 +51,7 @@ import {
   type GitPreferences,
 } from "./preferences/git";
 
+export * from "./preferences/browser";
 export * from "./preferences/terminal";
 export * from "./preferences/whiteboard";
 export * from "./preferences/git";
@@ -266,6 +272,8 @@ export interface PreferencesState {
    */
   settingsSubpage: string | null;
   terminal: TerminalPreferences;
+  /** 浏览器节点的内存偏好；`nodes/browser/{discard,pool}.ts` 负责消费。 */
+  browser: BrowserPreferences;
   /** 白板配置；`use-canvas-preferences.ts` 与 `flow-options.ts` 负责消费。 */
   whiteboard: WhiteboardPreferences;
   /**
@@ -304,6 +312,10 @@ export interface PreferencesState {
   setTerminalPreference: <K extends keyof TerminalPreferences>(
     key: K,
     value: TerminalPreferences[K],
+  ) => void;
+  setBrowserPreference: <K extends keyof BrowserPreferences>(
+    key: K,
+    value: BrowserPreferences[K],
   ) => void;
   setWhiteboardPreference: <K extends keyof WhiteboardPreferences>(
     key: K,
@@ -379,6 +391,7 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   lastSettingsSection: readStored(LAST_SETTINGS_SECTION_KEY),
   settingsSubpage: null,
   terminal: storedTerminalPreferences(),
+  browser: storedBrowserPreferences(),
   whiteboard: storedWhiteboardPreferences(),
   git: storedGitPreferences(),
 
@@ -571,6 +584,11 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
     writeStored(GIT_KEYS[key], serializeGitPreference(value));
     set((state) => ({ git: { ...state.git, [key]: value } }));
   },
+  setBrowserPreference(key, value) {
+    if (get().browser[key] === value) return;
+    writeStored(BROWSER_KEYS[key], String(value));
+    set((state) => ({ browser: { ...state.browser, [key]: value } }));
+  },
   setWhiteboardPreference(key, value) {
     // 值没变就整块不动：偏好菜单与设置页可能连着写同一个值，
     // 换一个新的 `whiteboard` 对象会让所有订阅者白重渲染一遍。
@@ -583,6 +601,11 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
 /** 组件里用；只有终端外观那一块变化才重渲染。 */
 export function useTerminalPreferences(): TerminalPreferences {
   return usePreferencesStore((state) => state.terminal);
+}
+
+/** 同上，浏览器节点那一块。 */
+export function useBrowserPreferences(): BrowserPreferences {
+  return usePreferencesStore((state) => state.browser);
 }
 
 /** 同上，白板那一块。 */

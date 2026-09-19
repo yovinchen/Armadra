@@ -13,10 +13,13 @@ import {
   SlidersHorizontal,
   SquareTerminal,
   GitPullRequest,
+  Globe,
   Webhook,
   LayoutGrid,
   type LucideIcon,
 } from "lucide-react";
+
+import { isDesktop } from "@/platform";
 
 /**
  * 设置页的分区注册表（计划书 §24.1）。
@@ -37,6 +40,13 @@ export interface SettingsSection {
   labelKey: string;
   /** 导航项左侧的 16px 线性图标（§24.2「源列表侧栏」）。 */
   icon: LucideIcon;
+  /**
+   * 只在桌面壳里出现。
+   *
+   * 这一页上的每一项都只对壳里的 `<webview>` 有意义；浏览器标签页里既建不
+   * 出浏览器节点，也就没有可配的东西，列一页永远无效的设置比不列更糟。
+   */
+  desktopOnly?: boolean;
 }
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
@@ -78,6 +88,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.connection",
     labelKey: "settings.section.terminal",
     icon: SquareTerminal,
+  },
+  {
+    // 浏览器节点的内存配置；和终端一样，说的是「这台机器怎么跑它」。
+    id: "browser",
+    groupKey: "settings.group.connection",
+    labelKey: "settings.section.browser",
+    icon: Globe,
+    desktopOnly: true,
   },
   {
     id: "workspace",
@@ -146,10 +164,16 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
 
 export const DEFAULT_SETTINGS_SECTION = SETTINGS_SECTIONS[0]!.id;
 
+/** 这台机器上真正能进的分区。壳不在时少几行，而不是几行点不动的。 */
+export function visibleSettingsSections(): SettingsSection[] {
+  const desktop = isDesktop();
+  return SETTINGS_SECTIONS.filter((section) => desktop || !section.desktopOnly);
+}
+
 export function isSettingsSectionId(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    SETTINGS_SECTIONS.some((section) => section.id === value)
+    visibleSettingsSections().some((section) => section.id === value)
   );
 }
 
@@ -167,7 +191,7 @@ export interface SettingsNavGroup {
 
 /** 按注册顺序切成连续的分组段——顺序即导航里的顺序。 */
 export function groupSections(
-  sections: readonly SettingsSection[] = SETTINGS_SECTIONS,
+  sections: readonly SettingsSection[] = visibleSettingsSections(),
 ): SettingsNavGroup[] {
   const groups: SettingsNavGroup[] = [];
   for (const section of sections) {

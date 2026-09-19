@@ -54,6 +54,8 @@ vi.mock("sonner", () => ({
 
 import { toast } from "sonner";
 
+import { usePreferencesStore } from "@/app/preferences-store";
+
 import { BrowserNode } from "./BrowserNode";
 import { BROWSER_DISCARD_MS, DISCARD_TICK_MS } from "./discard";
 
@@ -92,6 +94,9 @@ function guests(): HTMLElement[] {
 beforeEach(() => {
   store.document.nodes = [node];
   store.updateNodeData.mockClear();
+  usePreferencesStore.setState({
+    browser: { discard: true, discardMinutes: 5, backgroundMax: 8 },
+  });
   (window as unknown as Record<string, unknown>).armadra = {};
 });
 
@@ -260,6 +265,51 @@ describe("隐藏回收（W3.2）", () => {
     expect(notice).not.toBeNull();
     // 说的是内存，不是权限。
     expect(notice!.textContent).toContain("为省内存释放");
+  });
+
+  /**
+   * 设置在**定时器触发时重读**：人在设置页动了开关，不用等这棵子树重渲，
+   * 也不用重开节点——下一个 tick 就按新值判断。
+   */
+  it("回收开关在定时器触发时重读，关掉之后就不再回收", () => {
+    paint();
+    fireEvent(guests()[0]!, new Event("did-stop-loading"));
+    backgroundTheFirstTab();
+
+    usePreferencesStore.getState().setBrowserPreference("discard", false);
+    act(() => {
+      vi.advanceTimersByTime(BROWSER_DISCARD_MS + DISCARD_TICK_MS * 2);
+    });
+    expect(guests()).toHaveLength(2);
+
+    // 再打开，下一个 tick 就回收——没有中间的「要等下一次渲染」。
+    usePreferencesStore.getState().setBrowserPreference("discard", true);
+    act(() => {
+      vi.advanceTimersByTime(DISCARD_TICK_MS * 2);
+    });
+    expect(guests()).toHaveLength(1);
+  });
+
+  it("阈值也在定时器触发时重读，调大之后原来该回收的留了下来", () => {
+    paint();
+    fireEvent(guests()[0]!, new Event("did-stop-loading"));
+    backgroundTheFirstTab();
+
+    usePreferencesStore.getState().setBrowserPreference("discardMinutes", 60);
+    act(() => {
+      vi.advanceTimersByTime(BROWSER_DISCARD_MS + DISCARD_TICK_MS * 2);
+    });
+    expect(guests()).toHaveLength(2);
+
+    usePreferencesStore.getState().setBrowserPreference("discardMinutes", 1);
+    act(() => {
+      vi.advanceTimersByTime(DISCARD_TICK_MS * 2);
+    });
+    expect(guests()).toHaveLength(1);
+    // 提示里的分钟数跟着设置走，不是那个写死的 5。
+    expect(
+      document.querySelector('[data-slot="browser-discarded"]')!.textContent,
+    ).toContain("1 分钟");
   });
 
   it("回到被回收的标签时重放记住的 URL，且不把那次导航回写成新事实", () => {

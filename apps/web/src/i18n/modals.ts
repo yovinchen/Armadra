@@ -26,6 +26,7 @@ export const modals: MessageModule = {
     "settings.section.whiteboard": "白板",
     "settings.section.agent": "Agent", // i18n-exempt
     "settings.section.terminal": "终端",
+    "settings.section.browser": "浏览器",
     "settings.section.workspace": "工作区",
     "settings.section.data": "数据",
     "settings.section.account": "账号与用量",
@@ -296,6 +297,7 @@ export const modals: MessageModule = {
     "settings.section.whiteboard": "Whiteboard",
     "settings.section.agent": "Agent",
     "settings.section.terminal": "Terminal",
+    "settings.section.browser": "Browser",
     "settings.section.workspace": "Workspace",
     "settings.section.data": "Data",
     "settings.section.account": "Account & usage",

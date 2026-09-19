@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { CanvasNode } from "@armadra/shared";
 
+import { usePreferencesStore } from "@/app/preferences-store";
 import type { ArmadraFlowNode, CanvasFlowNode } from "@/canvas/sync/project";
 
 import {
@@ -21,6 +22,9 @@ import {
 
 beforeEach(() => {
   (window as unknown as Record<string, unknown>).armadra = {};
+  usePreferencesStore.setState({
+    browser: { discard: true, discardMinutes: 5, backgroundMax: 8 },
+  });
   resetWebviewPool();
 });
 
@@ -165,6 +169,18 @@ describe("applyWebviewPool", () => {
     expect(order).not.toContain("b1");
     // 活着的永远不被逐出，逐出只发生在 ghost 上。
     expect(order[0]).toBe("b2");
+  });
+
+  it("上限跟着设置走，调小之后下一帧就把多出来的逐掉", () => {
+    usePreferencesStore.getState().setBrowserPreference("backgroundMax", 3);
+    const all = Array.from({ length: 6 }, (_, i) => browser(`b${i}`));
+    applyWebviewPool(all, 1_000);
+    applyWebviewPool([], 2_000);
+    expect(webviewPoolOrder()).toHaveLength(3);
+
+    usePreferencesStore.getState().setBrowserPreference("backgroundMax", 2);
+    applyWebviewPool([], 3_000);
+    expect(webviewPoolOrder()).toHaveLength(2);
   });
 
   it("没有浏览器节点时什么都不做", () => {

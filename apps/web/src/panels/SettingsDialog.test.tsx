@@ -62,7 +62,7 @@ import { usePreferencesStore } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { translate } from "../i18n";
 import { SettingsDialog } from "./SettingsDialog";
-import { SETTINGS_SECTIONS } from "./settings/nav";
+import { visibleSettingsSections } from "./settings/nav";
 
 installDomPolyfills();
 afterEach(cleanup);
@@ -221,12 +221,14 @@ describe("SettingsDialog", () => {
   it("导航列出注册表里的每个分区，且没有搜索框", async () => {
     open();
     await screen.findByText(zh("settings.theme"));
-    for (const section of SETTINGS_SECTIONS) {
+    // 壳不在时「浏览器」那一行不该出现：它上面每一项都只对 `<webview>`
+    // 有意义（复查 §5.2）。
+    const sections = visibleSettingsSections();
+    expect(sections.some((section) => section.id === "browser")).toBe(false);
+    for (const section of sections) {
       expect(navItem(zh(section.labelKey)), section.id).toBeTruthy();
     }
-    expect(within(nav()).getAllByRole("button")).toHaveLength(
-      SETTINGS_SECTIONS.length,
-    );
+    expect(within(nav()).getAllByRole("button")).toHaveLength(sections.length);
     expect(screen.queryByPlaceholderText(/搜索/)).toBeNull();
     expect(screen.queryByText(zh("settings.nodeColorStyle"))).toBeNull();
   });
@@ -243,7 +245,7 @@ describe("SettingsDialog", () => {
     open();
     await screen.findByText(zh("settings.theme"));
 
-    for (const section of SETTINGS_SECTIONS) {
+    for (const section of visibleSettingsSections()) {
       fireEvent.click(navItem(zh(section.labelKey)));
       await waitFor(() => expect(page().dataset.section).toBe(section.id));
       // 页头标题就是这一页的名字，导航高亮跟着走。
