@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { load } from "js-yaml";
 import {
+  bundleResources,
   goTarget,
   hostBuildPlan,
   rustSidecars,
@@ -192,4 +197,70 @@ test("the Windows session host is found under the target triple directory", () =
     ),
   );
   assert.equal(paths.destination, undefined);
+});
+
+/**
+ * `bundleResources()` and `electron-builder.yml` are one decision in two
+ * files: a bundle listed here that electron-builder never copies is a daemon
+ * the packaged app cannot start, and a `{from, to}` pair in the yml that
+ * nothing here knows about is a file whose existence nobody is checking.
+ * electron-builder resolves `from` as a literal path and *silently packages
+ * without it* when it is missing, so this correspondence is the only thing
+ * that would catch a rename.
+ */
+const here = dirname(fileURLToPath(import.meta.url));
+const BUILDER = load(
+  readFileSync(join(here, "..", "electron-builder.yml"), "utf8"),
+);
+
+test("every platform's extraResources carries exactly the bundles that platform needs", () => {
+  for (const [triple, platform] of [
+    ["x86_64-pc-windows-msvc", "win"],
+    ["aarch64-apple-darwin", "mac"],
+    ["x86_64-unknown-linux-gnu", "linux"],
+  ]) {
+    const declared = BUILDER[platform].extraResources.map(
+      (entry) => `${entry.from} -> ${entry.to}`,
+    );
+    for (const bundle of bundleResources(triple)) {
+      assert.ok(
+        declared.includes(`${bundle.from} -> ${bundle.to}`),
+        `${platform}: electron-builder.yml never copies ${bundle.from}`,
+      );
+    }
+    // And nothing under `out/` is copied that this file does not know about.
+    const copied = BUILDER[platform].extraResources
+      .filter((entry) => entry.from.startsWith("out/"))
+      .map((entry) => entry.from)
+      .sort();
+    assert.deepEqual(
+      copied,
+      bundleResources(triple)
+        .map((bundle) => bundle.from)
+        .sort(),
+      `${platform}: extraResources and bundleResources() disagree`,
+    );
+  }
+});
+
+test("the session host bundle ships on Windows only", () => {
+  const windows = bundleResources("x86_64-pc-windows-msvc").map((b) => b.from);
+  assert.ok(windows.includes("out/session-host/host.cjs"));
+  for (const triple of ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]) {
+    const elsewhere = bundleResources(triple).map((bundle) => bundle.from);
+    assert.deepEqual(elsewhere, ["out/cli/armadra-hook.js"]);
+  }
+});
+
+/**
+ * The daemon must not end up in the asar: it is named on a command line as an
+ * absolute path, and only a real file on disk can be.
+ */
+test("neither bundle is left inside the asar", () => {
+  for (const pattern of ["!out/cli/**/*", "!out/session-host/**/*"]) {
+    assert.ok(
+      BUILDER.files.includes(pattern),
+      `electron-builder.yml's "files" is missing ${pattern}`,
+    );
+  }
 });

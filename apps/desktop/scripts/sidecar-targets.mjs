@@ -45,6 +45,33 @@ export function rustSidecars(triple) {
   return sidecars;
 }
 
+/**
+ * The electron-vite bundles a given target ships through `extraResources`.
+ *
+ * Not binaries, and therefore not `stage-binaries.mjs`' business: they are
+ * produced by `pnpm --filter @armadra/desktop build` into `out/` and copied
+ * from there verbatim. They are listed here, beside `rustSidecars()`, because
+ * the question they answer is the same one — *what does this platform's
+ * bundle have to contain* — and because a list nothing checks drifts.
+ * `sidecar-targets.test.mjs` holds this against `electron-builder.yml`.
+ *
+ * `out/session-host/host.cjs` is Windows-only for the same reason
+ * `armadra-session-host` is: ConPTY sessions have to outlive the shell there,
+ * and tmux already does that job on macOS and Linux (R6d).
+ */
+export function bundleResources(triple) {
+  const { GOOS } = goTarget(triple);
+  const resources = [
+    { from: "out/cli/armadra-hook.js", to: "cli/armadra-hook.js" },
+  ];
+  if (GOOS === "windows")
+    resources.push({
+      from: "out/session-host/host.cjs",
+      to: "session-host/host.cjs",
+    });
+  return resources;
+}
+
 export function selectTarget({ host, env = {}, target, native = false }) {
   if (!host) throw new Error("Could not determine the Rust host target triple");
   if (native && target)
