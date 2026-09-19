@@ -12,10 +12,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "predev": "node scripts/ensure-electron.mjs && pnpm prepare:host --native",
-    "prepare:host": "node scripts/prepare-host.mjs",
-    "stage:binaries": "node scripts/stage-binaries.mjs",
-    "stage:binaries-placeholders": "node scripts/stage-binaries.mjs --placeholders",
+    "predev": "node scripts/ensure-electron.mjs",
     "dist": "node scripts/dist.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "node scripts/ensure-node-pty.mjs",

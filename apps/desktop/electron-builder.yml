@@ -14,12 +14,12 @@ productName: Armadra
 # the Linux binary name from it — `@armadradesktop`, which AppImage refuses as
 # a file name. Every platform gets the same short executable name.
 executableName: armadra
-# The staged sidecar binaries (`resources/<binary>[.exe]`) and the `out/`
-# bundles are placed into the unpacked app by this hook, not by
-# `extraResources`: electron-builder copies once, and on the Windows runners
-# that one copy meets a transient sharing violation. The hook retries
-# (scripts/after-pack.mjs). It runs before signing, so everything it places
-# is signed with the bundle as an extraResources entry would have been.
+# The `out/` bundles and the core's migration files are placed into the
+# unpacked app by this hook, not by `extraResources`: electron-builder copies
+# once, and on the Windows runners that one copy meets a transient sharing
+# violation. The hook retries (scripts/after-pack.mjs). It runs before signing,
+# so everything it places is signed with the bundle as an extraResources entry
+# would have been.
 afterPack: ./scripts/after-pack.mjs
 
 directories:
@@ -61,21 +61,18 @@ files:
 asarUnpack:
   - node_modules/node-pty/**
 
-# The sidecar binaries `scripts/stage-binaries.mjs` stages into `resources/`
-# before packaging, and the `out/` bundles `bundleResources()` lists (the
-# hook client, the Windows session host), are placed into the bundle by
-# `scripts/after-pack.mjs` (see `afterPack` above); no platform section
+# This shell ships no sidecar binaries: the core is an `out/` bundle and runs
+# on the Electron the app already carries. What `scripts/after-pack.mjs` places
+# is `bundleResources()` (the hook client, and on Windows the session host) plus
+# `migrationResources()` (the `.sql` files under `resources/migrations`, which is
+# where `core/db/migrations.ts` looks in a packaged build). No platform section
 # carries an `extraResources` list. Electron's `process.resourcesPath` is exactly
-# that directory on every platform, which is what `runtime-process.ts`'s
-# `runtimeExecutable()` already resolves against — no `-<triple>` suffix
-# needed, unlike the `<name>-<triple>` convention the previous bundler imposed
-# (armadra-inventory.md §2 item 29).
+# that directory on every platform.
 #
-# Windows binaries carry `.exe` (`stage-binaries.mjs`'s `goTarget().extension`)
-# and only Windows ships `armadra-session-host` (T01: ConPTY sessions have to
-# outlive the Worker there; tmux already does that job on macOS/Linux); the
-# per-platform list is `binariesFor()` in stage-binaries.mjs, which the hook
-# reads, so nothing here can drift from what was staged.
+# Only Windows ships the session host (T01: ConPTY sessions have to outlive the
+# core there; tmux already does that job on macOS/Linux); the per-platform list
+# is `bundleResources()` in after-pack.mjs, so nothing here can drift from what
+# is placed.
 
 mac:
   category: public.developer-tools
@@ -95,8 +92,8 @@ mac:
   extendInfo:
     # macOS 15+ gates any connection to an address on the user's own subnet
     # behind Local Network privacy, attributed to the RESPONSIBLE PROCESS —
-    # for everything this shell spawns (the Runtime, the Go Host, agent CLIs)
-    # that is Armadra.app, not the child. Without this string there is no
+    # for everything this shell spawns (the core, agent CLIs) that is
+    # Armadra.app, not the child. Without this string there is no
     # prompt and no row in System Settings → Privacy & Security → Local
     # Network: the denial is silent and ungrantable, and it surfaces as
     # `EHOSTUNREACH` from an agent session while Apple-signed `/usr/bin/curl`

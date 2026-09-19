@@ -1,14 +1,13 @@
 /**
  * `pnpm --filter @armadra/desktop dist`.
  *
- * Three steps, in this order and for this reason: the signing decision is
- * made and reported
- * *before* anything is built, so a build that cannot be signed says so in the
- * first second rather than after a multi-minute `electron-vite build` +
- * packaging run; the renderer/main/preload bundle is built next; the sidecar
- * binaries are staged first (see the note in `main` about Windows file locks),
- * so a stale `resources/` directory from an earlier target never survives
- * into a new one silently (`stageBinaries` always copies fresh).
+ * Two steps, in this order and for this reason: the signing decision is made
+ * and reported *before* anything is built, so a build that cannot be signed
+ * says so in the first second rather than after a multi-minute
+ * `electron-vite build` + packaging run; the renderer/main/preload/core
+ * bundles are built next, and `scripts/after-pack.mjs` places what the bundle
+ * needs out of `out/` while electron-builder packs. There is nothing to stage
+ * beforehand: this shell ships no sidecar binaries.
  *
  * Local `dist` always injects `extraMetadata.armadraUpdates = "disabled"`
  * (W2.2's read side keys off this field): a local build is indistinguishable
@@ -22,9 +21,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "js-yaml";
 
-import { rustHost } from "./prepare-host.mjs";
-import { selectTarget } from "./sidecar-targets.mjs";
-import { stageBinaries } from "./stage-binaries.mjs";
 import {
   REQUIRE_ENV,
   configOverride,
@@ -152,15 +148,6 @@ export async function dist({ env = process.env, local = true } = {}) {
   (plan.mode === "skip" ? console.warn : console.log)(
     `${plan.mode === "skip" ? "!" : "→"} ${plan.message}`,
   );
-
-  // Staged BEFORE the renderer/main build on purpose: on Windows a freshly
-  // copied executable stays locked by the real-time scanner for a while, and
-  // electron-builder's own copy of it fails with EBUSY. The build takes long
-  // enough that the lock is gone by the time the packager runs;
-  // `stageBinaries` also waits until each file opens again before returning.
-  const target = selectTarget({ host: rustHost(), env, native: true });
-  for (const path of stageBinaries({ env, target }))
-    console.log(`Staged binary: ${path}`);
 
   execFileSync(process.execPath, [electronViteEntry(), "build"], {
     cwd: app,

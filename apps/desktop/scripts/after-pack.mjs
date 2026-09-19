@@ -1,56 +1,57 @@
 /**
- * electron-builder `afterPack` hook: puts the staged sidecar binaries into the
- * unpacked app's resources directory ourselves, with a retry.
+ * electron-builder `afterPack` hook: puts the `out/` bundles and the migration
+ * files into the unpacked app's resources directory ourselves, with a retry.
  *
- * They — and the `out/` bundles (`bundleResources()`) — used to travel as
- * `extraResources`. On the Windows CI runners electron-builder's own copy of
- * them failed with `EBUSY: resource busy or locked` — a different file each
- * run (a Rust binary, the Go binary, then a freshly built `host.cjs`), still
- * after the real-time scanner was switched off, and while a rename probe a
- * moment earlier found nothing holding the file. Whatever holds it does so
- * briefly, and electron-builder copies once and gives up. This copies the
- * same files to the same places, but tries again for a bounded while before
- * it gives up; when it does give up it names the processes that have the
- * file mapped, so the failure says its cause. Nothing of ours is left to
- * `extraResources`, so the one-shot copy has nothing left to trip on.
+ * They used to travel as `extraResources`. On the Windows CI runners
+ * electron-builder's own copy of them failed with `EBUSY: resource busy or
+ * locked` — a different file each run, still after the real-time scanner was
+ * switched off, and while a rename probe a moment earlier found nothing
+ * holding the file. Whatever holds it does so briefly, and electron-builder
+ * copies once and gives up. This copies the same files to the same places, but
+ * tries again for a bounded while before it gives up; when it does give up it
+ * names the processes that have the file mapped, so the failure says its
+ * cause. Nothing of ours is left to `extraResources`, so the one-shot copy has
+ * nothing left to trip on.
  *
  * `afterPack` runs before signing on every platform (app-builder-lib's
- * `doPack` emits it, then `doSignAfterPack`), so a binary placed here is
- * signed and notarized with the bundle exactly as an `extraResources` entry
- * would have been.
+ * `doPack` emits it, then `doSignAfterPack`), so a file placed here is signed
+ * and notarized with the bundle exactly as an `extraResources` entry would
+ * have been.
  */
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { bundleResources, goTarget } from "./sidecar-targets.mjs";
-import { binariesFor } from "./stage-binaries.mjs";
 
 const app = dirname(dirname(fileURLToPath(import.meta.url)));
 
-/** How long one binary may keep refusing to copy before the hook fails. */
+/** How long one file may keep refusing to copy before the hook fails. */
 export const COPY_LIMIT_MS = 120_000;
 
 /** electron-builder's `Arch` numbering → the name `process.arch` uses. */
 const ARCH_NAMES = ["ia32", "x64", "armv7l", "arm64", "universal"];
 
-/** The Rust target triple a packaged platform/arch pair corresponds to. */
-export function tripleFor(platformName, archName) {
-  const table = {
-    "darwin/arm64": "aarch64-apple-darwin",
-    "darwin/x64": "x86_64-apple-darwin",
-    "win32/arm64": "aarch64-pc-windows-msvc",
-    "win32/x64": "x86_64-pc-windows-msvc",
-    "linux/arm64": "aarch64-unknown-linux-gnu",
-    "linux/x64": "x86_64-unknown-linux-gnu",
-  };
-  const triple = table[`${platformName}/${archName}`];
-  if (!triple) {
+/** The platform/arch pairs this shell is packaged for. */
+const SUPPORTED = {
+  darwin: ["arm64", "x64"],
+  win32: ["arm64", "x64"],
+  linux: ["arm64", "x64"],
+};
+
+/** Refuse a platform/arch pair nothing ships, before anything is copied. */
+export function platformFor(platformName, archName) {
+  if (!SUPPORTED[platformName]?.includes(archName)) {
     throw new Error(
-      `after-pack: no sidecar target for ${platformName}/${archName}`,
+      `after-pack: no bundle target for ${platformName}/${archName}`,
     );
   }
-  return triple;
+  return platformName;
 }
 
 /** The processes with `file` loaded as an image or a module (Windows only). */
@@ -119,35 +120,76 @@ export function copyWithRetry(
 }
 
 /**
- * Everything this hook places for a target: the staged binaries under their
- * plain names, then the `out/` bundles at the paths the launchers name.
+ * The electron-vite bundles a given platform ships, at the paths the launchers
+ * name.
+ *
+ * They are produced by `pnpm --filter @armadra/desktop build` into `out/` and
+ * copied from there verbatim, outside the asar: the hook client is named with
+ * an absolute path by a generated launcher, and the session host is started as
+ * `ELECTRON_RUN_AS_NODE=1 <Electron> <resources>/session-host/host.cjs`, which
+ * has to be a real file on disk.
+ *
+ * `out/session-host/host.cjs` is Windows-only: ConPTY sessions have to outlive
+ * the shell there, and tmux already does that job on macOS and Linux (R6d).
  */
-export function placements(triple) {
-  const { extension } = goTarget(triple);
-  return [
-    ...binariesFor(triple).map((binary) => ({
-      from: join("resources", `${binary}${extension}`),
-      to: `${binary}${extension}`,
-      executable: true,
-    })),
-    ...bundleResources(triple).map((bundle) => ({
-      from: bundle.from,
-      to: bundle.to,
-      executable: false,
-    })),
+export function bundleResources(platformName) {
+  const resources = [
+    { from: "out/cli/armadra-hook.js", to: "cli/armadra-hook.js" },
   ];
+  if (platformName === "win32")
+    resources.push({
+      from: "out/session-host/host.cjs",
+      to: "session-host/host.cjs",
+    });
+  return resources;
+}
+
+/** Where the `.sql` files are in the checkout, and where they go in a bundle. */
+export const MIGRATIONS_FROM = "src/core/db/migrations";
+export const MIGRATIONS_TO = "migrations";
+
+/**
+ * The migration files, as `{from, to}` pairs.
+ *
+ * A packaged core has no checkout to walk up into, so `core/db/migrations.ts`'s
+ * `resolveMigrationsDir` looks for exactly `<resources>/migrations`. They are
+ * copied file by file rather than as a directory so that every placement goes
+ * through the same retry as everything else here.
+ */
+export function migrationResources(from = join(app, MIGRATIONS_FROM)) {
+  return readdirSync(from)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => ({
+      from: `${MIGRATIONS_FROM}/${name}`,
+      to: `${MIGRATIONS_TO}/${name}`,
+    }));
+}
+
+/**
+ * Everything this hook places for a platform: the `out/` bundles, then the
+ * migrations the core reads at start-up.
+ *
+ * There are no sidecar binaries any more. The core is one of those `out/`
+ * bundles and runs on the Electron the app already ships, so nothing here is
+ * marked executable.
+ */
+export function placements(platformName) {
+  return [...bundleResources(platformName), ...migrationResources()].map(
+    (resource) => ({ ...resource, executable: false }),
+  );
 }
 
 export default async function afterPack(context) {
   const platformName = context.electronPlatformName;
   const archName = ARCH_NAMES[context.arch] ?? process.arch;
-  const triple = tripleFor(platformName, archName);
+  platformFor(platformName, archName);
   const resourcesDir = context.packager.getResourcesDir(context.appOutDir);
-  for (const placement of placements(triple)) {
+  for (const placement of placements(platformName)) {
     const source = join(app, placement.from);
     if (!existsSync(source)) {
       throw new Error(
-        `after-pack: ${source} is missing; stage-binaries.mjs and the electron-vite build run before packaging`,
+        `after-pack: ${source} is missing; the electron-vite build runs before packaging`,
       );
     }
     const destination = join(resourcesDir, placement.to);

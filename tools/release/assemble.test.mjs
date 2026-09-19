@@ -30,11 +30,6 @@ import {
   readCompatibility,
   releaseNote,
 } from "./compatibility.mjs";
-import {
-  locateBinary,
-  packageComponents,
-  zipCommand,
-} from "./package-components.mjs";
 import { assemble } from "./assemble.mjs";
 
 function scratch() {
@@ -75,7 +70,7 @@ test("a file changed after the list was written fails verification", async () =>
   try {
     stageAssets({ directory, version: "0.2.0" });
     await writeChecksums(directory);
-    const victim = join(directory, "armadra-host_0.2.0_linux-x86_64.tar.gz");
+    const victim = join(directory, "Armadra_0.2.0_linux-x86_64.AppImage");
     writeFileSync(victim, "swapped\n");
     const problems = await verifyChecksums(directory);
     assert.equal(problems.length, 1);
@@ -125,8 +120,8 @@ test("a signature moved onto another artifact is refused", async () => {
     await writeChecksums(directory);
     const key = generateKey();
     signDirectory({ directory, key, version: "0.2.0" });
-    const from = "armadra-host_0.2.0_linux-x86_64.tar.gz";
-    const onto = "armadra-hook_0.2.0_linux-x86_64.tar.gz";
+    const from = "Armadra_0.2.0_linux-x86_64.AppImage";
+    const onto = "Armadra_0.2.0_linux-x86_64.deb";
     // Same key, valid signature, wrong file: only the trusted comment ties the
     // two together, so this must fail on the comment rather than the bytes.
     writeFileSync(
@@ -249,7 +244,7 @@ test("the audit catches a hole the individual steps would each pass", async () =
   }
 });
 
-test("the mock release server answers the shape the Host reads", async () => {
+test("the mock release server answers the shape the updater reads", async () => {
   const directory = scratch();
   try {
     stageAssets({ directory, version: "0.2.0" });
@@ -271,7 +266,7 @@ test("the mock release server answers the shape the Host reads", async () => {
       const index = await (await fetch(`${server.source}/releases`)).json();
       assert.equal(index.length, 3);
       // A draft is served exactly as GitHub serves it: visible to the API and
-      // skipped by the Host, so the "not published yet" path is a real path.
+      // skipped by the updater, so the "not published yet" path is a real path.
       assert.equal(
         index.find((release) => release.tag_name === "v0.3.0").draft,
         true,
@@ -304,12 +299,12 @@ test("the mock release server answers the shape the Host reads", async () => {
   }
 });
 
-test("the mock server can produce the failures a real host produces", async () => {
+test("the mock server can produce the failures a real source produces", async () => {
   const directory = scratch();
   try {
     stageAssets({ directory, version: "0.2.0" });
     await writeChecksums(directory);
-    const name = "armadra-host_0.2.0_linux-x86_64.tar.gz";
+    const name = "Armadra_0.2.0_linux-x86_64.AppImage";
     const original = readFileSync(join(directory, name));
 
     const unreachable = await startMockReleaseServer({
@@ -325,8 +320,8 @@ test("the mock server can produce the failures a real host produces", async () =
       releases: [],
       faults: { malformed: true },
     });
-    // A body that is not the shape the Host expects is an unusable source, not
-    // an empty list of releases.
+    // A body that is not the shape a reader expects is an unusable source,
+    // not an empty list of releases.
     assert.equal(
       await (await fetch(`${malformed.source}/releases`)).text(),
       "not json",
@@ -365,46 +360,6 @@ test("the mock server can produce the failures a real host produces", async () =
     await truncated.close();
   } finally {
     rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-test("packaging finds a binary under either name and reports what was not built", () => {
-  const from = scratch();
-  const out = scratch();
-  try {
-    writeFileSync(join(from, "armadra-host"), "host\n");
-    writeFileSync(
-      join(from, "armadra-runtime-x86_64-unknown-linux-gnu"),
-      "worker\n",
-    );
-    assert.ok(
-      locateBinary({ from, binary: "armadra-host", target: "linux-x86_64" }),
-    );
-    assert.ok(
-      locateBinary({
-        from,
-        binary: "armadra-runtime",
-        target: "linux-x86_64",
-        triple: "x86_64-unknown-linux-gnu",
-      }),
-    );
-    const { packed, missing } = packageComponents({
-      target: "linux-x86_64",
-      from,
-      out,
-      version: "0.2.0",
-      triple: "x86_64-unknown-linux-gnu",
-    });
-    assert.deepEqual(packed.map((entry) => entry.asset).sort(), [
-      "armadra-host_0.2.0_linux-x86_64.tar.gz",
-      "armadra-runtime_0.2.0_linux-x86_64.tar.gz",
-    ]);
-    // A component this target should publish but nobody built is a hole in the
-    // release, reported now rather than by a client that cannot upgrade.
-    assert.deepEqual(missing, ["armadra-hook"]);
-  } finally {
-    rmSync(from, { recursive: true, force: true });
-    rmSync(out, { recursive: true, force: true });
   }
 });
 
@@ -536,29 +491,3 @@ test("an unplaceable file fails assembly", async () => {
   }
 });
 
-// Windows components are .zip, and `zip` is not on every Windows runner's
-// PATH. Falling back to the 7-Zip that is there beats a release that fails at
-// the packaging step with "zip: command not found".
-test("the zip archiver falls back to 7-Zip and refuses to guess", () => {
-  assert.deepEqual(zipCommand((name) => name === "zip").command, "zip");
-  assert.deepEqual(zipCommand((name) => name === "7z").command, "7z");
-  assert.deepEqual(zipCommand((name) => name === "7zz").command, "7zz");
-  // Preference order: zip first, whatever else is also installed.
-  assert.equal(zipCommand(() => true).command, "zip");
-  assert.deepEqual(zipCommand(() => true).argv("out.zip", "inner"), [
-    "-q",
-    "-X",
-    "-j",
-    "out.zip",
-    "inner",
-  ]);
-  assert.deepEqual(zipCommand((name) => name === "7z").argv("out.zip", "in"), [
-    "a",
-    "-tzip",
-    "-bso0",
-    "-bse0",
-    "out.zip",
-    "in",
-  ]);
-  assert.throws(() => zipCommand(() => false), /No zip archiver found/);
-});

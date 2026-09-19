@@ -14,8 +14,11 @@
 # pulling in a newer glibc symbol would otherwise re-break it silently.
 #
 # Usage: verify-linux-glibc-baseline.sh [binary ...]
-# Without arguments it inspects the release binaries `cargo build --release` and
-# `prepare:host` leave in target/release (and target/<triple>/release).
+# Without arguments it inspects the unpacked Linux bundle electron-builder
+# leaves in apps/desktop/release/: the `armadra` launcher and the native
+# addons unpacked beside the asar (node-pty's `pty.node` and its
+# `spawn-helper`, which `posix_spawn` executes). Those are what this repository
+# links; Electron's own binaries come from upstream.
 # Override the baseline with ARMADRA_GLIBC_BASELINE (default 2.35, the glibc of
 # Ubuntu 22.04 LTS and Debian 12).
 set -euo pipefail
@@ -37,42 +40,27 @@ for command_name in objdump grep sed sort awk; do
   command -v "$command_name" >/dev/null 2>&1 || fail "missing required command: $command_name"
 done
 
-# Everything a Linux release ships as an executable. armadra-host is built with
-# CGO_ENABLED=0 and so carries no GLIBC references at all; it is listed anyway
-# because a future cgo dependency would make it carry them, and a binary that is
-# checked and found clean costs one objdump.
-readonly BINARY_NAMES=(
-  "Armadra"
-  "armadra-runtime"
-  "armadra-hook"
-  "armadra-host"
-)
-
 binaries=()
 if [ "$#" -gt 0 ]; then
   binaries=("$@")
 else
-  release_dirs=("target/release")
-  for triple in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
-    release_dirs+=("target/$triple/release")
-  done
-  for directory in "${release_dirs[@]}"; do
+  # electron-builder's unpacked output, one directory per architecture.
+  for directory in apps/desktop/release/linux-unpacked \
+    apps/desktop/release/linux-arm64-unpacked; do
     [ -d "$directory" ] || continue
-    for name in "${BINARY_NAMES[@]}"; do
-      # prepare-sidecar stages the sidecars under their triple, so both
-      # spellings are inspected wherever they exist.
-      for candidate in "$directory/$name" "$directory/$name"-*; do
-        [ -f "$candidate" ] || continue
-        case "$candidate" in
-          *.d | *.sig | *.rlib) continue ;;
-        esac
-        binaries+=("$candidate")
-      done
-    done
+    # The launcher electron-builder names from `executableName`.
+    [ -f "$directory/armadra" ] && binaries+=("$directory/armadra")
+    # Every native addon unpacked beside the asar, plus node-pty's helper.
+    while IFS= read -r candidate; do
+      binaries+=("$candidate")
+    done < <(
+      find "$directory" \
+        \( -name '*.node' -o -name 'spawn-helper' \) -type f | sort
+    )
   done
 fi
 
-[ "${#binaries[@]}" -gt 0 ] || fail "no Armadra release binary found to inspect (build it first or pass a path)"
+[ "${#binaries[@]}" -gt 0 ] || fail "no Armadra release binary found to inspect (run \`pnpm --filter @armadra/desktop dist\` first, or pass a path)"
 
 status=0
 for binary in "${binaries[@]}"; do
@@ -120,6 +108,8 @@ if [ "$status" -ne 0 ]; then
   fail "a Linux binary requires a newer GLIBC than the baseline (GLIBC_$baseline).
   Build the Linux release on that baseline — the ubuntu-22.04 / ubuntu-22.04-arm runners,
   or an ubuntu:22.04 container — so the artifacts start on Ubuntu 22.04+ and Debian 12+.
+  A native addon (node-pty) is rebuilt against the runner's glibc, so this is the check
+  that catches a runner image moving forward.
   See docs/guides/ci-release.md §2."
 fi
 

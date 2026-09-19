@@ -26,12 +26,10 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  COMPONENTS,
   MANIFEST_ASSETS,
   TARGETS,
   assetComponent,
   assetTarget,
-  componentAsset,
   desktopAssets,
   webAsset,
 } from "./artifacts.mjs";
@@ -63,12 +61,6 @@ export function stageAssets({ directory, version }) {
       // and `assemble.mjs` signs the directory itself before it builds the
       // manifest. Staging one here would hide whether that ordering holds.
     }
-    for (const entry of COMPONENTS) {
-      if (!entry.targets.includes(target)) continue;
-      const name = componentAsset({ binary: entry.binary, version, target });
-      writeFileSync(join(directory, name), placeholder(name));
-      staged.push(name);
-    }
   }
   writeFileSync(
     join(directory, webAsset(version)),
@@ -86,17 +78,17 @@ export async function auditRelease({ directory, version, publicKeyText }) {
       .readdirSync(directory)
       .filter((name) => !name.endsWith(".sig")),
   );
-  // Every published file must be one the Host can place. An asset it reads no
-  // component from is one it will never offer, however correct its bytes are.
+  // Every published file must be one the updater can place. An asset it reads
+  // no component from is one it will never offer, however correct its bytes are.
   for (const name of staged) {
     const component = assetComponent(name);
     if (component === "") {
-      problems.push(`${name} declares no component the Host can read`);
+      problems.push(`${name} declares no component the updater can read`);
       continue;
     }
     if (component === "manifest" || component === "web") continue;
     if (assetTarget(name) === "")
-      problems.push(`${name} declares no target the Host can read`);
+      problems.push(`${name} declares no target the updater can read`);
   }
   for (const required of MANIFEST_ASSETS) {
     if (!staged.has(required)) problems.push(`${required} is missing`);
@@ -199,8 +191,8 @@ async function main(argv) {
       })),
     );
 
-    // The Host reads a release through the API shape, not through a directory,
-    // so the dry run serves it and reads it back the way the Host would.
+    // A release is read through the API shape, not through a directory, so the
+    // dry run serves it and reads it back the way a client would.
     const server = await startMockReleaseServer({
       releases: [{ directory, tag: `v${version}`, body: note }],
     });

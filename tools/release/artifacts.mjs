@@ -1,14 +1,15 @@
 /**
  * What a release publishes, and what each file is called.
  *
- * The names are load-bearing. The Host reads a component out of the prefix
+ * The names are load-bearing. The updater reads a component out of the prefix
  * before the first "_" and a target out of the "<os>-<arch>" segment after the
  * version, and it matches a detached signature by name plus ".sig". A file
  * named a little differently is not a slightly wrong download — it is an
- * artifact the Host cannot place, and it will refuse rather than guess.
+ * artifact nothing can place, and the pipeline refuses rather than guesses.
  *
- * Keep this in step with updates.assetComponents and updates.assetTarget in
- * apps/host/internal/updates/source.go; artifacts.test.mjs asserts both ends.
+ * A release publishes two things now: the desktop bundles, and the web bundle
+ * the server shell (`apps/server`) serves. There are no component archives —
+ * the managed binaries they carried do not exist any more.
  */
 
 /** Every target a release builds for, in the contract's "<os>-<arch>" form. */
@@ -21,89 +22,33 @@ export const TARGETS = [
   "windows-aarch64",
 ];
 
-/** Components published as a compressed archive of one program. */
-export const COMPONENTS = [
-  { component: "host", binary: "armadra-host", targets: TARGETS },
-  { component: "worker", binary: "armadra-runtime", targets: TARGETS },
-  { component: "hook", binary: "armadra-hook", targets: TARGETS },
-  {
-    component: "session-host",
-    binary: "armadra-session-host",
-    // Windows only: elsewhere tmux already owns sessions that outlive a shell,
-    // and shipping a binary whose main refuses to run helps nobody.
-    targets: TARGETS.filter((target) => target.startsWith("windows-")),
-  },
-];
-
 /** The two files that describe a release rather than carry a program. */
 export const MANIFEST_ASSETS = ["latest.json", "SHA256SUMS"];
 
-/** The archive extension a target uses. */
-export function archiveExtension(target) {
-  return target.startsWith("windows-") ? ".zip" : ".tar.gz";
-}
-
-/** The executable name inside an archive. */
-export function binaryName(binary, target) {
-  return target.startsWith("windows-") ? `${binary}.exe` : binary;
-}
-
-/** The published name of one component archive. */
-export function componentAsset({ binary, version, target }) {
-  return `${binary}_${version}_${target}${archiveExtension(target)}`;
-}
-
-/** The published name of the built web bundle, which has no target. */
+/**
+ * The published name of the built web bundle, which has no target.
+ *
+ * This is `apps/web`'s `dist/` in a tarball: the artifact an operator unpacks
+ * beside the server shell (`apps/server`), which serves it. It is not a
+ * program archive — there are none left.
+ */
 export function webAsset(version) {
   return `armadra-web_${version}.tar.gz`;
 }
 
 /**
- * Every component archive a release publishes, with the component the Host
- * will read back out of each name.
- */
-export function componentAssets(version) {
-  const assets = [];
-  for (const entry of COMPONENTS) {
-    for (const target of entry.targets) {
-      assets.push({
-        component: entry.component,
-        binary: entry.binary,
-        target,
-        name: componentAsset({ binary: entry.binary, version, target }),
-      });
-    }
-  }
-  assets.push({
-    component: "web",
-    binary: "armadra-web",
-    target: "",
-    name: webAsset(version),
-  });
-  return assets;
-}
-
-/**
- * The component a published name declares, mirroring the Host's own reading.
- * A name that follows no convention declares none, and nothing matches it.
+ * The component a published name declares. A name that follows no convention
+ * declares none, and nothing matches it.
  */
 export function assetComponent(name) {
   if (MANIFEST_ASSETS.includes(name)) return "manifest";
   const separator = name.indexOf("_");
   if (separator < 0) return "";
-  const prefixes = {
-    Armadra: "desktop",
-    "armadra-host": "host",
-    "armadra-runtime": "worker",
-    "armadra-worker": "worker",
-    "armadra-hook": "hook",
-    "armadra-session-host": "session-host",
-    "armadra-web": "web",
-  };
+  const prefixes = { Armadra: "desktop", "armadra-web": "web" };
   return prefixes[name.slice(0, separator)] ?? "";
 }
 
-/** The target a published name declares, mirroring updates.assetTarget. */
+/** The target a published name declares. */
 export function assetTarget(name) {
   const lower = name.toLowerCase();
   for (const system of ["darwin", "linux", "windows"]) {
@@ -129,8 +74,8 @@ export function assetTarget(name) {
  *
  * The names below are NOT electron-builder's own. It writes
  * `Armadra-0.1.0-arm64.dmg`, `Armadra Setup 0.1.0.exe` and
- * `armadra_0.1.0_amd64.deb`, and none of those declares a target the Host can
- * read (`assetTarget` finds nothing in `arm64` or `amd64`, and a space in a
+ * `armadra_0.1.0_amd64.deb`, and none of those declares a target `assetTarget`
+ * can read (it finds nothing in `arm64` or `amd64`, and a space in a
  * name is its own problem). `stage-desktop.mjs` looks each bundle up by `kind`
  * and renames it to the name here, so the rename is stated once rather than
  * repeated as a `find` in every release job.
