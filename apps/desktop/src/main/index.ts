@@ -6,6 +6,7 @@ import {
   IMPLEMENTED_CHANNELS,
   IPC,
   NOT_IMPLEMENTED,
+  type PickOptions,
   type TransportEndpoints,
   ipcError,
 } from "../shared/ipc";
@@ -29,8 +30,14 @@ import {
   getMainWindow,
   loadRenderer,
   markQuitting,
+  onWindowCreated,
   revealWindow,
 } from "./window";
+import { pickDirectory, pickFiles } from "./dialogs";
+import { openExternal } from "./external";
+import { installApplicationMenu, installKeydownIntercept } from "./menu";
+import { applyShortcuts, releaseShortcuts } from "./shortcuts";
+import { createTray, destroyTray } from "./tray";
 import {
   ownsRuntime,
   publishedRuntimeBases,
@@ -67,6 +74,12 @@ function registerIpc(): void {
     // it is the one place that holds both the Host's lifecycle and the
     // Runtime — it has to stop both before an installer may run (§2.3).
     ...updates.handlers,
+    [IPC.dialogPickDirectory.channel]: (options) =>
+      pickDirectory(options as PickOptions | undefined),
+    [IPC.dialogPickFiles.channel]: (options) =>
+      pickFiles(options as PickOptions | undefined),
+    [IPC.shellOpenExternal.channel]: (url) => openExternal(url),
+    [IPC.shortcutsApply.channel]: (bindings) => applyShortcuts(bindings),
   };
   // The table and the implementation list must agree: a handler added here
   // without being listed there (or the reverse) is how a channel quietly
@@ -147,6 +160,10 @@ async function requestQuit(): Promise<void> {
     return;
   }
   markQuitting();
+  // A global hotkey outlives the window but not the process, and the tray's
+  // poll must not keep the loop alive past the last service stopping.
+  releaseShortcuts();
+  destroyTray();
   app.quit();
 }
 
@@ -155,6 +172,16 @@ async function requestQuit(): Promise<void> {
 async function start(): Promise<void> {
   traceLifecycle("setup");
   registerIpc();
+
+  // The system integration (W2.1). All of it is installed before the window
+  // exists: the intercept is a per-window hook, so registering it afterwards
+  // would miss the first window, and the menu is process-wide.
+  onWindowCreated(installKeydownIntercept);
+  installApplicationMenu();
+  createTray({
+    runtimeBase: async () => (await transportEndpoints()).httpBase,
+    quit: () => app.quit(),
+  });
 
   const window = createMainWindow();
   void loadRenderer(window);

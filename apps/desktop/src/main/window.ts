@@ -1,6 +1,7 @@
 import { BrowserWindow, app } from "electron";
 import { join } from "node:path";
 import { traceLifecycle } from "./trace";
+import { createCrashReloadPolicy } from "../shell-core/crash-reload";
 import { closeAction, rendererTarget } from "../shell-core/window-rules";
 
 /**
@@ -19,6 +20,23 @@ import { closeAction, rendererTarget } from "../shell-core/window-rules";
 let current: BrowserWindow | null = null;
 /** Set once the quit sequence starts, so `close` stops meaning `hide`. */
 let quitting = false;
+
+/**
+ * What to do to every window this module makes — the per-window wiring other
+ * modules own, `before-input-event` above all.
+ *
+ * A hook rather than a direct call because macOS recreates the window from the
+ * dock after a close, and anything installed only on the FIRST window silently
+ * stops working after that cycle. It also keeps the dependency one-way:
+ * `menu.ts` reaches into this module, and this module must not reach back.
+ */
+const created: ((window: BrowserWindow) => void)[] = [];
+
+export function onWindowCreated(
+  listener: (window: BrowserWindow) => void,
+): void {
+  created.push(listener);
+}
 
 export function markQuitting(): void {
   quitting = true;
@@ -87,8 +105,30 @@ export function createMainWindow(): BrowserWindow {
     if (current === window) current = null;
   });
 
+  // A dead renderer is a blank window over a Runtime that is still running and
+  // still holding the user's terminals; reloading gets the canvas back. The
+  // policy is what stops that from becoming a loop — see `crash-reload.ts`.
+  const crashes = createCrashReloadPolicy();
+  window.webContents.on("render-process-gone", (_event, details) => {
+    traceLifecycle(`renderer gone: ${details.reason}`);
+    if (!crashes.shouldReload(details.reason, Date.now())) return;
+    if (window.isDestroyed()) return;
+    void loadRenderer(window);
+  });
+
+  for (const listener of created) listener(window);
+
   current = window;
   return window;
+}
+
+/**
+ * What ⌘W and the menu's Close item mean. Going through `close()` rather than
+ * `hide()` keeps ONE place deciding — `closeAction` above — so the fullscreen
+ * rule (electron/electron#20263) cannot be bypassed by a second caller.
+ */
+export function closeWindow(): void {
+  getMainWindow()?.close();
 }
 
 /** Brings the window back from hidden or minimized, creating it if it is gone. */

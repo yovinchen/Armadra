@@ -83,6 +83,25 @@ export const IPC = {
   windowIsFocused: spec("window:is-focused", "invoke", "window"),
 
   /**
+   * A chord the MAIN process claimed out of `before-input-event`, forwarded to
+   * the page as an intent.
+   *
+   * Not in the design's §2.2 table, because the table predates the decision to
+   * port nodeterm's keydown intercept: an accelerator on an application menu
+   * item is handled ABOVE the web contents, so a chord the menu owns can only
+   * reach the page if main claims it and hands it over. The closed list of
+   * claimed chords is `shell-core/keydown-intercept.ts`.
+   */
+  windowKeyIntent: spec("window:key-intent", "event", "window"),
+
+  /**
+   * A notification the MAIN process sent was clicked. The shell brings its own
+   * window back to the front; the `nodeId` it forwards is the page's business,
+   * because the shell has no idea what a canvas node is.
+   */
+  windowNotificationClick: spec("window:notification-click", "event", "window"),
+
+  /**
    * The UI locale. Tray and menu wording comes from `apps/web/src/i18n/`; the
    * main process only ever learns which language to pick.
    */
@@ -100,10 +119,10 @@ export type ChannelName = (typeof IPC)[keyof typeof IPC]["channel"];
 export const ALL_CHANNELS: readonly ChannelSpec[] = Object.values(IPC);
 
 /**
- * The channels that answer for real (W1.0/W1.1, plus the seven of W2.2).
- * Everything else in the table is registered too, but rejects with
- * `not_implemented` — a placeholder that fails loudly beats a channel that is
- * simply absent, which the page can only observe as a hang or an
+ * The channels that answer for real (W1.0/W1.1, W2.1's system integration
+ * and the seven of W2.2). Everything else in the table is registered too,
+ * but rejects with `not_implemented` — a placeholder that fails loudly beats
+ * a channel that is simply absent, which the page can only observe as a hang or an
  * `Error: No handler registered`.
  */
 export const IMPLEMENTED_CHANNELS: readonly string[] = [
@@ -117,6 +136,10 @@ export const IMPLEMENTED_CHANNELS: readonly string[] = [
   IPC.updatesDownload.channel,
   IPC.updatesInstall.channel,
   IPC.updatesRestartReport.channel,
+  IPC.dialogPickDirectory.channel,
+  IPC.dialogPickFiles.channel,
+  IPC.shellOpenExternal.channel,
+  IPC.shortcutsApply.channel,
 ];
 
 /** The `{ code, message }` shape AGENTS.md requires of every rejection. */
@@ -130,6 +153,26 @@ export function ipcError(code: string, message: string): IpcError {
 }
 
 export const NOT_IMPLEMENTED = "not_implemented";
+
+/** What `dialog:pick-directory` / `dialog:pick-files` accept. Paths, never
+ * bytes: the page hands a path to the Runtime, which is the process allowed to
+ * read it, so the file never travels through the renderer at all. */
+export interface PickOptions {
+  readonly multiple?: boolean;
+  readonly defaultPath?: string;
+}
+
+/** One requested global hotkey, in the accelerator syntax the page produces. */
+export interface ShortcutBinding {
+  readonly id: string;
+  readonly accelerator: string;
+}
+
+/** What became of one. See `shell-core/shortcut-rules.ts` for the states. */
+export interface ShortcutOutcome {
+  readonly id: string;
+  readonly state: "bound" | "unbound" | "invalid" | "taken";
+}
 
 /** What `transport:endpoints` answers. Bases carry no trailing slash. */
 export interface TransportEndpoints {

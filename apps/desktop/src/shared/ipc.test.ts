@@ -35,14 +35,19 @@ describe("the IPC table", () => {
       expect(declared.has(channel), channel).toBe(true);
   });
 
-  it("implements exactly the channels the batches so far promised", () => {
+  it("implements exactly the channels the shipped batches promised", () => {
+    // W1.0/W1.1 answered the first three; W2.1 added the system integration and
+    // W2.2 the seven update commands. Everything else in the table still rejects
+    // with `not_implemented`, and this list is the record of which batch owes what.
     expect([...IMPLEMENTED_CHANNELS].sort()).toEqual(
       [
-        // W1.0 / W1.1
         "app:locale",
         "transport:endpoints",
         "window:is-focused",
-        // W2.2: the seven update commands
+        "dialog:pick-directory",
+        "dialog:pick-files",
+        "shell:open-external",
+        "shortcuts:apply",
         "updates:cancel",
         "updates:check",
         "updates:dismiss",
@@ -52,6 +57,17 @@ describe("the IPC table", () => {
         "updates:state",
       ].sort(),
     );
+  });
+
+  it("keeps the two window events the shell pushes on its own", () => {
+    // Neither is in design §2.2: the intercept is a port decided after the
+    // table was written, and a main-process notification has nowhere else to
+    // report a click to. Both are `window` reach — they mean nothing to a peer
+    // that is not this window.
+    for (const spec of [IPC.windowKeyIntent, IPC.windowNotificationClick]) {
+      expect(spec.direction, spec.channel).toBe("event");
+      expect(spec.reach, spec.channel).toBe("window");
+    }
   });
 
   it("covers every domain the migration design §2.2 lists", () => {

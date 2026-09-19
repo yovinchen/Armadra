@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import {
   DESKTOP_DOCUMENT_ATTRIBUTE,
   IPC,
+  type PickOptions,
+  type ShortcutBinding,
+  type ShortcutOutcome,
   type TransportEndpoints,
 } from "../shared/ipc";
 
@@ -40,6 +43,10 @@ function subscribe<A extends unknown[]>(channel: string) {
 const onUpdatesProgress = subscribe<[unknown]>(IPC.updatesProgress.channel);
 const onShortcutTriggered = subscribe<[string]>(IPC.shortcutsTriggered.channel);
 const onBrowserDrive = subscribe<[unknown]>(IPC.browserDrive.channel);
+const onKeyIntent = subscribe<[string]>(IPC.windowKeyIntent.channel);
+const onNotificationClick = subscribe<[{ nodeId: string }]>(
+  IPC.windowNotificationClick.channel,
+);
 
 export interface ArmadraDesktopApi {
   readonly transport: {
@@ -50,10 +57,17 @@ export interface ArmadraDesktopApi {
   };
   readonly window: {
     isFocused(): Promise<boolean>;
+    /** A chord the main process claimed back from the application menu
+     * (`shell-core/keydown-intercept.ts`). */
+    onKeyIntent(listener: (intent: string) => void): () => void;
+    /** A main-process notification was clicked; the page selects the node. */
+    onNotificationClick(
+      listener: (event: { nodeId: string }) => void,
+    ): () => void;
   };
   readonly dialog: {
-    pickDirectory(options?: unknown): Promise<string[]>;
-    pickFiles(options?: unknown): Promise<string[]>;
+    pickDirectory(options?: PickOptions): Promise<string[]>;
+    pickFiles(options?: PickOptions): Promise<string[]>;
   };
   readonly shell: {
     openExternal(url: string): Promise<void>;
@@ -74,7 +88,7 @@ export interface ArmadraDesktopApi {
     onProgress(listener: (progress: unknown) => void): () => void;
   };
   readonly shortcuts: {
-    apply(bindings: unknown): Promise<unknown>;
+    apply(bindings: readonly ShortcutBinding[]): Promise<ShortcutOutcome[]>;
     onTriggered(listener: (id: string) => void): () => void;
   };
   readonly browser: {
@@ -100,6 +114,8 @@ const api: ArmadraDesktopApi = {
   },
   window: {
     isFocused: () => ipcRenderer.invoke(IPC.windowIsFocused.channel),
+    onKeyIntent: (listener) => onKeyIntent(listener),
+    onNotificationClick: (listener) => onNotificationClick(listener),
   },
   dialog: {
     pickDirectory: (options) =>
@@ -142,8 +158,8 @@ contextBridge.exposeInMainWorld("armadra", api);
  * Mark the document as desktop-hosted, synchronously and before any of the
  * page's own scripts run. This replaces the Tauri shell's `data-tauri`
  * attribute (`src-tauri/src/main.rs:53-55`), which `apps/web/src/styles/tokens.css`
- * keys its window-chrome rules off. W1.0 only adds the new attribute; the
- * front end still reads `data-tauri` until W2.1 switches it over.
+ * keys its window-chrome rules off. Since W2.1 those rules match on either
+ * attribute, so the same stylesheet dresses both shells.
  */
 function markDesktopDocument(): void {
   document.documentElement?.setAttribute(DESKTOP_DOCUMENT_ATTRIBUTE, "");
