@@ -5,6 +5,7 @@ import type { Position } from "@armadra/shared";
 import { usePreferencesStore } from "@/app/preferences-store";
 import { canEditCanvas, useCanvasOwnership } from "@/canvas-ownership";
 import { useCanvasStore } from "@/store/canvas-store";
+import { defaultNodeSize } from "@/store/defaults";
 import { isCanvasLocked } from "../../canvas-lock";
 import {
   getBaseSize,
@@ -214,9 +215,10 @@ function commitFrame(draft: Draft): void {
     width: Math.abs(draft.current.x - draft.origin.x),
     height: Math.abs(draft.current.y - draft.origin.y),
   };
+  // 拖得太小当成「点一下」：给分组的默认尺寸，别让用户拿到一个装不下节点的框。
   const size =
     rect.width < 40 || rect.height < 40
-      ? { width: 480, height: 320 }
+      ? defaultNodeSize("group")
       : { width: rect.width, height: rect.height };
   const position =
     rect.width < 40 || rect.height < 40
