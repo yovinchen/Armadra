@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createHash, randomBytes } from "node:crypto";
 import { connect, type Socket } from "node:net";
 
-import { acceptKey, encodeFrame, MessageReader } from "../../shell-core/browser/websocket";
+import {
+  acceptKey,
+  encodeFrame,
+  MessageReader,
+} from "../../shell-core/browser/websocket";
 import { startDriveServer, type DriveServer } from "./drive-server";
 
 /**
@@ -80,7 +84,10 @@ async function dial(address: string): Promise<Client> {
     }
     for (const message of reader.push(rest)) {
       if (message.kind !== "text") continue;
-      const value = JSON.parse(message.data.toString("utf8")) as Record<string, unknown>;
+      const value = JSON.parse(message.data.toString("utf8")) as Record<
+        string,
+        unknown
+      >;
       const waiter = waiters.shift();
       if (waiter) waiter(value);
       else inbox.push(value);
@@ -92,7 +99,8 @@ async function dial(address: string): Promise<Client> {
   });
 
   return {
-    send: (value) => socket.write(mask(Buffer.from(JSON.stringify(value), "utf8"))),
+    send: (value) =>
+      socket.write(mask(Buffer.from(JSON.stringify(value), "utf8"))),
     next: () =>
       new Promise((resolve) => {
         const ready = inbox.shift();
@@ -121,7 +129,12 @@ describe("the drive channel", { timeout: 10_000 }, () => {
     client.send({ type: "hello", token: server.token });
     expect(await client.next()).toEqual({ type: "ready" });
 
-    client.send({ id: "r1", nodeId: "browser-1", verb: "read", args: { mode: "title" } });
+    client.send({
+      id: "r1",
+      nodeId: "browser-1",
+      verb: "read",
+      args: { mode: "title" },
+    });
     const answer = await client.next();
     expect(answer).toEqual({
       id: "r1",
@@ -151,7 +164,7 @@ describe("the drive channel", { timeout: 10_000 }, () => {
 
   it("turns a thrown refusal into { code, message }", async () => {
     server = await startDriveServer(async () => {
-      throw Object.assign(new Error("no drivable browser node \"browser-9\""), {
+      throw Object.assign(new Error('no drivable browser node "browser-9"'), {
         code: "browser_not_drivable",
       });
     });
@@ -178,9 +191,16 @@ describe("the drive channel", { timeout: 10_000 }, () => {
     const client = await dial(server.address);
     client.send({ type: "hello", token: server.token });
     await client.next();
-    client.send({ id: "r3", nodeId: "browser-1", verb: "Runtime.evaluate", args: {} });
+    client.send({
+      id: "r3",
+      nodeId: "browser-1",
+      verb: "Runtime.evaluate",
+      args: {},
+    });
     const answer = await client.next();
-    expect((answer.error as { code: string }).code).toBe("browser_unknown_verb");
+    expect((answer.error as { code: string }).code).toBe(
+      "browser_unknown_verb",
+    );
     expect(called).toBe(false);
   });
 
@@ -191,7 +211,12 @@ describe("the drive channel", { timeout: 10_000 }, () => {
     const client = await dial(server.address);
     client.send({ type: "hello", token: server.token });
     await client.next();
-    server.publish({ type: "event", event: "navigated", nodeId: "browser-1", url: "https://a" });
+    server.publish({
+      type: "event",
+      event: "navigated",
+      nodeId: "browser-1",
+      url: "https://a",
+    });
     expect(await client.next()).toEqual({
       type: "event",
       event: "navigated",

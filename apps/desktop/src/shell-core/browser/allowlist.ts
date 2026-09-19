@@ -123,13 +123,19 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
     "DOM.getDocument",
     (p) => {
       const depth = p.depth;
-      if (depth !== undefined && (!isFiniteNumber(depth) || depth < 0 || depth > 1)) {
+      if (
+        depth !== undefined &&
+        (!isFiniteNumber(depth) || depth < 0 || depth > 1)
+      ) {
         return false;
       }
       return p.pierce !== true;
     },
   ],
-  ["DOM.resolveNode", (p) => isFiniteNumber(p.nodeId) || typeof p.backendNodeId === "number"],
+  [
+    "DOM.resolveNode",
+    (p) => isFiniteNumber(p.nodeId) || typeof p.backendNodeId === "number",
+  ],
   ["Runtime.releaseObject", (p) => typeof p.objectId === "string"],
   [
     "Runtime.callFunctionOn",
@@ -156,7 +162,12 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
   [
     "Input.dispatchMouseEvent",
     (p) => {
-      const types = ["mousePressed", "mouseReleased", "mouseMoved", "mouseWheel"];
+      const types = [
+        "mousePressed",
+        "mouseReleased",
+        "mouseMoved",
+        "mouseWheel",
+      ];
       if (typeof p.type !== "string" || !types.includes(p.type)) return false;
       if (!isFiniteNumber(p.x) || !isFiniteNumber(p.y)) return false;
       // Coordinates must land inside a viewport this shell measured itself.
@@ -173,10 +184,12 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
       // The one field that would turn a key event into arbitrary typing.
       if ("text" in p) return false;
       if ("unmodifiedText" in p) return false;
-      if (p.key !== undefined && !BROWSER_KEYS.includes(String(p.key))) return false;
+      if (p.key !== undefined && !BROWSER_KEYS.includes(String(p.key)))
+        return false;
       if (p.commands !== undefined) {
         if (!Array.isArray(p.commands)) return false;
-        if (!p.commands.every((c) => BROWSER_COMMANDS.includes(String(c)))) return false;
+        if (!p.commands.every((c) => BROWSER_COMMANDS.includes(String(c))))
+          return false;
       }
       return true;
     },
@@ -194,13 +207,16 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
     "Page.captureScreenshot",
     (p) => {
       const format = p.format;
-      if (format !== undefined && format !== "png" && format !== "jpeg") return false;
+      if (format !== undefined && format !== "png" && format !== "jpeg")
+        return false;
       if (p.clip !== undefined) {
         if (!isObject(p.clip)) return false;
         const clip = p.clip;
         const fields = ["x", "y", "width", "height", "scale"];
-        if (!Object.keys(clip).every((key) => fields.includes(key))) return false;
-        if (!fields.slice(0, 4).every((key) => isFiniteNumber(clip[key]))) return false;
+        if (!Object.keys(clip).every((key) => fields.includes(key)))
+          return false;
+        if (!fields.slice(0, 4).every((key) => isFiniteNumber(clip[key])))
+          return false;
       }
       return true;
     },
@@ -224,7 +240,9 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
 ]);
 
 /** Every method name this shell may ever send. Used by the reachability test. */
-export const ALLOWED_METHODS: readonly string[] = Object.freeze([...ALLOWED.keys()]);
+export const ALLOWED_METHODS: readonly string[] = Object.freeze([
+  ...ALLOWED.keys(),
+]);
 
 /**
  * Domains and methods that must never appear in the table. Asserted by the
@@ -285,7 +303,8 @@ export function isAllowed(
   if (method === "Input.dispatchMouseEvent" && viewport) {
     const x = shaped.x as number;
     const y = shaped.y as number;
-    if (x < 0 || y < 0 || x > viewport.width || y > viewport.height) return false;
+    if (x < 0 || y < 0 || x > viewport.width || y > viewport.height)
+      return false;
   }
   return true;
 }

@@ -54,9 +54,27 @@ describe("parseRegistration", () => {
 
 describe("which guest a verb drives", () => {
   const guests: GuestRegistration[] = [
-    { webContentsId: 1, nodeId: "browser-1", tabId: "t1", surface: "canvas", active: false },
-    { webContentsId: 2, nodeId: "browser-1", tabId: "t2", surface: "canvas", active: true },
-    { webContentsId: 3, nodeId: "browser-2", tabId: "t1", surface: "modal", active: true },
+    {
+      webContentsId: 1,
+      nodeId: "browser-1",
+      tabId: "t1",
+      surface: "canvas",
+      active: false,
+    },
+    {
+      webContentsId: 2,
+      nodeId: "browser-1",
+      tabId: "t2",
+      surface: "canvas",
+      active: true,
+    },
+    {
+      webContentsId: 3,
+      nodeId: "browser-2",
+      tabId: "t1",
+      surface: "modal",
+      active: true,
+    },
   ];
 
   it("is the node's active canvas tab", () => {
@@ -76,8 +94,12 @@ describe("the refusals", () => {
   it("says the same thing for a node with no drivable guest and for one that does not exist", () => {
     // The acceptance gate's second line, as a unit test: a refusal that told
     // them apart would be a probe for what is on somebody's canvas.
-    expect(notDrivableMessage("browser-2")).toBe(notDrivableMessage("browser-2"));
-    expect(notDrivableMessage("x").replace("x", "y")).toBe(notDrivableMessage("y"));
+    expect(notDrivableMessage("browser-2")).toBe(
+      notDrivableMessage("browser-2"),
+    );
+    expect(notDrivableMessage("x").replace("x", "y")).toBe(
+      notDrivableMessage("y"),
+    );
   });
 
   it("calls a discarded guest a lifecycle event, not a permission failure", () => {
@@ -101,7 +123,13 @@ describe("the navigation gate", () => {
   });
 
   it("refuses every other scheme and anything unparseable", () => {
-    for (const url of ["about:config", "javascript:1", "data:text/html,x", "/relative", ""]) {
+    for (const url of [
+      "about:config",
+      "javascript:1",
+      "data:text/html,x",
+      "/relative",
+      "",
+    ]) {
       expect(allowGuestNavigation(url), url).toBe(false);
     }
   });

@@ -1,10 +1,19 @@
 import { createHash, randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 import type { DownloadItem, Session } from "electron";
 
 import { DRIVE_CODES } from "../../shell-core/browser/drive";
-import { jailMessage, jailWritePath } from "../../shell-core/browser/workspace-path";
+import {
+  jailMessage,
+  jailWritePath,
+} from "../../shell-core/browser/workspace-path";
 import { CdpRefusal } from "./cdp";
 
 /**
@@ -64,7 +73,10 @@ export function watchDownloads(
       return;
     }
     const id = randomUUID();
-    const target = join(stagingDirectory, `${id}-${safeName(item.getFilename())}`);
+    const target = join(
+      stagingDirectory,
+      `${id}-${safeName(item.getFilename())}`,
+    );
     item.setSavePath(target);
     const record: StagedDownload = {
       id,
@@ -120,7 +132,10 @@ export function acceptStagedDownload(
   if (record.state !== "ready") {
     throw new CdpRefusal(DRIVE_CODES.refused, "that download has not finished");
   }
-  const jailed = jailWritePath(workspaceRoot, join("downloads", record.suggestedFilename));
+  const jailed = jailWritePath(
+    workspaceRoot,
+    join("downloads", record.suggestedFilename),
+  );
   if (!jailed.ok && jailed.reason === "missingParent") {
     const directory = jailWritePath(workspaceRoot, "downloads");
     if (directory.ok) mkdirSync(directory.path, { recursive: true });
@@ -180,7 +195,11 @@ export interface PendingChooser {
 const choosers = new Map<string, PendingChooser>();
 
 /** Records a `Page.fileChooserOpened`. */
-export function noteChooser(nodeId: string, backendNodeId: number, mode: string): void {
+export function noteChooser(
+  nodeId: string,
+  backendNodeId: number,
+  mode: string,
+): void {
   choosers.set(nodeId, {
     backendNodeId,
     mode,
@@ -199,7 +218,8 @@ export function clearChooser(nodeId: string): void {
 
 /** Only for tests. */
 export function resetTransfers(): void {
-  for (const record of staged.values()) rmSync(record.stagedPath, { force: true });
+  for (const record of staged.values())
+    rmSync(record.stagedPath, { force: true });
   staged.clear();
   choosers.clear();
 }

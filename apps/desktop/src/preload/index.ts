@@ -47,7 +47,9 @@ function subscribe<A extends unknown[]>(channel: string) {
 
 const onUpdatesProgress = subscribe<[unknown]>(IPC.updatesProgress.channel);
 const onShortcutTriggered = subscribe<[string]>(IPC.shortcutsTriggered.channel);
-const onBrowserDrive = subscribe<[BrowserDriveCommand]>(IPC.browserDrive.channel);
+const onBrowserDrive = subscribe<[BrowserDriveCommand]>(
+  IPC.browserDrive.channel,
+);
 const onKeyIntent = subscribe<[string]>(IPC.windowKeyIntent.channel);
 const onNotificationClick = subscribe<[{ nodeId: string }]>(
   IPC.windowNotificationClick.channel,
@@ -119,7 +121,9 @@ export interface ArmadraDesktopApi {
    * Runtime's lease machine rather than stopping at a component's state.
    */
   readonly browser: {
-    register(registration: BrowserRegistration): Promise<{ ok: boolean; reason?: string }>;
+    register(
+      registration: BrowserRegistration,
+    ): Promise<{ ok: boolean; reason?: string }>;
     unregister(webContentsId: number): Promise<{ ok: boolean }>;
     view(view: BrowserView): Promise<{ ok: boolean }>;
     control(control: BrowserControl): Promise<{ ok: boolean }>;
@@ -181,7 +185,8 @@ const api: ArmadraDesktopApi = {
     unregister: (webContentsId) =>
       ipcRenderer.invoke(IPC.browserUnregister.channel, webContentsId),
     view: (view) => ipcRenderer.invoke(IPC.browserView.channel, view),
-    control: (control) => ipcRenderer.invoke(IPC.browserControl.channel, control),
+    control: (control) =>
+      ipcRenderer.invoke(IPC.browserControl.channel, control),
     onDrive: (listener) => onBrowserDrive(listener),
   },
   pathForFile: (file) => webUtils.getPathForFile(file),

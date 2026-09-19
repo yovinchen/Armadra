@@ -137,7 +137,9 @@ impl Client {
                     return Err(AppError::Conflict(error.to_string()));
                 }
             };
-            let Message::Text(text) = message else { continue };
+            let Message::Text(text) = message else {
+                continue;
+            };
             let Ok(value) = serde_json::from_str::<Value>(&text) else {
                 continue;
             };
@@ -146,8 +148,7 @@ impl Client {
                     *self
                         .outbox
                         .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner) =
-                        Some(outbox.clone());
+                        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(outbox.clone());
                     self.connected.store(true, Ordering::Relaxed);
                     tracing::info!("browser drive channel ready");
                 }
@@ -210,7 +211,10 @@ impl Client {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(id.clone(), sender);
         let request = json!({ "id": id, "nodeId": node_id, "verb": verb, "args": args });
-        if outbox.send(Message::Text(request.to_string().into())).is_err() {
+        if outbox
+            .send(Message::Text(request.to_string().into()))
+            .is_err()
+        {
             self.pending
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)

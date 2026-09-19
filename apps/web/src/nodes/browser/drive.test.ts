@@ -101,11 +101,21 @@ describe("useDrive", () => {
       listener?.({ kind: "tabs", nodeId: "b1", action: "close", tabId: "t3" });
       // A popup the main process denied: it becomes a tab on the canvas
       // instead of a window outside every rule on this page.
-      listener?.({ kind: "popup", nodeId: "b1", url: "https://example.test/p" });
+      listener?.({
+        kind: "popup",
+        nodeId: "b1",
+        url: "https://example.test/p",
+      });
     });
-    expect(handlers.onOpenTab).toHaveBeenNthCalledWith(1, "https://example.test/x");
+    expect(handlers.onOpenTab).toHaveBeenNthCalledWith(
+      1,
+      "https://example.test/x",
+    );
     expect(handlers.onCloseTab).toHaveBeenCalledWith("t3");
-    expect(handlers.onOpenTab).toHaveBeenNthCalledWith(2, "https://example.test/p");
+    expect(handlers.onOpenTab).toHaveBeenNthCalledWith(
+      2,
+      "https://example.test/p",
+    );
   });
 
   it("hands the lease through, and suppresses discard while an agent holds it", () => {

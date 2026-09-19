@@ -98,7 +98,9 @@ export class GuestSession {
       attaches += 1;
     }
     this.attached = true;
-    this.dbg.on("message", (_event, method, params) => this.onEvent(method, params));
+    this.dbg.on("message", (_event, method, params) =>
+      this.onEvent(method, params),
+    );
     this.dbg.on("detach", () => {
       this.attached = false;
     });
@@ -143,7 +145,8 @@ export class GuestSession {
     // A NEW DOCUMENT in the main frame, or an execution context wiped: either
     // way every `@N` this page handed out now points at nothing in particular.
     if (method === "Page.frameNavigated") {
-      const frame = (params as { frame?: { parentId?: string } } | undefined)?.frame;
+      const frame = (params as { frame?: { parentId?: string } } | undefined)
+        ?.frame;
       if (frame && frame.parentId === undefined) this.refs.bumpGeneration();
     } else if (method === "Runtime.executionContextsCleared") {
       this.refs.bumpGeneration();
@@ -158,7 +161,10 @@ export class GuestSession {
    * command that is not in the allowlist, or whose parameters do not pass their
    * validator, does not reach the second half.
    */
-  async send(method: string, params: Record<string, unknown>): Promise<unknown> {
+  async send(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<unknown> {
     if (this.revoked !== null) {
       throw new CdpRefusal("browser_lease_revoked", this.revoked);
     }
@@ -221,21 +227,30 @@ export class GuestSession {
    * declaration is looked up from the table by name and is never built here, so
    * there is no string this function could be persuaded to run.
    */
-  async run<T>(name: ScriptName, argument?: string | number | boolean): Promise<T> {
+  async run<T>(
+    name: ScriptName,
+    argument?: string | number | boolean,
+  ): Promise<T> {
     const declaration = SCRIPTS[name];
     const document = (await this.send("DOM.getDocument", { depth: 0 })) as {
       root?: { nodeId?: number };
     };
     const nodeId = document.root?.nodeId;
     if (typeof nodeId !== "number") {
-      throw new CdpRefusal("browser_failed", "the page has no document right now");
+      throw new CdpRefusal(
+        "browser_failed",
+        "the page has no document right now",
+      );
     }
     const resolved = (await this.send("DOM.resolveNode", { nodeId })) as {
       object?: { objectId?: string };
     };
     const objectId = resolved.object?.objectId;
     if (typeof objectId !== "string") {
-      throw new CdpRefusal("browser_failed", "the page has no document right now");
+      throw new CdpRefusal(
+        "browser_failed",
+        "the page has no document right now",
+      );
     }
     try {
       const answer = (await this.send("Runtime.callFunctionOn", {
@@ -249,7 +264,9 @@ export class GuestSession {
       }
       return answer.result?.value as T;
     } finally {
-      await this.send("Runtime.releaseObject", { objectId }).catch(() => undefined);
+      await this.send("Runtime.releaseObject", { objectId }).catch(
+        () => undefined,
+      );
     }
   }
 }

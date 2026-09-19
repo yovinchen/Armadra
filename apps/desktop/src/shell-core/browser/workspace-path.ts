@@ -48,7 +48,10 @@ export function isInside(root: string, candidate: string): boolean {
  * `requested` may be relative (resolved against the workspace root) or
  * absolute. Either way it ends up inside the root or it is refused.
  */
-export function jailWritePath(workspaceRoot: string, requested: string): JailResult {
+export function jailWritePath(
+  workspaceRoot: string,
+  requested: string,
+): JailResult {
   if (typeof requested !== "string" || requested.length === 0) {
     return { ok: false, reason: "badPath" };
   }
@@ -62,7 +65,9 @@ export function jailWritePath(workspaceRoot: string, requested: string): JailRes
   } catch {
     return { ok: false, reason: "missingParent" };
   }
-  const absolute = isAbsolute(requested) ? resolve(requested) : resolve(root, requested);
+  const absolute = isAbsolute(requested)
+    ? resolve(requested)
+    : resolve(root, requested);
 
   let parent: string;
   try {
@@ -77,7 +82,8 @@ export function jailWritePath(workspaceRoot: string, requested: string): JailRes
   // Rule 3: the last segment may already exist as a symlink out of the tree.
   // `lstat` does not follow it, which is exactly why it is the one used.
   try {
-    if (lstatSync(final).isSymbolicLink()) return { ok: false, reason: "symlink" };
+    if (lstatSync(final).isSymbolicLink())
+      return { ok: false, reason: "symlink" };
   } catch {
     // Not existing is the normal case for a file about to be created.
   }
@@ -91,11 +97,15 @@ export function jailWritePath(workspaceRoot: string, requested: string): JailRes
  * let a workspace-relative name name a file outside the workspace, which is
  * the read-side twin of the write primitive above.
  */
-export function jailReadPath(workspaceRoot: string, requested: string): JailResult {
+export function jailReadPath(
+  workspaceRoot: string,
+  requested: string,
+): JailResult {
   const jailed = jailWritePath(workspaceRoot, requested);
   if (!jailed.ok) return jailed;
   try {
-    if (!lstatSync(jailed.path).isFile()) return { ok: false, reason: "badPath" };
+    if (!lstatSync(jailed.path).isFile())
+      return { ok: false, reason: "badPath" };
   } catch {
     return { ok: false, reason: "badPath" };
   }

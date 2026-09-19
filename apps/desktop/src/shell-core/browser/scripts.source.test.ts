@@ -79,7 +79,12 @@ describe("the frozen script table", () => {
   });
 
   it("every enumerating script carries the same element query, verbatim", () => {
-    const enumerating = ["readMap", "resolveRef", "describeElement", "isVisible"] as const;
+    const enumerating = [
+      "readMap",
+      "resolveRef",
+      "describeElement",
+      "isVisible",
+    ] as const;
     for (const name of enumerating) {
       expect(SCRIPTS[name].includes(ELEMENT_QUERY), name).toBe(true);
     }
@@ -102,7 +107,9 @@ describe("the frozen script table", () => {
     // The only use of `.value` in readMap is as a truthiness test.
     const uses = SCRIPTS.readMap.match(/el\.value/g) ?? [];
     expect(uses.length).toBe(1);
-    expect(SCRIPTS.readMap.includes('el.value ? "filled" : "empty"')).toBe(true);
+    expect(SCRIPTS.readMap.includes('el.value ? "filled" : "empty"')).toBe(
+      true,
+    );
   });
 
   it("a password field contributes no label of its own", () => {
@@ -112,7 +119,8 @@ describe("the frozen script table", () => {
 
 describe("isArmadraScript", () => {
   it("accepts exactly the members", () => {
-    for (const body of Object.values(SCRIPTS)) expect(isArmadraScript(body)).toBe(true);
+    for (const body of Object.values(SCRIPTS))
+      expect(isArmadraScript(body)).toBe(true);
   });
 
   it("rejects a member with one character added", () => {

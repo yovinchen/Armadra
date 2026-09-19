@@ -28,7 +28,9 @@ const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 export const MAX_MESSAGE_BYTES = 8 * 1024 * 1024;
 
 export function acceptKey(clientKey: string): string {
-  return createHash("sha1").update(clientKey + GUID).digest("base64");
+  return createHash("sha1")
+    .update(clientKey + GUID)
+    .digest("base64");
 }
 
 /** The 101 response, as bytes. */
@@ -60,7 +62,10 @@ export interface DecodedFrame {
  * the connection, because there is no way to resynchronize a stream whose
  * lengths cannot be trusted.
  */
-export function decodeFrame(buffer: Buffer, requireMask = true): DecodedFrame | null {
+export function decodeFrame(
+  buffer: Buffer,
+  requireMask = true,
+): DecodedFrame | null {
   if (buffer.length < 2) return null;
   const first = buffer.readUInt8(0);
   const second = buffer.readUInt8(1);
@@ -150,9 +155,15 @@ export class MessageReader {
    * Feeds bytes in and yields whatever completed. Control frames are returned
    * as they arrive; a `close` or `ping` is the caller's to answer.
    */
-  push(chunk: Buffer): Array<{ kind: "text" | "close" | "ping" | "pong"; data: Buffer }> {
-    this.buffer = this.buffer.length === 0 ? chunk : Buffer.concat([this.buffer, chunk]);
-    const out: Array<{ kind: "text" | "close" | "ping" | "pong"; data: Buffer }> = [];
+  push(
+    chunk: Buffer,
+  ): Array<{ kind: "text" | "close" | "ping" | "pong"; data: Buffer }> {
+    this.buffer =
+      this.buffer.length === 0 ? chunk : Buffer.concat([this.buffer, chunk]);
+    const out: Array<{
+      kind: "text" | "close" | "ping" | "pong";
+      data: Buffer;
+    }> = [];
     for (;;) {
       const frame = decodeFrame(this.buffer, this.requireMask);
       if (frame === null) return out;
@@ -178,7 +189,8 @@ export class MessageReader {
             throw new Error("continuation without a start");
           }
           this.fragmentBytes += frame.payload.length;
-          if (this.fragmentBytes > MAX_MESSAGE_BYTES) throw new Error("message too large");
+          if (this.fragmentBytes > MAX_MESSAGE_BYTES)
+            throw new Error("message too large");
           this.fragments.push(frame.payload);
           if (frame.fin) {
             const data = Buffer.concat(this.fragments);

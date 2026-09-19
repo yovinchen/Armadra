@@ -36,12 +36,12 @@
  * that quietly disagree about what element number seven is.
  */
 export const ELEMENT_QUERY =
-  'a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=checkbox],[role=radio],[role=textbox],[contenteditable=true]';
+  "a[href],button,input,select,textarea,summary,[role=button],[role=link],[role=checkbox],[role=radio],[role=textbox],[contenteditable=true]";
 
 /* eslint-disable no-useless-escape */
 
 const READ_TITLE =
-  'function () { return { title: document.title, url: location.href }; }';
+  "function () { return { title: document.title, url: location.href }; }";
 
 const READ_TEXT =
   'function (limit) { var body = document.body; var text = body ? body.innerText : ""; return { text: text.slice(0, limit), total: text.length, truncated: text.length > limit, title: document.title, url: location.href }; }';
@@ -71,7 +71,7 @@ const ACTIVE_FIELD =
   'function () { var el = document.activeElement; if (!el || el === document.body) return { found: false }; var tag = el.tagName.toLowerCase(); var type = (el.getAttribute("type") || "").toLowerCase(); var r = el.getBoundingClientRect(); return { found: true, tag: tag, type: type, editable: tag === "input" || tag === "textarea" || el.isContentEditable === true, filled: !!el.value, x: r.x, y: r.y, w: r.width, h: r.height }; }';
 
 const SCROLL_POSITION =
-  'function () { var doc = document.scrollingElement || document.documentElement; return { top: doc.scrollTop, left: doc.scrollLeft, height: doc.scrollHeight, width: doc.scrollWidth, viewportWidth: document.documentElement.clientWidth, viewportHeight: document.documentElement.clientHeight, title: document.title, url: location.href }; }';
+  "function () { var doc = document.scrollingElement || document.documentElement; return { top: doc.scrollTop, left: doc.scrollLeft, height: doc.scrollHeight, width: doc.scrollWidth, viewportWidth: document.documentElement.clientWidth, viewportHeight: document.documentElement.clientHeight, title: document.title, url: location.href }; }";
 
 /* eslint-enable no-useless-escape */
 

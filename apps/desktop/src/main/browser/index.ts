@@ -1,7 +1,10 @@
 import { Menu, clipboard, type WebContents } from "electron";
 
 import type { DriveEvent } from "../../shell-core/browser/drive";
-import { allowGuestNavigation, decidePopup } from "../../shell-core/browser/navigation";
+import {
+  allowGuestNavigation,
+  decidePopup,
+} from "../../shell-core/browser/navigation";
 import {
   guestContextMenu,
   inspectElementPoint,
@@ -99,9 +102,17 @@ export function stopBrowser(): void {
 export function handleRegister(raw: unknown): { ok: boolean; reason?: string } {
   const outcome = registerGuest(raw);
   if (!outcome.ok) return { ok: false, reason: outcome.reason };
-  const registration = raw as { webContentsId: number; hostX?: number; hostY?: number };
+  const registration = raw as {
+    webContentsId: number;
+    hostX?: number;
+    hostY?: number;
+  };
   const entry = guestByWebContentsId(registration.webContentsId);
-  setHostRect(registration.webContentsId, registration.hostX, registration.hostY);
+  setHostRect(
+    registration.webContentsId,
+    registration.hostX,
+    registration.hostY,
+  );
   if (entry) wireGuest(entry.contents, outcome.nodeId);
   publishEvent({
     type: "event",
@@ -144,7 +155,11 @@ export function driveCounters(): {
   methods: readonly string[];
   guests: number;
 } {
-  return { attaches: attachCount(), methods: sentMethods(), guests: allGuests().length };
+  return {
+    attaches: attachCount(),
+    methods: sentMethods(),
+    guests: allGuests().length,
+  };
 }
 
 /* -------------------------------- per guest -------------------------------- */
@@ -171,7 +186,8 @@ function wireGuest(contents: WebContents, nodeId: string): void {
   // canvas knows how to place.
   contents.setWindowOpenHandler(({ url }) => {
     const decision = decidePopup(url, isRegisteredGuest(contents));
-    if (decision.report) tellRenderer({ kind: "popup", nodeId, url: decision.url });
+    if (decision.report)
+      tellRenderer({ kind: "popup", nodeId, url: decision.url });
     return { action: "deny" };
   });
 
@@ -179,7 +195,8 @@ function wireGuest(contents: WebContents, nodeId: string): void {
     publishEvent({ type: "event", event: "navigated", nodeId, url });
   });
   contents.on("did-navigate-in-page", (_event, url, isMainFrame) => {
-    if (isMainFrame) publishEvent({ type: "event", event: "navigated", nodeId, url });
+    if (isMainFrame)
+      publishEvent({ type: "event", event: "navigated", nodeId, url });
   });
 
   // A person touching the page is what preempts an agent. This replaces the old
@@ -230,7 +247,8 @@ interface ContextMenuParams {
 let canvasZoom = 1;
 
 export function setCanvasZoom(zoom: unknown): void {
-  if (typeof zoom === "number" && Number.isFinite(zoom) && zoom > 0) canvasZoom = zoom;
+  if (typeof zoom === "number" && Number.isFinite(zoom) && zoom > 0)
+    canvasZoom = zoom;
 }
 
 function showGuestMenu(
@@ -254,7 +272,10 @@ function showGuestMenu(
           enabled: item.enabled ?? true,
         };
       }
-      return { label: labelFor(item.id ?? ""), click: () => act(item.id ?? "") };
+      return {
+        label: labelFor(item.id ?? ""),
+        click: () => act(item.id ?? ""),
+      };
     }),
   ).popup();
 
@@ -269,10 +290,12 @@ function showGuestMenu(
         }
         return;
       case "back":
-        if (contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack();
+        if (contents.navigationHistory.canGoBack())
+          contents.navigationHistory.goBack();
         return;
       case "forward":
-        if (contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward();
+        if (contents.navigationHistory.canGoForward())
+          contents.navigationHistory.goForward();
         return;
       case "reload":
         contents.reload();
@@ -282,7 +305,11 @@ function showGuestMenu(
         // `inspectElement` wants the guest's. Subtracting the element's host
         // origin and dividing by the canvas zoom is the whole conversion;
         // skipping it opens DevTools on the wrong element at every zoom but 1.
-        const point = inspectElementPoint(params, hostRectOf(contents), canvasZoom);
+        const point = inspectElementPoint(
+          params,
+          hostRectOf(contents),
+          canvasZoom,
+        );
         contents.inspectElement(point.x, point.y);
         return;
       }
@@ -318,7 +345,11 @@ function labelFor(id: string): string {
  */
 const hostRects = new Map<number, { x: number; y: number }>();
 
-export function setHostRect(webContentsId: unknown, x: unknown, y: unknown): void {
+export function setHostRect(
+  webContentsId: unknown,
+  x: unknown,
+  y: unknown,
+): void {
   if (typeof webContentsId !== "number") return;
   if (typeof x !== "number" || typeof y !== "number") return;
   hostRects.set(webContentsId, { x, y });

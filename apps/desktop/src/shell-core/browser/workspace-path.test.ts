@@ -61,7 +61,8 @@ describe("a path a capture may write", () => {
   it("takes a relative path inside the workspace", () => {
     const jailed = jailWritePath(workspace, "shots/page.png");
     expect(jailed.ok).toBe(true);
-    if (jailed.ok) expect(jailed.path).toBe(join(workspace, "shots", "page.png"));
+    if (jailed.ok)
+      expect(jailed.path).toBe(join(workspace, "shots", "page.png"));
   });
 
   it("refuses a path that climbs out with ..", () => {
@@ -77,7 +78,9 @@ describe("a path a capture may write", () => {
   });
 
   it("refuses a sibling directory whose name shares the prefix", () => {
-    expect(jailWritePath(workspace, join(root, "proj-evil", "page.png"))).toEqual({
+    expect(
+      jailWritePath(workspace, join(root, "proj-evil", "page.png")),
+    ).toEqual({
       ok: false,
       reason: "outsideWorkspace",
     });
@@ -91,11 +94,17 @@ describe("a path a capture may write", () => {
   });
 
   it("refuses a symlink as the FINAL segment, which realpath of the parent misses", () => {
-    expect(jailWritePath(workspace, "escape.txt")).toEqual({ ok: false, reason: "symlink" });
+    expect(jailWritePath(workspace, "escape.txt")).toEqual({
+      ok: false,
+      reason: "symlink",
+    });
   });
 
   it("refuses a path carrying a NUL byte", () => {
-    expect(jailWritePath(workspace, "shots/a\0b.png")).toEqual({ ok: false, reason: "badPath" });
+    expect(jailWritePath(workspace, "shots/a\0b.png")).toEqual({
+      ok: false,
+      reason: "badPath",
+    });
   });
 
   it("refuses a directory that does not exist rather than creating one", () => {
@@ -117,6 +126,9 @@ describe("a path an upload may read", () => {
   });
 
   it("refuses a directory", () => {
-    expect(jailReadPath(workspace, "shots")).toEqual({ ok: false, reason: "badPath" });
+    expect(jailReadPath(workspace, "shots")).toEqual({
+      ok: false,
+      reason: "badPath",
+    });
   });
 });

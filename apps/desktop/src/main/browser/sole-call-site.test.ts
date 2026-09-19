@@ -67,8 +67,16 @@ describe("the CDP call site", () => {
   it("nobody evaluates JavaScript in a page by any other door", () => {
     for (const file of files) {
       const source = readFileSync(file, "utf8");
-      for (const door of ["executeJavaScript(", "insertCSS(", "webFrame.", "eval("]) {
-        expect(source.includes(door), `${relative(src, file)} contains ${door}`).toBe(false);
+      for (const door of [
+        "executeJavaScript(",
+        "insertCSS(",
+        "webFrame.",
+        "eval(",
+      ]) {
+        expect(
+          source.includes(door),
+          `${relative(src, file)} contains ${door}`,
+        ).toBe(false);
       }
     }
   });
@@ -86,6 +94,8 @@ describe("the CDP call site", () => {
     // which is cheaper to keep true. A page that could be given a session
     // cookie for accounts.google.com turns the next human visit into somebody
     // else's login.
-    expect(ALLOWED_METHODS.some((method) => method.startsWith("Network."))).toBe(false);
+    expect(
+      ALLOWED_METHODS.some((method) => method.startsWith("Network.")),
+    ).toBe(false);
   });
 });

@@ -301,8 +301,7 @@ async fn via_shell(
             Ok(render_lease(&session.lease_snapshot()))
         }
     } else {
-        let payload =
-            super::shell::with_workspace(shell_args(verb, args), &workspace.root_path);
+        let payload = super::shell::with_workspace(shell_args(verb, args), &workspace.root_path);
         super::shell::drive(&service, &target.id, verb, payload)
             .await
             .map(|result| super::shell::render(verb, args, &result))
@@ -346,7 +345,10 @@ async fn via_shell(
 /// Written out per verb rather than forwarded wholesale. A pass-through would
 /// mean the shell's verbs taking whatever a caller typed, and the point of a
 /// verb interface is that the set of things one can say is closed.
-pub(crate) fn shell_args(verb: &str, args: &Args<'_>) -> serde_json::Map<String, serde_json::Value> {
+pub(crate) fn shell_args(
+    verb: &str,
+    args: &Args<'_>,
+) -> serde_json::Map<String, serde_json::Value> {
     use serde_json::json;
     let mut map = serde_json::Map::new();
     let mut put = |name: &str, value: serde_json::Value| {
@@ -419,10 +421,17 @@ pub(crate) fn shell_args(verb: &str, args: &Args<'_>) -> serde_json::Map<String,
             }
         }
         "wait" => {
-            put("urlContains", opt(args.text("url-contains").or_else(|| args.text("urlContains"))));
+            put(
+                "urlContains",
+                opt(args
+                    .text("url-contains")
+                    .or_else(|| args.text("urlContains"))),
+            );
             put(
                 "titleContains",
-                opt(args.text("title-contains").or_else(|| args.text("titleContains"))),
+                opt(args
+                    .text("title-contains")
+                    .or_else(|| args.text("titleContains"))),
             );
             put(
                 "timeoutMs",
@@ -439,10 +448,16 @@ pub(crate) fn shell_args(verb: &str, args: &Args<'_>) -> serde_json::Map<String,
             put(
                 "path",
                 json!(args.text("path").map(str::to_owned).unwrap_or_else(|| {
-                    format!(".armadra/browser/{}.png", chrono::Utc::now().timestamp_millis())
+                    format!(
+                        ".armadra/browser/{}.png",
+                        chrono::Utc::now().timestamp_millis()
+                    )
                 })),
             );
-            put("fullPage", json!(args.flag("full-page") || args.flag("fullPage")));
+            put(
+                "fullPage",
+                json!(args.flag("full-page") || args.flag("fullPage")),
+            );
             put("format", opt(args.text("format")));
         }
         "upload" => put("paths", json!(repeated(args, "path"))),

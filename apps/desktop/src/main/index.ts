@@ -107,11 +107,17 @@ function registerIpc(): void {
     // including the `getType() === 'webview'` check the page cannot be trusted
     // to have made: the id it sends later selects a webContents to attach a
     // debugger to.
-    [IPC.browserRegister.channel]: (registration) => handleRegister(registration),
+    [IPC.browserRegister.channel]: (registration) =>
+      handleRegister(registration),
     [IPC.browserUnregister.channel]: (id) => handleUnregister(id),
     [IPC.browserView.channel]: (view) => {
       const geometry = view as
-        | { webContentsId?: unknown; hostX?: unknown; hostY?: unknown; zoom?: unknown }
+        | {
+            webContentsId?: unknown;
+            hostX?: unknown;
+            hostY?: unknown;
+            zoom?: unknown;
+          }
         | undefined;
       setHostRect(geometry?.webContentsId, geometry?.hostX, geometry?.hostY);
       setCanvasZoom(geometry?.zoom);
@@ -121,8 +127,13 @@ function registerIpc(): void {
     // here would hide a badge and leave a debugger attached, which is the one
     // failure the whole ownership design is written against.
     [IPC.browserControl.channel]: (control) => {
-      const asked = control as { nodeId?: unknown; action?: unknown } | undefined;
-      if (typeof asked?.nodeId !== "string" || typeof asked.action !== "string") {
+      const asked = control as
+        | { nodeId?: unknown; action?: unknown }
+        | undefined;
+      if (
+        typeof asked?.nodeId !== "string" ||
+        typeof asked.action !== "string"
+      ) {
         return { ok: false };
       }
       publish({
