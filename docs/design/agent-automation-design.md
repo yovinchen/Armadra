@@ -4,9 +4,9 @@
 
 ## 实现状态（截至 2026-09-05）
 
-§1 能力交集已落地：能力表新增 `nativeRecurrence`、`structuredInputAck`、`supportsModelSelection`；求交集顺序为基础适配器 → 自定义配置 → CLI 版本探测 → 执行主机，实现在 `packages/shared/src/agent-capabilities.ts`，设置页的能力清单逐项显示裁决它的那一级。版本探测跑 `<launchCmd> --version` 并缓存到 `settings.agents.probes[<agentId>]`（`apps/runtime/src/agent_probe.rs`，24 小时过期，换启动程序即重探）；探不到就是 `failed`，对应能力显示 unknown，界面不画按钮。`CAPABILITY_MIN_VERSION` 目前是空表——没有可引用的发行说明就不编版本门槛，探测眼下只提供「问不出来 → 不承诺」这一半。`nativeRecurrence` 仍无内置适配器声明：七种 CLI 都没有可读的任务列表。但**读得到规则的时候**有一层适配：活动卡片可以带一条 `nativeRecurrence { dialect, rule, timezone }`（`packages/shared/src/domain/node-data.ts`，原文逐字保存、不做规范化），`apps/web/src/panels/automation/native-recurrence.ts` 把 cron 表达式与 launchd 的 `StartCalendarInterval` / `StartInterval` 翻成平台计划的 recurrence 预填进向导。翻不动的一律返回机器码并把原文摆出来：`@reboot`（是事件不是周期）、带秒的六字段、`L`/`W`/`#` 扩展、只有事件触发的 launchd 任务、`StartCalendarInterval` 数组里的多个时刻（一份计划只有一条重复规则）、以及超出 Host 上下限的 interval。时区不猜——crontab 行不带时区、launchd 用本机时区，源头没写就留空由人选。执行主机方面，SSH 终端不带 `contextUsage` 与 `usage`（转录和账号都在对面机器上）。
+§1 能力交集已落地：能力表新增 `nativeRecurrence`、`structuredInputAck`、`supportsModelSelection`；求交集顺序为基础适配器 → 自定义配置 → CLI 版本探测 → 执行主机，实现在 `packages/shared/src/agent-capabilities.ts`，设置页的能力清单逐项显示裁决它的那一级。版本探测跑 `<launchCmd> --version` 并缓存到 `settings.agents.probes[<agentId>]`（`apps/runtime/src/agent_probe.rs`，24 小时过期，换启动程序即重探）；探不到就是 `failed`，对应能力显示 unknown，界面不画按钮。`CAPABILITY_MIN_VERSION` 目前是空表——没有可引用的发行说明就不编版本门槛，探测眼下只提供「问不出来 → 不承诺」这一半。`nativeRecurrence` 仍无内置适配器声明：六种 CLI 都没有可读的任务列表。但**读得到规则的时候**有一层适配：活动卡片可以带一条 `nativeRecurrence { dialect, rule, timezone }`（`packages/shared/src/domain/node-data.ts`，原文逐字保存、不做规范化），`apps/web/src/panels/automation/native-recurrence.ts` 把 cron 表达式与 launchd 的 `StartCalendarInterval` / `StartInterval` 翻成平台计划的 recurrence 预填进向导。翻不动的一律返回机器码并把原文摆出来：`@reboot`（是事件不是周期）、带秒的六字段、`L`/`W`/`#` 扩展、只有事件触发的 launchd 任务、`StartCalendarInterval` 数组里的多个时刻（一份计划只有一条重复规则）、以及超出 Host 上下限的 interval。时区不猜——crontab 行不带时区、launchd 用本机时区，源头没写就留空由人选。执行主机方面，SSH 终端不带 `contextUsage` 与 `usage`（转录和账号都在对面机器上）。
 
-§2 上下文用量：Claude 仍是 `provider_hook` / `reported` 精确来源。Codex 与 Gemini 走 `structured_transcript` / `estimated`——读各自的结构化转录，用可解释的字符启发式 `chars-v1`（ASCII 每四字符 1 token，非 ASCII 每字符 1 token）求和，附带置信、已统计消息数与是否截断（`apps/runtime/src/context_estimate.rs`）。转录读不出内容时返回 unknown，不返回 0%。分母来自模型上下文窗口表（`packages/shared/src/model-context.ts` 与 `apps/runtime/src/context_models.rs`），转录里报出的模型优先于启动时选的模型，表里没有的模型 capacity 为 null。opencode / Pi / OMP / Copilot 不声明 `contextUsage`：它们的历史不在本地结构化文件里。80/95 阈值进了设置页并持久化，只改徽标措辞，不自动压缩或打断。
+§2 上下文用量：Claude 仍是 `provider_hook` / `reported` 精确来源。Codex 走 `structured_transcript` / `estimated`——读其结构化转录，用可解释的字符启发式 `chars-v1`（ASCII 每四字符 1 token，非 ASCII 每字符 1 token）求和，附带置信、已统计消息数与是否截断（`apps/runtime/src/context_estimate.rs`）。转录读不出内容时返回 unknown，不返回 0%。分母来自模型上下文窗口表（`packages/shared/src/model-context.ts` 与 `apps/runtime/src/context_models.rs`），转录里报出的模型优先于启动时选的模型，表里没有的模型 capacity 为 null。opencode / Pi / OMP / Copilot 不声明 `contextUsage`：它们的历史不在本地结构化文件里。80/95 阈值进了设置页并持久化，只改徽标措辞，不自动压缩或打断。
 
 §8 自动命名：Hook 报出本会话第一个回合后调一次 `suggest-title`，仅在标题仍是占位名时应用，用户改名即锁定，按 (节点, 会话, 代次) 缓存，请求期间被改名则丢弃结果；OSC 标题不覆盖自动命名写入的语义标题（`apps/web/src/meta/auto-title.ts`）。设置页有开关。普通终端不参与：`suggest-title` 需要 Agent 状态行，没有 Agent 的终端仍只跟随 OSC 标题。提交信息草稿新增语言（zh/en）与 Conventional Commits 选项，二者只追加固定的风格子句，不改变读取范围、文件排除、敏感行处理与 digest 复核。
 
@@ -80,7 +80,7 @@ interface AgentCapabilities {
 
 同一原生任务不会自动复制成平台计划，否则会双重触发。显式“转为平台计划”时必须先确认原生任务已取消；不支持确认时只创建停用草稿。
 
-活动卡片上的“转为平台计划”按这条规矩实现：它不转换任何东西，只把创建向导预填好打开（表单顶部标明来源是原生活动卡片），由人确认后创建**草稿**。原生卡片和它观察的 CLI 循环原地不动，计划也不会被自动启用——七种 CLI 都没有可读的任务列表，「确认原生任务已取消」眼下只能由人做，界面把这句写在按钮下面而不是替用户假设。被观察的节点上没有可作为目标的 Agent 会话时按钮置灰并说明原因，而不是打开一个选不出目标的表单。
+活动卡片上的“转为平台计划”按这条规矩实现：它不转换任何东西，只把创建向导预填好打开（表单顶部标明来源是原生活动卡片），由人确认后创建**草稿**。原生卡片和它观察的 CLI 循环原地不动，计划也不会被自动启用——六种 CLI 都没有可读的任务列表，「确认原生任务已取消」眼下只能由人做，界面把这句写在按钮下面而不是替用户假设。被观察的节点上没有可作为目标的 Agent 会话时按钮置灰并说明原因，而不是打开一个选不出目标的表单。
 
 ### 3.1 实施状态（2026-09-05）
 

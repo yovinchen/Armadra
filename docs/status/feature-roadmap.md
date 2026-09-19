@@ -6,7 +6,7 @@
 
 ## 1. 产品定位
 
-Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code、Codex、Gemini CLI、OpenCode、Pi、OMP、GitHub Copilot）作为终端节点放在无限画布上，节点连线即共享上下文；周边提供编辑器、多仓库 Git、文件、浏览器、后台自动化、额度与资源监控。所有数据留在本机，服务集成在应用内部，关闭窗口不停止后台。
+Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code、Codex、OpenCode、Pi、OMP、GitHub Copilot）作为终端节点放在无限画布上，节点连线即共享上下文；周边提供编辑器、多仓库 Git、文件、浏览器、后台自动化、额度与资源监控。所有数据留在本机，服务集成在应用内部，关闭窗口不停止后台。
 
 ## 2. 技术框架
 
@@ -43,8 +43,8 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 
 | 功能                                                                                                                    | 状态 |
 | ----------------------------------------------------------------------------------------------------------------------- | ---- |
-| 7 种 CLI 启动、resume、权限模式、模型选择；保留各 CLI 账户与配置                                                        | ✅   |
-| Hook 安装（Claude/Codex/Gemini/OpenCode）→ 归一化 → `working/waiting/blocked/done`                                      | ✅   |
+| 6 种 CLI 启动、resume、权限模式、模型选择；保留各 CLI 账户与配置（Gemini CLI 已于 2026-09-19 移除）                     | ✅   |
+| Hook 安装（Claude/Codex/OpenCode）→ 归一化 → `working/waiting/blocked/done`                                             | ✅   |
 | 权限请求在节点头部直答                                                                                                  | ✅   |
 | `armadra.mailbox.v1`：`post/inbox/ack` 拉取消息箱；`send/reply/notify` 主动投递                                         | ✅   |
 | 按连线读取转录 / 摘要 / 终端画面                                                                                        | ✅   |
@@ -55,7 +55,7 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | 自动命名：占位标题才应用、人工改名锁定、可预览（A05）                                                                   | ⬜   |
 | 原生 Loop/Cron 观察卡片 AgentActivityNode（A01）                                                                        | ✅   |
 | 子代理卡片                                                                                                              | ✅   |
-| 会话索引（Claude/Codex/Gemini 历史会话检索）                                                                            | ✅   |
+| 会话索引（Claude/Codex 历史会话检索）                                                                                   | ✅   |
 | 多账号与节点账号绑定 `credentialRef`/`AccountRef`（S02，预留）                                                          | ⬜   |
 
 ### 3.3 终端与主机生命周期
@@ -138,7 +138,7 @@ T01 是 🔶：`crates/session-host` 与 Worker 侧后端已交付并通过交�
 
 | 功能                                                                                | 状态 |
 | ----------------------------------------------------------------------------------- | ---- |
-| Claude / Codex / Gemini 额度窗口（5h、7d、模型专属）与重置时间，用量球展示          | ✅   |
+| Claude / Codex 额度窗口（5h、7d、模型专属）与重置时间，用量球展示                   | ✅   |
 | **Copilot 额度**：premium interactions / chat 百分比                                | ✅   |
 | **Codex 额度**校对 OAuth 来源、credits 余额；CLI RPC 回退                           | ✅   |
 | **本地成本统计**：Claude / Codex 本地日志按日聚合 token 与费用，今日 / 30 天 / 会话 | ✅   |
@@ -234,7 +234,6 @@ Worker。H03 已实现手机底部导航、单节点焦点页、软键盘工具�
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | Claude   | 已有：钥匙串 / `~/.claude/.credentials.json` OAuth → `api.anthropic.com/api/oauth/usage`                                                           | 5h、7d、7d-sonnet / opus、extra usage  |
 | Codex    | 已有：`~/.codex/auth.json` → `chatgpt.com/backend-api/wham/usage`；新增 CLI RPC 回退（`codex app-server` `account/rateLimits/read`）、credits 余额 | primary / secondary 窗口、credits      |
-| Gemini   | 已有：OAuth 配额接口                                                                                                                               | 按返回                                 |
 | Copilot  | 新增：GitHub device flow（`read:user`）→ `api.github.com/copilot_internal/user`；token 存 OS 钥匙串                                                | premium interactions、chat；无重置时间 |
 
 本地成本统计：
