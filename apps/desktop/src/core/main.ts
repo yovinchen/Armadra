@@ -20,6 +20,8 @@ import {
 } from "./endpoints";
 import { install as installEvents } from "./events";
 import { NO_HOOK_SERVICE } from "./http/health";
+import { install as installFiles } from "./files/routes";
+import { install as installImports } from "./imports/routes";
 import { CoreServer } from "./http/server";
 import { VERSION, announcement, instanceId } from "./instance";
 import { install as installSettings } from "./settings";
@@ -107,6 +109,10 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installWorkspaces,
   installCanvas,
   installAssets,
+  // Files and imports sit beside the canvas domains: both start from a
+  // workspace row, and `imports` mints one of its own.
+  installFiles,
+  installImports,
   installSettings,
   installUsage,
   installIdentity,
