@@ -1,7 +1,0 @@
-{
-  "capability": "remote.files.manage.v1",
-  "operation": 39,
-  "replay": "safe",
-  "request": {},
-  "responseType": "Vec<file_ops::TrashEntry>"
-}

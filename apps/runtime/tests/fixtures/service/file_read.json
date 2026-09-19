@@ -1,9 +1,0 @@
-{
-  "capability": null,
-  "operation": 5,
-  "replay": "safe",
-  "request": {
-    "path": "src/main.rs"
-  },
-  "responseType": "files::FileContent"
-}

@@ -1,9 +1,0 @@
-{
-  "capability": "remote.git.panel.v1",
-  "operation": 56,
-  "replay": "safe",
-  "request": {
-    "path": "."
-  },
-  "responseType": "git_repository::IdentityRecord"
-}
