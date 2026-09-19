@@ -28,6 +28,12 @@ directories:
 files:
   - out/**/*
   - package.json
+  # `out/cli/` is deliberately NOT in the asar: it ships through
+  # `extraResources` below, as a plain file the generated launcher can name
+  # with an absolute path. Keeping a second copy in the archive would only
+  # invite someone to point a hook at the one that needs asar support to be
+  # readable.
+  - "!out/cli/**/*"
 
 # `node-pty` is the one native Node addon in this shell (R2, the TypeScript
 # core's terminal domain). It must be OUTSIDE the asar: the addon resolves
@@ -68,6 +74,15 @@ mac:
       to: .
     - from: resources/armadra-hook
       to: .
+    # The TypeScript hook client (R3c). Unlike the three above it is not a
+    # binary: it is one CJS file the installer's generated launcher runs as
+    # `ELECTRON_RUN_AS_NODE=1 <Electron> <resources>/cli/armadra-hook.js`,
+    # because a packaged machine is not guaranteed to have a system `node`.
+    # Outside the asar so that path is a real file on disk — the Electron
+    # binary is the only interpreter we can count on, and asking it to read an
+    # entry point out of an archive is a dependency this does not need.
+    - from: out/cli/armadra-hook.js
+      to: cli/armadra-hook.js
   category: public.developer-tools
   icon: build/icons/icon.icns
   hardenedRuntime: true
@@ -120,6 +135,10 @@ win:
     # apps/desktop/scripts/sidecar-targets.mjs `rustSidecars()`).
     - from: resources/armadra-session-host.exe
       to: .
+    # See the macOS entry: the launcher is `armadra-hook.cmd` here, and it
+    # names this exact path.
+    - from: out/cli/armadra-hook.js
+      to: cli/armadra-hook.js
   target:
     - target: nsis
       arch: [x64, arm64]
@@ -140,6 +159,9 @@ linux:
       to: .
     - from: resources/armadra-hook
       to: .
+    # See the macOS entry.
+    - from: out/cli/armadra-hook.js
+      to: cli/armadra-hook.js
   target:
     - target: AppImage
       arch: [x64, arm64]

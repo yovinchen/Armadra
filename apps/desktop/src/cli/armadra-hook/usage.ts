@@ -23,7 +23,12 @@ export const MAX_PAYLOAD_BYTES = 1024 * 1024;
 export const CLIENT_VERSION = "0.1.0";
 
 /** The context-link verbs the runtime exposes. */
-export const CONTEXT_VERBS = ["list", "summary", "transcript", "terminal"] as const;
+export const CONTEXT_VERBS = [
+  "list",
+  "summary",
+  "transcript",
+  "terminal",
+] as const;
 
 /**
  * The controlled-browser verbs the runtime exposes (B01).

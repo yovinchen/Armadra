@@ -29,7 +29,9 @@ export function totalTimeoutMs(): number {
   const raw = envVar("ARMADRA_HOOK_TIMEOUT_MS");
   if (raw === undefined) return TOTAL_TIMEOUT_MS;
   const parsed = Number(raw.trim());
-  return Number.isInteger(parsed) && parsed > 0 && parsed <= 600_000 ? parsed : TOTAL_TIMEOUT_MS;
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 600_000
+    ? parsed
+    : TOTAL_TIMEOUT_MS;
 }
 
 /**
@@ -43,7 +45,10 @@ export interface HookRequest {
   body?: Buffer;
 }
 
-export function getRequest(path: string, headers: [string, string][]): HookRequest {
+export function getRequest(
+  path: string,
+  headers: [string, string][],
+): HookRequest {
   return { method: "GET", path, headers };
 }
 
@@ -74,7 +79,9 @@ export function requestBytes(request: HookRequest): Buffer {
   }
   lines.push("\r\n");
   const head = Buffer.from(lines.join(""), "utf8");
-  return request.body === undefined ? head : Buffer.concat([head, request.body]);
+  return request.body === undefined
+    ? head
+    : Buffer.concat([head, request.body]);
 }
 
 /** A parsed response. The body is small, so it is buffered whole. */
@@ -103,7 +110,12 @@ export async function send(
   let lastError = "no transport configured";
 
   if (endpoint.sock !== undefined && process.platform !== "win32") {
-    const attempt = await exchange({ path: endpoint.sock }, bytes, deadline, `cannot connect to ${endpoint.sock}`);
+    const attempt = await exchange(
+      { path: endpoint.sock },
+      bytes,
+      deadline,
+      `cannot connect to ${endpoint.sock}`,
+    );
     if ("ok" in attempt) return attempt;
     lastError = attempt.error;
   }
@@ -150,7 +162,9 @@ function exchange(
     const socket = net.connect(target);
     socket.setNoDelay(true);
 
-    const finish = (outcome: { ok: HookResponse } | { error: string }): void => {
+    const finish = (
+      outcome: { ok: HookResponse } | { error: string },
+    ): void => {
       if (settled) return;
       settled = true;
       clearTimeout(connectTimer);
@@ -193,7 +207,8 @@ function exchange(
       // servers hold the socket open past the final byte.
       const complete = tryParse(Buffer.concat(chunks));
       if (complete !== undefined) finish({ ok: complete });
-      else if (received > 8 * 1024 * 1024) finish({ error: "hook response is implausibly large" });
+      else if (received > 8 * 1024 * 1024)
+        finish({ error: "hook response is implausibly large" });
     });
     socket.on("error", (error: NodeJS.ErrnoException) => {
       finishWithError(`${connectLabel}: ${errnoText(error)}`);
@@ -256,9 +271,14 @@ export function tryParse(raw: Buffer): HookResponse | undefined {
     const parsed = parseResponse(raw);
     return "ok" in parsed ? parsed.ok : undefined;
   }
-  const chunked = (headerValue(head, "transfer-encoding") ?? "").toLowerCase().includes("chunked");
+  const chunked = (headerValue(head, "transfer-encoding") ?? "")
+    .toLowerCase()
+    .includes("chunked");
   if (chunked) {
-    if (body.indexOf("\r\n0\r\n") >= 0 || body.subarray(0, 3).toString("latin1") === "0\r\n") {
+    if (
+      body.indexOf("\r\n0\r\n") >= 0 ||
+      body.subarray(0, 3).toString("latin1") === "0\r\n"
+    ) {
       const parsed = parseResponse(raw);
       return "ok" in parsed ? parsed.ok : undefined;
     }
@@ -272,7 +292,9 @@ export function tryParse(raw: Buffer): HookResponse | undefined {
 }
 
 /** Parses a complete HTTP/1.1 response, decoding chunked bodies. */
-export function parseResponse(raw: Buffer): { ok: HookResponse } | { error: string } {
+export function parseResponse(
+  raw: Buffer,
+): { ok: HookResponse } | { error: string } {
   const headEnd = raw.indexOf("\r\n\r\n");
   if (headEnd < 0) return { error: "truncated response" };
   const head = raw.subarray(0, headEnd + 4).toString("utf8");
@@ -281,7 +303,9 @@ export function parseResponse(raw: Buffer): { ok: HookResponse } | { error: stri
     return { error: `unparseable status line: ${head.split("\r\n")[0] ?? ""}` };
   }
   const rawBody = raw.subarray(headEnd + 4);
-  const chunked = (headerValue(head, "transfer-encoding") ?? "").toLowerCase().includes("chunked");
+  const chunked = (headerValue(head, "transfer-encoding") ?? "")
+    .toLowerCase()
+    .includes("chunked");
   const lengthHeader = headerValue(head, "content-length");
   let body: Buffer;
   if (hasNoBody(status)) {
@@ -289,7 +313,10 @@ export function parseResponse(raw: Buffer): { ok: HookResponse } | { error: stri
   } else if (chunked) {
     body = decodeChunked(rawBody);
   } else if (lengthHeader !== undefined && /^\d+$/.test(lengthHeader.trim())) {
-    body = rawBody.subarray(0, Math.min(Number(lengthHeader.trim()), rawBody.length));
+    body = rawBody.subarray(
+      0,
+      Math.min(Number(lengthHeader.trim()), rawBody.length),
+    );
   } else {
     body = rawBody;
   }
@@ -308,7 +335,9 @@ function decodeChunked(input: Buffer): Buffer {
   for (;;) {
     const lineEnd = rest.indexOf("\r\n");
     if (lineEnd < 0) break;
-    const sizeText = (rest.subarray(0, lineEnd).toString("utf8").split(";")[0] ?? "").trim();
+    const sizeText = (
+      rest.subarray(0, lineEnd).toString("utf8").split(";")[0] ?? ""
+    ).trim();
     if (!/^[0-9a-fA-F]+$/.test(sizeText)) break;
     const size = Number.parseInt(sizeText, 16);
     if (size === 0) break;

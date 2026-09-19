@@ -24,7 +24,9 @@ import {
 const temporaries: string[] = [];
 
 function tempdir(): string {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "armadra-hook-endpoint-"));
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "armadra-hook-endpoint-"),
+  );
   temporaries.push(directory);
   return directory;
 }
@@ -48,19 +50,25 @@ describe("endpoint file parsing", () => {
   it("unescapes embedded single quotes", () => {
     // A path such as `/tmp/o'brien/hook.sock` round-trips through the POSIX
     // `'\''` escape.
-    const map = parseEndpointFile("ARMADRA_HOOK_SOCK='/tmp/o'\\''brien/hook.sock'\n");
+    const map = parseEndpointFile(
+      "ARMADRA_HOOK_SOCK='/tmp/o'\\''brien/hook.sock'\n",
+    );
     expect(map.get(KEY_SOCK)).toBe("/tmp/o'brien/hook.sock");
   });
 
   it("keeps inner characters verbatim", () => {
-    const map = parseEndpointFile("A='a=b=c'\nB='  spaced  '\nC='#not a comment'\n");
+    const map = parseEndpointFile(
+      "A='a=b=c'\nB='  spaced  '\nC='#not a comment'\n",
+    );
     expect(map.get("A")).toBe("a=b=c");
     expect(map.get("B")).toBe("  spaced  ");
     expect(map.get("C")).toBe("#not a comment");
   });
 
   it("skips blank, comment and malformed lines", () => {
-    const map = parseEndpointFile("\n# comment\ngarbage\n=novalue\nexport A='1'\n");
+    const map = parseEndpointFile(
+      "\n# comment\ngarbage\n=novalue\nexport A='1'\n",
+    );
     expect(map.size).toBe(1);
     expect(map.get("A")).toBe("1");
   });
@@ -93,12 +101,19 @@ describe("loading", () => {
   });
 
   it("puts the pending directory next to the endpoint file", () => {
-    expect(pendingDir({ path: "/data/armadra/hook-endpoint.env" })).toBe("/data/armadra/pending");
+    expect(pendingDir({ path: "/data/armadra/hook-endpoint.env" })).toBe(
+      "/data/armadra/pending",
+    );
   });
 });
 
 /** Writes a minimal valid endpoint file at `file`. */
-function writeEndpoint(file: string, port: number, token: string, tokenDir: string): void {
+function writeEndpoint(
+  file: string,
+  port: number,
+  token: string,
+  tokenDir: string,
+): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(
     file,
@@ -112,7 +127,12 @@ describe("candidate discovery", () => {
     const envPath = path.join(root, "env", "hook-endpoint.env");
     const dataDir = path.join(root, "data");
     writeEndpoint(envPath, 100, "t1", path.join(root, "tokens1"));
-    writeEndpoint(path.join(dataDir, "hook-endpoint.env"), 200, "t2", path.join(root, "tokens2"));
+    writeEndpoint(
+      path.join(dataDir, "hook-endpoint.env"),
+      200,
+      "t2",
+      path.join(root, "tokens2"),
+    );
     const candidates = discoverCandidatesFrom(envPath, dataDir);
     expect(candidates.length).toBe(2);
     expect(candidates[0]?.port).toBe(100);
@@ -131,7 +151,12 @@ describe("candidate discovery", () => {
   it("falls back to the default location when the env file is missing", () => {
     const root = tempdir();
     const dataDir = path.join(root, "data");
-    writeEndpoint(path.join(dataDir, "hook-endpoint.env"), 200, "t2", path.join(root, "tokens"));
+    writeEndpoint(
+      path.join(dataDir, "hook-endpoint.env"),
+      200,
+      "t2",
+      path.join(root, "tokens"),
+    );
     const candidates = discoverCandidatesFrom(
       path.join(root, "nowhere", "hook-endpoint.env"),
       dataDir,
@@ -144,7 +169,12 @@ describe("candidate discovery", () => {
     const root = tempdir();
     const dataDir = path.join(root, "data");
     const tokenDir = path.join(root, "tokens");
-    writeEndpoint(path.join(dataDir, "hook-endpoint.env"), 100, "abc", tokenDir);
+    writeEndpoint(
+      path.join(dataDir, "hook-endpoint.env"),
+      100,
+      "abc",
+      tokenDir,
+    );
     fs.writeFileSync(
       path.join(dataDir, "endpoints.json"),
       '{"version":1,"runtime":{"instanceId":"i","writtenAt":"now","processId":1,"http":"http://127.0.0.1:200"}}',
@@ -161,7 +191,12 @@ describe("candidate discovery", () => {
   it("skips endpoints.json when it names the same address", () => {
     const root = tempdir();
     const dataDir = path.join(root, "data");
-    writeEndpoint(path.join(dataDir, "hook-endpoint.env"), 100, "abc", path.join(root, "tokens"));
+    writeEndpoint(
+      path.join(dataDir, "hook-endpoint.env"),
+      100,
+      "abc",
+      path.join(root, "tokens"),
+    );
     fs.writeFileSync(
       path.join(dataDir, "endpoints.json"),
       '{"version":1,"runtime":{"instanceId":"i","writtenAt":"now","processId":1,"http":"http://127.0.0.1:100"}}',

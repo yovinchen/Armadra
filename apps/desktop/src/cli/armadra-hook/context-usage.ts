@@ -9,7 +9,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { envVar, isValidNodeId, nodeToken } from "./endpoint.js";
-import { asNumber, asObject, asString, canonicalJsonBytes, parseJson } from "./json.js";
+import {
+  asNumber,
+  asObject,
+  asString,
+  canonicalJsonBytes,
+  parseJson,
+} from "./json.js";
 import type { JsonValue } from "./json.js";
 import { postJsonRequest } from "./http.js";
 import { headersFor, loadSession, send } from "./session.js";
@@ -93,7 +99,8 @@ export function loadBinding(): Binding | undefined {
   const sessionId = envVar("ARMADRA_SESSION_ID");
   if (sessionId === undefined || !isValidNodeId(sessionId)) return undefined;
   const rawGeneration = envVar("ARMADRA_SESSION_GENERATION");
-  if (rawGeneration === undefined || !/^\d+$/.test(rawGeneration)) return undefined;
+  if (rawGeneration === undefined || !/^\d+$/.test(rawGeneration))
+    return undefined;
   const generation = BigInt(rawGeneration);
   if (generation > MAX_COUNT) return undefined;
 
@@ -105,10 +112,13 @@ export function loadBinding(): Binding | undefined {
     return undefined;
   }
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) return undefined;
-  if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0) return undefined;
+  if (process.platform !== "win32" && (metadata.mode & 0o077) !== 0)
+    return undefined;
 
   try {
-    const revision = nextRevision(path.join(directory, `${sessionId}-${generation}.seq`));
+    const revision = nextRevision(
+      path.join(directory, `${sessionId}-${generation}.seq`),
+    );
     return { session, sessionId, generation: Number(generation), revision };
   } catch {
     return undefined;
@@ -135,7 +145,8 @@ export function nextRevision(file: string): bigint {
   try {
     const handle = fs.openSync(file, "r+");
     try {
-      if (fs.fstatSync(handle).size !== 16) throw new Error("corrupt context sequence");
+      if (fs.fstatSync(handle).size !== 16)
+        throw new Error("corrupt context sequence");
       const buffer = Buffer.alloc(16);
       fs.readSync(handle, buffer, 0, 16, 0);
       const count = buffer.readBigUInt64BE(0);
@@ -144,7 +155,8 @@ export function nextRevision(file: string): bigint {
         throw new Error("corrupt context sequence");
       }
       const next = count + 1n;
-      if (next > 0xffff_ffff_ffff_ffffn) throw new Error("context sequence exhausted");
+      if (next > 0xffff_ffff_ffff_ffffn)
+        throw new Error("context sequence exhausted");
       const out = Buffer.alloc(16);
       out.writeBigUInt64BE(next, 0);
       out.writeBigUInt64BE(~next & 0xffff_ffff_ffff_ffffn, 8);
@@ -190,7 +202,9 @@ function acquireLock(file: string): () => void {
     if (Date.now() >= deadline) {
       // Distinguishable, so a caller that can afford to try again knows this
       // was contention and not a broken file.
-      const error = new Error("context sequence is held by another hook") as NodeJS.ErrnoException;
+      const error = new Error(
+        "context sequence is held by another hook",
+      ) as NodeJS.ErrnoException;
       error.code = "EWOULDBLOCK";
       throw error;
     }
@@ -213,7 +227,10 @@ function sleepBriefly(): void {
 export function filterData(input: JsonValue): JsonValue | undefined {
   const root = asObject(input);
   if (root === undefined) return undefined;
-  const text = (value: Record<string, JsonValue> | undefined, key: string): string | undefined => {
+  const text = (
+    value: Record<string, JsonValue> | undefined,
+    key: string,
+  ): string | undefined => {
     const field = asString(value?.[key]);
     if (field === undefined || field === "") return undefined;
     if (Buffer.byteLength(field, "utf8") > 200) return undefined;
@@ -237,7 +254,8 @@ export function filterData(input: JsonValue): JsonValue | undefined {
     if (current === undefined) return undefined;
     const count = (key: string): number | undefined => {
       const value = asNumber(current[key]);
-      if (value === undefined || !Number.isInteger(value) || value < 0) return undefined;
+      if (value === undefined || !Number.isInteger(value) || value < 0)
+        return undefined;
       return BigInt(value) <= MAX_COUNT ? value : undefined;
     };
     const input_tokens = count("input_tokens");
@@ -250,15 +268,28 @@ export function filterData(input: JsonValue): JsonValue | undefined {
     ) {
       return undefined;
     }
-    usage = { input_tokens, cache_creation_input_tokens, cache_read_input_tokens };
+    usage = {
+      input_tokens,
+      cache_creation_input_tokens,
+      cache_read_input_tokens,
+    };
   }
 
   const size = asNumber(window["context_window_size"]);
   const contextWindowSize =
-    size !== undefined && Number.isInteger(size) && size > 0 && BigInt(size) <= MAX_COUNT
+    size !== undefined &&
+    Number.isInteger(size) &&
+    size > 0 &&
+    BigInt(size) <= MAX_COUNT
       ? size
       : null;
-  const contextWindow: Record<string, JsonValue> = { context_window_size: contextWindowSize };
+  const contextWindow: Record<string, JsonValue> = {
+    context_window_size: contextWindowSize,
+  };
   if (hasCurrent) contextWindow["current_usage"] = usage;
-  return { session_id: sessionId, model: { id: model }, context_window: contextWindow };
+  return {
+    session_id: sessionId,
+    model: { id: model },
+    context_window: contextWindow,
+  };
 }

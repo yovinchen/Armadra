@@ -26,7 +26,9 @@ export interface Session {
 export function loadSession(): { ok: Session } | { error: string } {
   const nodeId = envVar("ARMADRA_NODE_ID");
   if (nodeId === undefined) {
-    return { error: "ARMADRA_NODE_ID is not set (not running inside a canvas node)" };
+    return {
+      error: "ARMADRA_NODE_ID is not set (not running inside a canvas node)",
+    };
   }
   const candidates = discoverCandidates();
   if (candidates.length === 0) {
@@ -46,7 +48,10 @@ export function loadSession(): { ok: Session } | { error: string } {
  * endpoint is always presented with its own token, not a stale one from a
  * different directory.
  */
-export function headersFor(session: Session, candidate: Endpoint): [string, string][] {
+export function headersFor(
+  session: Session,
+  candidate: Endpoint,
+): [string, string][] {
   const headers: [string, string][] = [
     ["X-Armadra-Hook-Client", HOOK_CLIENT_REVISION],
     ["X-Armadra-Hook-Token", candidate.hookToken ?? ""],

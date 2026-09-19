@@ -32,7 +32,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 /** File name of the launcher for a platform. */
-export function launcherFileName(platform: NodeJS.Platform = process.platform): string {
+export function launcherFileName(
+  platform: NodeJS.Platform = process.platform,
+): string {
   return platform === "win32" ? "armadra-hook.cmd" : "armadra-hook";
 }
 
@@ -54,7 +56,8 @@ function shQuote(value: string): string {
  * to refuse than to emit a script that silently runs something else.
  */
 function cmdQuote(value: string): string {
-  if (value.includes('"')) throw new Error(`path cannot contain a quote on Windows: ${value}`);
+  if (value.includes('"'))
+    throw new Error(`path cannot contain a quote on Windows: ${value}`);
   return `"${value}"`;
 }
 

@@ -110,7 +110,8 @@ class Parser {
     this.skipWhitespace();
     const value = this.parseValue();
     this.skipWhitespace();
-    if (this.index !== this.text.length) throw new SyntaxError("trailing input");
+    if (this.index !== this.text.length)
+      throw new SyntaxError("trailing input");
     return value;
   }
 
@@ -127,7 +128,8 @@ class Parser {
 
   private parseValue(): JsonValue {
     const character = this.text[this.index];
-    if (character === undefined) throw new SyntaxError("unexpected end of input");
+    if (character === undefined)
+      throw new SyntaxError("unexpected end of input");
     if (character === "{") return this.parseObject();
     if (character === "[") return this.parseArray();
     if (character === '"') return this.parseString();
@@ -193,7 +195,8 @@ class Parser {
   }
 
   private parseString(): string {
-    if (this.text[this.index] !== '"') throw new SyntaxError("expected a string");
+    if (this.text[this.index] !== '"')
+      throw new SyntaxError("expected a string");
     const start = this.index;
     this.index += 1;
     for (;;) {
@@ -202,7 +205,8 @@ class Parser {
       this.index += 1;
       if (character === '"') break;
       if (character === "\\") {
-        if (this.index >= this.text.length) throw new SyntaxError("unterminated escape");
+        if (this.index >= this.text.length)
+          throw new SyntaxError("unterminated escape");
         this.index += 1;
       }
     }
@@ -215,17 +219,26 @@ class Parser {
   private parseNumber(): RawNumber {
     const start = this.index;
     if (this.text[this.index] === "-") this.index += 1;
-    while (this.index < this.text.length && DIGIT.test(this.text[this.index]!)) this.index += 1;
+    while (this.index < this.text.length && DIGIT.test(this.text[this.index]!))
+      this.index += 1;
     if (this.text[this.index] === ".") {
       this.index += 1;
-      while (this.index < this.text.length && DIGIT.test(this.text[this.index]!)) this.index += 1;
+      while (
+        this.index < this.text.length &&
+        DIGIT.test(this.text[this.index]!)
+      )
+        this.index += 1;
     }
     const exponent = this.text[this.index];
     if (exponent === "e" || exponent === "E") {
       this.index += 1;
       const sign = this.text[this.index];
       if (sign === "+" || sign === "-") this.index += 1;
-      while (this.index < this.text.length && DIGIT.test(this.text[this.index]!)) this.index += 1;
+      while (
+        this.index < this.text.length &&
+        DIGIT.test(this.text[this.index]!)
+      )
+        this.index += 1;
     }
     const raw = this.text.slice(start, this.index);
     if (raw === "" || raw === "-" || !Number.isFinite(Number(raw))) {
@@ -233,7 +246,9 @@ class Parser {
     }
     // Integers replay verbatim (serde keeps u64/i64 exact); floats go through
     // ryu's shortest form, which is not necessarily the source token.
-    return new RawNumber(/[.eE]/.test(raw) ? formatFloat(Number(raw)) : normaliseInteger(raw));
+    return new RawNumber(
+      /[.eE]/.test(raw) ? formatFloat(Number(raw)) : normaliseInteger(raw),
+    );
   }
 }
 
@@ -277,7 +292,9 @@ export function asString(value: JsonValue | undefined): string | undefined {
 }
 
 /** Reads an object out of a parsed value. */
-export function asObject(value: JsonValue | undefined): Record<string, JsonValue> | undefined {
+export function asObject(
+  value: JsonValue | undefined,
+): Record<string, JsonValue> | undefined {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, JsonValue>)
     : undefined;

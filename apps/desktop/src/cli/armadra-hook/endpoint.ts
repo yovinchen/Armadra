@@ -67,24 +67,32 @@ export function endpointFilePath(): string | undefined {
  * `undefined` only when the platform gives us nothing to build a path from
  * (no `HOME`, no `XDG_DATA_HOME`, no `LOCALAPPDATA`).
  */
-export function defaultDataDir(platform: NodeJS.Platform = process.platform): string | undefined {
+export function defaultDataDir(
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
   const override = envVar("ARMADRA_DATA_DIR");
   if (override !== undefined) return override;
   if (platform === "darwin") {
     const home = envVar("HOME");
-    return home === undefined ? undefined : path.join(home, "Library/Application Support/Armadra");
+    return home === undefined
+      ? undefined
+      : path.join(home, "Library/Application Support/Armadra");
   }
   if (platform === "win32") {
     const local = envVar("LOCALAPPDATA");
     return local === undefined ? undefined : path.join(local, "Armadra");
   }
-  const base = envVar("XDG_DATA_HOME") ?? (envVar("HOME") ? path.join(envVar("HOME")!, ".local/share") : undefined);
+  const base =
+    envVar("XDG_DATA_HOME") ??
+    (envVar("HOME") ? path.join(envVar("HOME")!, ".local/share") : undefined);
   return base === undefined ? undefined : path.join(base, "armadra");
 }
 
 /** A node id is only used to build filesystem paths after it passes this gate. */
 export function isValidNodeId(nodeId: string): boolean {
-  return nodeId.length > 0 && nodeId.length <= 80 && /^[A-Za-z0-9_-]+$/.test(nodeId);
+  return (
+    nodeId.length > 0 && nodeId.length <= 80 && /^[A-Za-z0-9_-]+$/.test(nodeId)
+  );
 }
 
 /**
@@ -136,7 +144,9 @@ export interface Endpoint {
  * Reads and parses the endpoint file. Any IO or parse problem is an error;
  * callers in hook mode turn that into a silent exit 0.
  */
-export function loadEndpoint(file: string): { ok: Endpoint } | { error: string } {
+export function loadEndpoint(
+  file: string,
+): { ok: Endpoint } | { error: string } {
   let text: string;
   try {
     text = fs.readFileSync(file, "utf8");
@@ -155,7 +165,9 @@ export function loadEndpoint(file: string): { ok: Endpoint } | { error: string }
   }
   const sock = nonEmpty(map.get(KEY_SOCK));
   if (port === undefined && sock === undefined) {
-    return { error: `endpoint file ${file} has neither ${KEY_PORT} nor ${KEY_SOCK}` };
+    return {
+      error: `endpoint file ${file} has neither ${KEY_PORT} nor ${KEY_SOCK}`,
+    };
   }
   return {
     ok: {
@@ -199,11 +211,16 @@ export function pendingDir(endpoint: Endpoint): string {
  * failover adopts a different candidate, the caller must present *that*
  * candidate's token, not one carried over from another directory (W0.3).
  */
-export function nodeToken(endpoint: Endpoint, nodeId: string): string | undefined {
+export function nodeToken(
+  endpoint: Endpoint,
+  nodeId: string,
+): string | undefined {
   if (!isValidNodeId(nodeId)) return undefined;
   if (endpoint.tokenDir === undefined) return undefined;
   try {
-    const token = fs.readFileSync(path.join(endpoint.tokenDir, nodeId), "utf8").trim();
+    const token = fs
+      .readFileSync(path.join(endpoint.tokenDir, nodeId), "utf8")
+      .trim();
     return token === "" ? undefined : token;
   } catch {
     return undefined;
@@ -259,7 +276,10 @@ export function discoverCandidatesFrom(
   if (credentials !== undefined) {
     const endpointsJson = path.join(dataDir, "endpoints.json");
     const address = readEndpointsJsonRuntime(endpointsJson);
-    if (address !== undefined && (address.port !== credentials.port || address.sock !== credentials.sock)) {
+    if (
+      address !== undefined &&
+      (address.port !== credentials.port || address.sock !== credentials.sock)
+    ) {
       candidates.push({
         path: endpointsJson,
         port: address.port,
@@ -292,7 +312,10 @@ function readEndpointsJsonRuntime(
   if (runtime === undefined) return undefined;
   const http = asString(runtime["http"]);
   const tail = http?.split(":").at(-1);
-  const port = tail !== undefined && /^\d+$/.test(tail) && Number(tail) <= 65535 ? Number(tail) : undefined;
+  const port =
+    tail !== undefined && /^\d+$/.test(tail) && Number(tail) <= 65535
+      ? Number(tail)
+      : undefined;
   const socket = nonEmpty(asString(runtime["socket"]));
   if (port === undefined && socket === undefined) return undefined;
   return { port, sock: socket };
