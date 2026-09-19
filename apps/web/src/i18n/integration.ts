@@ -5,7 +5,8 @@ import type { MessageModule } from "./index";
  *
  * 取代原来分散在 `modals` 里的 `settings.hooks.*` / `settings.skills.*`：
  * 一种 CLI 一行，所以文案也归到一处。Claude / Codex 这些是 CLI 名，保留原文
- * （§14 第 2 条）；`aicc-hook`、`nodeterm` 是磁盘上的字面量，同样不翻译。
+ * （§14 第 2 条）；`aicc-hook` 与上一个产品名是磁盘上的字面量（见 core 的
+ * `hook/install/repair.ts` `LEGACY_MARKERS`），同样不翻译。
  */
 export const integration: MessageModule = {
   "zh-CN": {
