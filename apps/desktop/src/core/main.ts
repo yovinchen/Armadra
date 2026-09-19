@@ -35,6 +35,7 @@ import {
 import { install as installRemote } from "./remote";
 import { install as installTerminals } from "./terminal/install";
 import { install as installAgents } from "./agent";
+import { install as installBrowser } from "./browser";
 
 /**
  * The core process.
@@ -118,6 +119,9 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // `installSettings` assembled, and it starts nothing until it is asked to.
   installRemote,
   installTerminals,
+  // After agents: the browser verbs reach the canvas through the same node and
+  // link tables, and the hook surface that carries them is the agent domain's.
+  installBrowser,
   // Last: the hook service publishes an endpoint file, and nothing may be
   // advertised before the domains that answer a hook report exist.
   installHooks,

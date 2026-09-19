@@ -1139,6 +1139,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "hook",
     feature: "浏览器动词",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/automation/agent-target",
