@@ -29,6 +29,7 @@ import {
   logLevel,
   nodePlatform,
 } from "./platform";
+import { install as installTerminals } from "./terminal/install";
 
 /**
  * The core process.
@@ -102,6 +103,7 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installSettings,
   installUsage,
   installIdentity,
+  installTerminals,
 ];
 
 export async function run(options: RunOptions = {}): Promise<RunningCore> {
