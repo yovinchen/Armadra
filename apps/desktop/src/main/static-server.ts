@@ -222,8 +222,14 @@ export async function startPageSource(
   devServerUrl: string | undefined,
   packaged: boolean,
   staticRoot: string,
+  externalRenderer = false,
 ): Promise<PageSource> {
-  const target = pageSourceTarget(devServerUrl, packaged, staticRoot);
+  const target = pageSourceTarget(
+    devServerUrl,
+    packaged,
+    staticRoot,
+    externalRenderer,
+  );
   if (target.kind === "static") return startStaticServer(target.root);
   return {
     origin: new URL(target.url).origin,
