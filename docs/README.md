@@ -73,6 +73,7 @@
 ## contracts/ 实施契约
 
 - [v3 Agent 终端](contracts/v3-agent-terminal-plan.md)：章节 §N 被代码引用，保留编号。
+- [core 的 JSON 面](contracts/core-json-api.md)：`/api/github/*`、`/api/automations/*` 与 `GET /api/identity/hello` 的线上形状，以及自动化域存进库里的那份 JSON。章节 §N 被代码引用，保留编号。
 - [tldraw 画布](history/tldraw-canvas-plan.md) 已被 [React Flow 画布](design/canvas-react-flow.md)取代并移入 `history/`。代码注释里的「旧画布契约 §N」指的就是它，只写编号不写路径；§6.1 / §6.3 已改指 React Flow 画布的 §3.1 / §2.5，§6.2（资产端点）与 §8（实施阶段）在新文档里没有对应章节，仍按编号回溯本文。
 
 ## history/ 与 research/
