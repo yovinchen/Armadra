@@ -247,7 +247,7 @@ pub struct MiniBar {
 ///
 /// Kept deliberately small and separate from [`UsageSnapshot`] so a desktop
 /// shell can render the strip without understanding the whole payload. The
-/// runtime provides this shape; wiring it into a Tauri tray is the shell's job.
+/// runtime provides this shape; wiring it into a tray is the shell's job.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MiniUsage {

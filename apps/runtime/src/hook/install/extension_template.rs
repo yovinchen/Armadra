@@ -125,7 +125,6 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 
-const ARMADRA_TIMEOUT_MS = 1500;
 const ARMADRA_MAX_TEXT = 2000;
 const ARMADRA_MAX_PATH = 4096;
 const ARMADRA_U64_MASK = 0xffffffffffffffffn;
@@ -134,6 +133,20 @@ function armadraEnv(name) {
   const value = process.env[name];
   return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
+
+// How long a report may take before it is abandoned. 1.5s is the budget for
+// the socket round trip AND for the spawn fallback, which is a whole process
+// start: on a machine that is busy enough, 1.5s is not always long enough to
+// start one, and the child is then killed mid-write. The default stands —
+// nothing may hold a turn open longer than this — but a loaded test machine
+// can raise it, which is the only reason the override exists.
+const ARMADRA_TIMEOUT_MS = (() => {
+  const raw = armadraEnv("ARMADRA_HOOK_TIMEOUT_MS");
+  const parsed = raw === undefined ? NaN : Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 60000
+    ? parsed
+    : 1500;
+})();
 
 // The same gate as `crates/hook/src/endpoint.rs::is_valid_node_id`: an id only
 // becomes part of a filesystem path after it passes this.

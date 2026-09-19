@@ -2,7 +2,7 @@
 
 ## 代码边界
 
-- `apps/web` 是唯一前端，`apps/desktop` 是 Tauri 薄壳；业务仍由 Rust Runtime 执行，Go Host 正在分阶段迁移。
+- `apps/web` 是唯一前端，`apps/desktop` 是 Electron 薄壳；业务仍由 Rust Runtime 执行，Go Host 正在分阶段迁移。
 - 画布修改经 `canvas-store` 动作；界面文案放 `apps/web/src/i18n/`，复用现有 shadcn 组件。
 - Runtime JSON 使用 camelCase，错误为 `{ code, message }`；跨端 Protobuf 以 `proto/` 为唯一来源，生成文件不手改。
 - 数据库新增编号迁移；已发布迁移不得修改。未知或损坏的数据库拒绝启动，禁止自动清库或重建。

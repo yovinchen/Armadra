@@ -52,17 +52,15 @@ fn spawn_runtime(data_dir: &Path) -> Child {
         .expect("spawn armadra-runtime")
 }
 
-/// Blocks until a real `/verify` round trip succeeds. The endpoint file
-/// appears (and `wait_for_port` returns) as soon as start-up publishes it,
-/// which is *before* the async runtime reaches the point in `main` where it
-/// registers its `SIGTERM` handler (`tokio::signal::unix::signal` inside
-/// `shutdown_signal`, only polled once the router's `select!` is first
-/// evaluated). Sending a signal in that gap hits the OS default disposition
-/// — immediate termination — instead of the graceful path this crate is
-/// testing, which is a real start-up ordering quirk and not what W0.3 is
-/// about. Waiting for an actual HTTP answer is what proves the handler is
-/// already installed: the listener accept loop and the signal task are
-/// polled together, in the same `select!`.
+/// Blocks until a real `/verify` round trip succeeds.
+///
+/// The endpoint file appearing proves only that it was written; this proves
+/// something is answering behind it, which is what makes destroying it below
+/// a meaningful thing to do.
+///
+/// It is NOT what makes the signal safe to send. `main` arms its handlers
+/// (`ShutdownSignals::install`) before it publishes anything about itself, so
+/// by the time this file exists SIGTERM already lands on the graceful path.
 fn wait_until_serving(data_dir: &Path, node_id: &str) {
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
@@ -190,48 +188,45 @@ fn a_killed_runtimes_stale_endpoint_self_heals_after_a_restart() {
 /// The other half of W0.3: a *clean* shutdown must not leave the endpoint
 /// file behind, advertising a Runtime that is deliberately on its way out.
 ///
-/// Retries the whole spawn (bounded) rather than asserting on the first try:
-/// `wait_until_serving` narrows the pre-registration race described there but
-/// does not close it completely — a run whose `SIGTERM` hit before the
-/// handler was installed exits by the *signal* (`ExitStatusExt::signal()`
-/// is `Some`), not by returning `Ok(())` from `main`, and says nothing about
-/// the shutdown path this test exists to check.
+/// Asserted on the first try, with no retry loop. This used to need one: the
+/// handlers were installed where the router's `select!` first polled them,
+/// which is after `hook-endpoint.env` is published, so a SIGTERM sent as soon
+/// as that file appeared could land on the default disposition and kill the
+/// process outright. `main` now arms them before publishing anything, and the
+/// exit status below is what asserts it still does — a run that lost that race
+/// would exit BY the signal rather than by returning from `main`.
 #[test]
 fn a_clean_shutdown_removes_the_endpoint_file() {
     use std::os::unix::process::ExitStatusExt;
 
-    for attempt in 1..=5 {
-        let data_dir = tempfile::tempdir().unwrap();
-        let mut runtime = spawn_runtime(data_dir.path());
-        wait_for_port(data_dir.path(), None);
-        wait_until_serving(data_dir.path(), "node-a");
-        let endpoint_file = data_dir.path().join("hook-endpoint.env");
-        assert!(endpoint_file.exists());
+    let data_dir = tempfile::tempdir().unwrap();
+    let mut runtime = spawn_runtime(data_dir.path());
+    wait_for_port(data_dir.path(), None);
+    wait_until_serving(data_dir.path(), "node-a");
+    let endpoint_file = data_dir.path().join("hook-endpoint.env");
+    assert!(endpoint_file.exists());
 
-        unsafe { libc::kill(runtime.id() as i32, libc::SIGTERM) };
-        let deadline = Instant::now() + Duration::from_secs(15);
-        let status = loop {
-            if let Ok(Some(status)) = runtime.try_wait() {
-                break status;
-            }
-            if Instant::now() > deadline {
-                let _ = runtime.kill();
-                panic!("runtime did not exit after SIGTERM");
-            }
-            std::thread::sleep(Duration::from_millis(25));
-        };
-
-        if status.signal().is_some() {
-            assert!(
-                attempt < 5,
-                "the Runtime kept losing the pre-registration race to SIGTERM"
-            );
-            continue;
+    unsafe { libc::kill(runtime.id() as i32, libc::SIGTERM) };
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let status = loop {
+        if let Ok(Some(status)) = runtime.try_wait() {
+            break status;
         }
-        assert!(
-            !endpoint_file.exists(),
-            "a clean shutdown must remove the hook endpoint file"
-        );
-        return;
-    }
+        if Instant::now() > deadline {
+            let _ = runtime.kill();
+            panic!("runtime did not exit after SIGTERM");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
+
+    assert_eq!(
+        status.signal(),
+        None,
+        "SIGTERM killed the Runtime instead of reaching its handler: the \
+         handlers are no longer armed before the endpoint is published"
+    );
+    assert!(
+        !endpoint_file.exists(),
+        "a clean shutdown must remove the hook endpoint file"
+    );
 }

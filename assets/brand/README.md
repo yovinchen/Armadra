@@ -7,7 +7,7 @@
 
 ## 使用位置
 
-- Tauri 桌面端派生图标：`apps/desktop/src-tauri/icons/`
+- 桌面端派生图标：`apps/desktop/build/icons/`
 - Web favicon 与界面品牌标识：`apps/web/public/icon.png`
 
 所有旧候选、实验配色、深浅色方案及旧节点连线标识均已删除。后续如需调整

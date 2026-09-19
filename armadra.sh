@@ -7,7 +7,7 @@
 #   ./armadra.sh test            全部测试：shared / web / cargo workspace
 #   ./armadra.sh build           编译：Rust 二进制（release）+ 前端产物
 #   ./armadra.sh build --bundle  额外打出 .app / .dmg
-#   ./armadra.sh run             本地运行桌面端（tauri dev，前端热更新）
+#   ./armadra.sh run             本地运行桌面端（electron-vite dev，前端热更新）
 #   ./armadra.sh run web         只跑 Runtime + 浏览器里的前端
 #   ./armadra.sh all             install → check → build → run
 #
@@ -92,15 +92,16 @@ run_tests() {
 build() {
   local bundle=false
   [ "${1:-}" = "--bundle" ] && bundle=true
-  step "编译 Rust 二进制（release）并准备 Tauri sidecar"
-  pnpm --filter @armadra/desktop prepare:sidecar
+  step "编译 Rust 二进制（release）并准备受管二进制"
+  cargo build --release -p armadra-runtime -p armadra-hook
+  pnpm --filter @armadra/desktop prepare:host --release --native
   step "构建前端"
   pnpm --filter @armadra/shared build
   pnpm --filter @armadra/web build
   if $bundle; then
     step "打包桌面端（.app / .dmg）"
-    pnpm --filter @armadra/desktop exec tauri build
-    ok "产物在 target/release/bundle/"
+    pnpm --filter @armadra/desktop dist
+    ok "产物在 apps/desktop/release/"
   else
     ok "编译完成（加 --bundle 可打包安装包）"
   fi
@@ -134,7 +135,7 @@ runtime_endpoint() {
   ' "$(armadra_data_dir)/endpoints.json" 2>/dev/null || true
 }
 
-# 浏览器开发由本脚本持有 Runtime；桌面开发改由 Tauri 持有私有控制管道，
+# 浏览器开发由本脚本持有 Runtime；桌面开发改由桌面壳持有私有控制管道，
 # 使关闭前台与明确退出后台具有不同语义。
 #
 # 不指定端口时按 `--listen tcp:127.0.0.1:0` 启动，实际端口由内核决定并写进
@@ -174,14 +175,14 @@ start_runtime() {
 }
 
 run_desktop() {
-  # 桌面壳自己在私有 socket 上持有 Runtime；开发时额外开一个回环端口，
-  # 因为 Vite 页面在 http://127.0.0.1:1420，自定义协议在那里不可用。
+  # 桌面壳自己持有 Runtime；开发时钉一个回环端口，因为 Vite 页面在
+  # http://127.0.0.1:1420，而壳在这条路上不给页面注入基址。
   port_in_use "${DESKTOP_RUNTIME_PORT}" && fail "端口 ${DESKTOP_RUNTIME_PORT} 已被占用（Armadra.app 或上次的 Runtime 还在跑？pkill -f armadra-runtime）"
-  # tauri.conf.json 的 devUrl 固定是 127.0.0.1:1420：被别的项目占住时 vite 会换端口，
+  # electron-vite 的 devUrl 固定是 127.0.0.1:1420：被别的项目占住时 vite 会换端口，
   # 桌面壳却会一直等 1420，看起来像卡死。
   port_in_use 1420 && fail "端口 1420 已被占用，桌面开发模式的前端必须跑在 1420（先关掉占用它的进程）"
-  step "准备 sidecar（tauri 的 externalBin 校验要求文件存在）"
-  pnpm --filter @armadra/desktop prepare:sidecar
+  step "准备 Go Host（壳按 target/debug 找它）"
+  pnpm --filter @armadra/desktop prepare:host --native
   pnpm --filter @armadra/shared build
   step "编译桌面持有的 Runtime（debug）"
   cargo build -p armadra-runtime -p armadra-hook

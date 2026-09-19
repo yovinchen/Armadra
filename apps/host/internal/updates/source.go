@@ -177,8 +177,8 @@ const (
 	ComponentSessionHost = "session-host"
 	ComponentWeb         = "web"
 	// ComponentManifest covers the files that describe a release rather than
-	// carry a program: the Tauri updater manifest and the checksum list. They
-	// are one file for every platform, so they declare no target.
+	// carry a program: the updater manifest (latest.json) and the checksum
+	// list. They are one file for every platform, so they declare no target.
 	ComponentManifest = "manifest"
 )
 

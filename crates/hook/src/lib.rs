@@ -2,7 +2,7 @@
 //! into agent terminals.
 //!
 //! The binary is deliberately dependency light (only `serde_json`) so it stays
-//! small enough to ship as a Tauri sidecar and starts fast enough to sit on the
+//! small enough to ship beside the desktop shell and starts fast enough to sit on the
 //! hot path of every hook event a CLI emits.
 //!
 //! Design rules that the rest of this crate follows:

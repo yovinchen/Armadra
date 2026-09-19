@@ -11,8 +11,9 @@ cargo test -p armadra-runtime
 ```
 
 默认只监听 `127.0.0.1:43120`（`ARMADRA_RUNTIME_HOST` / `ARMADRA_RUNTIME_PORT` 可覆盖）。
-CORS 只放行 `http://127.0.0.1:*`、`http://localhost:*`、`tauri://localhost`、
-`https://tauri.localhost`。
+CORS 只放行回环 HTTP 来源：`http://127.0.0.1:*`、`http://localhost:*`，以及
+无端口的 `http://127.0.0.1`、`http://localhost`（Unix socket / 命名管道上的调用者
+没有端口可写）。
 
 ## 模块
 
