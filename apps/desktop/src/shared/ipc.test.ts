@@ -51,6 +51,7 @@ describe("the IPC table", () => {
         "dialog:pick-directory",
         "dialog:pick-files",
         "shell:open-external",
+        "shell:show-item-in-folder",
         "shortcuts:apply",
         "updates:cancel",
         "updates:check",
@@ -65,6 +66,15 @@ describe("the IPC table", () => {
         "browser:control",
       ].sort(),
     );
+  });
+
+  it("keeps revealing a path on its own channel, never through openExternal", () => {
+    // The `file://` URL this replaces was refused by the scheme allow-list,
+    // which was the right refusal: widening that list to reveal a directory
+    // would have widened it for everything else that reaches `openExternal`.
+    expect(IPC.shellShowItemInFolder.direction).toBe("invoke");
+    expect(IPC.shellShowItemInFolder.reach).toBe("window");
+    expect(IMPLEMENTED_CHANNELS).toContain(IPC.shellShowItemInFolder.channel);
   });
 
   it("keeps the two window events the shell pushes on its own", () => {

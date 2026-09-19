@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { runtimeApi } from "../../../api/client";
 import { useT } from "../../../app/preferences-store";
-import { openExternal } from "../../../platform";
+import { revealPath } from "../../../platform";
 import { SettingsGroup } from "../SettingsGroup";
 import { LegacyArchives } from "../LegacyArchives";
 import { SettingsRow } from "../SettingsRow";
@@ -75,7 +75,17 @@ export function DataPage() {
             disabled={!info.data}
             onClick={() => {
               const dir = info.data?.dataDir;
-              if (dir) void openExternal(`file://${encodeURI(dir)}`);
+              if (!dir) return;
+              void revealPath(dir).then((outcome) => {
+                // 三种结局都说一声：这个按钮以前失败时完全没有反馈，
+                // 点下去什么也不发生就只能读成「应用坏了」。
+                if (outcome === "copied")
+                  toast.success(t("settings.reveal.copied"));
+                else if (outcome === "failed")
+                  toast.error(t("settings.reveal.failed"), {
+                    description: dir,
+                  });
+              });
             }}
           >
             {t("settings.reveal")}

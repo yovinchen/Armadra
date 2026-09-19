@@ -82,6 +82,22 @@ export const IPC = {
   shellOpenExternal: spec("shell:open-external", "invoke", "window"),
 
   /**
+   * `shell.showItemInFolder`, with a ROOT allow-list
+   * (`shell-core/reveal-path.ts`).
+   *
+   * A separate channel rather than a `file://` URL through the one above, and
+   * that is the whole point: `openExternal` hands a scheme to the operating
+   * system's handler table, so admitting `file:` there would admit every
+   * other consumer of that table. Revealing opens a file manager window on a
+   * path inside a directory this shell owns, and nothing else.
+   *
+   * `window`: it acts on the machine the window runs on, on behalf of a person
+   * looking at that window. A remote peer asking for it would be asking this
+   * machine to open a Finder window nobody is in front of.
+   */
+  shellShowItemInFolder: spec("shell:show-item-in-folder", "invoke", "window"),
+
+  /**
    * The seven update commands, one for one with the Rust shell's commands they
    * replace (W2.2). `updates:check` carries the Host's answer the page already
    * fetched with its own session; everything else takes no argument and
@@ -181,6 +197,7 @@ export const IMPLEMENTED_CHANNELS: readonly string[] = [
   IPC.dialogPickDirectory.channel,
   IPC.dialogPickFiles.channel,
   IPC.shellOpenExternal.channel,
+  IPC.shellShowItemInFolder.channel,
   IPC.shortcutsApply.channel,
   // W3.3 / W3.4.
   IPC.browserRegister.channel,

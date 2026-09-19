@@ -30,6 +30,12 @@ interface ArmadraBridge {
   readonly shell: {
     /** 只放行 `http` / `https`，其余以 `scheme_not_allowed` 拒绝。 */
     openExternal(url: string): Promise<void>;
+    /**
+     * 在系统文件管理器里定位一个路径。只放行数据目录与系统下载目录之内的
+     * 绝对路径，其余以 `path_not_allowed` 拒绝——路径是页面报的，所以名单
+     * 由主进程说了算。
+     */
+    showItemInFolder(path: string): Promise<{ ok: boolean }>;
   };
   readonly shortcuts: {
     /** 全量替换：活着的热键集合就等于最后一次 apply 的那张表。 */

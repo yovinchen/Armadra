@@ -64,7 +64,7 @@ import {
 } from "./browser";
 import { setDriveEnvironment } from "./runtime-process";
 import { pickDirectory, pickFiles } from "./dialogs";
-import { openExternal } from "./external";
+import { openExternal, showItemInFolder } from "./external";
 import { installApplicationMenu, installKeydownIntercept } from "./menu";
 import { applyShortcuts, releaseShortcuts } from "./shortcuts";
 import { createTray, destroyTray } from "./tray";
@@ -109,6 +109,13 @@ function registerIpc(): void {
     [IPC.dialogPickFiles.channel]: (options) =>
       pickFiles(options as PickOptions | undefined),
     [IPC.shellOpenExternal.channel]: (url) => openExternal(url),
+    // Revealing is its own channel with its own allow-list; see
+    // `shell-core/reveal-path.ts` for why it is not a `file://` URL through
+    // the line above.
+    [IPC.shellShowItemInFolder.channel]: (path) => {
+      showItemInFolder(path);
+      return { ok: true };
+    },
     [IPC.shortcutsApply.channel]: (bindings) => applyShortcuts(bindings),
     // W3.3 / W3.4. Registration is validated in `main/browser/registry.ts`,
     // including the `getType() === 'webview'` check the page cannot be trusted
