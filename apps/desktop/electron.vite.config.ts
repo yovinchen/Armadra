@@ -25,11 +25,11 @@ const EXTERNAL = ["electron", "node-pty"];
 
 /**
  * Workspace packages go the other way: they must be BUNDLED. A packaged app
- * has no `node_modules/@armadra/*` to require, and `@armadra/protocol` is
+ * has no `node_modules/@armadra/*` to require, and `@armadra/shared` is
  * ESM-only — its `exports` declares no `require` condition, so a CJS main
  * process cannot load it at runtime even in development.
  */
-const BUNDLED_WORKSPACE_PACKAGES = ["@armadra/protocol"];
+const BUNDLED_WORKSPACE_PACKAGES = ["@armadra/shared"];
 
 /**
  * CJS output for both. electron-vite defaults to ESM (`.mjs`), and an
