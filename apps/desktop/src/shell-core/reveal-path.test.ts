@@ -66,7 +66,9 @@ describe("the path a reveal may open", () => {
   it("refuses a path carrying a NUL byte", () => {
     // The syscall truncates at the NUL, so the checked string and the opened
     // one would be different paths.
-    expect(revealablePath(`${join(DATA, "ok")}\0/etc/passwd`, ROOTS)).toBe(null);
+    expect(revealablePath(`${join(DATA, "ok")}\0/etc/passwd`, ROOTS)).toBe(
+      null,
+    );
   });
 
   it("refuses everything when there are no roots, and ignores junk roots", () => {

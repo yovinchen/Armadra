@@ -53,10 +53,7 @@ interface ArmadraBridge {
      */
     onKeyIntent(listener: (intent: string, token: string) => void): () => void;
     /** 页面有没有接住那条意图。 */
-    resolveKeyIntent(
-      token: string,
-      handled: boolean,
-    ): Promise<{ ok: boolean }>;
+    resolveKeyIntent(token: string, handled: boolean): Promise<{ ok: boolean }>;
     /** 主进程发的通知被点了，页面自己决定选中哪个节点。 */
     onNotificationClick(
       listener: (event: { nodeId: string }) => void,

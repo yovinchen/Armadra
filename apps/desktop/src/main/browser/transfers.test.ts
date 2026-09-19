@@ -76,7 +76,11 @@ class FakeSession {
 
   on(
     event: string,
-    listener: (event: unknown, item: FakeItem, contents: { id: number }) => void,
+    listener: (
+      event: unknown,
+      item: FakeItem,
+      contents: { id: number },
+    ) => void,
   ) {
     if (event === "will-download") this.listener = listener;
     return this;
