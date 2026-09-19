@@ -35,14 +35,24 @@ describe("where the page comes from", () => {
       kind: "devServer",
       url: "http://127.0.0.1:5173",
     });
-    // electron-vite did not start one: apps/web's own pinned port.
-    expect(pageSourceTarget(undefined, false, "/out")).toEqual({
+    // electron-vite did not start one, but somebody else did: apps/web's own
+    // pinned port (`ARMADRA_DESKTOP_EXTERNAL_RENDERER=1`).
+    expect(pageSourceTarget(undefined, false, "/out", true)).toEqual({
       kind: "devServer",
       url: DEFAULT_DEV_RENDERER_URL,
     });
-    expect(pageSourceTarget("", false, "/out")).toEqual({
+    expect(pageSourceTarget("", false, "/out", true)).toEqual({
       kind: "devServer",
       url: DEFAULT_DEV_RENDERER_URL,
+    });
+  });
+
+  it("serves a build output nobody is hosting, packaged or not", () => {
+    // `electron-vite preview` runs the real static path without a bundle,
+    // which is the only way that path gets exercised before packaging.
+    expect(pageSourceTarget(undefined, false, "/out")).toEqual({
+      kind: "static",
+      root: "/out",
     });
   });
 

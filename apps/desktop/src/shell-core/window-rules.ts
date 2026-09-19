@@ -64,10 +64,17 @@ export function pageSourceTarget(
   devServerUrl: string | undefined,
   packaged: boolean,
   staticRoot: string,
+  externalRenderer = false,
 ): PageSourceTarget {
   if (packaged) return { kind: "static", root: staticRoot };
-  return {
-    kind: "devServer",
-    url: devServerUrl || DEFAULT_DEV_RENDERER_URL,
-  };
+  // electron-vite started apps/web itself and told us where.
+  if (devServerUrl) return { kind: "devServer", url: devServerUrl };
+  // `ARMADRA_DESKTOP_EXTERNAL_RENDERER=1`: somebody is already running
+  // `pnpm --filter @armadra/web dev` on apps/web's own pinned port.
+  if (externalRenderer)
+    return { kind: "devServer", url: DEFAULT_DEV_RENDERER_URL };
+  // Neither: an unpackaged run over a build output — `electron-vite preview`.
+  // Serving it is the same path the packaged shell takes, which is the point
+  // of exercising it without a bundle.
+  return { kind: "static", root: staticRoot };
 }
