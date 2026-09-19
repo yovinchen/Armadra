@@ -43,6 +43,19 @@ describe("routeFile", () => {
     expect(routeFile(file("clip.mp4", "video/mp4"))).toBe("file");
     expect(routeFile(file("x.tiff", "image/tiff"))).toBe("file");
   });
+
+  it("按扩展名认 .mmd / .mermaid（它们没有可用的 MIME）", () => {
+    expect(routeFile(file("chart.mmd", ""))).toBe("mermaid");
+    expect(routeFile(file("chart.mermaid", "text/plain"))).toBe("mermaid");
+    expect(routeFile(file("CHART.MMD", ""))).toBe("mermaid");
+  });
+
+  it("图片判定排在前面：`a.png.mmd` 仍然只算一种", () => {
+    // 扩展名是 `.mmd`，所以走 mermaid 而不是图片。
+    expect(routeFile(file("a.png.mmd", ""))).toBe("mermaid");
+    // 真图片带 MIME 时不会被误判成图。
+    expect(routeFile(file("a.mmd.png", "image/png"))).toBe("image");
+  });
 });
 
 describe("routePath", () => {

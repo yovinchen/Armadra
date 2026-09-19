@@ -12,6 +12,8 @@ import {
 import { runtimeApi } from "../../api/client";
 import { AssetTooLargeError, uploadAsset } from "../assets";
 import { addItems } from "../whiteboard/store";
+import { isMermaidFileName } from "../whiteboard/mermaid/detect";
+import { openMermaidImport } from "../whiteboard/mermaid/open";
 import { canEditCanvas, useCanvasOwnership } from "../../canvas-ownership";
 import { viewportCentre } from "../interaction/pointer";
 import { t } from "../../app/preferences-store";
@@ -82,11 +84,15 @@ export function isImagePath(path: string): boolean {
  * MIME 优先（`image/png`…），拿不到 MIME 的时候退回扩展名——某些系统拖出来的
  * 文件 `type` 是空串。非图片按字节上传为导入副本，绝不以文件名伪造本机路径。
  */
-export type FileRoute = "image" | "file";
+export type FileRoute = "image" | "mermaid" | "file";
 
 export function routeFile(file: { name: string; type: string }): FileRoute {
   if (IMAGE_MIME_TYPES.has(file.type)) return "image";
   if (!file.type && isImagePath(file.name)) return "image";
+  // `.mmd` / `.mermaid` 的 MIME 在所有系统上都是空串或 `text/plain`，
+  // 所以只能看扩展名（Mermaid 导入设计 §4.4）。放在图片判定之后，免得
+  // 一个叫 `a.png.mmd` 的文件两边都命中。
+  if (isMermaidFileName(file.name)) return "mermaid";
   return "file";
 }
 
@@ -427,8 +433,14 @@ export async function addBrowserFiles(
     return;
   }
   const images = files.filter((file) => routeFile(file) === "image");
+  const diagrams = files.filter((file) => routeFile(file) === "mermaid");
   const others = files.filter((file) => routeFile(file) === "file");
   if (images.length) await createImageShapes(images, point, target);
+  // 对话框一次只确认一张图，所以多个 `.mmd` 一起拖进来时只开第一个，
+  // 其余按普通文件导入（设计 §4.4）。
+  const [diagram, ...extraDiagrams] = diagrams;
+  if (diagram) await openMermaidFile(diagram, point);
+  others.push(...extraDiagrams);
   if (!others.length || !importTargetIsActive(target)) return;
   // Repeated names get distinct paths without overwriting either file.
   const used = new Set<string>();
@@ -529,5 +541,21 @@ async function fetchImageSize(url: string): Promise<ImageBox | null> {
     return await measureImage(await response.blob());
   } catch {
     return null;
+  }
+}
+
+/**
+ * 拖进来的 `.mmd` → 打开导入对话框（预填文件内容）。
+ *
+ * 和粘贴一样先确认再落地：文件里可能是半成品，直接画上去没法撤回到
+ * 「什么都没发生」。读不出来时只提示，不退化成建一个 editor 节点——
+ * 用户拖的是图，给他一个文本编辑器是答非所问。
+ */
+async function openMermaidFile(file: File, at: Position): Promise<void> {
+  try {
+    const text = await file.text();
+    if (text.trim()) openMermaidImport({ text, at });
+  } catch {
+    toast.error(t("mermaid.fileFailed"));
   }
 }

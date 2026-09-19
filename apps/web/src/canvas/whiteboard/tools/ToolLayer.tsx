@@ -4,6 +4,9 @@ import { useStoreApi } from "@xyflow/react";
 import { usePreferencesStore } from "@/app/preferences-store";
 import { setDefaultStyle, useTool } from "../../interaction/tool-store";
 import { trackPointer } from "../../interaction/pointer";
+import { registerCanvasCommands } from "../../commands";
+import { isCanvasLocked } from "../../canvas-lock";
+import { openMermaidImport, useMermaidDialogOpen } from "../mermaid/open";
 import { DraftPreview } from "./DraftPreview";
 import { useClipboardCommands } from "./use-clipboard";
 import { useDoubleClickText } from "./use-double-click-text";
@@ -39,15 +42,27 @@ const CURSORS: Record<string, string> = {
   frame: "crosshair",
 };
 
+/**
+ * 导入 Mermaid 的对话框。
+ *
+ * 懒加载 + 只在打开时渲染：这条链上挂着 mermaid（2.7 MB）与 dagre，
+ * 静态挂在这里等于把它们拖进首屏（Mermaid 导入设计 D2）。
+ */
+const ImportMermaidDialog = React.lazy(
+  () => import("../mermaid/ImportMermaidDialog"),
+);
+
 export function ToolLayer() {
   const tool = useTool();
   const store = useStoreApi();
   const { draft } = useToolPointer();
+  const mermaidOpen = useMermaidDialogOpen();
 
   useItemDrag();
   useClipboardCommands();
   useDoubleClickText();
   useDefaultStyle();
+  useMermaidCommand();
 
   // 光标写在 React Flow 的容器上：铺一层透明覆盖层只为了换光标，会顺带
   // 把滚轮缩放和节点的 hover 一起挡掉。
@@ -66,7 +81,30 @@ export function ToolLayer() {
     return dom ? trackPointer(dom) : undefined;
   }, [store]);
 
-  return <DraftPreview draft={draft} />;
+  return (
+    <>
+      <DraftPreview draft={draft} />
+      {mermaidOpen ? (
+        <React.Suspense fallback={null}>
+          <ImportMermaidDialog />
+        </React.Suspense>
+      ) : null}
+    </>
+  );
+}
+
+/** ⌘⇧M / 加号菜单的「导入 Mermaid…」；锁住的画布上不响应。 */
+function useMermaidCommand(): void {
+  React.useEffect(
+    () =>
+      registerCanvasCommands({
+        "canvas.importMermaid": () => {
+          if (isCanvasLocked()) return;
+          openMermaidImport();
+        },
+      }),
+    [],
+  );
 }
 
 /**

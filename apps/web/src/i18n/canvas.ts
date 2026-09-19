@@ -101,6 +101,22 @@ const zh = {
   /* 空白右键的添加菜单里的白板项 */
   "add.text": "新建文字",
   "add.frame": "新建画框",
+  "add.importMermaid": "导入 Mermaid…",
+
+  /* 导入 Mermaid 对话框（design/mermaid-import.md §4.2 / §6） */
+  "mermaid.title": "导入 Mermaid",
+  "mermaid.description": "流程图落成可编辑的图形，其余图种落成图片。",
+  "mermaid.source": "源码",
+  "mermaid.preview": "预览",
+  "mermaid.placeholder": "flowchart LR\n  A[开始] --> B[结束]",
+  "mermaid.import": "导入",
+  "mermaid.cancel": "取消",
+  "mermaid.empty": "先粘贴或输入一段 Mermaid",
+  "mermaid.errorAt": "第 {line} 行：{message}",
+  "mermaid.renderFailed": "这张图渲染不出来",
+  "mermaid.imported": "已导入 {count} 个对象",
+  "mermaid.importedImage": "已按图片导入（{type} 暂不支持转成图形）",
+  "mermaid.fileFailed": "读不到这个文件",
 
   /* 画布动作 */
   "canvas.selectAll": "全选",
@@ -278,6 +294,23 @@ const en: Record<keyof typeof zh, string> = {
 
   "add.text": "New text",
   "add.frame": "New frame",
+  "add.importMermaid": "Import Mermaid…",
+
+  /* Import Mermaid dialog */
+  "mermaid.title": "Import Mermaid",
+  "mermaid.description":
+    "Flowcharts become editable shapes; other diagrams become an image.",
+  "mermaid.source": "Source",
+  "mermaid.preview": "Preview",
+  "mermaid.placeholder": "flowchart LR\n  A[Start] --> B[End]",
+  "mermaid.import": "Import",
+  "mermaid.cancel": "Cancel",
+  "mermaid.empty": "Paste or type some Mermaid first",
+  "mermaid.errorAt": "Line {line}: {message}",
+  "mermaid.renderFailed": "This diagram could not be rendered",
+  "mermaid.imported": "Imported {count} objects",
+  "mermaid.importedImage": "Imported as an image ({type} cannot become shapes)",
+  "mermaid.fileFailed": "Could not read that file",
 
   "canvas.selectAll": "Select all",
   "canvas.fitView": "Fit view",

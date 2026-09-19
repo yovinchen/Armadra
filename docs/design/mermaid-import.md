@@ -1,21 +1,21 @@
 # 画板导入 Mermaid 图
 
 > 状态：已实施（2026-09-19，基线 `359058afd`）。把一段 Mermaid 文本变成画板上的内容：flowchart 走「原生对象」路径，落成可编辑、可移动、一步撤销的几何形与连线；其余图种走「图片回退」，经现有资产导入路径落成图片对象。
-> 范围：`apps/web/src/canvas/whiteboard/mermaid/`（新增）、`canvas/whiteboard/tools/use-clipboard.ts`、`canvas/menus/add-menu.ts`、`canvas/dnd/external-content.ts`、`keybindings/commands.ts`、`i18n/`、`vite.config.ts` 的 chunk 分组。白板文档格式（[React Flow 画布](canvas-react-flow.md) §3.1 的 v2）**不变**，不新增对象类型、不新增迁移。
+> 范围：`apps/web/src/canvas/whiteboard/mermaid/`（新增）、`canvas/whiteboard/tools/use-clipboard.ts`、`canvas/menus/add-menu.ts`、`canvas/dnd/external-content.ts`、`keybindings/commands.ts`、`i18n/`。`vite.config.ts` 评估过但**没改**（§2.2：手工分组会把按需切分压成一个首屏大球）。白板文档格式（[React Flow 画布](canvas-react-flow.md) §3.1 的 v2）**不变**，不新增对象类型、不新增迁移。
 > 输入：mermaid 12.0.0 与 `@dagrejs/dagre` 3.1 在本仓 jsdom 环境下的实测（见 §2.1、§7）。
 
 ## 1. 结论与决策
 
-| #   | 决策                                                                       | 依据                                                                                                                       |
-| --- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| D1  | **用官方 `mermaid` 包解析，不自写解析器**                                  | Mermaid 语法有 11 种图种、各自一套 jison 文法且逐版演进；自写解析器等于永久维护一个会持续落后的方言（§2.1）               |
-| D2  | **mermaid 与 dagre 只出现在动态 `import()` 的 chunk 里**                   | mermaid 打包后约 2.7 MB（未压缩），绝不能进首屏；实测首屏 chunk 不变（§7）                                                |
-| D3  | **flowchart / graph → 原生白板对象；其余图种 → 图片对象**                  | flowchart 的 `db` 暴露了完整的节点 / 边 / 子图三元组，能无损映射到白板的五类对象；其余图种的 `db` 形状各异且语义无对应物   |
-| D4  | **布局用 dagre，不用 mermaid 自己的渲染结果**                              | mermaid 的坐标藏在渲染出的 SVG 里，取回来要量 DOM；dagre 是 mermaid 自己 flowchart 布局用的同一个库，纯函数、可在单测里跑 |
-| D5  | **subgraph 落成一个更大的矩形框，画在成员后面**，不是 React Flow 的父子节点 | 白板对象的 `parentId` 指向 `group` 节点（画布节点），不能指向另一条白板对象；用 z 序表达包含关系最省事也最好编辑         |
-| D6  | **落库经 `whiteboard/store.addItems` 一次调用**                            | 它已经是批量动作，一次 `setWhiteboard` 即一条历史；不需要新增 store 动作（§4.4）                                          |
-| D7  | **颜色全部取画板调色板，丢弃 Mermaid 自己的配色**                          | 导入的图必须和手画的内容看起来是同一块板；Mermaid 主题色在深色画布上不可读（§5）                                          |
-| D8  | **粘贴识别到 Mermaid 时先弹对话框确认，不直接落地**                        | 识别是前缀匹配，必然有误判；一段以 `graph` 开头的普通文本被吞掉比多一次确认糟得多（§6.2）                                 |
+| #   | 决策                                                                        | 依据                                                                                                                      |
+| --- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| D1  | **用官方 `mermaid` 包解析，不自写解析器**                                   | Mermaid 语法有 11 种图种、各自一套 jison 文法且逐版演进；自写解析器等于永久维护一个会持续落后的方言（§2.1）               |
+| D2  | **mermaid 与 dagre 只出现在动态 `import()` 的 chunk 里，且不手工分组**      | mermaid 打包后数 MB，绝不能进首屏；rolldown 自己按图种切得比手工分组好，实测入口 chunk 一个字节没变（§2.2、§7）           |
+| D3  | **flowchart / graph → 原生白板对象；其余图种 → 图片对象**                   | flowchart 的 `db` 暴露了完整的节点 / 边 / 子图三元组，能无损映射到白板的五类对象；其余图种的 `db` 形状各异且语义无对应物  |
+| D4  | **布局用 dagre，不用 mermaid 自己的渲染结果**                               | mermaid 的坐标藏在渲染出的 SVG 里，取回来要量 DOM；dagre 是 mermaid 自己 flowchart 布局用的同一个库，纯函数、可在单测里跑 |
+| D5  | **subgraph 落成一个更大的矩形框，画在成员后面**，不是 React Flow 的父子节点 | 白板对象的 `parentId` 指向 `group` 节点（画布节点），不能指向另一条白板对象；用 z 序表达包含关系最省事也最好编辑          |
+| D6  | **落库经 `whiteboard/store.addItems` 一次调用**                             | 它已经是批量动作，一次 `setWhiteboard` 即一条历史；不需要新增 store 动作（§4.4）                                          |
+| D7  | **颜色全部取画板调色板，丢弃 Mermaid 自己的配色**                           | 导入的图必须和手画的内容看起来是同一块板；Mermaid 主题色在深色画布上不可读（§5）                                          |
+| D8  | **粘贴识别到 Mermaid 时先弹对话框确认，不直接落地**                         | 识别是前缀匹配，必然有误判；一段以 `graph` 开头的普通文本被吞掉比多一次确认糟得多（§6.2）                                 |
 
 ## 2. 解析
 
@@ -23,11 +23,11 @@
 
 `mermaid@12` 导出两个我们要用的入口，实测（jsdom，本仓 vitest 环境）都能跑：
 
-| 调用                                      | 返回                                                                    | 用途                     |
-| ----------------------------------------- | ----------------------------------------------------------------------- | ------------------------ |
-| `mermaid.parse(text)`                     | `{ diagramType: "flowchart-v2" \| "sequence" \| … }`，语法错时 `throw` | 判图种、拿错误           |
-| `mermaid.mermaidAPI.getDiagramFromText(t)` | `{ type, text, db, parser, renderer }`                                  | 拿 flowchart 的 `db`     |
-| `mermaid.render(id, text)`                | `{ svg }`                                                               | 图片回退（**需要真 DOM**） |
+| 调用                                       | 返回                                                                   | 用途                       |
+| ------------------------------------------ | ---------------------------------------------------------------------- | -------------------------- |
+| `mermaid.parse(text)`                      | `{ diagramType: "flowchart-v2" \| "sequence" \| … }`，语法错时 `throw` | 判图种、拿错误             |
+| `mermaid.mermaidAPI.getDiagramFromText(t)` | `{ type, text, db, parser, renderer }`                                 | 拿 flowchart 的 `db`       |
+| `mermaid.render(id, text)`                 | `{ svg }`                                                              | 图片回退（**需要真 DOM**） |
 
 flowchart 的 `db` 上我们只用四个读方法，实测返回：
 
@@ -46,17 +46,25 @@ db.getClasses()    → { [name]: { id, styles[], textStyles[] } }
 
 ### 2.2 包体积与切分
 
-| 包                | 版本     | 未压缩  | 落点                                                        |
-| ----------------- | -------- | ------- | ----------------------------------------------------------- |
-| `mermaid`         | ^12.0.0  | ~2.7 MB | 只被 `mermaid/parse.ts` 与 `mermaid/render.ts` 动态 `import()` |
-| `@dagrejs/dagre`  | ^3.1.1   | ~200 kB | 被 `mermaid/layout.ts` 静态 import，整个目录只从懒加载的对话框进入 |
+| 包               | 版本    | 未压缩  | 落点                                                               |
+| ---------------- | ------- | ------- | ------------------------------------------------------------------ |
+| `mermaid`        | ^12.0.0 | ~2.7 MB | 只被 `mermaid/parse.ts` 与 `mermaid/render.ts` 动态 `import()`     |
+| `@dagrejs/dagre` | ^3.1.1  | ~200 kB | 被 `mermaid/layout.ts` 静态 import，整个目录只从懒加载的对话框进入 |
 
 两条保证：
 
 1. `ImportMermaidDialog.tsx` 由 `ToolLayer` 经 `React.lazy` 挂载，且**只在对话框打开时才渲染**，所以 `layout.ts` → dagre 整条链是异步的。
 2. `parse.ts` / `render.ts` 里对 mermaid 的引用一律写成 `await import("mermaid")`，即使将来有人把 `parse.ts` 静态 import 进首屏，mermaid 本身仍留在自己的 chunk 里。
 
-`vite.config.ts` 的 `codeSplitting.groups` 增加一组 `mermaid`（`priority: 20`，匹配 `node_modules/{mermaid,@dagrejs,dagre-d3-es,cytoscape*,khroma,langium,…}`），目的只是**给这块起个稳定名字**方便体积回归，不改变它的异步性质。实测见 §7。
+`vite.config.ts` 的 `codeSplitting.groups` **不加** `mermaid` 分组——试过，结论是加了更糟：
+
+| 分组写法                                | 结果                                                                                    |
+| --------------------------------------- | --------------------------------------------------------------------------------------- |
+| 匹配 mermaid + 它的 d3 / dompurify 依赖 | 那些包首屏也在用，整块 4.8 MB 被拽成**首屏静态依赖**（`index.html` 直接 modulepreload） |
+| 只匹配 `node_modules/mermaid/`          | 仍然是一块 4.8 MB，且入口仍静态 import 了它                                             |
+| **不分组（采用）**                      | rolldown 自己按图种切成一堆小的**异步** chunk，入口一个字节都没碰                       |
+
+不分组时 rolldown 把 mermaid 切成 `mermaid.core`（82.6 kB）、`mermaid-parser.core`（16.2 kB）、`dagre-*`（46.7 kB）、`cytoscape.esm`（424.7 kB，只有 mindmap 用）以及每个图种各自一块——打开一张 flowchart 只会拉到前三块。手工分组反而把这套按需切分压成一个大球，所以这里的正确做法是**什么都不做**。实测见 §7。
 
 唯一一个进首屏的文件是 `detect.ts`：它是 30 行纯正则，不 import 任何重依赖，因为 `use-clipboard.ts` 每次粘贴都要问它。
 
@@ -86,23 +94,23 @@ type MermaidParsed =
 
 **形状映射**（白板只有六种几何：`rectangle` `ellipse` `diamond` `triangle` `hexagon` `star`）：
 
-| Mermaid `type`                                                                     | 白板 `geo`  | 理由                             |
-| ---------------------------------------------------------------------------------- | ----------- | -------------------------------- |
-| `diamond`                                                                          | `diamond`   | 一一对应                         |
-| `hexagon`                                                                          | `hexagon`   | 一一对应                         |
-| `circle` `doublecircle` `stadium`                                                  | `ellipse`   | 圆与胶囊都是圆角轮廓，椭圆最近   |
-| `square` `round` `subroutine` `cylinder` `odd` `trapezoid` `lean_*` `inv_*` `null` | `rectangle` | **降级默认**：认不出的一律矩形   |
+| Mermaid `type`                                                                     | 白板 `geo`  | 理由                           |
+| ---------------------------------------------------------------------------------- | ----------- | ------------------------------ |
+| `diamond`                                                                          | `diamond`   | 一一对应                       |
+| `hexagon`                                                                          | `hexagon`   | 一一对应                       |
+| `circle` `doublecircle` `stadium`                                                  | `ellipse`   | 圆与胶囊都是圆角轮廓，椭圆最近 |
+| `square` `round` `subroutine` `cylinder` `odd` `trapezoid` `lean_*` `inv_*` `null` | `rectangle` | **降级默认**：认不出的一律矩形 |
 
 `triangle` 与 `star` 没有 Mermaid 对应物，导入永远不会产出这两种——这是有意的，不拿它们硬凑。
 
 **对象产出**（一个 Mermaid 图 → 一次 `addItems`）：
 
-| Mermaid 元素 | 白板对象                                                               |
-| ------------ | ---------------------------------------------------------------------- |
+| Mermaid 元素 | 白板对象                                                              |
+| ------------ | --------------------------------------------------------------------- |
 | subgraph     | `shape`（`geo: rectangle`、`fill: "none"`、`label` = 标题），最先入列 |
-| edge         | `line`（`points` 两点、`arrowEnd`、`dash` 按 `stroke`）                |
+| edge         | `line`（`points` 两点、`arrowEnd`、`dash` 按 `stroke`）               |
 | edge 标签    | `text`（居中在线段中点，`align: "middle"`），空标签不产出             |
-| node         | `shape`（`geo` 按上表、`label` = 节点文字）                            |
+| node         | `shape`（`geo` 按上表、`label` = 节点文字）                           |
 
 `ShapeItem` 自带 `label` 字段，所以节点文字**不另起 `text` 对象**——否则移动一个节点要拖两次。
 入列顺序即 z 序（`addItems` 对 `z === 0` 的对象按数组顺序递增编号），所以子图框在最底、连线在中间、节点压在连线上、边标签在最上。
@@ -184,14 +192,14 @@ shadcn `Dialog` + `Textarea` + `Button` + `Tabs`，左输入右预览：
 
 ## 6. 失败形态
 
-| 情况                             | 表现                                                                       |
-| -------------------------------- | -------------------------------------------------------------------------- |
+| 情况                             | 表现                                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | 语法错                           | 对话框里显示 Mermaid 原话的错误行（`error.message` 首段 + `error.hash.line + 1`），确认按钮禁用，**不产生任何对象** |
-| 图种能解析但 `db` 缺方法         | 当成回退路径走图片                                                         |
-| `mermaid.render` 抛（无 DOM 等） | toast 一条 `mermaid.renderFailed`，对话框留在原处，不落对象                 |
-| 图片上传超 8 MiB                 | `uploadAsset` 自己提示，不落对象                                           |
-| 空图（0 节点）                   | 确认按钮禁用                                                               |
-| 落地中途换了画板                 | `importTargetIsActive` 为假，整批丢弃（沿用既有资产导入规则）               |
+| 图种能解析但 `db` 缺方法         | 当成回退路径走图片                                                                                                  |
+| `mermaid.render` 抛（无 DOM 等） | toast 一条 `mermaid.renderFailed`，对话框留在原处，不落对象                                                         |
+| 图片上传超 8 MiB                 | `uploadAsset` 自己提示，不落对象                                                                                    |
+| 空图（0 节点）                   | 确认按钮禁用                                                                                                        |
+| 落地中途换了画板                 | `importTargetIsActive` 为假，整批丢弃（沿用既有资产导入规则）                                                       |
 
 「不产生半成品」由结构保证：解析 → 布局 → 生成对象三步全在内存里做完，只有最后一次 `addItems` 才碰文档。
 
@@ -200,7 +208,7 @@ shadcn `Dialog` + `Textarea` + `Button` + `Tabs`，左输入右预览：
 - 纯函数单测：`detect.test.ts`（正反样本）、`parse.test.ts`（真 mermaid，三种 fixture）、`layout.test.ts`（方向、不重叠、居中）、`to-items.test.ts`（对象数量 / 类型 / 标签 / 端点落在形状边界上 / z 序）。
 - `render.ts` 在 jsdom 里跑不了（实测 `childNodeEl.node(...)?.getBBox is not a function`，jsdom 没有 SVG 度量），所以涉及它的测试一律 `vi.mock`，只断言调用契约。
 - `pnpm --filter @armadra/web test` / `typecheck`、`pnpm check` 全绿。
-- 体积回归：`pnpm --filter @armadra/web build` 后 `mermaid` chunk 独立存在，首屏 chunk 不变。
+- 体积回归：`pnpm --filter @armadra/web build` 后，入口 chunk 的静态 import 里**没有**任何 mermaid / dagre / cytoscape 块，`index.html` 也不 modulepreload 它们。2026-09-19 实测入口 `index-*.js` 256.1 kB（gzip 81.7 kB），与改动前一致；mermaid 相关的异步块合计约 570 kB，按图种分块。
 
 ## 8. 遗留
 

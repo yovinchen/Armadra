@@ -29,10 +29,10 @@ describe("parseMermaid：含 subgraph 与边标签的 LR 流程图", () => {
     expect(graph.direction).toBe("LR");
     expect(graph.nodes.map((node) => node.id)).toEqual(["A", "B", "C", "D"]);
     expect(graph.nodes.map((node) => node.label)).toEqual([
-      "开始",
-      "要继续吗",
-      "完成",
-      "停下",
+      "Start",
+      "Continue",
+      "Done",
+      "Stop",
     ]);
     expect(graph.nodes.map((node) => node.shape)).toEqual([
       "square",
@@ -45,8 +45,8 @@ describe("parseMermaid：含 subgraph 与边标签的 LR 流程图", () => {
     expect(graph.edges.map((edge) => [edge.from, edge.to, edge.label])).toEqual(
       [
         ["A", "B", ""],
-        ["B", "C", "是"],
-        ["B", "D", "否"],
+        ["B", "C", "yes"],
+        ["B", "D", "no"],
       ],
     );
     // `-->` 是单向箭头。
@@ -55,7 +55,19 @@ describe("parseMermaid：含 subgraph 与边标签的 LR 流程图", () => {
     );
 
     expect(graph.groups).toEqual([
-      { id: "S", label: "收尾", nodes: ["C", "D"] },
+      { id: "S", label: "Wrap up", nodes: ["C", "D"] },
+    ]);
+  });
+
+  it("中文标签原样解出来，不被转义也不被截断", async () => {
+    const parsed = await parseMermaid(
+      "flowchart LR\n  A[开始处理] --> B{要继续吗}",
+    );
+    expect(parsed.kind).toBe("graph");
+    if (parsed.kind !== "graph") return;
+    expect(parsed.graph.nodes.map((node) => node.label)).toEqual([
+      "开始处理",
+      "要继续吗",
     ]);
   });
 });

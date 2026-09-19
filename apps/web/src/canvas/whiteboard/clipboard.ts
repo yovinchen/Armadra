@@ -8,6 +8,7 @@ import {
   type Reference,
 } from "./model";
 import { itemsBounds } from "./geometry";
+import { looksLikeMermaid } from "./mermaid/detect";
 
 /**
  * 画布剪贴板（React Flow 计划 §2.8 / F19，归属 whiteboard）。
@@ -187,13 +188,18 @@ export function relocateClipboard(
 
 /* ------------------------------ 外部内容分流 ------------------------------- */
 
-export type PasteRoute = "canvas" | "image" | "text" | "none";
+export type PasteRoute = "canvas" | "image" | "mermaid" | "text" | "none";
 
 /**
  * 一次粘贴走哪条路（§2.8）。
  *
  * 顺序有意义：签名最优先（我们自己的复制），然后是图片文件（截图粘贴的
- * `text/plain` 常常是空的），最后才是文本。三样都没有就什么也不做。
+ * `text/plain` 常常是空的），再看这段文本是不是 Mermaid，最后才当纯文本。
+ * 四样都没有就什么也不做。
+ *
+ * `mermaid` 这一支落地时**先弹确认对话框**而不是直接画图：识别是前缀匹配，
+ * 必然有误判，把一段 `graph` 开头的散文悄悄吞掉比多一次点击糟得多
+ * （Mermaid 导入设计 D8）。
  */
 export function routePaste(input: {
   text?: string | null;
@@ -201,6 +207,7 @@ export function routePaste(input: {
 }): PasteRoute {
   if (isCanvasClipboard(input.text)) return "canvas";
   if (input.hasImage) return "image";
+  if (looksLikeMermaid(input.text)) return "mermaid";
   if (input.text && input.text.trim().length > 0) return "text";
   return "none";
 }
