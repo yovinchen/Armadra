@@ -2,7 +2,12 @@ import { strict as assert } from "node:assert";
 import { existsSync } from "node:fs";
 import test from "node:test";
 
-import { electronViteEntry, mergeConfig, resolveConfig } from "./dist.mjs";
+import {
+  distArch,
+  electronViteEntry,
+  mergeConfig,
+  resolveConfig,
+} from "./dist.mjs";
 import { CERT_ENV, CERT_PASSWORD_ENV } from "./signing-electron.mjs";
 
 test("electron-vite is resolved as JavaScript, not through a shell wrapper", () => {
@@ -56,4 +61,15 @@ test("a signed local build still disables the updater feed", () => {
 test("a non-local (release) resolution does not inject the disabled-updates marker", () => {
   const { config } = resolveConfig({ env: {}, local: false });
   assert.equal(config.extraMetadata, undefined);
+});
+
+test("every target is restricted to the one architecture this run packages", () => {
+  const { config } = resolveConfig({ env: { ARMADRA_DIST_ARCH: "arm64" } });
+  for (const platform of ["mac", "win", "linux"]) {
+    for (const entry of config[platform].target) {
+      assert.deepEqual(entry.arch, ["arm64"], `${platform}/${entry.target}`);
+    }
+  }
+  assert.equal(distArch({}), process.arch);
+  assert.throws(() => distArch({ ARMADRA_DIST_ARCH: "ia32" }), /x64 or arm64/);
 });
