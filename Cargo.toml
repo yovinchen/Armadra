@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
     "apps/runtime",
-    "apps/desktop/src-tauri",
     "crates/hook",
     "crates/protocol",
     "crates/session-host",
@@ -14,8 +13,8 @@ edition = "2024"
 license = "MIT"
 authors = ["Armadra contributors"]
 
-# The hook client ships as a Tauri sidecar and runs on the hot path of every
-# agent hook event, so it is tuned for size rather than throughput. These keys
+# The hook client ships beside the desktop shell and runs on the hot path of
+# every agent hook event, so it is tuned for size rather than throughput. These keys
 # are scoped to the package so the runtime keeps the default release profile;
 # `lto` and `panic` cannot be set per package, and with a two-crate dependency
 # graph and `codegen-units = 1` they buy very little here.

@@ -1,8 +1,8 @@
 /**
  * `pnpm --filter @armadra/desktop dist`.
  *
- * Three steps, in this order and for this reason (same ordering as the
- * Tauri-era `scripts/build.mjs`): the signing decision is made and reported
+ * Three steps, in this order and for this reason: the signing decision is
+ * made and reported
  * *before* anything is built, so a build that cannot be signed says so in the
  * first second rather than after a multi-minute `electron-vite build` +
  * packaging run; the renderer/main/preload bundle is built next; the sidecar
@@ -39,8 +39,8 @@ const app = resolve(here, "..");
 /**
  * Resolve electron-vite's CLI as JavaScript rather than shelling out to
  * `pnpm run build` or `npx electron-vite`: the same reasoning as
- * `build.mjs`'s `tauriEntry` — `execFileSync` without a shell cannot start a
- * `.cmd` wrapper on Windows, and resolving the package's own entry point
+ * `execFileSync` without a shell cannot start a `.cmd` wrapper on Windows,
+ * and resolving the package's own entry point
  * means this does not depend on which package manager invoked it.
  */
 export function electronViteEntry(from = app) {

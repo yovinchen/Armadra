@@ -49,9 +49,7 @@ export function selectTarget({ host, env = {}, target, native = false }) {
   if (!host) throw new Error("Could not determine the Rust host target triple");
   if (native && target)
     throw new Error("--native and --target cannot be combined");
-  const triple = native
-    ? host
-    : target || env.TAURI_ENV_TARGET_TRIPLE || env.CARGO_BUILD_TARGET || host;
+  const triple = native ? host : target || env.CARGO_BUILD_TARGET || host;
   goTarget(triple); // Fail before invoking either toolchain on unsupported targets.
   return {
     triple,
@@ -64,6 +62,13 @@ export function targetDirectory(repository, env = {}) {
   return resolve(repository, env.CARGO_TARGET_DIR || "target");
 }
 
+/**
+ * Where a built binary is, as Cargo and `go build` leave it.
+ *
+ * There is no second, staged location: electron-builder's `extraResources`
+ * copies files verbatim, so `stage-binaries.mjs` reads straight from here into
+ * `apps/desktop/resources/` under the binary's plain name.
+ */
 export function sidecarPaths({
   repository,
   env = {},
@@ -78,13 +83,6 @@ export function sidecarPaths({
       target.explicitTarget ? target.triple : "",
       release ? "release" : "debug",
       `${binary}${extension}`,
-    ),
-    // Tauri's externalBin path is relative to tauri.conf.json, independent of
-    // Cargo's optional output directory. Stage into that configured location.
-    destination: resolve(
-      repository,
-      "target/release",
-      `${binary}-${target.triple}${extension}`,
     ),
   };
 }

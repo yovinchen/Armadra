@@ -43,10 +43,11 @@ let stopped = false;
 let onQuit: () => void = () => app.quit();
 
 function icon(): Electron.NativeImage {
-  // The Tauri shell's icon set, shared rather than duplicated. A template
-  // image so macOS tints it for light and dark menu bars by itself.
+  // The same icon set electron-builder packages from (`build/icons/`), shared
+  // rather than duplicated. A template image so macOS tints it for light and
+  // dark menu bars by itself.
   const image = nativeImage.createFromPath(
-    join(repoRoot(), "apps/desktop/src-tauri/icons/32x32.png"),
+    join(repoRoot(), "apps/desktop/build/icons/32x32.png"),
   );
   if (!image.isEmpty() && process.platform === "darwin")
     image.setTemplateImage(true);

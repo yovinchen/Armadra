@@ -9,7 +9,7 @@
  * those has a failing case too, because a check that only ever passes is not a
  * check.
  *
- * The rules asserted here are the ones `src-tauri/src/updates/offer.rs`
+ * The rules asserted here are the ones `src/shell-core/updates/offer.ts`
  * enforces at run time; the Rust tests cover the derivation, and this covers
  * the pipeline it derives from. The signing key is generated for this run and
  * discarded with it, and the server binds loopback on an ephemeral port, so
@@ -45,7 +45,7 @@ function digestOf(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/** The one desktop bundle a Tauri updater can actually apply for a target. */
+/** The one desktop bundle the updater can actually apply for a target. */
 function updaterAsset(target) {
   return desktopAssets(VERSION, target).find((asset) => asset.updater).name;
 }
