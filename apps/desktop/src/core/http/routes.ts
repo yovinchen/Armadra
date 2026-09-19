@@ -1102,6 +1102,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "用量统计",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/usage/refresh",
@@ -1109,6 +1110,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "用量统计",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/usage/mini",
@@ -1123,6 +1125,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "用量统计",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/usage/cost/refresh",
@@ -1130,6 +1133,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "用量统计",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/usage/copilot",
@@ -1137,6 +1141,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "用量统计",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/usage/copilot/login",
@@ -1144,6 +1149,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "用量统计",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/usage/copilot/poll",
@@ -1151,6 +1157,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "用量统计",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/usage/copilot/logout",
@@ -1158,6 +1165,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "用量统计",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/approvals/{pendingId}/answer",

@@ -1,22 +1,19 @@
 /**
- * The usage domain, as far as this batch takes it: one route, `GET
- * /api/usage/mini`.
+ * 用量域：九条 `/api/usage/*` 路由。
  *
- * The other eight usage routes stay 501 with their feature name. They need the
- * provider modules — reading a CLI's stored credentials out of the keychain or
- * a 0600 file, calling a quota endpoint, the cost scan over local transcripts,
- * the Copilot device flow — and those arrive with the usage domain proper.
+ * R1b 先落了 `mini` 一条——托盘条每次启动都问它，而它绝不能挂住或者编一个数字。
+ * 这一批补上其余八条：快照与手动刷新、本地成本扫描与它的刷新、以及 Copilot 的四条
+ * 设备流。
  *
- * `mini` is here because the tray strip asks for it on every start, and what it
- * must never do is hang or invent a number. A source that has fetched nothing
- * answers the same document the Rust Runtime answers before its own first
- * fetch: two null bars and a null timestamp, which is precisely the state in
- * which the pill does not render. `unavailable` is a real answer, and it is the
- * one this build gives.
+ * 三条规矩贯穿整个域，写在 `snapshot.ts` 的开头，这里只重复最容易在重写里走样的
+ * 那一条：**失败带原因码，从不带消息**。一个只看到「取不到用量」的用户分不清一次
+ * 过期的登录和一个代理问题。
  */
 
 import type { CoreContext } from "../main";
+import { settingsDomain } from "../settings";
 import { emptySnapshot, miniUsage, type UsageSnapshot } from "./snapshot";
+import { UsageService } from "./service";
 
 export {
   emptySnapshot,
@@ -34,26 +31,158 @@ export type {
   UsageStatus,
   UsageWindow,
 } from "./snapshot";
+export { UsageService } from "./service";
+export { CopilotLogin } from "./copilot-login";
+export type { AuthState, LoginProgress, LoginPrompt } from "./copilot-login";
+export { SecretStore } from "./secret-store";
+export type { SecretBackend } from "./secret-store";
+export {
+  BUILT_IN_PRICES,
+  CostService,
+  ScanState,
+  costOf,
+  emptySummary,
+  priceFor,
+  summarize,
+  undated,
+} from "./cost";
+export type { CostSummary, ModelPrice, TokenTotals } from "./cost";
+export {
+  claudeWindows,
+  codexCliWindows,
+  codexCredits,
+  copilotWindows,
+  durationLabel,
+  clampPercent,
+  selectCredential,
+  tokenFromPayload,
+} from "./providers";
 
 /**
- * Where the snapshot comes from.
+ * `mini` 的数据从哪来。
  *
- * A function rather than a value so the provider modules can replace it without
- * this route changing: they will own a cache and a refresh loop, and `mini` is
- * a projection of whatever that cache currently holds.
+ * 一个函数而不是一个值，这样 R1b 写下的那条路由在这一批接上真正的缓存时一个字都
+ * 不用改：`mini` 是那份缓存当前持有的东西的一个投影。
  */
 export type UsageSource = () => UsageSnapshot;
 
 let source: UsageSource = emptySnapshot;
 
-/** Point `mini` at a real cache. The provider modules call this. */
+/** 让 `mini` 指向一份真的缓存。 */
 export function setUsageSource(next: UsageSource): void {
   source = next;
 }
 
-export function install(context: CoreContext): void {
-  context.server.router.handle("GET", "/api/usage/mini", () => ({
+export interface UsageDomain {
+  readonly service: UsageService;
+  stop(): void;
+}
+
+let assembled: UsageDomain | undefined;
+
+export function usageDomain(): UsageDomain | undefined {
+  return assembled;
+}
+
+export function install(context: CoreContext): UsageDomain {
+  const service = new UsageService({
+    settings: settingsDomain()?.settings,
+    dataDir: context.dataDir,
+  });
+  setUsageSource(() => service.snapshot());
+
+  const { router } = context.server;
+  router.handle("GET", "/api/usage/mini", () => ({
     status: 200,
     body: miniUsage(source()),
   }));
+
+  // 缓存着的快照（plan §19）。只有百分比和重置时间：没有令牌、没有账号 id、没有
+  // 套餐名。
+  //
+  // 后台循环在**第一次有人问**时才武装，而不是在装配时。Rust 那边是在 `main` 里
+  // 无条件起的；这里改成惰性，理由是 core 现在被大量集成测试反复拉起，一个每次
+  // 装配都去读钥匙串、发网络请求的循环会让那些测试花钱在没人看的数据上。语义没
+  // 变：第一次取仍然在启动之后 10 秒，只是「启动」从「装配」挪到了「第一次读」。
+  router.handle("GET", "/api/usage", () => {
+    service.start();
+    return { status: 200, body: service.snapshot() };
+  });
+
+  // 现在就取，最多 30 秒一次。两种情况都返回快照，所以调用方不必为节流分支。
+  router.handle("POST", "/api/usage/refresh", async () => {
+    service.start();
+    return { status: 200, body: await service.refreshThrottled() };
+  });
+
+  // 缓存着的本地记录汇总。计数、模型 id 和日期；从不是一行记录文本。
+  router.handle("GET", "/api/usage/cost", () => ({
+    status: 200,
+    body: service.cost.summary(),
+  }));
+
+  router.handle("POST", "/api/usage/cost/refresh", () => ({
+    status: 200,
+    body: service.cost.refreshManual(),
+  }));
+
+  // 登录标志、令牌在哪儿、以及待处理的设备流提示。从不是令牌或者 device code。
+  router.handle("GET", "/api/usage/copilot", async () => ({
+    status: 200,
+    body: await service.copilot.state(),
+  }));
+
+  router.handle("POST", "/api/usage/copilot/login", async () => {
+    try {
+      return { status: 200, body: await service.copilot.begin(globalThis.fetch) };
+    } catch (error) {
+      // 规矩 3：上游细节被记录，不被返回。
+      context.log.debug("Copilot 设备流启动失败", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        status: 500,
+        body: {
+          code: "internal",
+          message: "Could not start the GitHub sign-in",
+        },
+      };
+    }
+  });
+
+  router.handle("POST", "/api/usage/copilot/poll", async () => {
+    const result = await service.copilot.poll(globalThis.fetch);
+    if (result.progress === "authorized") {
+      // 一个新令牌该在下一次板子轮询时出现，而不是五分钟以后。
+      void service.refresh();
+    }
+    // 线上是**扁平**的一条：`progress` 加上 `AuthState` 的字段，和 Rust 的
+    // `#[serde(flatten)]` 一样。
+    return {
+      status: 200,
+      body: { progress: result.progress, ...result.state },
+    };
+  });
+
+  router.handle("POST", "/api/usage/copilot/logout", async () => {
+    try {
+      const state = await service.copilot.logout();
+      void service.refresh();
+      return { status: 200, body: state };
+    } catch (error) {
+      context.log.debug("Copilot 登出失败", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {
+        status: 500,
+        body: {
+          code: "internal",
+          message: "Could not remove the stored GitHub token",
+        },
+      };
+    }
+  });
+
+  assembled = { service, stop: () => service.stop() };
+  return assembled;
 }
