@@ -14,13 +14,16 @@
 //! `CARGO_BIN_EXE_armadra-hook` is not set here — that variable is only
 //! populated for a package's own `[[bin]]` targets, and `armadra-hook`
 //! belongs to the separate `crates/hook` package — so the sibling binary in
-//! the same `target/<profile>` directory is used instead. Both are built
-//! together by `cargo test -p armadra-runtime -p armadra-hook`, exactly the
-//! command AGENTS.md and this change's verification use.
+//! the same `target/<profile>` directory is used instead, and `hook_bin()`
+//! builds it on demand when it is not there. Either command works:
+//! `cargo test -p armadra-runtime -p armadra-hook` builds both up front,
+//! and `cargo test -p armadra-runtime` on a clean target directory builds
+//! the sibling from inside the test.
 
 use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
+    sync::Once,
     time::{Duration, Instant},
 };
 
@@ -28,12 +31,54 @@ fn runtime_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_armadra-runtime"))
 }
 
+/// The sibling `armadra-hook`, BUILT ON DEMAND.
+///
+/// `cargo test -p armadra-runtime` alone builds only this package, so on a
+/// clean target directory the sibling simply is not there and every test below
+/// would fail on a missing file. Rather than making the command the reader
+/// types part of the test's precondition, the first caller builds the binary
+/// itself, once per process, into the same target directory and profile the
+/// Runtime binary was built into — which is what puts it next to it.
+///
+/// The build is skipped entirely when the file already exists, so the usual
+/// `cargo test -p armadra-runtime -p armadra-hook` never spawns a nested
+/// cargo at all.
 fn hook_bin() -> PathBuf {
+    static BUILT: Once = Once::new();
     let runtime = runtime_bin();
     let dir = runtime
         .parent()
         .expect("the runtime binary has a parent directory");
-    dir.join("armadra-hook")
+    let hook = dir.join("armadra-hook");
+    BUILT.call_once(|| {
+        if hook.is_file() {
+            return;
+        }
+        // `--target-dir` is the directory that HOLDS the profile directory, so
+        // the output lands beside the Runtime binary under both the plain
+        // `target/<profile>` layout and the `target/<triple>/<profile>` one a
+        // cross build uses.
+        let target_dir = dir
+            .parent()
+            .expect("the profile directory has a parent directory");
+        let profile = dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("debug");
+        let mut command = Command::new(option_env!("CARGO").unwrap_or("cargo"));
+        command
+            .args(["build", "-p", "armadra-hook", "--target-dir"])
+            .arg(target_dir);
+        if profile == "release" {
+            command.arg("--release");
+        }
+        let status = command
+            .stdin(Stdio::null())
+            .status()
+            .expect("run cargo build -p armadra-hook");
+        assert!(status.success(), "cargo build -p armadra-hook failed");
+    });
+    hook
 }
 
 /// Starts a Runtime over `data_dir`, listening on a kernel-assigned loopback
@@ -131,8 +176,8 @@ fn run_hook(data_dir: &Path, node_id: &str, args: &[&str]) -> Output {
 fn a_killed_runtimes_stale_endpoint_self_heals_after_a_restart() {
     assert!(
         hook_bin().is_file(),
-        "armadra-hook was not built next to armadra-runtime at {}; \
-         run `cargo test -p armadra-runtime -p armadra-hook`",
+        "armadra-hook is missing next to armadra-runtime at {}; \
+         the on-demand build above should have produced it",
         hook_bin().display()
     );
     let data_dir = tempfile::tempdir().unwrap();
