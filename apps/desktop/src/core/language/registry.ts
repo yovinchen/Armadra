@@ -130,7 +130,11 @@ const FULL: readonly Feature[] = [
  * `ruff server` is a linter with an LSP face. Claiming completion or rename
  * for it would put affordances in the editor that answer nothing.
  */
-const LINT_ONLY: readonly Feature[] = ["diagnostics", "formatting", "codeAction"];
+const LINT_ONLY: readonly Feature[] = [
+  "diagnostics",
+  "formatting",
+  "codeAction",
+];
 
 /**
  * `marksman` does links, headings and symbols; preview stays with the renderer
@@ -300,9 +304,7 @@ export function candidate(
   serverId: string,
 ): { entry: LanguageEntry; candidate: ServerCandidate } | undefined {
   for (const entry of LANGUAGES) {
-    const found = entry.candidates.find(
-      (value) => value.serverId === serverId,
-    );
+    const found = entry.candidates.find((value) => value.serverId === serverId);
     if (found !== undefined) return { entry, candidate: found };
   }
   return undefined;

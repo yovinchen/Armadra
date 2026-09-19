@@ -39,7 +39,12 @@ import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
-import { DomainError, badRequest, conflict, forbidden } from "../workspaces/support";
+import {
+  DomainError,
+  badRequest,
+  conflict,
+  forbidden,
+} from "../workspaces/support";
 
 const MAX_TEXT_FILE_SIZE = 1_048_576;
 export const MAX_WRITE_FILE_SIZE = 2 * 1_048_576;

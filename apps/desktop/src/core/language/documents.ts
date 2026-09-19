@@ -193,11 +193,7 @@ export class Documents {
    * Replaces the whole text — used after an external change is reloaded and
    * after ownership moves.
    */
-  replace(
-    uri: string,
-    text: string,
-    diskSha256?: string,
-  ): number | undefined {
+  replace(uri: string, text: string, diskSha256?: string): number | undefined {
     const document = this.open.get(uri);
     if (document === undefined) return undefined;
     document.text = text;
@@ -291,7 +287,9 @@ function parseOneChange(change: JsonValue): ContentChange | undefined {
   };
 }
 
-export function parsePosition(value: JsonValue | undefined): Position | undefined {
+export function parsePosition(
+  value: JsonValue | undefined,
+): Position | undefined {
   if (
     value === null ||
     value === undefined ||

@@ -430,6 +430,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "语言服务",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/language/sessions",
@@ -437,6 +438,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "语言服务",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/language/sessions/{sessionId}",
@@ -444,6 +446,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "语言服务",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/language/sessions/{sessionId}/stream",
@@ -451,6 +454,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "语言服务",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/language/sessions/{sessionId}/edits",
@@ -458,6 +462,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "语言服务",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/language/servers/{serverId}/restart",
@@ -465,6 +470,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "语言服务",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/language/servers/{serverId}/stop",
@@ -472,6 +478,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "语言服务",
     phase: 5,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/git/status",

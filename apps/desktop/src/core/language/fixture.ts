@@ -108,10 +108,13 @@ export class Harness {
       const remaining = deadline - Date.now();
       if (remaining <= 0) return undefined;
       await new Promise<void>((resolve) => {
-        const timer = setTimeout(() => {
-          this.waiters.delete(sessionId);
-          resolve();
-        }, Math.min(remaining, 50));
+        const timer = setTimeout(
+          () => {
+            this.waiters.delete(sessionId);
+            resolve();
+          },
+          Math.min(remaining, 50),
+        );
         this.waiters.set(sessionId, () => {
           clearTimeout(timer);
           this.waiters.delete(sessionId);
@@ -157,7 +160,11 @@ export function diagnosticsFor(uri: string): (value: JsonObject) => boolean {
   return (value) => {
     if (!isDiagnostics(value)) return false;
     const params = value["params"];
-    if (params === null || typeof params !== "object" || Array.isArray(params)) {
+    if (
+      params === null ||
+      typeof params !== "object" ||
+      Array.isArray(params)
+    ) {
       return false;
     }
     return params["uri"] === uri;

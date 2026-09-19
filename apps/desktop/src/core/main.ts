@@ -32,6 +32,7 @@ import {
   logLevel,
   nodePlatform,
 } from "./platform";
+import { install as installLanguage } from "./language";
 import { install as installRemote } from "./remote";
 import { install as installTerminals } from "./terminal/install";
 import { install as installAgents } from "./agent";
@@ -119,6 +120,10 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // `installSettings` assembled, and it starts nothing until it is asked to.
   installRemote,
   installTerminals,
+  // Language servers after settings (the probe cache and the overrides live in
+  // that document) and after events (a hub publishes its status the moment it
+  // starts). It starts nothing until a session is opened.
+  installLanguage,
   // After agents: the browser verbs reach the canvas through the same node and
   // link tables, and the hook surface that carries them is the agent domain's.
   installBrowser,

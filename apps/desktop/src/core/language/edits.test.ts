@@ -55,7 +55,8 @@ class Project {
 }
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 function replaceFirstLine(newText: string): JsonValue {

@@ -125,10 +125,7 @@ export function parseVersion(output: string): string | undefined {
       const start = cursor;
       while (isDigit(characters[cursor])) cursor += 1;
       segments.push(characters.slice(start, cursor).join(""));
-      if (
-        characters[cursor] === "." &&
-        isDigit(characters[cursor + 1])
-      ) {
+      if (characters[cursor] === "." && isDigit(characters[cursor + 1])) {
         cursor += 1;
       } else {
         break;
@@ -261,7 +258,8 @@ function stored(
   }
   const exitCode = object["exitCode"];
   return {
-    serverId: typeof object["serverId"] === "string" ? object["serverId"] : serverId,
+    serverId:
+      typeof object["serverId"] === "string" ? object["serverId"] : serverId,
     program: typeof object["program"] === "string" ? object["program"] : "",
     executable:
       typeof object["executable"] === "string" ? object["executable"] : "",
@@ -327,7 +325,11 @@ async function cached(
 ): Promise<ServerProbe> {
   const program = programFor(settings, candidate);
   if (!refresh) {
-    const entry = stored(store.snapshot() as JsonValue, hostId, candidate.serverId);
+    const entry = stored(
+      store.snapshot() as JsonValue,
+      hostId,
+      candidate.serverId,
+    );
     if (
       entry !== undefined &&
       entry.program === program &&

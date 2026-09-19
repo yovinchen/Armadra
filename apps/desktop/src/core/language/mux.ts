@@ -35,11 +35,7 @@
  * same language share one server rather than racing two into existence.
  */
 
-import {
-  Documents,
-  isClean,
-  type Document,
-} from "./documents";
+import { Documents, isClean, type Document } from "./documents";
 import {
   applyEdits,
   currentVersions,
@@ -128,10 +124,7 @@ export interface HubEvents {
     restartCount: number;
     progress?: { percent?: number; title: string };
   }): void;
-  server(event: {
-    server: ServerDescriptor;
-    stderrTail?: string;
-  }): void;
+  server(event: { server: ServerDescriptor; stderrTail?: string }): void;
   fileChanged(file: AppliedFile): void;
 }
 
@@ -188,7 +181,9 @@ export class Hub {
    */
   stopping = false;
 
-  private initializeResolve: ((value: JsonValue | undefined) => void) | undefined;
+  private initializeResolve:
+    | ((value: JsonValue | undefined) => void)
+    | undefined;
   private starting: Promise<string | undefined> | undefined;
 
   constructor(options: HubOptions) {
@@ -492,7 +487,11 @@ export class Hub {
 
   private publishProgress(message: JsonObject): void {
     const params = message["params"];
-    if (params === null || typeof params !== "object" || Array.isArray(params)) {
+    if (
+      params === null ||
+      typeof params !== "object" ||
+      Array.isArray(params)
+    ) {
       return;
     }
     const value = params["value"];
@@ -749,7 +748,9 @@ export function expireRequests(hub: Hub, olderThanMs: number): void {
 /** The message ceiling, applied to what a session is about to send. */
 export function withinMessageCeiling(body: Buffer | string): boolean {
   const size =
-    typeof body === "string" ? Buffer.byteLength(body, "utf8") : body.byteLength;
+    typeof body === "string"
+      ? Buffer.byteLength(body, "utf8")
+      : body.byteLength;
   return size <= MAX_MESSAGE_BYTES;
 }
 

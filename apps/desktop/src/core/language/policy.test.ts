@@ -13,10 +13,7 @@ import {
   languageIdFor,
   type ServerState,
 } from "./registry";
-import {
-  LanguageSettings,
-  normalizeLanguageSection,
-} from "./settings";
+import { LanguageSettings, normalizeLanguageSection } from "./settings";
 import type { JsonObject } from "./jsonrpc";
 
 describe("language/policy", () => {
@@ -89,17 +86,15 @@ describe("language/registry", () => {
   it("falling back to a linter narrows what is claimed", () => {
     const python = language("python");
     expect(python).toBeDefined();
-    const ruff = python?.candidates.find(
-      (entry) => entry.serverId === "ruff",
-    );
+    const ruff = python?.candidates.find((entry) => entry.serverId === "ruff");
     expect(ruff).toBeDefined();
     expect(ruff?.features).not.toContain("completion");
     expect(ruff?.features).not.toContain("rename");
     expect(ruff?.features).toContain("diagnostics");
     // And it is the last resort, after the two full servers.
-    expect(
-      python?.candidates[python.candidates.length - 1]?.serverId,
-    ).toBe("ruff");
+    expect(python?.candidates[python.candidates.length - 1]?.serverId).toBe(
+      "ruff",
+    );
     expect(candidate("ruff")?.entry.languageId).toBe("python");
   });
 

@@ -52,7 +52,11 @@ export type ServerEvent =
    * means it is past the message ceiling and must be replaced by an error —
    * after its id has been read, so the session that asked stops waiting.
    */
-  | { readonly kind: "message"; readonly body: Buffer; readonly oversize: boolean }
+  | {
+      readonly kind: "message";
+      readonly body: Buffer;
+      readonly oversize: boolean;
+    }
   /** The process is gone. */
   | { readonly kind: "exited"; readonly code: number | null };
 
@@ -130,7 +134,10 @@ export class ServerProcess {
   private readonly stderr = new Tail();
   private closed = false;
 
-  private constructor(child: ChildProcess, onEvent: (event: ServerEvent) => void) {
+  private constructor(
+    child: ChildProcess,
+    onEvent: (event: ServerEvent) => void,
+  ) {
     this.child = child;
     this.pid = child.pid ?? null;
     this.startTimeUnixMs = Date.now();
