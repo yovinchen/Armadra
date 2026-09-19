@@ -212,9 +212,14 @@ SQLite 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量�
 
 Go Host 现在独占私有 `host.db`，通用实体 revision、操作收据和事件在同一事务内提交。Runtime 的离线 `export` 生成一致性数据库与受管资产包；Host 的离线 `import` 校验 Protobuf 清单后写入不激活的 staging。该链路保留原始数据和类型，用于维护窗口切换，任何阶段都不双写。
 
-**画布写入方随 ownership 记录变化。** 工作空间与画布（boards / nodes / edges / annotations / 资产引用）的写入所有权由 `write_ownership` 单行记录声明：`{ domain: canvas, owner: runtime | host, epoch }`，两侧各存一份，epoch 单调。默认 owner 是 Runtime，此时 Host 的 `armadra.v1.CanvasService` 只读、所有变更返回稳定错误码 `ownership_moved`；切换后反过来，Runtime 的画布/工作空间写入路由返回同一个 `ownership_moved`（HTTP 409），读取继续可用作只读后备。终端、文件、Git、Hook 的执行始终在 Runtime，不随该记录变化。
-
-切换只能由操作者在维护窗口内用 `armadra-host ownership switch|rollback|status` 触发，命令持有数据目录锁，因此运行中的 Host 必须先停止；没有自动切换，也没有双写。切换前必须依次完成 Runtime 一致性导出 → Host staging 导入 → 投影为画布实体 → 逐项核验（ID、位置、尺寸、Frame 嵌套、上下文链接、白板摘要、标注、资产哈希），出现任何差异即中止且不改任何所有权状态。epoch 经现有 Worker stdio 协议下发（`armadra-runtime worker --stdio --canvas-database FILE`，能力位 `canvas.ownership.v1`）。回滚方向相同，并要求 Host 先写出反向导出包；把该包重新导入 `canvas.db` 尚未实现，因此 Host 在持有期间产生过画布事件时回滚会被拒绝，除非操作者显式声明只要导出包。
+**写入所有权机制已删除（历史注记，R7c）。** 画布、设置、文件、会话、Agent、Git
+六个域曾各有一行 `write_ownership` 记录，声明「此刻由 Rust Runtime 还是 Go Host
+写」，页面按它路由每一次读写，切换窗口里画布变成只读。那个机制存在的唯一理由是
+**有两个写者**；`ARMADRA_CORE=ts` 的单一 core 里没有第二个，所以 2026-09-20 连同
+`/api/ownership`、`/api/ownership/domains` 两条路由、前端的 `canvas-ownership/` 与
+各域的 `host-session.ts` 一起删除，页面收口为「本地总是可编辑」。Rust 侧的两条路由
+随 crate 在 R7 删除，路由表与 Rust 的这处偏离记在
+`apps/desktop/src/core/http/routes.test.ts`。
 
 ## 6. 进程、端口与文件位置
 
@@ -245,7 +250,7 @@ Go Host 已增加独立私有设备认证表与 Protobuf 会话接口。浏览�
 机器（`apps/runtime/src/settings/local.rs`：终端后端、浏览器可执行文件、电源
 策略、CLI 路径覆盖与探测缓存）。载入时合成一份文档、写入时再拆开，所以
 `GET /api/settings` 仍是一个对象；`GET /api/settings/local` 告诉界面哪些键属于
-本机。settings 域的写入所有权切到 Host 再切回来时，本机那一半原地不动。
+本机。
 
 Runtime 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mise Node 安装
 目录），并把同一份 PATH 交给所有终端子进程——从 `.app` 启动的 GUI 进程拿到的是

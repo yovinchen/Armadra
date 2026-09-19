@@ -405,3 +405,57 @@ Rust 版用受保护 DACL（`D:P(A;;GA;;;SY)(A;;GA;;;<sid>)`）加每连接 `Get
 ### 14.5 路由表多了一条
 
 `/api/workspaces/{workspaceId}/browser/{nodeId}/stream` 是 Rust Runtime 没有的（那边没有 headless 后端可流）。它在 `ROUTES` 里带 `beyondContract: true`，对账用例按名字把这类条目剔除后再与 Rust 比对，契约的 163 条仍然逐条相等——放松断言会让下一条溜进来。
+
+## 15. R7c：页面的身份 / 会话 / 事件流 / 更新脱离 `host-client`
+
+R7 要删 `proto/`、`packages/protocol`、`packages/host-client` 与 core 的 `/rpc/*` 兼容面。这一批把页面上除 GitHub 与自动化之外的全部消费者搬到 core 的 JSON 面，并整段删掉写入所有权机制。
+
+### 15.1 写入所有权整段删除
+
+`write_ownership` 那六行记录回答的是「此刻由 Rust Runtime 还是 Go Host 写这个域」。单一 core 里没有第二个写者，这个问题没有第二个答案，所以删的是**机制**而不是某一处调用：
+
+- 前端：`canvas-ownership/`（10 个文件）、`ownership/store.ts`、`{agent,files,git,session,settings}/host-session.ts`、设置页的所有权面板与只读闸 `WriteGuard`、`i18n/ownership.ts`。五个网关（agent / files / git / session / settings）与画布的读写收口成对 core 的直接调用，保存队列的自动变基改用普通的 409 判定。
+- core：`http/routes.ts` 删掉 `/api/ownership` 与 `/api/ownership/domains`。它们曾是路由表里唯一「没有任何阶段认领」的两条，`core/main.test.ts` 与 `core/files/install.integration.test.ts` 拿它们当 501 的例子，现在换成 `/api/power`。
+- **与契约 §5.1 的偏离**：Rust Runtime 仍注册这两条路由，所以 `routes.test.ts` 里多了一条 `RETIRED` 名单，逐条断言「Rust 有、这张表没有」，其余 161 条仍与 Rust 逐条相等。放松比较会让下一条偏离溜进来；Rust 侧随 crate 在 R7 删除。
+
+### 15.2 身份与会话：`apps/web/src/api/identity.ts`
+
+一个文件持有页面全部的身份凭据，zod 校验、`{ code, message }` 错误信封：
+
+| 动作            | 路径                                                             |
+| --------------- | ---------------------------------------------------------------- |
+| hello           | `GET /api/identity/hello`                                        |
+| 配对            | `POST /api/identity/pair`                                        |
+| 当前会话        | `GET /api/identity/session`                                      |
+| 轮转 / 换 CSRF  | `POST /api/identity/session/{refresh,csrf}`                      |
+| 登出            | `POST /api/identity/session/logout`                              |
+| 设备列表 / 撤销 | `GET /api/identity/devices`、`POST /api/identity/devices/revoke` |
+
+`GET hello` 是这一批给 core 补的唯一一条（与兼容面的 `HostService/Hello` 同一份内容）。
+
+**两条认证时序，页面只在一处判断走哪条（`host/native-session.ts::isNativeShell`）：**
+
+- **桌面壳**：页面停在壳的回环 HTTP 静态服务上（端口内核分配），core 在另一个回环端口。Cookie 按 host 不按 port 隔离，所以这条路上不能用 Cookie。打开设置 → 后台服务 → `GET hello` → 页面向 preload 桥要一张两分钟的票（`window.armadra.identity.ticket()`）→ `POST pair` 换回 `{ native: { accessToken, refreshToken } }` → 此后每次带 `Authorization: Bearer`，`credentials: "omit"`，凭据只在内存。
+- **服务器壳**：`armadra-server` 启动时打印 `https://…/#pair=<票>`。页面读 `location.hash` 一次、立刻 `history.replaceState` 抹掉片段 → `POST pair`（`credentials: "include"`）→ core 发 HttpOnly Cookie 并在响应体里给 `csrfToken` → 此后所有写方法带 `x-armadra-csrf`（`api/request.ts` 的 `RUNTIME_VIA_SERVER_SHELL` 那条分支）。刷新页面后内存是空的但 refresh Cookie 还在，`POST session/csrf` 换一枚；403 作废一次并重试一次，其余 403 是 core 在拒绝这台设备。
+
+后台服务设置页不再有可填的服务地址：单一 core 没有第二个地址可指。`isHostServed` 更名 `isServerShellServed`，`RUNTIME_VIA_HOST` 更名 `RUNTIME_VIA_SERVER_SHELL`。
+
+### 15.3 事件流：`?cursor=` 续订，并入 `api/events.ts`
+
+`host/event-stream.ts` 那条独立于 `api/events.ts` 的流删除。页面现在记下控制帧 `{"type":"cursor",…}` 报的位置，断线重连时带 `?cursor=<数>`，core 把那一段补发出来。
+
+第一次连上时页面**还没有位置**，而 `cursor=0` 的意思是「把这个 core 发过的一切重放一遍」（保留上限 5,000 条）——那是另一个问题的答案。为此 core 的 `parseCursor` 多认一个值 `now`：不补发任何历史，只在订阅一开始报一次当前水位。升级被拒（`409 SNAPSHOT_REQUIRED` / `CURSOR_AHEAD`，发生在 socket 打开**之前**）时页面放弃续订回到实时订阅——拿同一个数重连只会撞同一堵墙，而重连是按秒退避的。
+
+### 15.4 更新：发布侧暂时没有来源
+
+`host/updates-session.ts`（host-client 的 updates 面）删除。桌面壳那一半照常：staged 包的下载、安装、取消与重启报告都走 `apps/desktop/src/main/updates/**` 的桥。发布侧——「有没有新版本」——**没有来源**：R5 计划里的 `core/updates` 没有写，而 Go Host 的那条面在 `ARMADRA_CORE=ts` 下本来就连不上。所以 `updates/use-update-state.ts` 把发布侧固定报 `blocked: noReleaseSource`，`mergeUpdatesState` 的那条规则照旧成立：**任何一边没回答，都不写「已是最新」**。补上 `core/updates` 之后这里换一个真的来源即可，合并逻辑一行不动。
+
+Go Host 的「对外服务」开关（`/host/external-service`）与它的设置面板一并删除：那是 Host 自己的一条管理路由，服务器壳由运维用 `armadra-server` 起，页面不再是它的开关。
+
+### 15.5 剩下的 `host-client` 引用
+
+GitHub 与自动化两个面由并行的一条线改造。它们依赖的旧接线集中到 `apps/web/src/host/host-client-compat.ts` 一个文件（地址偏好、`hostSessionBlock`、`createHostIdentity`、共享的原生凭据），那条线落地之后整文件删除，`packages/host-client` 随之退出前端。
+
+### 15.6 验证
+
+`pnpm --filter @armadra/web test`、`pnpm --filter @armadra/desktop test`、`pnpm -r typecheck`、`pnpm check` 全绿。新增用例：`api/identity.test.ts`（两条传输各自的凭据、CSRF 只取一次、会话变更只通知一次、`#pair=` 只读一次）、`api/request.csrf.test.ts`（服务器壳那条路上的双提交头与一次性重试）、`api/events.test.ts` 的续订四例、`core/events/outbox.integration.test.ts` 的 `cursor=now` 一例。
