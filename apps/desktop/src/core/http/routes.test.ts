@@ -82,9 +82,15 @@ const contractual = ROUTES.filter((route) => !route.beyondContract);
 const RETIRED = ["/api/ownership", "/api/ownership/domains"];
 
 describe("the route table", () => {
-  it("adds exactly one path the Rust Runtime never had", () => {
+  it("names every path the Rust Runtime never had", () => {
+    // 四条，各自的理由写在 `routes.ts` 上：R6c 的远程浏览器画面流（Rust 那边
+    // 没有 headless 后端），以及 R7a 的三张 JSON 面（GitHub 与自动化在 Rust
+    // 时代活在 Go Host 的 protobuf 面上，Hello 的 JSON 形状是新加的）。
     expect(beyond.map((route) => route.path)).toEqual([
       "/api/workspaces/{workspaceId}/browser/{nodeId}/stream",
+      "/api/github/{verb}",
+      "/api/automations/{resource}",
+      "/api/identity/hello",
     ]);
   });
 
@@ -198,7 +204,8 @@ describe("the route table", () => {
     for (const phase of [1, 2, 3, 4, 5]) {
       expect(counts.get(phase), `R${phase}`).toBeGreaterThan(0);
     }
-    expect([...counts.values()].reduce((a, b) => a + b, 0)).toBe(160);
+    // 160 条契约内的（所有权两条已退休）+ R7a 那三张 JSON 面。
+    expect([...counts.values()].reduce((a, b) => a + b, 0)).toBe(163);
   });
 
   it("keeps the three inbound WebSocket paths in the table", () => {

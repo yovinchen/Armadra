@@ -7,8 +7,12 @@ import type {
 
 import type { CoreRequest } from "../http/router";
 import type { IdentityService } from "../identity/service";
-import { bearerCredential } from "../identity/http";
-import { identityFailure, isIdentityError } from "../identity/errors";
+import { credential, nativeRequest } from "../identity/http";
+import {
+  IdentityError,
+  identityFailure,
+  isIdentityError,
+} from "../identity/errors";
 import {
   commandSessionToJson,
   launchSpecFromJson,
@@ -259,6 +263,16 @@ export class AutomationApi {
     }
   }
 
+  /**
+   * 这次调用背后的主体。
+   *
+   * 明文回环上没带凭据的一次调用按**本机主人**处理（`IdentityService.localOwner`）：
+   * 页面经 `apps/web/src/api/request.ts` 打这一面，而桌面壳的会话是原生的，密钥
+   * 在壳里，既不发 Cookie 也到不了那个 `fetch`。TLS 的服务器壳上这条路不存在。
+   *
+   * 主人也必须是一台**真设备**：自动化的授权记录要拿它的 epoch 复核，一个编出来
+   * 的设备标识会让计划在第一次投递时被自己的复核拒掉。
+   */
   private caller(
     request: CoreRequest,
     workspaceId: string,
@@ -269,8 +283,16 @@ export class AutomationApi {
     if (origin === undefined) {
       throw new ScheduleError("authorization", "这次调用没有报来源");
     }
+    const token = credential(request, hostId, "access");
+    if (token === "" && nativeRequest(request)) {
+      const owner = this.options.identity.localOwner();
+      // 还没配过对：这是「没有会话」，不是「权限不够」——页面据此去走配对，
+      // 而不是去看一块它其实有权限打开的面板。
+      if (owner === undefined) throw new IdentityError("unauthenticated");
+      return { ...owner, workspaceId };
+    }
     const principal = this.options.identity.authenticate({
-      accessToken: bearerCredential(request),
+      accessToken: token,
       hostId,
       origin,
       requireCsrf: mutation,

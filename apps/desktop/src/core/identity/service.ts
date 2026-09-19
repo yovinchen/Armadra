@@ -136,6 +136,69 @@ export class IdentityService {
     return this.store.hostId();
   }
 
+  /**
+   * 本机主人，带上它当前那台设备。
+   *
+   * 给 `/api/` 那张 JSON 面用（R7a）。那一面由页面经普通 `fetch` 打，页面手上
+   * 没有会话密钥——桌面壳的会话是**原生**的，密钥在壳里，既不发 Cookie 也进不了
+   * `apps/web/src/api/request.ts`。所以在**明文 + 回环来源**（`nativeRequest`）
+   * 上，没带凭据的一次调用按「它就是本机的壳」处理，和 core 里其余 `/api/`
+   * 路由的判定入口（`core/identity/gate.ts`，对 owner 恒真）一致。
+   *
+   * 三条边界：只在原生请求上用（TLS 的服务器壳仍然必须带凭据）；必须真有一台
+   * 没被撤销的设备——自动化的授权记录要拿它的 epoch 复核，一个编出来的设备标识
+   * 会让计划在第一次投递时被自己的复核拒掉；授权是 owner 的全量 scope，因为这
+   * 台机器上的 owner 本来就是全量。
+   *
+   * 找不到主人或没有活着的设备就是 `undefined`——那是「这台 core 还没配过对」，
+   * 调用方照 `unauthenticated` 回答。
+   */
+  localOwner():
+    | {
+        readonly principalId: string;
+        readonly deviceId: string;
+        readonly deviceEpoch: number;
+        readonly scopes: readonly Scope[];
+      }
+    | undefined {
+    return this.store.transaction((tx) => this.localOwnerIn(tx));
+  }
+
+  private localOwnerIn(tx: IdentityTx):
+    | {
+        readonly principalId: string;
+        readonly deviceId: string;
+        readonly deviceEpoch: number;
+        readonly scopes: readonly Scope[];
+      }
+    | undefined {
+    const owner = tx.owner();
+    if (owner === undefined) return undefined;
+    // 最后建的那台：壳每次配对建一台新的，旧的留在表里等人去看。
+    let newest: IdentityDevice | undefined;
+    let cursor = "";
+    for (;;) {
+      const page = tx.devices(cursor, 200);
+      if (page.length === 0) break;
+      for (const device of page) {
+        if (device.principalId !== owner.principalId) continue;
+        if (device.revokedAtMs !== 0) continue;
+        if (newest === undefined || device.createdAtMs >= newest.createdAtMs) {
+          newest = device;
+        }
+      }
+      cursor = page[page.length - 1]?.deviceId ?? "";
+      if (page.length < 200) break;
+    }
+    if (newest === undefined) return undefined;
+    return {
+      principalId: owner.principalId,
+      deviceId: newest.deviceId,
+      deviceEpoch: newest.epoch,
+      scopes: allScopes(),
+    };
+  }
+
   private now(): number {
     const value = this.clock();
     if (!Number.isFinite(value) || value <= 0)

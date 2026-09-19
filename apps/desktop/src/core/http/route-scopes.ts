@@ -41,6 +41,24 @@ export const ROUTE_SCOPE_RULES: readonly RouteScopeRule[] = [
   // 健康检查是壳与探针用来确认「core 起来了」的，先于任何身份存在。
   { pattern: /^\/(api\/)?health$/, read: null, write: null },
 
+  // Hello 回答的是「这台 core 是谁、支持什么」，那是一次配对**之前**就要知道的
+  // 事，所以它和健康检查同一档：不要求任何权限。
+  { pattern: /^\/api\/identity\/hello$/, read: null, write: null },
+
+  // R7a 的两张 JSON 面。工作空间跟着查询串走而不是路径，所以这里声明的是全局
+  // 那一档；按工作空间收窄的那一次判定在域自己的 HTTP 面上（`github/http.ts`
+  // 的 `apiCaller`、`schedule/api.ts` 的 `caller`），它们看得见 `workspaceId`。
+  {
+    pattern: /^\/api\/github\//,
+    read: "github:read",
+    write: "github:write",
+  },
+  {
+    pattern: /^\/api\/automations/,
+    read: "automation:read",
+    write: "automation:manage",
+  },
+
   { pattern: new RegExp(`^${WORKSPACE}/events$`), read: "events:read" },
 
   {

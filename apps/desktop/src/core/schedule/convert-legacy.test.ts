@@ -53,10 +53,7 @@ function legacyDatabase(): DatabaseSync {
 describe("0020：自动化载荷从 protobuf 转成 JSON", () => {
   it("字节行经迁移与转换之后读得回来，摘要换成规范 JSON 的那个数", () => {
     const database = legacyDatabase();
-    const planConfig = config({
-      case: "once",
-      value: { atUnixMs: 1_800_000_000_000n },
-    });
+    const planConfig = config({ atMs: 1_800_000_000_000 });
     const plan = create(AutomationPlanSchema, {
       id: "plan-1",
       configVersion: 2n,
