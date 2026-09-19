@@ -106,7 +106,12 @@ export function options(
     user === null
       ? armadraKnownHosts(dataDir)
       : `${armadraKnownHosts(dataDir)} ${user}`;
-  return ["-o", `UserKnownHostsFile=${files}`, "-o", "StrictHostKeyChecking=yes"];
+  return [
+    "-o",
+    `UserKnownHostsFile=${files}`,
+    "-o",
+    "StrictHostKeyChecking=yes",
+  ];
 }
 
 /** The `[host]:port` form known_hosts uses for a non-default port. */
@@ -129,7 +134,9 @@ function keyscanProgram(env: NodeJS.ProcessEnv = process.env): string {
  * Split out as a pure function so the rule can be tested without writing to
  * the process environment.
  */
-export function acceptedOverride(value: string | undefined): string | undefined {
+export function acceptedOverride(
+  value: string | undefined,
+): string | undefined {
   if (value === undefined) return undefined;
   return value.startsWith("/") && !/\s/u.test(value) ? value : undefined;
 }
@@ -223,7 +230,10 @@ export async function fingerprint(
   // writable path is a place another process could swap the file between the
   // write and the read.
   const directory = join(dataDir, "ssh");
-  const path = join(directory, `.fingerprint-${randomUUID().replace(/-/gu, "")}`);
+  const path = join(
+    directory,
+    `.fingerprint-${randomUUID().replace(/-/gu, "")}`,
+  );
   try {
     mkdirSync(directory, { recursive: true });
     hardenDirectory(directory);

@@ -166,7 +166,9 @@ export interface BlockerSources {
   readonly editorDrafts?: (workspaceId: string) => readonly string[];
   readonly terminals?: (
     workspaceId: string,
-  ) => Promise<readonly { readonly nodeId: string; readonly sessionId: string }[]>;
+  ) => Promise<
+    readonly { readonly nodeId: string; readonly sessionId: string }[]
+  >;
   readonly browserSessions?: (
     workspaceId: string,
   ) => Promise<readonly { readonly nodeId: string; readonly id: string }[]>;

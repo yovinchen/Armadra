@@ -49,7 +49,10 @@ describe("the ssh options", () => {
     const data = dataDir();
     const given = options(data, {});
     expect(
-      given.some((value, index) => value === "-o" && given[index + 1] === "StrictHostKeyChecking=yes"),
+      given.some(
+        (value, index) =>
+          value === "-o" && given[index + 1] === "StrictHostKeyChecking=yes",
+      ),
     ).toBe(true);
     const files = given.find((value) =>
       value.startsWith("UserKnownHostsFile="),
@@ -96,7 +99,12 @@ describe("trusting a key", () => {
     // And two lines at once, which would smuggle a second entry past one
     // confirmation.
     expect(() =>
-      trust(data, host(), `example.com ${KEY}\nevil.example.com ssh-rsa AAAA`, false),
+      trust(
+        data,
+        host(),
+        `example.com ${KEY}\nevil.example.com ssh-rsa AAAA`,
+        false,
+      ),
     ).toThrow(ScanFailed);
   });
 
@@ -178,10 +186,7 @@ describe("trusting a key", () => {
   it("matches one name out of a comma-separated pattern list", () => {
     const data = dataDir();
     mkdirSync(join(data, "ssh"), { recursive: true });
-    writeFileSync(
-      armadraKnownHosts(data),
-      `example.com,10.0.0.7 ${KEY}\n`,
-    );
+    writeFileSync(armadraKnownHosts(data), `example.com,10.0.0.7 ${KEY}\n`);
     expect(trustedLines(data, "10.0.0.7", {})).toHaveLength(1);
     expect(trustedLines(data, "example.co", {})).toHaveLength(0);
   });

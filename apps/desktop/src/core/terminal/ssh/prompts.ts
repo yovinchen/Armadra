@@ -73,7 +73,9 @@ interface Pending {
  * have to guess.
  */
 export function classify(prompt: string): PromptKind {
-  return prompt.toLowerCase().includes("passphrase") ? "passphrase" : "password";
+  return prompt.toLowerCase().includes("passphrase")
+    ? "passphrase"
+    : "password";
 }
 
 /** Raised for every refusal, carrying the status the API face owes it. */
@@ -159,7 +161,10 @@ export class PromptRegistry {
    * expired, was cancelled, or the deadline passed — all of which the helper
    * turns into a non-zero exit, which makes `ssh` fail rather than hang.
    */
-  async await(promptId: string, deadlineMs: number): Promise<string | undefined> {
+  async await(
+    promptId: string,
+    deadlineMs: number,
+  ): Promise<string | undefined> {
     const pending = this.prompts.get(promptId);
     if (pending === undefined) return undefined;
     if (pending.answer === undefined) {

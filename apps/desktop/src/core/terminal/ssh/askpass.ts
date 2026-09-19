@@ -152,7 +152,7 @@ export function helperScript(socket: string): string {
     `if [ -z "\${${SOCKET_ENV}:-}" ] || [ -z "\${${TOKEN_ENV}:-}" ] || [ -z "\${${HOST_ENV}:-}" ]; then`,
     "  exit 1",
     "fi",
-    "# Quoted curl-config values understand \\\\ and \\\" and nothing else.",
+    '# Quoted curl-config values understand \\\\ and \\" and nothing else.',
     `prompt=$(printf '%s' "\${1:-}" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g')`,
     "# The token and the prompt go in on stdin, never on argv: 'ps' and",
     "# /proc/<pid>/cmdline are globally readable.",

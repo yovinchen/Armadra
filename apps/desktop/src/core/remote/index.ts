@@ -51,7 +51,11 @@ import {
   trustHostKey,
   type SshRouteDeps,
 } from "../terminal/ssh/routes";
-import { probeHost, validateExecutionHost, ValidationRefused } from "./validate";
+import {
+  probeHost,
+  validateExecutionHost,
+  ValidationRefused,
+} from "./validate";
 import { RemoteWorker, RemoteWorkers } from "./worker";
 
 /**
@@ -166,7 +170,11 @@ export function install(context: CoreContext): RemoteDomain {
     "/api/ssh/hosts/{hostId}/host-keys",
     answered((match) => forgetHostKeys(deps, match.params.hostId ?? "")),
   );
-  router.handle("GET", "/api/ssh/prompts", answered(() => listPrompts(deps)));
+  router.handle(
+    "GET",
+    "/api/ssh/prompts",
+    answered(() => listPrompts(deps)),
+  );
   router.handle(
     "POST",
     "/api/ssh/hosts/{hostId}/prompts/{promptId}",

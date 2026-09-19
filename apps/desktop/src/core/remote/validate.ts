@@ -114,7 +114,9 @@ export async function validateExecutionHost(
   if (host === undefined) {
     throw new ValidationRefused(404, "not_found", "No such execution host");
   }
-  const probe = await (deps.probe ?? ((h) => probeHost(deps.dataDir, h, deps.launcher)))(host);
+  const probe = await (
+    deps.probe ?? ((h) => probeHost(deps.dataDir, h, deps.launcher))
+  )(host);
   if (!probe.ok) {
     return {
       executionHostId: hostId,
