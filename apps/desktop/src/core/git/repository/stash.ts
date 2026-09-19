@@ -482,7 +482,7 @@ export async function protectLocalPaths(
   }
   const inspect = new Set<string>();
   for (const name of [...touched].sort()) {
-    const parts = name.split("/");
+    const parts = segments(name);
     if (
       isAbsolute(name) ||
       parts.some((part) => part === "" || part === "." || part === "..")
@@ -585,13 +585,25 @@ export function sameHead(left: ExpectedState, right: ExpectedState): boolean {
   return left.headOid === right.headOid && left.branch === right.branch;
 }
 
+/**
+ * A relative path's segments, the way Rust's `Path::components` yields them.
+ *
+ * The trailing slash matters here: `git ls-files --others` reports an
+ * untracked *directory* as `apps/inner/`, and reading that as a four-segment
+ * path with an empty last one would turn "this is a directory" — which has its
+ * own refusal below — into "this output is malformed".
+ */
+function segments(name: string): string[] {
+  return name.replace(/\/+$/, "").split("/");
+}
+
 function hashUntracked(
   root: string,
   name: string,
   digest: ReturnType<typeof createHash>,
   budget: number,
 ): number {
-  const parts = name.split("/");
+  const parts = segments(name);
   if (
     isAbsolute(name) ||
     parts.some((part) => part === "" || part === "." || part === "..")
