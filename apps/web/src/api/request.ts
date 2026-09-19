@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { isHostServed, resolveRuntimeUrl } from "./runtime-url";
-import { ensureHostCsrf, forgetHostCsrf } from "../host/proxy-session";
+import { isServerShellServed, resolveRuntimeUrl } from "./runtime-url";
+import { ensureCsrf, forgetCsrf } from "./identity";
 import { t } from "../app/preferences-store";
 
 /**
@@ -22,8 +22,8 @@ export const RUNTIME_URL = resolveRuntimeUrl(
   PAGE_URL,
 );
 
-/** 这份页面是不是由 Go Host 托管、`/api` 走它的认证代理（H02）。 */
-export const RUNTIME_VIA_HOST = isHostServed(
+/** 这份页面是不是由服务器壳托管：那条路上写请求要带会话 CSRF 头。 */
+export const RUNTIME_VIA_SERVER_SHELL = isServerShellServed(
   import.meta.env.VITE_RUNTIME_URL,
   PAGE_URL,
 );
@@ -113,20 +113,20 @@ export async function request<T>(
   schema: z.ZodType<T>,
   init?: RequestInit,
 ): Promise<T> {
-  const guarded = RUNTIME_VIA_HOST && unsafeMethod(init?.method);
+  const guarded = RUNTIME_VIA_SERVER_SHELL && unsafeMethod(init?.method);
   let response: Response;
   try {
-    response = await send(path, init, guarded ? await ensureHostCsrf() : "");
+    response = await send(path, init, guarded ? await ensureCsrf() : "");
     // A rotated token is the one failure worth retrying: the request never
-    // reached the Runtime, so nothing was executed twice. Any other 403 is the
-    // Host refusing this device, and repeating it would not change that.
+    // reached a handler, so nothing was executed twice. Any other 403 is the
+    // core refusing this device, and repeating it would not change that.
     if (
       guarded &&
       response.status === 403 &&
       !(init?.body instanceof FormData)
     ) {
-      forgetHostCsrf();
-      const renewed = await ensureHostCsrf();
+      forgetCsrf();
+      const renewed = await ensureCsrf();
       if (renewed) response = await send(path, init, renewed);
     }
   } catch (cause) {

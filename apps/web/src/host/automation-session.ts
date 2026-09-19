@@ -6,7 +6,7 @@ import {
   type HostIdentitySession,
 } from "@armadra/host-client";
 
-import { loadHostAddress, probeHost } from "./connection";
+import { loadHostAddress, probeHostAt as probeHost } from "./connection";
 import {
   HostNativeSessionError,
   createHostIdentity,

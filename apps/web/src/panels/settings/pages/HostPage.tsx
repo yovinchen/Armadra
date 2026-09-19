@@ -1,62 +1,29 @@
 import { useId } from "react";
-import { CapabilityState, type CapabilityStatus } from "@armadra/host-client";
 
 import { useT } from "../../../app/preferences-store";
 import { useHostConnection } from "../../../host/use-host-connection";
 import { SettingsGroup } from "../SettingsGroup";
-import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
-import { Input } from "@/ui/input";
-import { ExternalServicePanel } from "./ExternalServicePanel";
 import { HostIdentityPanel } from "./HostIdentityPanel";
 
 /**
- * Hello 里显式报告为不支持的预留能力（H04 / S02）。
+ * 设置 → 后台服务。
  *
- * 服务不报告时显示「未报告」而不是「支持」：旧版本的沉默不是承诺。
+ * 以前这里有一个服务地址可以填：Runtime 与 Go Host 是两个进程，页面要能被指向
+ * 另一台机器上的 Host。单一 core 之后没有第二个地址——桌面壳里端口由壳给，
+ * 服务器壳里它就是这张页面的来源——所以这一页只剩「连得上吗」和「这台设备
+ * 登录了吗」两件事。
  */
-const RESERVED_CAPABILITIES = ["presence", "accountBinding"] as const;
-
-/** 服务发来的 reason 只在是已知键时才当键用，否则退回通用说明。 */
-const KNOWN_REASONS = new Set(["host.capability.reserved"]);
-
-function ReservedCapabilityState({ status }: { status?: CapabilityStatus }) {
-  const t = useT();
-  if (status?.state !== CapabilityState.UNSUPPORTED) {
-    return (
-      <Badge variant="outline" className="h-5 px-1.5 text-[11px]">
-        {t("host.capability.unknown")}
-      </Badge>
-    );
-  }
-  return (
-    <>
-      <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
-        {t("host.capability.unsupported")}
-      </Badge>
-      <span className="text-muted-foreground">
-        {t(
-          KNOWN_REASONS.has(status.reason)
-            ? status.reason
-            : "host.capability.reserved",
-        )}
-      </span>
-    </>
-  );
-}
-
 export function HostPage() {
   const t = useT();
   const id = useId();
-  const { address, state, editAddress, check, cancel } = useHostConnection();
+  const { state, check, cancel } = useHostConnection();
   const message =
     state.status === "error"
       ? state.messageKey
       : state.status === "idle" && state.cancelled
         ? "host.status.cancelled"
         : `host.status.${state.status}`;
-  const invalid =
-    state.status === "error" && state.messageKey === "host.error.address";
 
   return (
     <>
@@ -64,42 +31,14 @@ export function HostPage() {
         {t("host.note")}
       </p>
       <SettingsGroup>
-        <form
-          className="flex min-w-0 flex-col gap-3 px-4 py-3"
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            void check();
-          }}
-        >
-          <label htmlFor={`${id}-address`} className="text-[13px] font-medium">
-            {t("host.address")}
-          </label>
-          <Input
-            id={`${id}-address`}
-            type="url"
-            inputMode="url"
-            autoComplete="off"
-            autoCapitalize="none"
-            spellCheck={false}
-            value={address}
-            onChange={(event) => editAddress(event.target.value)}
-            aria-invalid={invalid}
-            aria-describedby={`${id}-remember ${id}-status`}
-            className="h-10 min-w-0 w-full"
-          />
-          <p
-            id={`${id}-remember`}
-            className="text-[11px] leading-4 text-muted-foreground"
-          >
-            {t("host.remember")}
-          </p>
+        <div className="flex min-w-0 flex-col gap-3 px-4 py-3">
           <div className="flex flex-wrap gap-2">
             <Button
-              type="submit"
+              type="button"
               size="sm"
               className="min-h-10"
               disabled={state.status === "checking"}
+              onClick={() => void check()}
             >
               {t("host.check")}
             </Button>
@@ -128,7 +67,7 @@ export function HostPage() {
           >
             {t(message)}
           </p>
-        </form>
+        </div>
         {state.status === "connected" && (
           <details className="min-w-0 px-4 py-3">
             <summary className="cursor-pointer rounded-sm text-[13px] focus-visible:outline-2 focus-visible:outline-ring">
@@ -155,32 +94,25 @@ export function HostPage() {
                 <dt className="text-muted-foreground">
                   {t("host.capabilities")}
                 </dt>
-                {RESERVED_CAPABILITIES.map((name) => (
-                  <dd
-                    key={name}
-                    className="mt-1 flex flex-wrap items-center gap-2"
-                  >
-                    <span>{t(`host.capability.${name}`)}</span>
-                    <ReservedCapabilityState
-                      status={state.hello.capabilityStatus.find(
-                        (entry) => entry.name === name,
-                      )}
-                    />
+                {state.hello.capabilities.length === 0 ? (
+                  <dd className="mt-1 text-muted-foreground">
+                    {t("host.capability.none")}
                   </dd>
-                ))}
-                <dd className="mt-2 text-muted-foreground">
-                  {t("host.capability.note")}
-                </dd>
+                ) : (
+                  state.hello.capabilities.map((name) => (
+                    <dd key={name} className="mt-1 break-all select-text">
+                      {name}
+                    </dd>
+                  ))
+                )}
               </div>
             </dl>
           </details>
         )}
       </SettingsGroup>
       <HostIdentityPanel
-        address={address}
         hello={state.status === "connected" ? state.hello : undefined}
       />
-      <ExternalServicePanel />
     </>
   );
 }

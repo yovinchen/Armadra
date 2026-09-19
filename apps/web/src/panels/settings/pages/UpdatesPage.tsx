@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { runtimeApi } from "../../../api/client";
 import { usePreferencesStore, useT } from "../../../app/preferences-store";
 import { useCanvasStore } from "../../../store/canvas-store";
-import { useUpdatesSession } from "../../../host/updates-session";
 import { openExternal } from "../../../platform";
 import {
   formatProgress,
@@ -36,15 +35,14 @@ const CHANNELS = ["stable", "beta"] as const;
 /**
  * 设置 → 更新（S03 / docs/design/updates-and-service-install.md §4）。
  *
- * 这一页把两个来源合起来：后台服务判断「有没有可用发布」，桌面壳判断
- * 「能不能装」。合并规则全在 `updates/state.ts` 的纯函数里，这里只负责
- * 把它渲染成行——包括那条最重要的：任何一边没回答，都不写「已是最新」。
+ * 两个来源：发布侧判断「有没有可用发布」，桌面壳判断「能不能装」。R7c 之后
+ * 发布侧暂时没有来源（core 还没有 `core/updates`），桌面壳那一半照常工作。
+ * 合并规则全在 `updates/state.ts` 的纯函数里，这里只负责把它渲染成行——
+ * 包括那条最重要的：任何一边没回答，都不写「已是最新」。
  */
 export function UpdatesPage() {
   const t = useT();
   const setPanel = useCanvasStore((state) => state.setPanel);
-  const connect = useUpdatesSession((store) => store.connect);
-  const sessionState = useUpdatesSession((store) => store.state);
   const { settings, save } = useRuntimeSettings();
 
   const host = useUpdateState((store) => store.host);
@@ -73,28 +71,24 @@ export function UpdatesPage() {
   const autoDownload = preferences?.autoDownload ?? false;
   const notify = preferences?.notify ?? true;
 
-  React.useEffect(() => {
-    void connect();
-    return start();
-  }, [connect, start]);
+  React.useEffect(() => start(), [start]);
 
   const runCheck = React.useCallback(() => {
-    if (!installed) return;
-    void check({ channel, installedVersion: installed });
-  }, [check, channel, installed]);
+    void check();
+  }, [check]);
 
   // Design §2.1: 30 seconds after start, then every six hours. A person who is
   // never told a release exists cannot decide to install it — but the switch
   // is theirs, and off means off.
   React.useEffect(() => {
-    if (!autoCheck || !installed || sessionState.status !== "ready") return;
+    if (!autoCheck || !installed) return;
     const first = setTimeout(runCheck, FIRST_CHECK_DELAY_MS);
     const repeat = setInterval(runCheck, CHECK_INTERVAL_MS);
     return () => {
       clearTimeout(first);
       clearInterval(repeat);
     };
-  }, [autoCheck, installed, runCheck, sessionState.status]);
+  }, [autoCheck, installed, runCheck]);
 
   const view = mergeUpdatesState(host, shell);
 

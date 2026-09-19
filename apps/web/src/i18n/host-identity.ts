@@ -3,10 +3,6 @@ import type { MessageModule } from "./index";
 export const hostIdentity: MessageModule = {
   "zh-CN": {
     "hostIdentity.title": "设备登录",
-    "hostIdentity.tlsRequired":
-      "尚未配置 HTTPS 登录。当前 HTTP 服务仅支持连接检查，不能保存或发送登录凭据。",
-    "hostIdentity.sameOrigin":
-      "请在该服务的 HTTPS 同源页面管理设备。当前页面来源不同，不能直接登录；桌面壳只对本机回环地址自动登录。",
     "hostIdentity.checkRequired": "请先检查连接，确认服务身份。",
     "hostIdentity.unsupported": "此服务尚未提供浏览器设备登录。",
     "hostIdentity.loading": "正在恢复设备登录…",
@@ -15,6 +11,8 @@ export const hostIdentity: MessageModule = {
     "hostIdentity.ticket": "一次性配对票据",
     "hostIdentity.ticketHelp":
       "粘贴本机配对命令输出的完整 JSON 或 ticket 值。提交后清空，不保存在本设备。",
+    "hostIdentity.ticketHelp.server":
+      "粘贴服务器启动时打印的配对链接里 #pair= 之后的那一段。提交后清空，不保存在本设备。",
     "hostIdentity.pair": "配对此设备",
     "hostIdentity.restore": "恢复登录状态",
     "hostIdentity.current": "当前设备",
@@ -44,8 +42,6 @@ export const hostIdentity: MessageModule = {
       "请求被拒绝，请检查当前登录权限或重新恢复登录。",
     "hostIdentity.error.auth": "配对票据或登录已过期、已使用或已撤销。",
     "hostIdentity.error.conflict": "设备状态已变化，请刷新列表后重新确认。",
-    "hostIdentity.error.unknown":
-      "未能确认操作结果。请先恢复登录或刷新设备状态，避免重复操作。",
     "hostIdentity.error.response": "服务返回了无法验证的响应。",
     "hostIdentity.scope.canvas:read": "查看画布",
     "hostIdentity.scope.canvas:write": "编辑画布",
@@ -70,10 +66,6 @@ export const hostIdentity: MessageModule = {
   },
   en: {
     "hostIdentity.title": "Device sign-in",
-    "hostIdentity.tlsRequired":
-      "HTTPS sign-in is not configured. The current HTTP service supports connection checks only and cannot receive sign-in credentials.",
-    "hostIdentity.sameOrigin":
-      "Manage devices from this service’s own HTTPS page. This page has a different origin and cannot sign in directly; the desktop shell signs in automatically only to the local loopback address.",
     "hostIdentity.checkRequired":
       "Check the connection first to confirm the service identity.",
     "hostIdentity.unsupported":
@@ -84,6 +76,8 @@ export const hostIdentity: MessageModule = {
     "hostIdentity.ticket": "One-time pairing ticket",
     "hostIdentity.ticketHelp":
       "Paste the full JSON or ticket value from the local pairing command. It is cleared on submission and never saved on this device.",
+    "hostIdentity.ticketHelp.server":
+      "Paste the part after #pair= from the pairing link the server printed at startup. It is cleared on submission and never saved on this device.",
     "hostIdentity.pair": "Pair this device",
     "hostIdentity.restore": "Restore sign-in",
     "hostIdentity.current": "Current device",
@@ -118,8 +112,6 @@ export const hostIdentity: MessageModule = {
       "The pairing ticket or session has expired, was already used, or was revoked.",
     "hostIdentity.error.conflict":
       "The device changed. Refresh the list and confirm again.",
-    "hostIdentity.error.unknown":
-      "The operation’s outcome could not be confirmed. Restore sign-in or refresh device state before repeating it.",
     "hostIdentity.error.response":
       "The service returned a response that could not be verified.",
     "hostIdentity.scope.canvas:read": "View canvases",

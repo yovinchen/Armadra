@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  hostServedOrigin,
+  serverShellOrigin,
   isShellTransport,
   resetShellEndpoints,
   resolveRuntimeUrl,
@@ -59,13 +59,13 @@ describe("Runtime addresses across desktop and web", () => {
     expect(
       resolveRuntimeUrl(undefined, "https://canvas.example/workspace/one"),
     ).toBe("https://canvas.example");
-    expect(hostServedOrigin("http://127.0.0.1:1420/")).toBe(null);
-    expect(hostServedOrigin("not a url")).toBe(null);
+    expect(serverShellOrigin("http://127.0.0.1:1420/")).toBe(null);
+    expect(serverShellOrigin("not a url")).toBe(null);
   });
   it("never treats a loopback HTTP page as Host-served", () => {
     // The shell's own static server is loopback HTTP; it answers through the
     // preload bridge, never by guessing from the page's address.
-    expect(hostServedOrigin("http://127.0.0.1:61000/")).toBe(null);
+    expect(serverShellOrigin("http://127.0.0.1:61000/")).toBe(null);
     expect(resolveRuntimeUrl(undefined, "http://127.0.0.1:61000/")).toBe(
       "http://127.0.0.1:43120",
     );

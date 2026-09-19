@@ -368,6 +368,18 @@ export class IdentityHttp {
     };
     try {
       switch (`${request.method} ${action}`) {
+        case "GET hello": {
+          // 和兼容面的 Hello 同一份内容，JSON 的外衣。不需要会话：页面要先
+          // 知道这是谁、装了哪些面，才谈得上换一个会话。
+          this.json(response, cors, 200, {
+            protocol: { major: PROTOCOL_MAJOR, minor: PROTOCOL_MINOR },
+            hostId,
+            hostInstanceId: this.options.instanceId,
+            capabilities: this.capabilities(),
+            maxFrameBytes: MAX_FRAME_BYTES,
+          });
+          return;
+        }
         case "POST pair": {
           const body = request.json<{ ticket?: unknown }>();
           if (typeof body?.ticket !== "string")

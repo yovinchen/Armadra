@@ -9,13 +9,13 @@ import {
   fetchNativeTicket,
   hasHostSessionCapability,
   hostSessionBlock,
-  hostSessionCapability,
   isNativeShell,
   nativeCredentials,
   nativeSessionFailureKey,
   pageOrigin,
   resetNativeSession,
 } from "./native-session";
+import { hostSessionCapability } from "./host-client-compat";
 
 const hostId = "1".repeat(32),
   hostInstanceId = "2".repeat(32);
