@@ -73,8 +73,10 @@ export function ensureNodeAbiBuild(root = nodePtyDir()) {
   if (existsSync(join(root, "build/Release/pty.node"))) return "built";
   // node-gyp is not a dependency of ours; it is `@electron/rebuild`'s, and
   // pnpm keeps it beside that package rather than in our `node_modules`.
+  // Resolved through the package's entry rather than its `package.json`,
+  // which its `exports` map does not expose.
   const rebuildDir = dirname(
-    require.resolve("@electron/rebuild/package.json", { paths: [app] }),
+    require.resolve("@electron/rebuild", { paths: [app] }),
   );
   const gyp = require.resolve("node-gyp/bin/node-gyp.js", {
     paths: [rebuildDir],
