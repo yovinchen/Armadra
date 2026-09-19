@@ -24,7 +24,7 @@ import {
   sessionName,
 } from "../backend";
 import { asRecord, childEnvironment } from "../environment";
-import { childCommands, terminateTree } from "../process";
+import { terminateTree } from "../process";
 import { type Pty, openPty, releasePty } from "../pty";
 import {
   LIST_ALIVE_FORMAT,
@@ -390,6 +390,13 @@ export class TmuxBackend implements TerminalBackend {
   }
 
   /* ------------------------------ not this batch --------------------------- */
+  //
+  // Each of these is a 501 that names itself rather than a half-answer. The
+  // pieces they need already exist — `control.paneForeground` reads
+  // `#{pane_pid} #{pane_current_command}` and `process.childCommands` walks
+  // the tree below it — so what is missing is the decision about the rest of
+  // R2's shape (the wheel bridge and the reaper use the same reads), not the
+  // mechanics.
 
   async capture(): Promise<string> {
     throw new NotImplemented("终端截屏");
@@ -399,9 +406,7 @@ export class TmuxBackend implements TerminalBackend {
     throw new NotImplemented("终端信号");
   }
 
-  async getForeground(key: SessionKey): Promise<ForegroundInfo> {
-    void key;
-    void childCommands;
+  async getForeground(): Promise<ForegroundInfo> {
     throw new NotImplemented("终端前台进程");
   }
 
