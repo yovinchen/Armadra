@@ -414,9 +414,16 @@ export class UpdatesController {
     );
   }
 
+  /**
+   * The announcement goes to the shell's own listeners — the tray W2.1 adds —
+   * and no further. It reaches no renderer channel, because the IPC table of
+   * design §2.2 declares no `updates:staged`: the page does not need one while
+   * `autoDownload` is off, since no transfer finishes that the page did not
+   * ask for. `STAGED_EVENT` is kept as the name both sides would use if that
+   * ever changes.
+   */
   private announce(staged: Staged): void {
     for (const listener of this.stagedListeners) listener(staged);
-    sendToWindow(STAGED_EVENT, staged);
   }
 }
 
