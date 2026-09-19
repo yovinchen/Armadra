@@ -5,7 +5,7 @@
 
 ## 1. 为什么要另记一份
 
-[React Flow 画布](../design/canvas-react-flow.md) §6.5 的那张表里，30 个终端节点**没有会话**，所以量不到用户报的卡顿——卡顿出在「会话状态跳动 → `updateNodeData` → 换一份 `document` → 全量重投影」这条链上（[画布调研](../research/nodeterm/canvas-nodes-and-state.md) §7.2）。这份基线把「活会话」这一列补上。
+[React Flow 画布](../design/canvas-react-flow.md) §6.5 的那张表里，30 个终端节点**没有会话**，所以量不到用户报的卡顿——卡顿出在「会话状态跳动 → `updateNodeData` → 换一份 `document` → 全量重投影」这条链上（Armadra 画布初步分析，实测修正见 §5.2）。这份基线把「活会话」这一列补上。
 
 两张表**不可直接比较**：§6.5 在有屏幕的 120 Hz 窗口里跑，这里是无头 Chrome，`requestAnimationFrame` 上限 60 Hz。fps 很快撞顶，**有判别力的是重渲组件数与最慢一帧**。
 
@@ -96,7 +96,7 @@ fps 在这台无头 Chrome 上撞在 60 Hz 的顶上，四段都贴着上限，�
 ### 5.2 这一轮推翻的两条既有判断
 
 1. **「便签每次击键 `updateNodeData`」在这个基线上不成立。**
-   （[画布调研](../research/nodeterm/canvas-nodes-and-state.md) §7.2-2 / §7.3-3）
+   这是对 Armadra 画布初步分析中输入写入频率与优化优先级的修正。
    `nodes/StickyNode.tsx`、`nodes/NodeShell.tsx` 的改名、`meta/NodeMeta.tsx`
    的批注、`nodes/browser/BrowserNode.tsx` 的地址栏，全部已经是本地 state +
    失焦 / 回车提交。审下来**没有一个**文本输入按键写文档，所以 P3 没有可摘的

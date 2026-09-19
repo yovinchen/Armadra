@@ -374,7 +374,7 @@ async function item6Lifetime(d) {
   };
 
   // Seed per-guest state so that a reload is visible in the page itself, not
-  // only in the ids: nodeterm's invariant is "state survives", not "the element
+  // only in the ids: Armadra's invariant is "state survives", not "the element
   // is still there".
   for (const id of ids) {
     await d.guest(

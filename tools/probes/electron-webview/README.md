@@ -2,7 +2,7 @@
 
 [Electron 迁移设计](../../../docs/design/electron-migration.md) W3.0 的 go/no-go 实验：一个独立的最小 Electron 工程，`webviewTag: true` + React Flow 12，两个节点各挂一个裸 `<webview>` 指向本地 fixture，全自动跑完六条验收并写出 `out/result.json`。
 
-不属于根 pnpm workspace，不引用 Armadra 任何代码，**跑它不会改动仓库任何现有文件**。结论与原始测量见 [webview 探针记录](../../../docs/research/nodeterm/webview-probe.md)。
+不属于根 pnpm workspace，不引用 Armadra 任何代码，**跑它不会改动仓库任何现有文件**。Armadra 于 2026-09-19 在 macOS arm64、Electron 42.10.1 上实测六条验收全部通过，第 3/6 条均为 go：缩放与平移命中零偏差，文字按合成缩放重新栅格化；guest 滚轮不冒泡到宿主；拖拽、缩放、平移、插入与删除兄弟节点不重载 guest，但对调节点时被 DOM 移动的 guest 会重载。复跑的原始测量写入 `out/result.json`，截图输出见下文。
 
 ## 跑
 
@@ -46,7 +46,7 @@ node node_modules/electron/install.js
 
 ## 两条实现上的坑（都是被测出来的，不是设计出来的）
 
-- **`webContents.sendInputEvent` 到不了 guest。** 它直接注入宿主 RenderWidget，不经浏览器进程的命中测试路由，所以瞄准 webview 的点击只会落在宿主 document 上（第 0 条：`sendInputEventReachedGuest: false` / `cdpInputReachedGuest: true`）。因此驱动一律走 `webContents.debugger` 的 `Input.*`。**实验工程可以这么做，生产照 nodeterm 的姿态仍然禁止 `Runtime.evaluate` 一类动词。**
+- **`webContents.sendInputEvent` 到不了 guest。** 它直接注入宿主 RenderWidget，不经浏览器进程的命中测试路由，所以瞄准 webview 的点击只会落在宿主 document 上（第 0 条：`sendInputEventReachedGuest: false` / `cdpInputReachedGuest: true`）。因此驱动一律走 `webContents.debugger` 的 `Input.*`。**实验工程可以这么做，Armadra 生产路径仍然禁止 `Runtime.evaluate` 一类动词。**
 - **React Flow 的 `preventScrolling: false` 会让它自己的 `wheel.zoom` 对非 ctrl 滚轮直接返回**，第 5 条的对照组会因此静默失效（看起来像「画布本来就不缩放」）。这里保持默认 `true`。
 
-`guestEval`（渲染进程里对 guest 调 `executeJavaScript`）**只在这个实验工程里允许**，它是读回 guest 自报坐标与计数器的唯一手段；生产路径按 nodeterm 的能力表禁止。
+`guestEval`（渲染进程里对 guest 调 `executeJavaScript`）**只在这个实验工程里允许**，它是读回 guest 自报坐标与计数器的唯一手段；Armadra 生产路径的能力白名单禁止此类任意脚本执行。

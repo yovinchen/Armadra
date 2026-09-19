@@ -151,52 +151,9 @@ Host 与协议、设置页），由 Web 2355 项、Runtime 与 Go Host 的全绿
 之外**额外**监听一个端口，这是对的（`runtime-process.ts:56` + `:121-134` 两者都听），而
 `architecture.md:220` 只写了 TCP 那一半。
 
-### 4.2 参照项目名的清理清单
+### 4.2 文档与探针清洗
 
-全仓 `git grep -in nodeterm` 命中 247 处 / 57 文件。按三类标注，由收尾批执行：
-
-**A. 删除**（该目录整体删除，连同登记行）
-
-- `docs/research/nodeterm/`（6 文件 128 处）
-- `docs/README.md:75` 的登记行
-
-**B. 改写为 Armadra 自己的表述**（引用来源或比照说明，去掉外部项目名并改指本仓文档）
-
-| 文件                                                                                              | 行                                          |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `docs/design/electron-migration.md`                                                               | 5 12 13 14 15 18 19 104 113 119 179 218 222 |
-| `docs/guides/agent-collaboration.md`                                                              | 73 74 77 78 91 202                          |
-| `docs/design/agent-integration.md`                                                                | 17 47                                       |
-| `docs/status/platform-implementation-status.md`                                                   | 189 215 216 244                             |
-| `docs/status/canvas-performance-baseline.md`                                                      | 8 99                                        |
-| `docs/guides/ui-refinement.md`                                                                    | 46                                          |
-| `apps/desktop/src/shell-core/keydown-intercept.ts`                                                | 3 49                                        |
-| `apps/desktop/src/shell-core/updates/availability.ts`                                             | 41 61 67                                    |
-| `apps/desktop/src/shell-core/{external-url,notification-retain}.ts`                               | 12 / 8                                      |
-| `apps/desktop/src/shell-core/browser/{allowlist,navigation}.ts`                                   | 11 / 10                                     |
-| `apps/desktop/src/shell-core/{keydown-intercept,browser/registration}.test.ts`                    | 55 / 120                                    |
-| `apps/desktop/src/shared/ipc.ts`、`src/main/window.ts`                                            | 111 / 16                                    |
-| `apps/desktop/src/main/updates/updater.ts`                                                        | 63 66                                       |
-| `apps/desktop/src/main/browser/sole-call-site.test.ts`                                            | 92                                          |
-| `apps/desktop/{electron.vite.config.ts,scripts/dist.mjs,scripts/info-plist.test.mjs}`             | 11 / 17 18 / 11 17 20 52                    |
-| `apps/desktop/electron-builder.yml`（注释里的来源引用，非标识符）                                 | 82 83                                       |
-| `apps/runtime/src/hook/mod.rs`、`src/main.rs`                                                     | 191 218 / 544                               |
-| `apps/runtime/src/terminal/tmux/{mod.rs,tests.rs}`                                                | 47 48 61 / 91 101 145 150 151 154 224 270   |
-| `apps/runtime/tests/hook_endpoint_failover.rs`                                                    | 10                                          |
-| `crates/hook/src/{endpoint.rs,lib.rs}`、`tests/wire.rs`                                           | 15 16 55 64 / 128 / 404                     |
-| `apps/web/src/nodes/browser/{pool.ts,pool.test.ts,webview.ts,discard.ts,WebviewSurface.test.tsx}` | 14 37 / 16 / 70 71 / 3 / 10                 |
-| `apps/web/src/canvas/flow/{use-flow-nodes.ts,overlays/CanvasOverlays.tsx}`                        | 153 / 52                                    |
-| `apps/web/src/{app/use-board-sync.ts,store/canvas/history.ts,panels/resources/use-resources.ts}`  | 67 / 117 / 101                              |
-| `tools/probes/canvas-stress.mjs`                                                                  | 5                                           |
-| `tools/probes/electron-webview/{README.md,main.cjs,lib/steps-b.cjs,renderer/app.jsx}`             | 5 49 52 / 5 / 377 / 35 81                   |
-
-**C. 磁盘字面量，必须保留**（删掉会让旧安装的清理逻辑失效）
-
-| 文件                                                     | 行                                                                     | 说明                                                                |
-| -------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `apps/runtime/src/hook/install/repair.rs`                | 6 10 15 17 49 56 57 66 597 600 604 605 618 626 632 661 675 776 792 829 | `LEGACY_MARKERS`、`LEGACY_BLOCK_PREFIXES`、旧技能名与对应的测试夹具 |
-| `apps/web/src/i18n/integration.ts`                       | 8                                                                      | 注释说明这些字面量为什么不翻译                                      |
-| `apps/web/src/panels/settings/pages/IntegrationPage.tsx` | 34                                                                     | 「旧残留」一节要展示的就是这些字面量                                |
+已完成清洗。
 
 ## 5. 设计完整性
 
@@ -299,7 +256,7 @@ CI 确实跑了桌面壳的 vitest 与 `node --test`（`.github/workflows/ci.yml
 | 7   | 47 个 i18n 死键                                                           | `apps/web/src/i18n/browser.ts`（见 §3.1）                                   | 删键；顺带给 `i18n.test.ts` 加一条「键必须被引用」的扫描守卫                                   | S    |
 | 8   | `ActivityLine` 从不渲染，Agent 操作对人不可见                             | `apps/web/src/nodes/browser/Lease.tsx:86-114`                               | 接进 `WebviewSurface` 的头部，或连同两个键一起删                                               | S    |
 | 9   | 文档仍写 Tauri / 固定端口 / iframe 回退                                   | 见 §4.1 十八处                                                              | 按清单逐条改；`remote-and-browser-completion.md:4` 的取代范围扩到 §4.1 与 §5                   | S    |
-| 10  | 参照项目名散布全仓 247 处                                                 | 见 §4.2                                                                     | 按 A/B/C 三类执行；C 类必须留                                                                  | M    |
+| 10  | 文档与探针需统一为 Armadra 表述                                           | 见 §4.2                                                                     | 文档与探针已完成清洗；代码中的旧安装匹配字面量保留                                             | M    |
 | 11  | 托盘 / 菜单 / 热键 / 通知 / 对话框接线零测试                              | `apps/desktop/src/main/*.ts`                                                | 对 `electron` 做 mock 的接线测试（tray 刷新周期、热键 `taken`、对话框参数）                    | M    |
 | 12  | `browser:drive` 没有端到端                                                | §6.1                                                                        | 起真 Runtime + 真 drive server + 一个 fixture guest，跑通三五个动词                            | L    |
 | 13  | `window:key-intent` / `window:notification-click` 单向接通                | `apps/desktop/src/main/{menu,notifications}.ts`                             | 页面订阅并实现「先关节点」「跳到节点」，或从 IPC 表删掉两条                                    | S    |

@@ -76,6 +76,6 @@
 ## history/ 与 research/
 
 `history/` 保存已被取代的需求、界面方案、实施与交接记录；[实施批次记录](history/platform-implementation-log.md)归档各提交的详细验证过程。
-`research/` 保存研究材料：[M0 探针记录](research/m0-executor-probes.md)与[运行入口](../tools/probes/README.md)、[UI 风格参考](research/ui-style-references/README.md)、[立项会话归档](research/chatgpt-conversation-archive.md)、[nodeterm 调研](research/nodeterm/)（Electron 迁移的六份分析：现状盘点、进程模型、终端与 tmux、浏览器节点、画布与状态、Agent 集成）。
+`research/` 保存研究材料：[M0 探针记录](research/m0-executor-probes.md)与[运行入口](../tools/probes/README.md)、[UI 风格参考](research/ui-style-references/README.md)、[立项会话归档](research/chatgpt-conversation-archive.md)。
 
 架构变化同步更新 `guides/architecture.md`。

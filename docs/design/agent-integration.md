@@ -12,11 +12,11 @@
 
 一个 CLI 要和画布打交道，要装两样东西、管三处状态：
 
-| 层       | 机制                                                        | 落点                                                  | 问题                                                                                                     |
-| -------- | ----------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 事件上报 | Hook（`armadra-hook <agent>`）或进程内扩展                  | 各 CLI 的全局配置文件（`~/.claude/settings.json` 等） | 写进用户全局配置；旧产品名时期的条目（`aicc-hook`、`nodeterm`）没人清；Codex `hooks.json` 的 schema 变了 |
-| 操作画布 | 技能 `armadra/SKILL.md` 教 CLI 去跑 `armadra-hook canvas …` | 各 CLI 的技能目录                                     | 与 Hook 分开安装、分开显示状态；旧技能（`aicc-canvas`）与新技能并存                                      |
-| 协作     | 同上的 `post` / `inbox` / `link` / `handoff-read` 动词      | 同上                                                  | 与操作画布是同一套问题                                                                                   |
+| 层       | 机制                                                        | 落点                                                  | 问题                                                                                                        |
+| -------- | ----------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 事件上报 | Hook（`armadra-hook <agent>`）或进程内扩展                  | 各 CLI 的全局配置文件（`~/.claude/settings.json` 等） | 写进用户全局配置；旧版接入条目（`aicc-hook` 与早期 hook 安装路径）没人清；Codex `hooks.json` 的 schema 变了 |
+| 操作画布 | 技能 `armadra/SKILL.md` 教 CLI 去跑 `armadra-hook canvas …` | 各 CLI 的技能目录                                     | 与 Hook 分开安装、分开显示状态；旧技能（`aicc-canvas`）与新技能并存                                         |
+| 协作     | 同上的 `post` / `inbox` / `link` / `handoff-read` 动词      | 同上                                                  | 与操作画布是同一套问题                                                                                      |
 
 用户实测：安装失败（实际是旧 Runtime 没有新路由）、CLI 找不到 `aicc-hook`、Codex 拒绝 `hooks.json`、连线后上下文不通。
 
@@ -44,7 +44,7 @@
 
 `hook/install/repair.rs`，设置页按钮 + Runtime 启动时自动检测（只报不改）：
 
-- 识别：各 CLI 配置里指向 `aicc-hook`、`nodeterm`、`.nodeterm`、`target/debug/…` 的 hook 条目；技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、`manage-nodeterm-canvas`、旧版 `armadra`（内容修订号落后）；Codex `hooks.json` 顶层的 `version`；全局 `AGENTS.md` / `CLAUDE.md` 里 `<!-- nodeterm:…:start/end -->`（或 `aicc:`）围起来的指令块（2026-09-15 补）。
+- 识别：各 CLI 配置里的旧版接入残留（早期 hook 安装路径），以及指向 `aicc-hook`、`target/debug/…` 的 hook 条目；技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、早期画布管理技能、旧版 `armadra`（内容修订号落后）；Codex `hooks.json` 顶层的 `version`；全局 `AGENTS.md` / `CLAUDE.md` 里 由早期接入标记或 `aicc:` 前缀的 HTML 注释（`start/end`）围起来的指令块（2026-09-15 补）。
 - 动作：列出 → 备份为 `<file>.armadra-backup-<时间戳>` → 删条目 / 目录 → 按现行写法重写；只动我们认得的条目，其余原样。
 - 报告：每种 CLI 一份 `{found, removed, kept, backup}`。
 
