@@ -256,6 +256,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布导入",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/ownership",
@@ -332,6 +333,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-info",
@@ -339,6 +341,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-download",
@@ -346,6 +349,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/imports",
@@ -353,6 +357,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布导入",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/imports/local",
@@ -360,6 +365,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布导入",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file",
@@ -367,6 +373,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-watch",
@@ -374,6 +381,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-version",
@@ -381,6 +389,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-index",
@@ -388,6 +397,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-search",
@@ -395,6 +405,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-entries",
@@ -402,6 +413,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-entries/rename",
@@ -409,6 +421,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-entries/trash",
@@ -416,6 +429,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/file-entries/restore",
@@ -423,6 +437,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "文件系统",
     phase: 4,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/language-service",
