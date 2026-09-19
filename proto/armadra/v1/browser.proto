@@ -107,52 +107,6 @@ message BrowserFrame {
   string tab_id = 11;
 }
 
-// How much picture a subscriber is asking for. A session with no subscription
-// stops streaming but keeps running, so an Agent can go on driving it (§9).
-enum BrowserVisibility {
-  BROWSER_VISIBILITY_UNSPECIFIED = 0;
-  BROWSER_VISIBILITY_FOCUSED = 1;
-  BROWSER_VISIBILITY_VISIBLE = 2;
-  // Subscribed but occluded or off-screen: no frames at all.
-  BROWSER_VISIBILITY_HIDDEN = 3;
-}
-
-message BrowserSubscribeRequest {
-  CommandMeta meta = 1;
-  string session_id = 2;
-  string subscription_id = 3;
-  BrowserVisibility visibility = 4;
-  // What the link between this subscriber and the session looks like. The
-  // Worker picks the budget; the subscriber only says what it can afford.
-  BrowserBandwidthClass bandwidth_class = 5;
-  // Downscale ceiling in CSS pixels. Zero means "no ceiling of my own".
-  uint32 max_width = 6;
-  // Who is watching, as far as this session can tell: the viewer's own opaque
-  // id. It is what the lease names as its human holder, so a badge can say
-  // "you" rather than "somebody" (§2.6/§2.8). Not an authenticated identity —
-  // the Host authenticates the device and does not forward that identity — so
-  // it is only ever used to tell viewers apart, never to grant anything.
-  string device_id = 7;
-  // Frame encodings this subscriber can decode, best first ("webp", "jpeg").
-  // Empty means JPEG only, which is what every client sent before this field
-  // existed. One page runs one screencast, so a session encodes WebP only
-  // when every live subscriber accepts it; the receipt below says which one
-  // was settled on rather than leaving the client to sniff the bytes.
-  repeated string accepted_encodings = 8;
-}
-
-message BrowserSubscription {
-  string subscription_id = 1;
-  int64 expires_at_unix_ms = 2;
-  // What the Worker settled on for this visibility, so the client shows the
-  // degradation instead of guessing it did not happen.
-  uint32 quality = 3;
-  uint32 max_fps = 4;
-  uint32 max_width = 5;
-  // "jpeg" | "webp" — the encoding the frames on this stream actually carry.
-  string encoding = 6;
-}
-
 /* -------------------------------- navigation ------------------------------ */
 
 enum BrowserNavigationAction {
@@ -222,7 +176,8 @@ message BrowserInputRequest {
   // Refused when the lease changed hands since the caller last looked, so a
   // revoked agent cannot land one more click (§2.6).
   uint64 lease_generation = 7;
-  // The viewer this input came from; see `BrowserSubscribeRequest.device_id`.
+  // The viewer this input came from: that end's own opaque id, used only to
+  // tell viewers apart and never to grant anything.
   string device_id = 8;
 }
 
@@ -439,6 +394,9 @@ message ListBrowserSessionsResponse {
 // The whole controlled-browser action surface, as one closed oneof. A caller
 // can only ask for what is named here.
 message BrowserAction {
+  // 9 was `subscribe`: the frame stream retired with the screencast
+  // (electron-migration §4.1). The number is never reused.
+  reserved 9;
   oneof action {
     CreateBrowserSessionRequest create = 1;
     BrowserNavigateRequest navigate = 2;
@@ -448,7 +406,6 @@ message BrowserAction {
     BrowserTypeRequest type = 6;
     BrowserWaitRequest wait = 7;
     BrowserCaptureRequest capture = 8;
-    BrowserSubscribeRequest subscribe = 9;
     BrowserDownloadDecisionRequest download_decision = 10;
     CloseBrowserSessionRequest close = 11;
     ListBrowserSessionsRequest list = 12;
@@ -465,13 +422,14 @@ message BrowserAction {
 }
 
 message BrowserActionResult {
+  // 14 was `subscription`, the receipt that stream answered with.
+  reserved 14;
   string request_id = 1;
   oneof result {
     BrowserSession session = 10;
     BrowserReadResponse read = 11;
     BrowserWaitResponse wait = 12;
     BrowserCaptureResponse capture = 13;
-    BrowserSubscription subscription = 14;
     BrowserDownload download = 15;
     ListBrowserSessionsResponse sessions = 16;
     ErrorResponse error = 17;
@@ -606,8 +564,8 @@ message BrowserLeaseRequest {
   string session_id = 2;
   BrowserLeaseAction action = 3;
   uint64 lease_generation = 4;
-  // Which viewer is taking over or handing back; see
-  // `BrowserSubscribeRequest.device_id`.
+  // Which viewer is taking over or handing back: that end's own opaque id,
+  // used only to tell viewers apart and never to grant anything.
   string device_id = 5;
   // Shown next to the badge on the other clients. Free text from the viewer,
   // truncated, and never used for a decision.
@@ -748,48 +706,6 @@ message BrowserCloseTabRequest {
   string session_id = 2;
   string tab_id = 3;
   uint64 lease_generation = 4;
-}
-
-/* -------------------------------- frame stream ---------------------------- */
-
-// How much of a link there is between a subscriber and the session. The
-// Worker turns this into a real budget and reports what it settled on.
-enum BrowserBandwidthClass {
-  BROWSER_BANDWIDTH_CLASS_UNSPECIFIED = 0;
-  BROWSER_BANDWIDTH_CLASS_LAN = 1;
-  BROWSER_BANDWIDTH_CLASS_WAN = 2;
-  BROWSER_BANDWIDTH_CLASS_METERED = 3;
-}
-
-// The dedicated per-session stream's downlink frame: `BrowserFrame` without
-// the base64 the workspace event channel needs (§2.9).
-message BrowserStreamFrame {
-  string session_id = 1;
-  uint64 generation = 2;
-  uint64 frame_seq = 3;
-  uint64 navigation_epoch = 4;
-  string tab_id = 5;
-  uint32 viewport_width = 6;
-  uint32 viewport_height = 7;
-  double device_scale_factor = 8;
-  // "jpeg" | "webp" — whatever `BrowserSubscription.encoding` reported.
-  string encoding = 9;
-  bytes data = 10;
-  int64 captured_at_unix_ms = 11;
-}
-
-// Everything a subscriber may send up that stream. Input goes here to save a
-// round trip; the HTTP route stays as the fallback.
-message BrowserStreamClient {
-  oneof message {
-    // Subscribes on connect; the same message later re-states the budget.
-    BrowserSubscribeRequest hello = 1;
-    // The highest frame this subscriber has drawn. More than two frames
-    // unacknowledged and it starts being skipped rather than queued (§2.9).
-    uint64 ack = 2;
-    BrowserInputRequest input = 3;
-    BrowserSubscribeRequest visibility = 4;
-  }
 }
 
 /* --------------------------------- activity ------------------------------- */

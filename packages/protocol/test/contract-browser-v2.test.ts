@@ -12,7 +12,6 @@ import {
   BrowserActionResultSchema,
   BrowserActivitySchema,
   BrowserAvailabilitySchema,
-  BrowserBandwidthClass,
   BrowserDialogKind,
   BrowserDownloadSchema,
   BrowserDownloadState,
@@ -25,17 +24,13 @@ import {
   BrowserManagedStateSchema,
   BrowserSessionSchema,
   BrowserSessionState,
-  BrowserStreamClientSchema,
-  BrowserStreamFrameSchema,
-  BrowserSubscriptionSchema,
   BrowserTabAction,
   BrowserTabListSchema,
-  BrowserVisibility,
 } from "../src/index.js";
 
 /**
  * 受控浏览器补全的线格式（remote-and-browser-completion §2.11）：受管二进制、
- * 标签与 frame、控制租约、对话框与选择器、新动词、专用帧流。与首轮的
+ * 标签与 frame、控制租约、对话框与选择器、新动词。与首轮的
  * `contract.test.ts` 分文件，首轮的 golden 字节不会被这一轮改动。
  */
 function fixture(name: string): Uint8Array {
@@ -370,75 +365,7 @@ describe("controlled browser: tabs, lease, dialogs, managed binary, stream", () 
     });
   });
 
-  it("streams raw frames down and a closed set of messages up", () => {
-    check("browser_stream_frame", BrowserStreamFrameSchema, {
-      sessionId: "browser-1",
-      generation: 3n,
-      frameSeq: 9007199254740993n,
-      navigationEpoch: maxUint64,
-      tabId: "t2",
-      viewportWidth: 1280,
-      viewportHeight: 800,
-      deviceScaleFactor: 1.5,
-      encoding: "jpeg",
-      data: new Uint8Array([0xff, 0xd8, 0x00, 0xff]),
-      capturedAtUnixMs: 1788557900000n,
-    });
-    check("browser_stream_hello", BrowserStreamClientSchema, {
-      message: {
-        case: "hello",
-        value: {
-          sessionId: "browser-1",
-          subscriptionId: "sub-1",
-          visibility: BrowserVisibility.FOCUSED,
-          bandwidthClass: BrowserBandwidthClass.METERED,
-          maxWidth: 960,
-          acceptedEncodings: ["webp", "jpeg"],
-        },
-      },
-    });
-    // A real Chrome answers `Page.startScreencast { format: "webp" }` with VP8
-    // WebP even though the protocol dump lists only jpeg/png, so the
-    // negotiated encoding travels as its own value rather than being sniffed.
-    check("browser_stream_frame_webp", BrowserStreamFrameSchema, {
-      sessionId: "browser-1",
-      generation: 3n,
-      frameSeq: 12n,
-      navigationEpoch: 4n,
-      tabId: "t1",
-      viewportWidth: 960,
-      viewportHeight: 540,
-      deviceScaleFactor: 1,
-      encoding: "webp",
-      data: new Uint8Array([
-        0x52, 0x49, 0x46, 0x46, 0xf8, 0x01, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
-      ]),
-      capturedAtUnixMs: 1788557900001n,
-    });
-    check("browser_stream_ack", BrowserStreamClientSchema, {
-      message: { case: "ack", value: maxUint64 },
-    });
-    check("browser_stream_input", BrowserStreamClientSchema, {
-      message: {
-        case: "input",
-        value: {
-          sessionId: "browser-1",
-          navigationEpoch: 4n,
-          frameSeq: 7n,
-          events: [{ kind: BrowserInputKind.TOUCH_START, x: 100, y: 200 }],
-          target: { tabId: "t2" },
-          leaseGeneration: 7n,
-        },
-      },
-    });
-    check("browser_subscription_degraded", BrowserSubscriptionSchema, {
-      subscriptionId: "sub-1",
-      expiresAtUnixMs: 1788557900000n,
-      quality: 45,
-      maxFps: 4,
-      maxWidth: 960,
-      encoding: "webp",
-    });
+  it("carries the activity line a node header shows", () => {
     check("browser_activity_refused", BrowserActivitySchema, {
       sessionId: "browser-1",
       actor: "agent",

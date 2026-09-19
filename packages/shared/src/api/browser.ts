@@ -167,7 +167,7 @@ export const BROWSER_LEASE_ACTIONS = ["status", "takeover", "release"] as const;
 export const browserLeaseRequestSchema = z.object({
   action: z.enum(BROWSER_LEASE_ACTIONS),
   leaseGeneration: z.number().int().nonnegative().optional(),
-  /** 谁在接管或交还；与 `browserInputRequestSchema.deviceId` 同义。 */
+  /** 谁在接管或交还：这一端的不透明标识，不授予任何权限。 */
   deviceId: z.string().optional(),
   displayName: z.string().optional(),
 });
@@ -244,19 +244,6 @@ export const browserActivityListSchema = z.object({
   activity: z.array(browserActivitySchema),
 });
 
-/* ------------------------------ 帧流带宽（§2.9） ----------------------------- */
-
-/** 客户端说自己这条链路是什么，Worker 决定预算并在订阅回执里如实报告。 */
-export const BROWSER_BANDWIDTH_CLASSES = ["lan", "wan", "metered"] as const;
-
-/**
- * 帧编码。一个页面只有一路 screencast，所以只有**所有**订阅者都说得出
- * `webp` 时整条流才用 WebP；订阅回执里的 `encoding` 是实际结果，客户端照它
- * 解码，不去嗅探字节（§2.9）。
- */
-export const BROWSER_FRAME_ENCODINGS = ["jpeg", "webp"] as const;
-export const browserFrameEncodingSchema = z.enum(BROWSER_FRAME_ENCODINGS);
-
 /**
  * `navigationEpoch` 是「这一页」的编号：导航一次就 +1，旧 epoch 的输入
  * 会被 Runtime 拒（409），客户端丢弃该批并等新帧，绝不重放（§8）。
@@ -323,78 +310,6 @@ export const browserNavigateRequestSchema = z.object({
   action: z.enum(BROWSER_NAVIGATION_ACTIONS),
   url: z.string().optional(),
   target: browserTargetSchema.optional(),
-});
-
-export const BROWSER_INPUT_KINDS = [
-  "mouseMoved",
-  "mousePressed",
-  "mouseReleased",
-  "wheel",
-  "keyDown",
-  "keyUp",
-  "text",
-  "touchStart",
-  "touchMove",
-  "touchEnd",
-] as const;
-
-/**
- * 一条输入事件。字段全给了默认值：一次点击只需要 `kind` / `x` / `y` /
- * `button`，中文输入只需要 `kind: "text"` 与 `text`——补零补空串比让调用
- * 方拼一个完整对象更不容易出错。
- */
-export const browserInputEventSchema = z.object({
-  kind: z.enum(BROWSER_INPUT_KINDS),
-  x: z.number().default(0),
-  y: z.number().default(0),
-  deltaX: z.number().default(0),
-  deltaY: z.number().default(0),
-  button: z.enum(["none", "left", "middle", "right"]).default("none"),
-  clickCount: z.number().int().nonnegative().default(0),
-  modifiers: z.number().int().nonnegative().default(0),
-  key: z.string().default(""),
-  code: z.string().default(""),
-  text: z.string().default(""),
-});
-
-export const browserInputRequestSchema = z.object({
-  navigationEpoch: z.number().int().nonnegative(),
-  frameSeq: z.number().int().nonnegative().optional(),
-  events: z.array(browserInputEventSchema).min(1).max(64),
-  target: browserTargetSchema.optional(),
-  leaseGeneration: z.number().int().nonnegative().optional(),
-  /**
-   * 这一端的不透明标识，只用来在徽标上区分「你」和「其他设备」——
-   * Host 认证的是设备，但不会把身份转发给 Runtime，所以它不授予任何权限。
-   */
-  deviceId: z.string().optional(),
-  displayName: z.string().optional(),
-});
-
-export const browserInputResultSchema = z.object({
-  accepted: z.number().int().nonnegative(),
-  navigationEpoch: z.number().int().nonnegative(),
-});
-
-/** 没人看的会话停止推帧（§8）；`hidden` 是标签页切走，不是节点折叠。 */
-export const BROWSER_VISIBILITIES = ["focused", "visible", "hidden"] as const;
-export const browserSubscribeRequestSchema = z.object({
-  subscriptionId: z.string().optional(),
-  visibility: z.enum(BROWSER_VISIBILITIES),
-  bandwidthClass: z.enum(BROWSER_BANDWIDTH_CLASSES).optional(),
-  maxWidth: z.number().int().nonnegative().optional(),
-  deviceId: z.string().optional(),
-  /** 这一端解得开的编码，好的在前；空数组等于「只有 JPEG」。 */
-  acceptedEncodings: z.array(browserFrameEncodingSchema).optional(),
-});
-export const browserSubscriptionSchema = z.object({
-  subscriptionId: z.string(),
-  expiresAt: z.string(),
-  quality: z.number().int(),
-  maxFps: z.number().int(),
-  maxWidth: z.number().int().nonnegative().default(0),
-  /** 这条流实际发的编码；旧 Runtime 不带这个字段，按 JPEG 处理。 */
-  encoding: browserFrameEncodingSchema.default("jpeg"),
 });
 
 /** 稳定元素引用绑定 session/frame/epoch；导航后失效（§7）。 */
@@ -507,15 +422,6 @@ export type BrowserNavigationAction =
 export type BrowserNavigateRequest = z.infer<
   typeof browserNavigateRequestSchema
 >;
-export type BrowserInputKind = (typeof BROWSER_INPUT_KINDS)[number];
-export type BrowserInputEvent = z.infer<typeof browserInputEventSchema>;
-export type BrowserInputRequest = z.infer<typeof browserInputRequestSchema>;
-export type BrowserInputResult = z.infer<typeof browserInputResultSchema>;
-export type BrowserVisibility = (typeof BROWSER_VISIBILITIES)[number];
-export type BrowserSubscribeRequest = z.infer<
-  typeof browserSubscribeRequestSchema
->;
-export type BrowserSubscription = z.infer<typeof browserSubscriptionSchema>;
 export type BrowserElement = z.infer<typeof browserElementSchema>;
 export type BrowserConsoleEntry = z.infer<typeof browserConsoleEntrySchema>;
 export type BrowserNetworkEntry = z.infer<typeof browserNetworkEntrySchema>;
@@ -554,7 +460,5 @@ export type BrowserScrollDirection = (typeof BROWSER_SCROLL_DIRECTIONS)[number];
 export type BrowserScrollRequest = z.infer<typeof browserScrollRequestSchema>;
 export type BrowserUploadRequest = z.infer<typeof browserUploadRequestSchema>;
 export type BrowserUploaded = z.infer<typeof browserUploadedSchema>;
-export type BrowserFrameEncoding = (typeof BROWSER_FRAME_ENCODINGS)[number];
 export type BrowserActivity = z.infer<typeof browserActivitySchema>;
 export type BrowserActivityList = z.infer<typeof browserActivityListSchema>;
-export type BrowserBandwidthClass = (typeof BROWSER_BANDWIDTH_CLASSES)[number];

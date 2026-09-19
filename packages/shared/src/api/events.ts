@@ -91,23 +91,6 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     type: z.literal("resource.sample"),
     snapshot: resourceSnapshotSchema,
   }),
-  /**
-   * 一帧受控浏览器画面（B01，设计 §8）。`data` 是 base64 的 JPEG 字节；
-   * 只有持有订阅的客户端会收到，被遮挡 / 无人订阅的会话不推帧。
-   */
-  z.object({
-    type: z.literal("browser.frame"),
-    sessionId: z.string(),
-    generation: z.number().int().nonnegative(),
-    frameSeq: z.number().int().nonnegative(),
-    navigationEpoch: z.number().int().nonnegative(),
-    viewportWidth: z.number().int().positive(),
-    viewportHeight: z.number().int().positive(),
-    deviceScaleFactor: z.number().positive(),
-    encoding: z.literal("jpeg"),
-    data: z.string(),
-    capturedAt: z.string(),
-  }),
   /** 会话状态变了：导航、标题、可前进/后退、崩溃或结束（设计 §9）。 */
   z.object({
     type: z.literal("browser.session"),
@@ -195,10 +178,6 @@ export type LanguageServerWorkspaceEvent = Extract<
 export type ResourceSampleEvent = Extract<
   WorkspaceEvent,
   { type: "resource.sample" }
->;
-export type BrowserFrameEvent = Extract<
-  WorkspaceEvent,
-  { type: "browser.frame" }
 >;
 export type BrowserLeaseEvent = Extract<
   WorkspaceEvent,
