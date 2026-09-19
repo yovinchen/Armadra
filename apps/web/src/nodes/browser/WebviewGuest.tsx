@@ -81,13 +81,23 @@ export function WebviewGuest({
     const guest = ref.current;
     if (!guest || discarded) return;
 
+    /**
+     * `did-stop-loading` 时刷新前进/后退（[浏览器节点] §2.4）。
+     *
+     * 「加载结束」与「能不能后退」是分开写的：前者必须无条件落下去，否则一
+     * 个还没长出这两个方法的元素会让标签**永远停在 loading**——而 loading 是
+     * 回收的一条否决，于是那个 guest 再也不会被释放。
+     */
     const refreshNavState = () => {
       const current = ref.current;
-      if (!current?.canGoBack) return;
       patchRef.current({
         loading: false,
-        canGoBack: current.canGoBack(),
-        canGoForward: current.canGoForward(),
+        ...(typeof current?.canGoBack === "function"
+          ? {
+              canGoBack: current.canGoBack(),
+              canGoForward: current.canGoForward(),
+            }
+          : {}),
       });
     };
 
