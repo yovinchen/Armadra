@@ -4,6 +4,7 @@ import { identityInstanceId } from "../identity";
 import { IdentityService } from "../identity/service";
 import { IdentityStore } from "../identity/store";
 import { AutomationApi, API_PREFIX } from "./api";
+import { convertLegacyPayloads } from "./convert-legacy";
 import { AUTOMATION_CAPABILITY, registerCapability } from "./capabilities";
 import { TerminalDispatcher, type DispatchContext } from "./dispatch";
 import { ScheduleEngine } from "./engine";
@@ -62,6 +63,20 @@ export function install(context: CoreContext): ScheduleDomain | undefined {
   if (!tablesReady(context)) {
     context.log.info("定时与自动化域未装配：0017 迁移尚未应用");
     return undefined;
+  }
+  // 0020 之前写下的行只有 protobuf 字节。先补成 JSON，再让任何读它们的东西起
+  // 来——半转的库读得动，但一个在转换中途开始调度的内核会把旧字节又写回去。
+  // **R7 删掉这一段**，连同 `convert-legacy.ts` 一起。
+  const converted = convertLegacyPayloads(context.db.database);
+  if (
+    converted.plans +
+      converted.activations +
+      converted.runs +
+      converted.receipts +
+      converted.commandSessions >
+    0
+  ) {
+    context.log.info("自动化载荷已从 protobuf 转成 JSON", { ...converted });
   }
   const store = new ScheduleStore(context.db.database);
   const identityStore = new IdentityStore(context.db.database);

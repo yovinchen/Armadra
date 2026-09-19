@@ -34,7 +34,11 @@ import { ScheduleStore } from "./store";
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = resolve(here, "../db/migrations/0017_event_outbox.sql");
+/** 0017 建表，0020 把载荷换成 JSON 列。两条都要，读写走的是 0020 之后的形状。 */
+const migrations = [
+  resolve(here, "../db/migrations/0017_event_outbox.sql"),
+  resolve(here, "../db/migrations/0020_automation_json.sql"),
+];
 
 export const HOST_ID = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
 export const PRINCIPAL = "0123456789abcdef0123456789abcdef";
@@ -52,7 +56,9 @@ export function openStore(): { database: DatabaseSync; store: ScheduleStore } {
       "host_id TEXT NOT NULL, event_floor INTEGER NOT NULL DEFAULT 0, " +
       "last_sequence INTEGER NOT NULL DEFAULT 0)",
   );
-  database.exec(readFileSync(migration, "utf8"));
+  for (const migration of migrations) {
+    database.exec(readFileSync(migration, "utf8"));
+  }
   return { database, store: new ScheduleStore(database) };
 }
 

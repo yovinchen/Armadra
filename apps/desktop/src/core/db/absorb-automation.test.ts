@@ -24,6 +24,7 @@ import {
 } from "@armadra/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { planFromJson } from "../schedule/json";
 import { configHash } from "../schedule/plan";
 import { absorbHostDatabase, hostDatabaseFile } from "./absorb-host";
 import { openDatabase } from "./open";
@@ -213,11 +214,13 @@ describe("搬运自动化域", () => {
 
     const stored = opened.database
       .prepare(
-        "SELECT revision, payload, state, next_due_at_ms AS nextDue FROM automation_plans WHERE plan_id = 'plan-1'",
+        "SELECT revision, payload, payload_json AS payloadJson, state, " +
+          "next_due_at_ms AS nextDue FROM automation_plans WHERE plan_id = 'plan-1'",
       )
       .get() as {
       revision: number;
-      payload: Uint8Array;
+      payload: Uint8Array | null;
+      payloadJson: string;
       state: number;
       nextDue: number;
     };
@@ -225,8 +228,9 @@ describe("搬运自动化域", () => {
     expect(Number(stored.revision)).toBe(7);
     expect(Number(stored.state)).toBe(AutomationPlanState.ACTIVE);
     expect(Number(stored.nextDue)).toBe(1_800_000_000_000);
-    // 载荷逐字节不变，所以配置摘要还是 Host 算出来的那个数。
-    const decoded = fromBinary(AutomationPlanSchema, stored.payload);
+    // 0020 之后投影时就解码成 JSON：字节列留空，记录本身一个字段都不少。
+    expect(stored.payload).toBeNull();
+    const decoded = planFromJson(JSON.parse(stored.payloadJson));
     expect(toBinary(AutomationPlanSchema, decoded)).toEqual(
       toBinary(AutomationPlanSchema, plan()),
     );
