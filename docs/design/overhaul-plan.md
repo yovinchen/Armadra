@@ -13,7 +13,7 @@
 | U3  | 新建窗口（含浏览器）按标准浏览器大小创建，内容按比例展示，终端等内容更多、chrome 更少                                                                     | §4 P1（节点尺寸与密度）                                           |
 | U4  | 画板可从 Mermaid 图导入并画到页面上                                                                                                                       | §4 P1（Mermaid 导入，设计见 `mermaid-import.md`（落地后挂链接）） |
 | U5  | 名称与 logo 全部替换；侧栏头部对齐                                                                                                                        | §4 P1（品牌与头部）                                               |
-| U6  | 剩余 Rust 与 Go 全部改为 TypeScript：**一个核心，两种壳**                                                                                                 | §4 P3（设计见 `typescript-core.md`，落地后挂链接）                |
+| U6  | 剩余 Rust 与 Go 全部改为 TypeScript：**一个核心，两种壳**                                                                                                 | §4 P3（设计见 [typescript-core.md](typescript-core.md)）          |
 | U7  | 推送仓库并进行多端编译                                                                                                                                    | §4 P4                                                             |
 | R1  | **项目与一切内容里不得出现所研究的第三方参考项目的名字**（含文档、注释、提交信息、研究材料）。唯一例外：hook 修复逻辑里必须匹配的用户磁盘旧路径字面量     | §4 P4 清洗批；所有 Agent 提示词写明                               |
 | R2  | 画布修改经 `canvas-store`；文案在 i18n；只用现有 shadcn 组件；Runtime JSON camelCase、错误 `{ code, message }`；迁移编号只增、未知库拒绝启动（AGENTS.md） | 各批验收                                                          |
@@ -35,7 +35,7 @@ apps/desktop/src/core   Electron-free 的 TS 核心：终端、Hook/Agent、画�
 apps/server      无窗口壳：node:http + ws + HTTPS + 单 owner 认证，托管前端给浏览器与手机；同一份 core
 ```
 
-删除项：`apps/runtime`、`apps/host`、`crates/*`、`proto/` 与三处生成码、`pnpm protocol:*`、Worker 协议、所有权迁移、`migrations.lock` 三处校验收敛为一处。分阶段、双实现并存、开关切换、可回滚——见 `typescript-core.md`。
+删除项：`apps/runtime`、`apps/host`、`crates/*`、`proto/` 与三处生成码、`pnpm protocol:*`、Worker 协议、所有权迁移、`migrations.lock` 三处校验收敛为一处。分阶段、双实现并存、开关切换、可回滚——见 [typescript-core.md](typescript-core.md)。
 
 ## 4. 工作流
 
@@ -58,7 +58,7 @@ apps/server      无窗口壳：node:http + ws + HTTPS + 单 owner 认证，托�
 
 ### P3 TypeScript 核心（U6）
 
-阶段 R0–R7、每阶段范围/参照/测试数/验收/风险/规模/建议 Agent 数，全部在 `typescript-core.md`。原则：
+阶段 R0–R7、每阶段范围/参照/测试数/验收/风险/规模/建议 Agent 数，全部在 [typescript-core.md](typescript-core.md)。原则：
 
 - **吸收而非移植**：Host 的职责并入 core 对应域，因分进程才存在的机制整段删除。
 - **不可变契约**：HTTP/WS API 面、SQLite schema 与迁移账本、`hook-endpoint.env`/`endpoints.json`、`armadra-hook` 命令面、Agent 环境变量注入表、token 0600 文件语义、契约 §N 编号。
