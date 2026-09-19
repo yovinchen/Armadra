@@ -60,7 +60,12 @@ export const IPC = {
   /** `shell.openExternal`, with an `http`/`https` scheme allow-list. */
   shellOpenExternal: spec("shell:open-external", "invoke", "window"),
 
-  /** The seven update commands, one for one with today's Tauri commands. */
+  /**
+   * The seven update commands, one for one with the Tauri commands they
+   * replace (W2.2). `updates:check` carries the Host's answer the page already
+   * fetched with its own session; everything else takes no argument and
+   * answers with the state machine's state.
+   */
   updatesState: spec("updates:state", "invoke", "shared"),
   updatesCheck: spec("updates:check", "invoke", "window"),
   updatesDismiss: spec("updates:dismiss", "invoke", "window"),
@@ -95,15 +100,23 @@ export type ChannelName = (typeof IPC)[keyof typeof IPC]["channel"];
 export const ALL_CHANNELS: readonly ChannelSpec[] = Object.values(IPC);
 
 /**
- * The channels this batch answers for real (W1.0/W1.1). Everything else in the
- * table is registered too, but rejects with `not_implemented` — a placeholder
- * that fails loudly beats a channel that is simply absent, which the page can
- * only observe as a hang or an `Error: No handler registered`.
+ * The channels that answer for real (W1.0/W1.1, plus the seven of W2.2).
+ * Everything else in the table is registered too, but rejects with
+ * `not_implemented` — a placeholder that fails loudly beats a channel that is
+ * simply absent, which the page can only observe as a hang or an
+ * `Error: No handler registered`.
  */
 export const IMPLEMENTED_CHANNELS: readonly string[] = [
   IPC.transportEndpoints.channel,
   IPC.appLocale.channel,
   IPC.windowIsFocused.channel,
+  IPC.updatesState.channel,
+  IPC.updatesCheck.channel,
+  IPC.updatesDismiss.channel,
+  IPC.updatesCancel.channel,
+  IPC.updatesDownload.channel,
+  IPC.updatesInstall.channel,
+  IPC.updatesRestartReport.channel,
 ];
 
 /** The `{ code, message }` shape AGENTS.md requires of every rejection. */

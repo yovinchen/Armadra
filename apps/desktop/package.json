@@ -20,7 +20,8 @@
     "test": "vitest run && node --test scripts/*.test.mjs"
   },
   "dependencies": {
-    "@armadra/protocol": "workspace:*"
+    "@armadra/protocol": "workspace:*",
+    "electron-updater": "6.8.9"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.3",

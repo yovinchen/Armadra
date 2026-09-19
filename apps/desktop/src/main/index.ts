@@ -23,6 +23,7 @@ import {
   waitForRuntime,
 } from "./runtime-process";
 import { traceLifecycle } from "./trace";
+import { installUpdates } from "./updates";
 import {
   createMainWindow,
   getMainWindow,
@@ -45,6 +46,7 @@ import {
 const lifecycle = new DesktopLifecycle();
 const runtime = new RuntimeProcess();
 const development = !app.isPackaged;
+const updates = installUpdates(lifecycle, runtime);
 
 /* ------------------------------ the IPC table ----------------------------- */
 
@@ -61,6 +63,10 @@ function registerIpc(): void {
     [IPC.transportEndpoints.channel]: transportEndpoints,
     [IPC.appLocale.channel]: () => app.getLocale(),
     [IPC.windowIsFocused.channel]: () => getMainWindow()?.isFocused() ?? false,
+    // W2.2: the seven update channels. The updater is assembled here because
+    // it is the one place that holds both the Host's lifecycle and the
+    // Runtime — it has to stop both before an installer may run (§2.3).
+    ...updates.handlers,
   };
   // The table and the implementation list must agree: a handler added here
   // without being listed there (or the reverse) is how a channel quietly
