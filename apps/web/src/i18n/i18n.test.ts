@@ -9,12 +9,14 @@ import {
 } from "./index";
 
 /**
- * i18n 的两条守卫（计划书 §13.6 / §14）。
+ * i18n 的三条守卫（计划书 §13.6 / §14）。
  *
  * 1. 每个消息模块的 `zh-CN` 与 `en` 必须键集合一致——少一个键就意味着
  *    切到英文时界面上蹦出一个键名。
  * 2. 功能代码里不许写死中文。扫描的是**去掉注释后**的源码：本项目的注释
  *    通篇中文（这是有意的房规），要管的是字符串字面量与 JSX 文本。
+ * 3. 每个键都得有人用。一组实现被删掉时，它的文案很容易留在表里没人发现
+ *    ——受管 Chromium 那一批就这样留了 39 个（复查 §3.1）。
  */
 
 const MODULES: Record<string, MessageModule> = MESSAGE_MODULES;
@@ -167,5 +169,189 @@ describe("界面文案", () => {
       offenders,
       "这些串要搬进 src/i18n/*.ts 并经 useT()/t() 取用",
     ).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* 键必须被引用                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * `t(`前缀.${…}`)` 这样拼出来的键，扫描器只看得见那个静态前缀。
+ *
+ * 自动抽出来而不是手写白名单：手写的白名单一改代码就过期，而这条正则读的
+ * 就是代码本身——拼接方式变了，放行范围跟着变。
+ */
+function dynamicPrefixes(corpus: string): Set<string> {
+  return new Set(
+    [...corpus.matchAll(/`([a-zA-Z][\w.-]*\.)\$\{/g)].map(
+      (match) => match[1] as string,
+    ),
+  );
+}
+
+/**
+ * 本次清理之外的历史欠账：这些键在这条守卫加上来之前就已经没人引用。
+ *
+ * 断言写成**全等**而不是「不多于」：新增一个没人用的键会失败，删掉一个欠账
+ * 却不从这张表里划掉也会失败。这张表只许变短。
+ */
+const UNREFERENCED: readonly string[] = [
+  "activity.title",
+  "agent.allow",
+  "agent.deny",
+  "agent.launchFailed",
+  "agents.close",
+  "agents.title",
+  "app.loadFailed",
+  "app.retry",
+  "automation.executionHost",
+  "automation.more",
+  "automation.open",
+  "board.new",
+  "board.rename",
+  "color.blue",
+  "color.cyan",
+  "color.green",
+  "color.orange",
+  "color.palette",
+  "color.purple",
+  "color.red",
+  "color.yellow",
+  "content.highlight",
+  "draw.color",
+  "draw.eraser",
+  "draw.pen",
+  "draw.undo",
+  "editor.readonly",
+  "frameBinding.missing",
+  "gitCommit.binary",
+  "gitCommit.title",
+  "gitHunk.close",
+  "gitIntegration.abortPick",
+  "gitIntegration.abortRebase",
+  "gitIntegration.abortRevert",
+  "gitIntegration.absent",
+  "gitIntegration.base",
+  "gitIntegration.binary",
+  "gitIntegration.continuePick",
+  "gitIntegration.continueRebase",
+  "gitIntegration.continueRevert",
+  "gitIntegration.dirty",
+  "gitIntegration.failed",
+  "gitIntegration.markResolved",
+  "gitIntegration.message",
+  "gitIntegration.none",
+  "gitIntegration.open",
+  "gitIntegration.ours",
+  "gitIntegration.rebaseOnto",
+  "gitIntegration.submodule",
+  "gitIntegration.target",
+  "gitIntegration.theirs",
+  "gitIntegration.title",
+  "gitIntegration.truncated",
+  "gitLog.details.title",
+  "gitLog.table.repository",
+  "gitStash.patch",
+  "gitStash.view",
+  "image.empty",
+  "launch.stalled",
+  "launcher.open",
+  "legacyArchive.bytes",
+  "lsp.executableMissing",
+  "lsp.formatOnSaveHint",
+  "lsp.openDocuments",
+  "lsp.stderr",
+  "lsp.unavailable",
+  "menu.closeWindow",
+  "menu.cut",
+  "menu.file",
+  "menu.minimize",
+  "menu.paste",
+  "menu.quit",
+  "menu.redo",
+  "menu.selectAll",
+  "menu.showWindow",
+  "menu.undo",
+  "menu.window",
+  "menu.zoom",
+  "mobile.key.ctrlA",
+  "mobile.key.ctrlC",
+  "mobile.key.ctrlD",
+  "mobile.key.ctrlE",
+  "mobile.key.ctrlK",
+  "mobile.key.ctrlL",
+  "mobile.key.ctrlR",
+  "mobile.key.ctrlU",
+  "mobile.key.ctrlZ",
+  "ownership.git.moved",
+  "ownership.git.readonly",
+  "ownership.git.unknownOutcome",
+  "ownership.unknown",
+  "problems.inactive",
+  "rope.launched",
+  "rope.subagent",
+  "rope.waiting",
+  "scm.ahead",
+  "scm.behind",
+  "scm.changes",
+  "scm.clean",
+  "scm.close",
+  "scm.committed",
+  "scm.diff",
+  "scm.message",
+  "scm.refresh",
+  "scm.staged",
+  "scm.title",
+  "sessions.add",
+  "sessions.collapse",
+  "sessions.empty",
+  "sessions.expand",
+  "sessions.signal.attention",
+  "sessions.signal.unread",
+  "sessions.signal.working",
+  "sessions.title",
+  "settings.nodeColorStyle.bar",
+  "settings.nodeColorStyle.dot",
+  "settings.shortcuts",
+  "ssh.edit",
+  "ssh.pickIdentity",
+  "ssh.testing",
+  "subagent.transcript",
+  "terminal.failed",
+  "terminal.findNext",
+  "terminal.findPrev",
+  "tray.quit",
+  "tray.showWindow",
+  "tray.updateRestart",
+  "tray.usage.session",
+  "tray.usage.unknown",
+  "tray.usage.week",
+  "updates.checkedAt",
+  "updates.release.notes",
+  "updates.release.size",
+  "usage.recoveryHint",
+  "usage.source.copilot",
+];
+
+describe("消息键的引用", () => {
+  it("每个键都至少被一个非 i18n 的源文件用到", () => {
+    const corpus = Object.entries(sources)
+      .filter(([path]) => !path.startsWith("/src/i18n/"))
+      .map(([, source]) => source)
+      .join("\n");
+    const prefixes = [...dynamicPrefixes(corpus)];
+    const used = (key: string) =>
+      corpus.includes(key) || prefixes.some((prefix) => key.startsWith(prefix));
+
+    const dead = Object.values(MODULES)
+      .flatMap((module) => Object.keys(module["zh-CN"]))
+      .filter((key) => !used(key))
+      .sort();
+
+    expect(
+      dead,
+      "没有任何代码引用这些键：删掉它们，或把新增的那几个从 UNREFERENCED 里划掉",
+    ).toEqual([...UNREFERENCED]);
   });
 });
