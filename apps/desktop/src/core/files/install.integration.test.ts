@@ -113,7 +113,7 @@ describe("the assembled filesystem and import domains", () => {
     }
     // A path that has not been written answers 501 with the feature's name, so
     // a 200 above is evidence the claim took rather than evidence of nothing.
-    const notYet = await send("GET", `/api/workspaces/${workspaceId}/git/refs`);
+    const notYet = await send("GET", "/api/ownership");
     expect(notYet.status).toBe(501);
   });
 

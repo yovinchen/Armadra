@@ -205,13 +205,13 @@ describe("what the core answers", () => {
 
   it("answers a route it has not written with 501 and the feature's name", async () => {
     const { core } = await start(temporary());
-    const response = await fetch(`${base(core)}/api/workspaces/import`, {
-      method: "POST",
-    });
+    // Ownership is the one table entry no phase claims: a single core has
+    // nothing to split, so it stays 501 until R7 removes the route.
+    const response = await fetch(`${base(core)}/api/ownership`);
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
       code: "not_implemented",
-      message: "画布导入（R4）",
+      message: "写入所有权记录（R1）",
     });
   });
 
