@@ -42,7 +42,10 @@ vi.mock("@/store/canvas-store", () => {
 
 vi.mock("@/platform", () => ({
   openExternal: vi.fn(),
-  pickFiles: vi.fn(async () => [] as string[]),
+  // 真实实现就是「preload 装没装 window.armadra」；测试按同一条判定走，
+  // 这样「壳在 / 壳不在」两组用例仍然只靠那一个全局开关切换。
+  isDesktop: () =>
+    typeof (window as { armadra?: unknown }).armadra !== "undefined",
 }));
 
 vi.mock("sonner", () => ({

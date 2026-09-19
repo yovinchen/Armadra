@@ -1,48 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { browserPartition, isDesktopShell } from "./desktop";
-import { allowGuestNavigation, searchOrUrl } from "./webview";
+import { isDesktop } from "@/platform";
+import { allowGuestNavigation, browserPartition, searchOrUrl } from "./webview";
 import { BROWSER_DISCARD_MS, shouldDiscard } from "./discard";
 
-describe("isDesktopShell", () => {
+describe("isDesktop", () => {
   it("是 false，除非 preload 把 window.armadra 装上去了", () => {
-    // jsdom 里没有壳。这一条同时钉住「浏览器走旧路径」：判定为假
+    // jsdom 里没有壳。这一条同时钉住「浏览器里不渲染 guest」：判定为假
     // 时 `BrowserNode` 一个 `<webview>` 都不渲染。
-    expect(isDesktopShell()).toBe(false);
+    expect(isDesktop()).toBe(false);
     (window as unknown as { armadra?: unknown }).armadra = {};
-    expect(isDesktopShell()).toBe(true);
+    expect(isDesktop()).toBe(true);
     delete (window as unknown as { armadra?: unknown }).armadra;
   });
 });
 
 describe("browserPartition", () => {
-  it("同一工作空间的用户节点共享一个 jar", () => {
-    expect(browserPartition("ws-1", "user")).toBe(
-      browserPartition("ws-1", "user"),
-    );
-    expect(browserPartition("ws-1", "user")).toBe(
-      "persist:armadra-browser-ws-1",
-    );
+  it("同一工作空间的浏览器节点共享一个 jar", () => {
+    expect(browserPartition("ws-1")).toBe(browserPartition("ws-1"));
+    expect(browserPartition("ws-1")).toBe("persist:armadra-browser-ws-1");
   });
 
-  it("Agent 的 jar 与人的分开，跨工作空间也分开", () => {
-    expect(browserPartition("ws-1", "agent")).toBe(
-      "persist:armadra-agent-browser-ws-1",
-    );
-    expect(browserPartition("ws-1", "user")).not.toBe(
-      browserPartition("ws-2", "user"),
-    );
-    expect(browserPartition("ws-1", "user")).not.toBe(
-      browserPartition("ws-1", "agent"),
-    );
+  it("跨工作空间分开", () => {
+    expect(browserPartition("ws-1")).not.toBe(browserPartition("ws-2"));
   });
 
-  it("全部带 persist: 前缀——关掉应用再开还是同一个登录态", () => {
-    for (const driver of ["user", "agent"] as const) {
-      expect(browserPartition(undefined, driver).startsWith("persist:")).toBe(
-        true,
-      );
-    }
+  it("带 persist: 前缀——关掉应用再开还是同一个登录态", () => {
+    expect(browserPartition(undefined).startsWith("persist:")).toBe(true);
   });
 });
 

@@ -3,7 +3,7 @@ import { useT } from "@/app/preferences-store";
 
 import { NodeShell } from "../NodeShell";
 import type { NodeBodyProps } from "../registry";
-import { isDesktopShell } from "./desktop";
+import { isDesktop } from "@/platform";
 import { WebviewSurface } from "./WebviewSurface";
 
 /**
@@ -16,7 +16,7 @@ import { WebviewSurface } from "./WebviewSurface";
  * 判定在渲染期间做一次就够：一个页面不会在运行中从 Electron 变成浏览器。
  */
 export function BrowserNode(props: NodeBodyProps) {
-  if (isDesktopShell()) return <WebviewSurface {...props} />;
+  if (isDesktop()) return <WebviewSurface {...props} />;
   return <UnavailableNode {...props} />;
 }
 

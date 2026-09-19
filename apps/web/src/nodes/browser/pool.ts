@@ -3,7 +3,7 @@ import type { CanvasNode } from "@armadra/shared";
 
 import type { ArmadraFlowNode, CanvasFlowNode } from "@/canvas/sync/project";
 
-import { isDesktopShell } from "./desktop";
+import { isDesktop } from "@/platform";
 
 /**
  * pool region —— webview 宿主节点在 React Flow `nodes` 数组里的稳定区段
@@ -34,7 +34,7 @@ import { isDesktopShell } from "./desktop";
  * guest 因此毫发无损（`display:none` 是实测安全的那一类），回来时还是同一个
  * 进程、同一份页面状态。ghost 数量有上限，逐出最久退休的那个。
  *
- * ## 代价（照抄 nodeterm 的显式记录）
+ * ## 代价
  *
  * 未选中的浏览器节点会盖在与它重叠的其他未选中节点之上——它们排在数组尾部，
  * 而 `zIndex` 只在不同层级间分胜负。选中态 `z = 1000` 仍然赢。
@@ -113,7 +113,7 @@ export function applyWebviewPool(
   nodes: CanvasFlowNode[],
   now: number = Date.now(),
 ): CanvasFlowNode[] {
-  if (!isDesktopShell()) return nodes;
+  if (!isDesktop()) return nodes;
 
   const rest: CanvasFlowNode[] = [];
   const live = new Map<string, ArmadraFlowNode>();

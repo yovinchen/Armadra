@@ -87,3 +87,17 @@ export function allowGuestNavigation(url: string): boolean {
     return false;
   }
 }
+
+/**
+ * 一个 guest 的 `partition`（[浏览器节点](browser-node.md) §2.3，探针 C）。
+ *
+ * 同一个工作空间的所有浏览器节点共享一个 jar，所以在 A 节点登录过的站点在 B
+ * 节点里仍然是登录的。带 `persist:` 前缀，关掉应用再开还在。
+ *
+ * **创建时定一次、永不变更**：Electron 只在 attach 时读这个属性，attach 之后
+ * 再改会被静默忽略（探针 C）——改了不报错、也不生效，于是一个「换了 partition
+ * 就该退出登录」的节点会继续用着旧 jar，这比报错难查得多。
+ */
+export function browserPartition(workspaceId: string | undefined): string {
+  return `persist:armadra-browser-${workspaceId ?? "default"}`;
+}
