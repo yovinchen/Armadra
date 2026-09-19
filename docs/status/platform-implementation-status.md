@@ -214,6 +214,7 @@
 - **首次打标签 `v0.1.0`**（`0e4a43bf`）：六个桌面目标全部打出，draft Release 37 个文件；路上修了三处——arm64 的 appimagetool 按架构钉版本（`f6d3b322`）、`assemble` 对全无签名的发布不再报洞（`0fcbab70`）、hook 序号锁的并发测试改为重试并把超时报成 `WouldBlock`（`0e4a43bf`）。未配置任何 secret，所以 macOS 仅 ad-hoc 签名、不公证，`latest.json` 为空；draft 未发布，由人审阅。
 - **09-15 打包版反馈**：画布四角统一 14px、锁定钮并入 Dock、缩略图钉在右下角、去掉 React Flow 标识与右上「搜索」钮（`a08f083d`、`792f5608`、`90130b99`）；Codex 节点「会话上下文全未知」与「在画布里创建 Claude Code 失败」同源——用户机器上 `~/.codex/hooks.json` 仍是旧版带 `version` 的文件（Codex 0.154 整份拒绝，hook 一条不跑）、`~/.codex/AGENTS.md` 仍有 nodeterm 指令块（模型去跑 `nodeterm.sh`），修复逻辑补上指令块识别并在画布顶部加残留通知条（`a8fc76e6`、`06ec821d`）；用量看板「取不到用量」是 Claude 钥匙串令牌过期 8 小时、Gemini 凭据过期 7 天，Runtime 只读不续期且把原因吞掉，现在按 `reason` 代码逐条说明（`981c80e3`）。
 - **09-16 打包版反馈**：终端里「不能指哪复制哪」是 xterm 在 React Flow 缩放后的坐标换算没有除以缩放比（62% 时点第 100 列落到第 62 列），前端包一层 xterm 内部 `MouseService` 的两个坐标函数按容器实际缩放比折回；Claude 在画布里开不出 Codex 节点有两层：用户机器上 Claude 从未装过 Armadra 技能、`~/.claude` 还是 nodeterm 时代的 hook 与四个旧技能（同 Codex，走「修复 → 安装」），以及产品侧 `armadra-hook` sidecar 目录不在画布终端的 PATH 上、技能却写裸命令名——现在 PATH 末尾带 sidecar 目录、环境里另给 `ARMADRA_HOOK_BIN`，技能修订号 6 → 7。
+- **09-19 移除 Gemini CLI**：`AGENT_IDS` 收成 claude / codex / opencode / pi / omp / copilot 六种；Runtime 删 `hook/install/gemini.rs`、`hook/normalize/gemini.rs`、`index/gemini.rs`、`usage/gemini.rs`，shared 注册表、Hook 事件表、用量 provider（现为 claude / codex / copilot）、会话索引 provider（现为 claude / codex）、模型上下文窗口表的 `gemini-*` 条目、web 品牌色令牌与 i18n 一并删除；技能指令文件不再区分 `GEMINI.md`，一律 `AGENTS.md`。迁移 `0014_retire_gemini.sql`：删 `conversations` / `agent_status` / `hook_installs` 中的 gemini 行，`terminal_sessions.agent_id` 置空，终端节点 `data_json` 里 `agent.id == "gemini"` 的去掉 `agent` 变为普通终端；不动用户机器上 `~/.gemini` 的任何文件。
 - 公开后 Dependabot 报 `glib 0.18`（Tauri 2 固定的 gtk 0.18 栈，仅 Linux，`VariantStrIter` 未用到）中危一条，待 Tauri 3 才能升；其余 vitest 告警已随 vitest 4 升级关闭。
 
 ## 本轮验证（2026-09-06 上午，四轮全部合入后于主树重跑，私有目标目录）
@@ -340,7 +341,7 @@
 
 ## 下一步
 
-1. 待用户决定：协作模型批 5（画布上直接允许/拒绝权限）；`handoff-read` 是否算确认；`workspace/executeCommand` 是否放开（语言服务 §6.2）；配置覆盖变量（`GEMINI_CLI_HOME`/`CODEX_HOME`/`COPILOT_HOME`/`PI_CODING_AGENT_DIR`）是否加入终端子进程白名单；远端 Worker `service_contract_version` 升到 2 是否改为能力位；是否推送 `origin`。之后评估 B6 `apps/runtime`→`apps/worker` 改名与 Host 内核分配端口。
+1. 待用户决定：协作模型批 5（画布上直接允许/拒绝权限）；`handoff-read` 是否算确认；`workspace/executeCommand` 是否放开（语言服务 §6.2）；配置覆盖变量（`CODEX_HOME`/`COPILOT_HOME`/`PI_CODING_AGENT_DIR`）是否加入终端子进程白名单；远端 Worker `service_contract_version` 升到 2 是否改为能力位；是否推送 `origin`。之后评估 B6 `apps/runtime`→`apps/worker` 改名与 Host 内核分配端口。
 2. 每轮合入后重跑 `pnpm check`、`cargo test --workspace`、`go -C apps/host test -race ./...`（含真实 Worker）、`pnpm protocol:test`、`pnpm ownership:e2e --domain settings|filesystem`、`pnpm canvas:e2e`；`main` 快进。
 3. 剩余 800–1500 行文件的收尾拆分（`migration_export.rs`、`settings.rs`、`GitRepositoryPanel.tsx`、`SourceControlDrawer.tsx`、`keybindings.ts` 等）在实施轮之间进行，避免与在飞批次冲突。
 4. 需要实机的验收保持未完成：手机、真实 GitHub/SSH、签名密钥；Windows 与 CI 真实 runner 已由第十二轮回答（三平台检查全绿），Windows 打包产物仍待首次打标签。

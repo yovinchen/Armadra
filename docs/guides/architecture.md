@@ -10,7 +10,7 @@
 
 独立 Go Host 已有身份、单实例、后台启停和 Protobuf 基础。桌面启动时异步启动/发现 Host，设置页可显式检查连接；Go Host 的生命周期独立于界面。默认应用业务仍由下述 Rust Runtime 提供。关闭桌面窗口隐藏前台并保留服务；Command Q/托盘退出经私有控制结束受管会话和后台。普通 Runtime 重启信号保留 tmux 恢复语义；尚未切换业务数据库或接入 Host 调度。实际进度见 [平台实施记录](../status/platform-implementation-status.md)。
 
-Armadra 是一个 local-first 的桌面画布：把 Claude Code、Codex、Gemini CLI、
+Armadra 是一个 local-first 的桌面画布：把 Claude Code、Codex、
 opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之间连一条线即
 建立上下文链接，Agent 可以读取被链接一端的转录、终端画面或白板内容。
 
@@ -112,7 +112,7 @@ Agent 节点就是终端节点里跑着一个 CLI，没有中间协议：
 1. Runtime 在 PTY 里启动 CLI，注入 `ARMADRA_NODE_ID`、`ARMADRA_ENDPOINT_FILE`
    等环境变量。
 2. 用户在设置中显式安装后，Runtime 往该 CLI 的配置目录写适配（`apps/runtime/src/hook/install/`）。
-   形式按 CLI 分两种：Claude / Codex / Gemini / Copilot 装**命令 Hook**，行是 `armadra-hook` 这个小二进制；
+   形式按 CLI 分两种：Claude / Codex / Copilot 装**命令 Hook**，行是 `armadra-hook` 这个小二进制；
    Pi / Oh My Pi 装一份生成的 **TS 扩展**（`extensions/armadra-status.ts`），OpenCode 装插件。
 3. 命令 Hook 每个事件 fork 一次 `armadra-hook`；进程内扩展在 CLI 自己的进程里说同一套 HTTP。
    两者都读 `<数据目录>/hook-endpoint.env` 找到 Runtime（优先 Unix socket，其次回环 TCP），
@@ -276,6 +276,6 @@ Rust可使用独立 `worker --stdio` 入口，通过父Go进程私有管道提�
 未知容量与预留量不填 0。
 
 来源分三档：Claude 的状态行与 Pi / Oh My Pi 扩展里的 `ctx.getContextUsage()` 都是提供方**实测**的当前窗口
-（`provider_hook` / `reported`）；Codex 与 Gemini 按需读本地结构化转录尾部**估算**（`structured_transcript`）；
+（`provider_hook` / `reported`）；Codex 按需读本地结构化转录尾部**估算**（`structured_transcript`）；
 OpenCode 与 Copilot 没有可信的本地读数，界面留空——Copilot 的会话事件文件只在压缩开始与退出时写占用数字，
 晚于描述一个活着的会话所需的时刻。自定义 Agent 能力可收窄，既有用户状态栏不会被安装器覆盖。
