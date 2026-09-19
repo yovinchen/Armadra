@@ -18,6 +18,18 @@ export {
 export { CONTROL_SOCKET, TICKET_PATH, controlSocketPath } from "./control";
 
 /**
+ * 这一轮 core 的实例标识，按身份域的拼法：32 位十六进制。
+ *
+ * `instanceId()` 是带连字符的 UUID，`/health` 与 `endpoints.json` 用的就是它，
+ * 壳按那一行对账，所以它不能改。身份域这边继承的是 Go Host 的形状——票据、
+ * 会话、以及 `packages/host-client` 校验 `hostInstanceId` 的那条正则，全都要
+ * 32 位十六进制。去掉连字符正好是同一串字节的另一种写法，两边说的是同一次运行。
+ */
+export function identityInstanceId(): string {
+  return instanceId().replace(/-/g, "");
+}
+
+/**
  * 身份域的装配。
  *
  * 三样东西挂上去：新面 `/api/identity/*`、兼容面 `/rpc/armadra.v1.*`、以及数据
@@ -34,9 +46,10 @@ export function installIdentity(context: CoreContext): void {
     );
     return;
   }
+  const runInstance = identityInstanceId();
   const store = new IdentityStore(context.db.database);
-  const service = new IdentityService(store, instanceId());
-  const http = new IdentityHttp({ service, instanceId: instanceId() });
+  const service = new IdentityService(store, runInstance);
+  const http = new IdentityHttp({ service, instanceId: runInstance });
 
   context.server.raw(RPC_PREFIX, (request, response, cors) =>
     http.rpc(request, response, cors),
@@ -49,7 +62,7 @@ export function installIdentity(context: CoreContext): void {
   // 一个明确的失败，而不是一个永远起不来的进程。
   void startControlChannel({
     service,
-    instanceId: instanceId(),
+    instanceId: runInstance,
     dataDir: context.dataDir,
     log: context.log,
   })
