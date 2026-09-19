@@ -9,7 +9,7 @@ import { DatabaseRefused, openDatabase } from "./open";
 import { loadMigrations } from "./migrations";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
+const migrationsDir = resolve(here, "migrations");
 const migrations = loadMigrations(migrationsDir);
 
 const closing: (() => void)[] = [];
@@ -41,13 +41,13 @@ describe("opening the database", () => {
   it("creates the file and applies every migration", () => {
     const path = file();
     const opened = open(path);
-    expect(opened.migrations).toHaveLength(14);
+    expect(opened.migrations).toHaveLength(migrations.length);
     const rows = opened.database
       .prepare(
         "SELECT version, description, success FROM _sqlx_migrations ORDER BY version",
       )
       .all() as { version: unknown; description: string; success: unknown }[];
-    expect(rows).toHaveLength(14);
+    expect(rows).toHaveLength(migrations.length);
     expect(rows.map((row) => Number(row.version))).toEqual(
       migrations.map((migration) => migration.version),
     );
@@ -102,7 +102,7 @@ describe("opening the database", () => {
           }
         ).n,
       ),
-    ).toBe(14);
+    ).toBe(migrations.length);
   });
 
   it("can be told to check without writing", () => {

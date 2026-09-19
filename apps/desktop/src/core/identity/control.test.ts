@@ -9,8 +9,7 @@ import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
-const unifiedDir = resolve(here, "../db/migrations");
+const migrationsDir = resolve(here, "../db/migrations");
 const INSTANCE = "0123456789abcdef0123456789abcdef";
 const ORIGIN = "http://127.0.0.1:1420";
 
@@ -30,7 +29,6 @@ async function channel() {
   const opened = openDatabase({
     file: join(dataDir, "canvas.db"),
     migrationsDir,
-    unifiedMigrationsDir: unifiedDir,
   });
   closing.push(opened.close);
   const service = new IdentityService(

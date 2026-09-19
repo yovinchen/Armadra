@@ -8,15 +8,15 @@ import { checksum, loadMigrations, resolveMigrationsDir } from "./migrations";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../../../..");
-const migrationsDir = join(repoRoot, "apps/runtime/migrations");
+const migrationsDir = join(here, "migrations");
 
 describe("the migration set", () => {
-  it("is the fourteen files the Rust Runtime compiles in", () => {
+  it("is one continuous sequence from 1", () => {
     const migrations = loadMigrations(migrationsDir);
-    expect(migrations).toHaveLength(14);
-    expect(migrations.map((migration) => migration.version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
-    ]);
+    expect(migrations.length).toBeGreaterThanOrEqual(20);
+    expect(migrations.map((migration) => migration.version)).toEqual(
+      migrations.map((_, index) => index + 1),
+    );
   });
 
   it("derives the description the way sqlx does", () => {
@@ -44,7 +44,10 @@ describe("the migration set", () => {
     const lock = JSON.parse(
       readFileSync(join(repoRoot, "migrations.lock"), "utf8"),
     ) as Record<string, Record<string, string>>;
-    const expected = lock["apps/runtime/migrations"] as Record<string, string>;
+    const expected = lock["apps/desktop/src/core/db/migrations"] as Record<
+      string,
+      string
+    >;
     for (const migration of loadMigrations(migrationsDir)) {
       const name = migration.file.slice(migration.file.lastIndexOf("/") + 1);
       expect(
@@ -52,7 +55,7 @@ describe("the migration set", () => {
         name,
       ).toBe(expected[name]);
     }
-    expect(Object.keys(expected)).toHaveLength(14);
+    expect(Object.keys(expected).length).toBeGreaterThanOrEqual(20);
   });
 
   it("checksums a string and a buffer alike", () => {
@@ -98,7 +101,9 @@ describe("the migration set", () => {
 describe("finding the migration directory", () => {
   it("lets the environment override everything", () => {
     expect(
-      resolveMigrationsDir({ env: { ARMADRA_MIGRATIONS_DIR: "/somewhere" } }),
+      resolveMigrationsDir({
+        env: { ARMADRA_CORE_MIGRATIONS_DIR: "/somewhere" },
+      }),
     ).toBe("/somewhere");
   });
 
@@ -109,10 +114,10 @@ describe("finding the migration directory", () => {
     expect(
       resolveMigrationsDir({
         env: {},
-        resourcesPath: join(repoRoot, "apps/runtime"),
+        resourcesPath: join(here, "..", "db"),
         from: here,
       }),
-    ).toBe(migrationsDir);
+    ).toBe(join(here, "..", "db", "migrations"));
   });
 
   it("walks up to the checkout in development", () => {
@@ -121,7 +126,7 @@ describe("finding the migration directory", () => {
 
   it("says what to set when there is nothing to find", () => {
     expect(() => resolveMigrationsDir({ env: {}, from: tmpdir() })).toThrow(
-      /ARMADRA_MIGRATIONS_DIR/,
+      /ARMADRA_CORE_MIGRATIONS_DIR/,
     );
   });
 });

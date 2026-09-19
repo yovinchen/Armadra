@@ -52,7 +52,6 @@ import {
   memorySecrets,
   migrationsDir,
   stubGh,
-  unifiedMigrationsDir,
   type FakeGithub,
 } from "./fixture";
 import { GithubService } from "./service";
@@ -75,7 +74,6 @@ async function harness(): Promise<Harness> {
   const opened: OpenedDatabase = openDatabase({
     file: join(dataDir, "canvas.db"),
     migrationsDir: migrationsDir(),
-    unifiedMigrationsDir: unifiedMigrationsDir(),
   });
   const identityStore = new IdentityStore(opened.database);
   const instanceId = identityInstanceId();

@@ -45,7 +45,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 /** The repository's migrations, which are the only ones there are. */
 export function migrationsDir(): string {
-  return resolve(here, "../../../../runtime/migrations");
+  return resolve(here, "../db/migrations");
 }
 
 export function fixture(

@@ -10,7 +10,7 @@ import { parseAnnouncement } from "./instance";
 import { endpointsFile } from "./paths";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../runtime/migrations");
+const migrationsDir = resolve(here, "db/migrations");
 
 const running: RunningCore[] = [];
 afterEach(async () => {
@@ -25,7 +25,7 @@ async function start(dataDir: string, listen = "tcp:127.0.0.1:0") {
   const lines: string[] = [];
   const core = await run({
     argv: ["--listen", listen, "--data-dir", dataDir],
-    env: { ARMADRA_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
+    env: { ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
     stdout: (line) => lines.push(line),
   });
   running.push(core);
@@ -121,7 +121,7 @@ describe("the core process", () => {
         "--data-dir",
         dataDir,
       ],
-      env: { ARMADRA_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
+      env: { ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
       stdout: () => {},
     });
     running.push(core);
@@ -141,7 +141,7 @@ describe("the core process", () => {
     const dataDir = temporary();
     const core = await run({
       argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", dataDir],
-      env: { ARMADRA_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
+      env: { ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
       stdout: () => {},
     });
     running.push(core);
@@ -178,7 +178,7 @@ describe("the core process", () => {
     await expect(
       run({
         argv: ["--listen", `tcp:127.0.0.1:${held}`, "--data-dir", second],
-        env: { ARMADRA_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
+        env: { ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
         stdout: () => {},
       }),
     ).rejects.toThrow(/already in use/);

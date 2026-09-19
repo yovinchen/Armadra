@@ -30,10 +30,6 @@ import { openDatabase, type OpenedDatabase } from "../db/open";
 const here = dirname(fileURLToPath(import.meta.url));
 
 export function migrationsDir(): string {
-  return resolve(here, "../../../../runtime/migrations");
-}
-
-export function unifiedMigrationsDir(): string {
   return resolve(here, "../db/migrations");
 }
 
@@ -219,7 +215,6 @@ export async function githubFixture(
   const db = openDatabase({
     file: join(dataDir, "canvas.db"),
     migrationsDir: migrationsDir(),
-    unifiedMigrationsDir: unifiedMigrationsDir(),
   });
   const store = new GithubStore(db.database);
   const secrets = memorySecrets();

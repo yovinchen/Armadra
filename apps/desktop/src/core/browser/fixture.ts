@@ -29,10 +29,6 @@ import { type BrowserContext, browserContext } from "./context";
 const here = dirname(fileURLToPath(import.meta.url));
 
 function migrationsDir(): string {
-  return resolve(here, "../../../../runtime/migrations");
-}
-
-function unifiedMigrationsDir(): string {
   return resolve(here, "../db/migrations");
 }
 
@@ -72,7 +68,6 @@ export function browserFixture(
   const opened: OpenedDatabase = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir: migrationsDir(),
-    unifiedMigrationsDir: unifiedMigrationsDir(),
   });
   const database = opened.database;
   const workspace = createWorkspace(database, {

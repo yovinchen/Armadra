@@ -15,7 +15,7 @@ import { type Migration, loadMigrations } from "./migrations";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrations = loadMigrations(
-  resolve(here, "../../../../runtime/migrations"),
+  resolve(here, "migrations"),
 );
 
 const open: DatabaseSync[] = [];

@@ -7,7 +7,6 @@ import { EventBus } from "./bus";
 import { absorbHostDatabase } from "./db/absorb-host";
 import { DatabaseRefused, type OpenedDatabase, openDatabase } from "./db/open";
 import { resolveMigrationsDir } from "./db/migrations";
-import { resolveUnifiedMigrationsDir, unifiedEnabled } from "./db/unified";
 import { installIdentity } from "./identity";
 import { install as installHooks } from "./hook";
 import { hookService } from "./hook/service";
@@ -72,7 +71,7 @@ import { install as installGit } from "./git";
 export interface RunOptions {
   readonly argv?: readonly string[];
   readonly env?: NodeJS.ProcessEnv;
-  /** Where to look for `apps/runtime/migrations` when nothing else says. */
+  /** 没有别的说法时，从哪里开始往上找 `db/migrations`。 */
   readonly moduleDir?: string;
   readonly stdout?: (line: string) => void;
   /**
@@ -203,10 +202,10 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
 
   // Step 2.
   //
-  // `ARMADRA_CORE=ts` 时多叠一个迁移目录：统一库迁移 0015。它是单向门——应用
-  // 之后 Rust Runtime 会因为「这条迁移本构建不认识」拒绝启动，所以应用前先把
-  // 整个库复制成 `canvas.db.before-ts-core-<ts>`，那是唯一的回滚点。
-  const unified = unifiedEnabled(env);
+  // 迁移只有一个目录，0001–0020 一条序列。其中 0015 是单向门：应用之后这个库
+  // 旧实现再也打不开，所以应用前先把整个库复制成
+  // `canvas.db.before-ts-core-<ts>`，那是唯一的回滚点（`openDatabase` 自己按
+  // 账本判断这次要不要过门）。
   const opened = openDatabase({
     file: databaseFile(dataDir),
     migrationsDir: resolveMigrationsDir({
@@ -214,15 +213,6 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
       resourcesPath: platform.resourcesPath,
       from: options.moduleDir,
     }),
-    ...(unified
-      ? {
-          unifiedMigrationsDir: resolveUnifiedMigrationsDir({
-            env,
-            resourcesPath: platform.resourcesPath,
-            from: options.moduleDir,
-          }),
-        }
-      : {}),
   });
   log.info("opened the database", {
     file: databaseFile(dataDir),
@@ -230,7 +220,7 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
   });
   if (opened.backup !== null) {
     log.warn(
-      "统一库迁移已应用：这个库 Rust Runtime 不再打得开，回滚请用备份替换",
+      "统一库迁移已应用：这个库旧实现不再打得开，回滚请用备份替换",
       { backup: opened.backup },
     );
   }

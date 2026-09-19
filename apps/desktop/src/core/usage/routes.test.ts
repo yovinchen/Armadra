@@ -97,7 +97,7 @@ async function harness(): Promise<Harness> {
 
   const opened: OpenedDatabase = openDatabase({
     file: join(dataDir, "canvas.db"),
-    migrationsDir: resolve(here, "../../../../runtime/migrations"),
+    migrationsDir: resolve(here, "../db/migrations"),
   });
   const platform = nodePlatform({
     dataDir,

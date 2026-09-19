@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { type RunningCore, run } from "../main";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
+const migrationsDir = resolve(here, "../db/migrations");
 
 const running: RunningCore[] = [];
 const directories: string[] = [];
@@ -37,7 +37,7 @@ async function start(): Promise<RunningCore> {
   directories.push(dataDir);
   const core = await run({
     argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", dataDir],
-    env: { ARMADRA_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
+    env: { ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
     stdout: () => {},
   });
   running.push(core);

@@ -51,8 +51,7 @@ import { ScheduleService } from "./service";
 import { ScheduleStore } from "./store";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migrationsDir = resolve(here, "../../../../runtime/migrations");
-const unifiedDir = resolve(here, "../db/migrations");
+const migrationsDir = resolve(here, "../db/migrations");
 
 const ORIGIN = "http://127.0.0.1:1420";
 const INSTANCE = "0123456789abcdef0123456789abcdef";
@@ -95,7 +94,6 @@ function setUp(options: { scopes?: readonly Scope[] } = {}): Fixture {
   const opened: OpenedDatabase = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir,
-    unifiedMigrationsDir: unifiedDir,
   });
   closing.push(opened.close);
   const identityStore = new IdentityStore(opened.database);
