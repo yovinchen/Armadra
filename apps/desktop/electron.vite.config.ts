@@ -121,12 +121,43 @@ const coreConfig: UserConfig = {
   ssr: { noExternal: true },
 };
 
+/**
+ * The fifth target: `armadra-hook`, the client the agent CLIs fork per event.
+ *
+ * It is a separate bundle from the core because it is a separate *program*:
+ * the CLIs run it as a command, hundreds of times a session, and it must start
+ * without loading a line of the core. One file, no dependencies, CJS — the
+ * launcher that the installer writes re-enters the shipped Electron binary
+ * with `ELECTRON_RUN_AS_NODE=1` and hands it this path, because a packaged
+ * machine is not guaranteed to have a system `node` and `#!/usr/bin/env node`
+ * would therefore be a coin flip (see `src/cli/armadra-hook/launcher.ts`).
+ *
+ * `codeSplitting: false` keeps it to the one file the launcher names; nothing
+ * but the shell's own externals is external, so the bundle is self-contained.
+ */
+const cliConfig: UserConfig = {
+  build: {
+    outDir: resolve(here, "out/cli"),
+    emptyOutDir: true,
+    target: "node22",
+    ssr: true,
+    minify: false,
+    rollupOptions: {
+      input: { "armadra-hook": resolve(here, "src/cli/armadra-hook/main.ts") },
+      external: EXTERNAL,
+      output: { ...cjs, codeSplitting: false },
+    },
+  },
+  ssr: { noExternal: true },
+};
+
 function buildCore(): Plugin {
   return {
     name: "armadra-core-bundle",
     apply: "build",
     async closeBundle() {
       await build(coreConfig);
+      await build(cliConfig);
     },
   };
 }
