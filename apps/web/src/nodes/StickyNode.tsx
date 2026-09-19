@@ -25,12 +25,35 @@ export function StickyNode({ id, node }: NodeBodyProps) {
     if (!editing) setDraft(content);
   }, [content, editing]);
 
+  /**
+   * **一次编辑一次提交，不按键提交。**
+   *
+   * 正文只住在 `draft` 里，失焦（或下面的卸载兜底）才写进文档。实测连续输入
+   * 100 个字符期间 `commit()` 跑 0 次、`PUT …/document` 发 0 次、撤销栈只长
+   * 一条（`docs/status/canvas-performance-baseline.md`）。这里**不加防抖**：
+   * 300 ms 的防抖在同一段输入里会变成八次提交，比现在更差。
+   */
   function commit(value: string) {
     setEditing(false);
     if (value !== content) {
       useCanvasStore.getState().updateNodeData(id, { content: value });
     }
   }
+
+  /**
+   * 还在编辑时节点被卸下来（切画布、进焦点页、节点被裁掉）不会走 `onBlur`，
+   * 那一段字就没了。用 ref 捎一份最新的草稿，卸载时补交一次。
+   */
+  const pending = React.useRef({ editing, draft, content });
+  pending.current = { editing, draft, content };
+  React.useEffect(
+    () => () => {
+      const last = pending.current;
+      if (!last.editing || last.draft === last.content) return;
+      useCanvasStore.getState().updateNodeData(id, { content: last.draft });
+    },
+    [id],
+  );
 
   return (
     <div

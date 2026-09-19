@@ -91,7 +91,7 @@ const INSTRUMENT = `
 
   const PERFORMED_WORK = 0b1;
   const RENDERING_TAGS = new Set([0, 1, 9, 11, 14, 15]); // Function/Class/ContextConsumer/ForwardRef/Memo/SimpleMemo
-  const profiler = { on: false, commits: 0, byName: new Map() };
+  const profiler = { on: false, commits: 0, byName: new Map(), roots: new Map(), perCommit: [] };
 
   function nameOf(fiber) {
     const type = fiber.type ?? fiber.elementType;
@@ -119,21 +119,28 @@ const INSTRUMENT = `
     // workInProgress.child 就是上一棵树的那个对象——整条子树原封不动，里面的
     // flags 还留着它上次渲染时的 PerformedWork。不设这道门会把没渲染的子树
     // 全部数进来（实测多出一个数量级）。
-    const stack = [[root.current, false]];
+    // 第三格：祖先里已经有人重渲了吗。没有的那一个就是这棵子树的**根因**，
+    // 叶子（Popover 之类）只是被它带下水的。
+    const stack = [[root.current, false, false]];
     while (stack.length > 0) {
-      const [fiber, forced] = stack.pop();
+      const [fiber, forced, underRendered] = stack.pop();
       if (!fiber) continue;
       const previous = fiber.alternate;
       const rendered = forced || !previous || didRender(previous, fiber);
+      let nowUnder = underRendered;
       if (rendered && RENDERING_TAGS.has(fiber.tag)) {
         seen += 1;
         const key = nameOf(fiber);
         profiler.byName.set(key, (profiler.byName.get(key) ?? 0) + 1);
+        if (!underRendered) {
+          profiler.roots.set(key, (profiler.roots.get(key) ?? 0) + 1);
+          nowUnder = true;
+        }
       }
       // 子树与上一棵完全共享 = 这次没进去过。
       const shared = previous && fiber.child && fiber.child === previous.child;
-      if (fiber.child && !shared) stack.push([fiber.child, false]);
-      if (fiber.sibling) stack.push([fiber.sibling, false]);
+      if (fiber.child && !shared) stack.push([fiber.child, false, nowUnder]);
+      if (fiber.sibling) stack.push([fiber.sibling, false, underRendered]);
     }
     return seen;
   }
@@ -150,7 +157,21 @@ const INSTRUMENT = `
     onCommitFiberRoot(_id, fiberRoot) {
       if (!profiler.on) return;
       profiler.commits += 1;
-      rendered += walk(fiberRoot);
+      const before = new Map(profiler.roots);
+      const count = walk(fiberRoot);
+      rendered += count;
+      // 每次 commit 的规模与它的「头部嫌疑人」——只有这份分解能指出
+      // 到底是谁在把三十个节点头一起拖下水。
+      const delta = [];
+      for (const [name, total] of profiler.roots) {
+        const grew = total - (before.get(name) ?? 0);
+        if (grew > 0) delta.push([name, grew]);
+      }
+      delta.sort((a, b) => b[1] - a[1]);
+      profiler.perCommit.push({
+        n: count,
+        top: delta.slice(0, 4).map(([name, grew]) => name + ":" + grew),
+      });
     },
     onCommitFiberUnmount() {},
     onPostCommitFiberRoot() {},
@@ -191,6 +212,8 @@ const INSTRUMENT = `
     startProfiler() {
       profiler.commits = 0;
       profiler.byName.clear();
+      profiler.roots.clear();
+      profiler.perCommit.length = 0;
       rendered = 0;
       profiler.on = true;
     },
@@ -200,7 +223,11 @@ const INSTRUMENT = `
         .sort((a, b) => b[1] - a[1])
         .slice(0, 12)
         .map(([name, count]) => ({ name, count }));
-      return { commits: profiler.commits, rendered, top };
+      const roots = [...profiler.roots.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 15)
+        .map(([name, count]) => ({ name, count }));
+      return { commits: profiler.commits, rendered, top, roots, perCommit: profiler.perCommit.slice(0, 60) };
     },
   };
 })();
@@ -343,7 +370,7 @@ async function main() {
       // 既有基线的最坏情况：`scale 0.35`，所有节点都在视口里，React Flow
       // 不裁剪（`docs/design/canvas-react-flow.md` §6.5）。视口直接写进文档，
       // 不靠 `fitView`——那是个藏在下拉里的菜单项，脚本点不稳。
-      viewport: { x: 60, y: 40, zoom: 0.35 },
+      viewport: { x: 280, y: 80, zoom: 0.35 },
       whiteboard: "",
     }),
   });
@@ -589,13 +616,46 @@ async function main() {
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     `);
 
+  /**
+   * 可选的计数器：`globalThis.__armadraCounters` 存在时一并记下来。
+   *
+   * 源码里**不留**这两个桩——`projectNodes` 的调用次数与 `commit()` 的次数是
+   * 诊断量，不是产品行为。要复核 P2 那条「投影次数与节点数解耦」的结论时，
+   * 在 `canvas/sync/project.ts` 的 `projectNodes` 与 `store/canvas/internal.ts`
+   * 的 `commit()` 开头各加三行自增，跑完这个脚本再删掉；没打桩的构建上这里
+   * 返回 null，脚本照跑。
+   */
+  const counters = () =>
+    evaluate(`
+      const c = globalThis.__armadraCounters;
+      return c ? JSON.parse(JSON.stringify(c)) : null;
+    `);
+  const resetCounters = () =>
+    evaluate(`
+      const c = globalThis.__armadraCounters;
+      if (c) { c.projectNodes = 0; c.projectedNodes = 0; c.commit = 0; c.commitLabels = {}; }
+      return 1;
+    `);
+
   /** 一段测量：开仪器 → 跑动作 → 停仪器 → 记堆。 */
   const measure = async (name, action) => {
     await sleep(800);
+    await resetCounters();
     await evaluate(`window.__armadraProbe.startFrames(); return 1;`);
     await action();
     const frames = await evaluate(`return window.__armadraProbe.stopFrames();`);
-    report.segments[name] = { ...frames, heapMb: await heapMb() };
+    const counted = await counters();
+    report.segments[name] = {
+      ...frames,
+      heapMb: await heapMb(),
+      ...(counted
+        ? {
+            projectNodes: counted.projectNodes,
+            projectedNodes: counted.projectedNodes,
+            storeCommits: counted.commit,
+          }
+        : {}),
+    };
     step(
       `段：${name}`,
       `${frames.fps} fps，p95 ${frames.p95Ms} ms，最慢 ${frames.slowestMs} ms`,
@@ -630,6 +690,8 @@ async function main() {
       );
       await sleep(8);
     }
+    // 回到按下那一点再松手：净平移为零，后面几段还能按原坐标找节点。
+    await mouse("mouseMoved", centre.x, centre.y);
     await mouse("mouseReleased", centre.x, centre.y, { buttons: 0 });
     await sleep(300);
   });
@@ -642,33 +704,74 @@ async function main() {
 
   /* ------------------------------- 拖一个节点 ------------------------------ */
 
-  const header = await evaluate(`
-    const node = [...document.querySelectorAll(".react-flow__node")]
-      .find((element) => element.textContent.includes("term-1"));
-    if (!node) return null;
-    const head = node.querySelector('[data-slot="node-header"]');
-    if (!head) return null;
-    const rect = head.getBoundingClientRect();
-    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-  `);
-  if (!header) throw new Error("找不到 term-1 的头部");
+  // 拖拽把手是节点头部（`nodes/registry.ts` 的 `DRAG_HANDLE_CLASS`），不是整块
+  // 节点体——按在终端正文上按到的是 xterm。
+  const nodeAt = () =>
+    evaluate(`
+      // 挑离画布中心最近的那个终端：平移之后固定名字的那一个可能已经被
+      // 侧边栏盖住或者移出视口，按下去什么都不会发生。
+      const centre = { x: 820, y: 430 };
+      let best = null;
+      for (const element of document.querySelectorAll(".react-flow__node")) {
+        const head = element.querySelector(".drag-handle");
+        if (!head) continue;
+        const rect = head.getBoundingClientRect();
+        if (rect.width < 4 || rect.height < 4) continue;
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        if (x < 260 || x > 1380 || y < 20 || y > 820) continue;
+        const distance = Math.hypot(x - centre.x, y - centre.y);
+        if (!best || distance < best.distance) {
+          const box = element.getBoundingClientRect();
+          best = {
+            distance,
+            id: element.getAttribute("data-id"),
+            x,
+            y,
+            nodeX: box.left,
+            nodeY: box.top,
+          };
+        }
+      }
+      return best;
+    `);
+  const header = await nodeAt();
+  if (!header) throw new Error("找不到 term-1 的拖拽把手");
 
   await measure("drag", async () => {
     await mouse("mousePressed", header.x, header.y);
+    // 先走一小步越过 React Flow 的起拖阈值，再开始画圆。
+    await mouse("mouseMoved", header.x + 6, header.y + 6);
+    await sleep(40);
     const start = Date.now();
     let angle = 0;
+    let last = { x: header.x + 6, y: header.y + 6 };
     while (Date.now() - start < 6000) {
       angle += 0.12;
-      await mouse(
-        "mouseMoved",
-        header.x + Math.cos(angle) * 120,
-        header.y + Math.sin(angle) * 80,
-      );
+      last = {
+        x: header.x + Math.cos(angle) * 120,
+        y: header.y + Math.sin(angle) * 80,
+      };
+      await mouse("mouseMoved", last.x, last.y);
       await sleep(8);
     }
-    await mouse("mouseReleased", header.x, header.y, { buttons: 0 });
+    await mouse("mouseReleased", last.x, last.y, { buttons: 0 });
     await sleep(400);
   });
+  const after = await evaluate(`
+    const element = document.querySelector('.react-flow__node[data-id="' + ${JSON.stringify(header.id)} + '"]');
+    if (!element) return null;
+    const box = element.getBoundingClientRect();
+    return { nodeX: box.left, nodeY: box.top };
+  `);
+  report.dragMoved =
+    after && Math.abs(after.nodeX - header.nodeX) > 1
+      ? Math.round(after.nodeX - header.nodeX)
+      : 0;
+  if (!report.dragMoved) {
+    await capture("drag-failed");
+    throw new Error("拖拽那一段节点没动：测到的不是拖拽，是静止画面");
+  }
 
   /* ----------------------- 便签里连续输入 100 字符 ------------------------ */
 
@@ -738,6 +841,7 @@ async function main() {
   if (!victim) throw new Error("没有可用于制造状态跳动的会话");
 
   await sleep(1500);
+  await resetCounters();
   await evaluate(`window.__armadraProbe.startProfiler(); return 1;`);
   // 真实的一次跳动：把一个会话连持久会话一起销毁（三级终止的 `session`，
   // 契约 §15.5）。前端的 `onStatus` 会 `patch()` 连接状态并
@@ -750,6 +854,7 @@ async function main() {
   report.rerender = await evaluate(
     `return window.__armadraProbe.stopProfiler();`,
   );
+  report.rerenderCounters = await counters();
   step(
     "一次会话状态跳动",
     `${report.rerender.commits} 次 commit，${report.rerender.rendered} 个组件重渲`,

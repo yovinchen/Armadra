@@ -75,6 +75,29 @@ describe("StickyNode", () => {
     });
   });
 
+  it("does not write per keystroke", () => {
+    renderSticky();
+    fireEvent.click(screen.getByRole("button", { name: "便签" }));
+    const textarea = screen.getByLabelText("便签");
+    for (const char of "abcdefghij") {
+      fireEvent.change(textarea, {
+        target: { value: (textarea as HTMLTextAreaElement).value + char },
+      });
+    }
+    expect(store.updateNodeData).not.toHaveBeenCalled();
+  });
+
+  it("commits the draft when it is unmounted mid-edit", () => {
+    const { unmount } = renderSticky();
+    fireEvent.click(screen.getByRole("button", { name: "便签" }));
+    const textarea = screen.getByLabelText("便签");
+    fireEvent.change(textarea, { target: { value: "没来得及失焦" } });
+    unmount();
+    expect(store.updateNodeData).toHaveBeenCalledWith("n1", {
+      content: "没来得及失焦",
+    });
+  });
+
   it("drops the draft on Escape", () => {
     renderSticky();
     fireEvent.click(screen.getByRole("button", { name: "便签" }));
