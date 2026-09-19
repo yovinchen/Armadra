@@ -197,7 +197,9 @@ describe("what the core answers", () => {
       version: "0.1.0",
       instanceId: core.instanceId,
       build: expect.any(String) as string,
-      hook: { ok: false },
+      // R3 brought the hook service up with the core: the endpoint file names
+      // this data directory's socket, which is what `ok` reports on.
+      hook: { ok: true, sock: join(core.dataDir, "hook.sock") },
     });
   });
 

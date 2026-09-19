@@ -9,6 +9,8 @@ import { DatabaseRefused, type OpenedDatabase, openDatabase } from "./db/open";
 import { resolveMigrationsDir } from "./db/migrations";
 import { resolveUnifiedMigrationsDir, unifiedEnabled } from "./db/unified";
 import { installIdentity } from "./identity";
+import { install as installHooks } from "./hook";
+import { hookService } from "./hook/service";
 import {
   RUNTIME_SERVICE,
   type ServiceEndpoint,
@@ -17,6 +19,7 @@ import {
   withdraw,
 } from "./endpoints";
 import { install as installEvents } from "./events";
+import { NO_HOOK_SERVICE } from "./http/health";
 import { CoreServer } from "./http/server";
 import { VERSION, announcement, instanceId } from "./instance";
 import { install as installSettings } from "./settings";
@@ -115,6 +118,9 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // `installSettings` assembled, and it starts nothing until it is asked to.
   installRemote,
   installTerminals,
+  // Last: the hook service publishes an endpoint file, and nothing may be
+  // advertised before the domains that answer a hook report exist.
+  installHooks,
 ];
 
 export async function run(options: RunOptions = {}): Promise<RunningCore> {
@@ -189,7 +195,15 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
   }
 
   const bus = new EventBus();
-  const server = new CoreServer({ platform, bus, version: VERSION });
+  const server = new CoreServer({
+    platform,
+    bus,
+    version: VERSION,
+    // R3: the section reconciles the endpoint file with the addresses this
+    // core is actually on; until the hook domain installs there is no service
+    // and `/health` reports a core with none.
+    hookHealth: () => hookService()?.health() ?? NO_HOOK_SERVICE,
+  });
   const context: CoreContext = {
     dataDir,
     db: opened,
