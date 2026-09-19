@@ -467,7 +467,7 @@ pub fn router_with_state(state: AppState) -> Router {
         // (electron-migration §4). Nothing about it is reachable over HTTP any
         // more: the picture is a `<webview>` guest of the window, and the
         // seventeen verbs arrive through `armadra-hook` and leave down the
-        // `browser:drive` socket. W3.5 removed the screencast surface.
+        // `browser:drive` socket. W3.5 removed the HTTP browser surface.
         // Host / session resources (T02). Sampling is a subscription: the
         // panel renews while it is open and the sampler stops on its own once
         // the last subscription lapses, so a closed panel costs nothing.

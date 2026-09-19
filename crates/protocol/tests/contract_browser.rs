@@ -58,22 +58,6 @@ fn browser_surface() {
         },
     );
     check(
-        "browser_frame",
-        BrowserFrame {
-            session_id: "browser-1".into(),
-            generation: 2,
-            frame_seq: 9_007_199_254_740_993,
-            navigation_epoch: u64::MAX,
-            viewport_width: 1000,
-            viewport_height: 700,
-            device_scale_factor: 1.5,
-            encoding: "jpeg".into(),
-            data: vec![0, 255, 0xd8, 0xff],
-            captured_at_unix_ms: 1_788_557_900_000,
-            ..Default::default()
-        },
-    );
-    check(
         "browser_input",
         BrowserInputRequest {
             meta: None,

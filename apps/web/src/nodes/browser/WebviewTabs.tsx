@@ -10,8 +10,8 @@ import { MAX_TABS, tabLetter, type TabsControl } from "./webview-tabs";
  * 浏览器节点的标签条。
  *
  * 一个标签就是一个 guest 元素，所以这里的每个动作都作用在渲染侧的模型上，
- * 没有会话 id、没有一次 `runtimeApi` 调用——W3.5 之前那条 screencast 路上的
- * `TabStrip.tsx` 随旧路径一起删掉了。
+ * 没有会话 id、没有一次 `runtimeApi` 调用——Runtime 侧那份标签条随旧路径一
+ * 起删掉了。
  *
  * 只有一个标签时不渲染：标题在节点头部，地址在地址栏，这条没有信息可给。
  */

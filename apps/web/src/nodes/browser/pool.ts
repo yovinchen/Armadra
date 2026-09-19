@@ -106,7 +106,7 @@ function ghostOf(node: ArmadraFlowNode): ArmadraFlowNode {
 /**
  * 投影的最后一道：把浏览器节点搬进 pool region。
  *
- * 非 Electron 壳原样返回——W3.5 之前 screencast 是唯一回退，那条路上没有
+ * 非 Electron 壳原样返回——那里根本没有 guest，池规则无事可做，也没有
  * guest 可保，多一层重排只会白白改变现有测试看到的数组。
  */
 export function applyWebviewPool(

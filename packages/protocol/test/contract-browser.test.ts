@@ -11,7 +11,6 @@ import {
   BrowserActionSchema,
   BrowserDownloadSchema,
   BrowserDownloadState,
-  BrowserFrameSchema,
   BrowserInputKind,
   BrowserInputRequestSchema,
   BrowserReadResponseSchema,
@@ -56,18 +55,6 @@ describe("controlled browser sessions", () => {
       keepAlive: true,
       createdAtUnixMs: 1788557000000n,
       updatedAtUnixMs: 1788557900000n,
-    });
-    check("browser_frame", BrowserFrameSchema, {
-      sessionId: "browser-1",
-      generation: 2n,
-      frameSeq: 9007199254740993n,
-      navigationEpoch: maxUint64,
-      viewportWidth: 1000,
-      viewportHeight: 700,
-      deviceScaleFactor: 1.5,
-      encoding: "jpeg",
-      data: new Uint8Array([0, 255, 0xd8, 0xff]),
-      capturedAtUnixMs: 1788557900000n,
     });
     check("browser_input", BrowserInputRequestSchema, {
       sessionId: "browser-1",

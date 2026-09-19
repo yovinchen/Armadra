@@ -5,8 +5,8 @@
 //!
 //! In a `<webview>` guest of the desktop window. This process does not start a
 //! browser, does not hold a profile and does not see a pixel: W3.5 removed the
-//! managed Chromium, the CDP client and the screencast entirely. What is left
-//! here is what was never about a page.
+//! managed Chromium, the CDP client and the picture stream entirely. What is
+//! left here is what was never about a page.
 //!
 //! ## What is left
 //!
