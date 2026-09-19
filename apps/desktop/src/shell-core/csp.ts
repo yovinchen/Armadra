@@ -27,13 +27,23 @@ const CONNECT = [
 ];
 
 /**
- * One policy for both modes. Development needs no extra grant: the dev server,
- * the Runtime and the Host are all loopback HTTP, which the list above already
- * covers — a dev-only policy is a policy the shipped build never exercises.
+ * One policy, with a single development-only grant.
+ *
+ * Vite's dev server injects the React refresh preamble as an INLINE `<script>`
+ * in `index.html`; under `default-src 'self'` that script is refused, the
+ * preamble never runs, and every component module then throws
+ * "@vitejs/plugin-react can't detect preamble" — the window opens with an
+ * empty `#root` and no overlay. So `devServer: true` (the `electron-vite dev`
+ * flow, never a build served from disk) adds `'unsafe-inline'` to scripts
+ * only. The shipped build has no inline script and keeps the strict policy;
+ * the static server never asks for the grant.
  */
-export function contentSecurityPolicy(): string {
+export function contentSecurityPolicy(
+  options: { devServer?: boolean } = {},
+): string {
   return [
     "default-src 'self'",
+    ...(options.devServer ? ["script-src 'self' 'unsafe-inline'"] : []),
     `connect-src ${CONNECT.join(" ")}`,
     // Tailwind and the shadcn components set inline custom properties.
     "style-src 'self' 'unsafe-inline'",

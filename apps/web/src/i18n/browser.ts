@@ -85,6 +85,8 @@ const zh = {
      不是权限错误——人看到的应当是一个可以直接恢复的状态，而不是被挡住。 */
   "browser.discarded":
     "页面隐藏超过 {minutes} 分钟，已为省内存释放；回到这里会重新加载。",
+  /* guest 渲染出错时的兜底：只让这个节点降级，不让整棵画布空白。 */
+  "browser.guestFailed": "这个页面的显示出错了；关闭节点后重开即可恢复。",
 
   /* 受管浏览器（§2.1） */
   "browser.managed.install": "安装受管浏览器 {version}（{megabytes} MB）",
@@ -169,6 +171,8 @@ const en: Record<keyof typeof zh, string> = {
 
   "browser.discarded":
     "Hidden for over {minutes} minutes, so the page was freed to save memory; coming back reloads it.",
+  "browser.guestFailed":
+    "This page failed to render; close the node and reopen it to recover.",
 
   "browser.managed.install":
     "Install managed browser {version} ({megabytes} MB)",

@@ -51,6 +51,18 @@ describe("the page's policy", () => {
     expect(policy).not.toContain("unsafe-eval");
     expect(policy).not.toContain("script-src");
   });
+
+  it("lets only the dev server run Vite's inline refresh preamble", () => {
+    // Without this the window opens with an empty #root: the preamble is an
+    // inline script, and every component module throws when it is missing.
+    const dev = contentSecurityPolicy({ devServer: true });
+    expect(dev).toContain("script-src 'self' 'unsafe-inline'");
+    expect(dev).not.toContain("unsafe-eval");
+    // The shipped build has no inline script and must not inherit the grant.
+    expect(contentSecurityPolicy({ devServer: false })).not.toContain(
+      "script-src",
+    );
+  });
 });
 
 describe("which documents the policy is attached to", () => {

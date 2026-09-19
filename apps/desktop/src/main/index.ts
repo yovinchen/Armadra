@@ -322,7 +322,10 @@ async function start(): Promise<void> {
     process.env.ARMADRA_DESKTOP_EXTERNAL_RENDERER === "1",
   );
   setPageUrl(page.url);
-  applyContentSecurityPolicy(page.origin);
+  // Only the Vite dev server serves inline scripts (the refresh preamble).
+  applyContentSecurityPolicy(page.origin, {
+    devServer: Boolean(process.env.ELECTRON_RENDERER_URL),
+  });
   traceLifecycle(`page origin ${page.origin}`);
 
   // The Host's launch configuration is resolved even when the Host itself is
