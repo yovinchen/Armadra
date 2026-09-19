@@ -73,16 +73,18 @@ BrowserWindow ──load──▶ 上面的 URL；页面从 preload 读一次 { 
 
 ### 2.2 IPC 表面（`src/shared/ipc.ts`）
 
-| 域        | 通道                                                                                   | 方向                               | 备注                                                                       |
-| --------- | -------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------- |
-| transport | `transport:endpoints`                                                                  | invoke                             | 返回 `{ httpBase, wsBase, hostBase, dataDir }`，替代 `__armadra/transport` |
-| dialog    | `dialog:pick-directory`、`dialog:pick-files`                                           | invoke                             | 保留「返回路径而非字节」与 `canCreateDirectories`                          |
-| shell     | `shell:open-external`                                                                  | invoke                             | scheme 白名单 `http`/`https`，其余拒绝                                     |
-| updates   | `updates:state/check/dismiss/cancel/download/install/restart-report`                   | invoke                             | 7 条与今天的 Tauri command 一一对应；`updates:progress` 事件               |
-| shortcuts | `shortcuts:apply`                                                                      | invoke；`shortcuts:triggered` 事件 | 只认 `global.toggleWindow` / `global.newTerminal`                          |
-| window    | `window:is-focused`                                                                    | invoke                             | 决定要不要弹系统通知                                                       |
-| app       | `app:locale`                                                                           | invoke                             | 托盘/菜单文案从 `apps/web/src/i18n/` 取，主进程只拿 locale                 |
-| browser   | `browser:register/unregister`（renderer→main）、`browser:drive`（Runtime→main，见 §4） |                                    |                                                                            |
+| 域        | 通道                                                                                   | 方向                               | 备注                                                                          |
+| --------- | -------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
+| transport | `transport:endpoints`                                                                  | invoke                             | 返回 `{ httpBase, wsBase, hostBase, dataDir }`，替代 `__armadra/transport`    |
+| dialog    | `dialog:pick-directory`、`dialog:pick-files`                                           | invoke                             | 保留「返回路径而非字节」与 `canCreateDirectories`                             |
+| shell     | `shell:open-external`                                                                  | invoke                             | scheme 白名单 `http`/`https`，其余拒绝                                        |
+| updates   | `updates:state/check/dismiss/cancel/download/install/restart-report`                   | invoke                             | 7 条与今天的 Tauri command 一一对应；`updates:progress` 事件                  |
+| shortcuts | `shortcuts:apply`                                                                      | invoke；`shortcuts:triggered` 事件 | 只认 `global.toggleWindow` / `global.newTerminal`                             |
+| window    | `window:is-focused`                                                                    | invoke                             | 决定要不要弹系统通知                                                          |
+| window    | `window:key-intent`、`window:notification-click`（事件，W2.1 追加）                    | event                              | 主进程拦截的和弦（封闭清单，本批只有 ⌘W）与主进程通知的点击必须有地方报给页面 |
+| identity  | `identity:ticket`（W1.2 追加，`reach: window`）                                        | invoke                             | main 执行 `armadra-host pair` 取票交给页面；pair 能力本身不暴露               |
+| app       | `app:locale`                                                                           | invoke                             | 托盘/菜单文案从 `apps/web/src/i18n/` 取，主进程只拿 locale                    |
+| browser   | `browser:register/unregister`（renderer→main）、`browser:drive`（Runtime→main，见 §4） |                                    |                                                                               |
 
 规则：JSON camelCase、错误 `{ code, message }`（AGENTS.md）；从第一天区分「只对本窗口」与「可被远端调用」，即便暂无远端 peer（平台 §1）。preload 的 `window.armadra` 只暴露这张表，`contextIsolation: true`、`nodeIntegration: false`、`webviewTag: true`。
 
