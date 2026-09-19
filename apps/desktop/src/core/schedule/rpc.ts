@@ -28,6 +28,7 @@ import {
 import type { CoreRequest } from "../http/router";
 import type { IdentityService } from "../identity/service";
 import { MEDIA_TYPE, bearerCredential } from "../identity/http";
+import { identityFailure, isIdentityError } from "../identity/errors";
 import { ScheduleError, big, num } from "./plan";
 import type { PlanSnapshot } from "./engine";
 import { type Caller, ScheduleService } from "./service";
@@ -83,6 +84,9 @@ interface Failure {
 
 /** 域内失败 → 这一面的错误码。`UNKNOWN` 不在这张表里：它不是一次可以分类的失败。 */
 export function rpcFailure(error: unknown): Failure {
+  // 认证失败照身份域自己的分档回答：页面在 401 上轮转重试、在 403 上不重试，
+  // 两者合并成一个「认证失败」它就只能无限重试了。
+  if (isIdentityError(error)) return identityFailure(error);
   if (error instanceof ScheduleError) {
     switch (error.code) {
       case "invalid":

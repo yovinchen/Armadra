@@ -9,6 +9,7 @@ import {
 import type { CoreRequest } from "../http/router";
 import type { IdentityService } from "../identity/service";
 import { bearerCredential } from "../identity/http";
+import { identityFailure, isIdentityError } from "../identity/errors";
 import { ScheduleError, num } from "./plan";
 import type { PlanSnapshot, RunSnapshot } from "./engine";
 import { type Caller, ScheduleService } from "./service";
@@ -308,6 +309,24 @@ export function apiFailure(error: unknown): {
   code: string;
   message: string;
 } {
+  // 认证失败照身份域自己的分档，只是 code 换成这一面的 snake_case 拼法。
+  if (isIdentityError(error)) {
+    const failure = identityFailure(error);
+    return {
+      status: failure.status,
+      code:
+        failure.status === 401
+          ? "unauthenticated"
+          : failure.status === 403
+            ? "forbidden"
+            : failure.status === 404
+              ? "not_found"
+              : failure.status === 409
+                ? "conflict"
+                : "bad_request",
+      message: failure.message,
+    };
+  }
   if (error instanceof ScheduleError) {
     switch (error.code) {
       case "invalid":
