@@ -33,6 +33,7 @@ import { addItems, createItemId, select } from "../whiteboard/store";
 import { textItemAt } from "../whiteboard/tools/draft";
 import { openMermaidImport } from "../whiteboard/mermaid/open";
 import { openAutomationPanel } from "../../panels/automation/open";
+import { isDesktop } from "../../platform";
 
 /**
  * 新建菜单（§13.3）。
@@ -267,17 +268,28 @@ export function buildAddMenu(
       // 落点交给对话框：它盖着画布，确认时用视口中心比用这里的锚点合理。
       run: () => openMermaidImport(),
     },
-    {
-      id: "add.browser",
-      label: t("add.browser"),
-      icon: Globe,
-      group: "content",
-      run: (context) => {
-        create(context, "browser", {
-          position: nodeDropPosition("browser", { anchor: context.position }),
-        });
-      },
-    },
+    /*
+      浏览器节点只在桌面壳里有可嵌入的页面，所以非桌面上整项不出现。
+      不做成「显示但禁用」：菜单里少一项，比多一项点不动的灰项干净，而且
+      手机与浏览器标签页上这一项永远不会变得可用，灰着也没有等待的意义。
+    */
+    ...(isDesktop()
+      ? [
+          {
+            id: "add.browser",
+            label: t("add.browser"),
+            icon: Globe,
+            group: "content",
+            run: (context: AddMenuContext) => {
+              create(context, "browser", {
+                position: nodeDropPosition("browser", {
+                  anchor: context.position,
+                }),
+              });
+            },
+          } satisfies AddMenuItem,
+        ]
+      : []),
     {
       id: "add.automation",
       label: t("add.automation"),
