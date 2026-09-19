@@ -187,6 +187,37 @@ describe("断线续订", () => {
     expect(await refusal(core, "?cursor=abc")).toBe("400 INVALID_CURSOR");
   });
 
+  /**
+   * `?cursor=now` 是「我还没有位置」：不补发历史，只报一次当前水位。页面第一次
+   * 连上时用它——`cursor=0` 会把这个 core 发过的一切重放一遍，那是另一个问题的
+   * 答案。
+   */
+  it("cursor=now 只报当前水位，不补发任何历史", async () => {
+    const core = await start();
+    publish(core, "before-one");
+    publish(core, "before-two");
+    await settle();
+    const seeded = await connect(core, "?cursor=now");
+    await settle();
+    expect(seeded.frames).toEqual([]);
+    expect(seeded.cursor).toBeGreaterThan(0);
+    const seededAt = seeded.cursor;
+
+    publish(core, "after");
+    await settle();
+    expect(seeded.frames.map((frame) => JSON.parse(frame).boardId)).toEqual([
+      "after",
+    ]);
+    expect(seeded.cursor).toBeGreaterThan(seededAt);
+
+    // 那个数拿回来能续：这正是页面重连时做的事。
+    const resumed = await connect(core, `?cursor=${seededAt}`);
+    await settle();
+    expect(resumed.frames.map((frame) => JSON.parse(frame).boardId)).toEqual([
+      "after",
+    ]);
+  });
+
   it("不带游标的客户端一帧不多一帧不少", async () => {
     const core = await start();
     const plain = await connect(core);

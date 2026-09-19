@@ -41,9 +41,17 @@ export const EVENTS_PATH = "/api/workspaces/{workspaceId}/events";
  * 只认十进制非负整数，`0` 表示「从这个 core 发过的第一条开始」。空字符串、
  * 负数、小数、别的进制一律是坏请求而不是 0：一个把游标写错的客户端应该在升级
  * 时就知道，而不是安静地收到一整份历史。
+ *
+ * `now` 是第三个答案，给**还没有位置**的客户端（R7c）：不补发任何历史，只在
+ * 订阅一开始报一次当前水位，此后按普通的续订订阅收控制帧。页面第一次连上时
+ * 用的就是它——它要的是「从现在起别漏」，不是「把这个 core 发过的一切重放
+ * 一遍」，而后者正是 `cursor=0` 的意思。
  */
-export function parseCursor(raw: string | null): number | "invalid" | null {
+export function parseCursor(
+  raw: string | null,
+): number | "now" | "invalid" | null {
   if (raw === null) return null;
+  if (raw === "now") return "now";
   if (!/^\d{1,19}$/.test(raw)) return "invalid";
   const value = Number(raw);
   return Number.isSafeInteger(value) ? value : "invalid";
@@ -75,7 +83,11 @@ export function install(context: CoreContext): WorkspaceEventStream {
       const release = stream.attachSocket(
         workspaceId,
         socket,
-        typeof cursor === "number" ? { cursor } : {},
+        cursor === "now"
+          ? { cursor: "now" as const }
+          : typeof cursor === "number"
+            ? { cursor }
+            : {},
       );
       // The stream is read-only; a client frame only matters as a close. A
       // `message` handler that answered would be a second protocol nothing on
@@ -109,6 +121,8 @@ export function install(context: CoreContext): WorkspaceEventStream {
       if (database === undefined) {
         return { status: 409, reason: "SNAPSHOT_REQUIRED" };
       }
+      // `now` 不读历史，所以没有可以掉出保留下限的东西可判。
+      if (cursor === "now") return undefined;
       const page = catchUp(database, workspaceId, cursor, 1);
       if (page.status === "snapshotRequired") {
         return { status: 409, reason: "SNAPSHOT_REQUIRED" };
