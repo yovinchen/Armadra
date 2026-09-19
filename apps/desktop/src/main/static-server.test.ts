@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join, posix, win32 } from "node:path";
 import {
   type PageSource,
   contentTypeFor,
@@ -73,36 +73,51 @@ function raw(
 }
 
 describe("staying inside the root", () => {
-  it("never resolves outside the root, whatever the spelling", () => {
-    const root = "/srv/app";
-    expect(resolveWithinRoot(root, "/index.html")).toBe("/srv/app/index.html");
-    expect(resolveWithinRoot(root, "/assets/../index.html")).toBe(
-      "/srv/app/index.html",
-    );
-    // The invariant is one sentence: every answer is either refused, or a
-    // path under the root. Which of the two a given spelling gets is the
-    // platform's business; leaving the root is nobody's.
-    for (const spelling of [
-      "/../secrets",
-      "/../../etc/passwd",
-      "/%2e%2e/secrets",
-      "/%2e%2e%2f%2e%2e%2fetc/passwd",
-      "/assets/../../secrets",
-      "/\0/etc/passwd",
-      "/%zz",
-      // A prefix match on the string alone would accept this sibling.
-      "/../app-other/secrets",
-      "/....//secrets",
-    ]) {
-      const resolved = resolveWithinRoot(root, spelling);
-      if (resolved === undefined) continue;
-      expect(resolved.startsWith(`${root}/`), spelling).toBe(true);
-    }
-    // A NUL byte and a malformed escape are refused outright rather than
-    // handed to the file system to interpret.
-    expect(resolveWithinRoot(root, "/\0/etc/passwd")).toBeUndefined();
-    expect(resolveWithinRoot(root, "/%zz")).toBeUndefined();
-  });
+  it.each([
+    { label: "native", pathModule: path, root: path.resolve("/srv/app") },
+    { label: "POSIX", pathModule: posix, root: "/srv/app" },
+    { label: "Windows", pathModule: win32, root: String.raw`D:\srv\app` },
+    { label: "UNC", pathModule: win32, root: String.raw`\\server\share\app` },
+  ])(
+    "never resolves outside the root, whatever the spelling ($label)",
+    ({ pathModule, root }) => {
+      const resolveRequest = (request: string) =>
+        resolveWithinRoot(root, request, pathModule);
+      expect(resolveRequest("/index.html")).toBe(
+        pathModule.join(root, "index.html"),
+      );
+      expect(resolveRequest("/assets/../index.html")).toBe(
+        pathModule.join(root, "index.html"),
+      );
+      // The invariant is one sentence: every answer is either refused, or a
+      // path under the root. Which of the two a given spelling gets is the
+      // platform's business; leaving the root is nobody's.
+      for (const spelling of [
+        "/../secrets",
+        "/../../etc/passwd",
+        "/%2e%2e/secrets",
+        "/%2e%2e%2f%2e%2e%2fetc/passwd",
+        "/assets/../../secrets",
+        "/\0/etc/passwd",
+        "/%zz",
+        // A prefix match on the string alone would accept this sibling.
+        "/../app-other/secrets",
+        "/....//secrets",
+        "/%2e%2e%5csecrets",
+        String.raw`/assets\..\..\secrets`,
+        String.raw`/D:\secrets`,
+        String.raw`/\\server\share\secrets`,
+      ]) {
+        const resolved = resolveRequest(spelling);
+        if (resolved === undefined) continue;
+        expect(resolved.startsWith(root + pathModule.sep), spelling).toBe(true);
+      }
+      // A NUL byte and a malformed escape are refused outright rather than
+      // handed to the file system to interpret.
+      expect(resolveRequest("/\0/etc/passwd")).toBeUndefined();
+      expect(resolveRequest("/%zz")).toBeUndefined();
+    },
+  );
 
   it("does not serve a file outside the root over HTTP either", async () => {
     const root = bundle();

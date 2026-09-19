@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import path from "node:path";
 
 /**
  * The repository root, as seen from the built main bundle.
@@ -12,6 +12,9 @@ import { resolve } from "node:path";
  * `__dirname` is `apps/desktop/out/main` in development and inside the asar
  * alike, so the root is four levels up.
  */
-export function repoRoot(from: string = __dirname): string {
-  return resolve(from, "../../../..");
+export function repoRoot(
+  from: string = __dirname,
+  pathModule: typeof path = path,
+): string {
+  return pathModule.resolve(from, "..", "..", "..", "..");
 }

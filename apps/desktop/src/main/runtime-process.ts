@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { connect } from "node:net";
-import { join, resolve } from "node:path";
+import path, { join } from "node:path";
 import {
   DesktopRuntimeControlSchema,
   DesktopShutdownRequestSchema,
@@ -296,14 +296,16 @@ export function runtimeExecutable(
   env: NodeJS.ProcessEnv = process.env,
   resourcesPath: string = process.resourcesPath,
   repoDir: string = repoRoot(),
+  platform: string = process.platform,
+  pathModule: typeof path = path,
 ): string {
-  const name = runtimeBinaryName();
+  const name = runtimeBinaryName(platform);
   if (env.ARMADRA_RUNTIME_BINARY) return env.ARMADRA_RUNTIME_BINARY;
-  if (packaged) return join(resourcesPath, name);
+  if (packaged) return pathModule.join(resourcesPath, name);
   const target = env.CARGO_TARGET_DIR
-    ? resolve(repoDir, env.CARGO_TARGET_DIR)
-    : join(repoDir, "target");
-  return join(target, "debug", name);
+    ? pathModule.resolve(repoDir, env.CARGO_TARGET_DIR)
+    : pathModule.join(repoDir, "target");
+  return pathModule.join(target, "debug", name);
 }
 
 /* --------------------------- reaching /health ---------------------------- */

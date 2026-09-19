@@ -6,7 +6,7 @@ import {
   type ServerResponse,
   createServer,
 } from "node:http";
-import { extname, join, normalize, resolve, sep } from "node:path";
+import path, { extname, join, resolve } from "node:path";
 import { contentSecurityPolicy } from "../shell-core/csp";
 import {
   DEFAULT_DEV_RENDERER_URL,
@@ -74,6 +74,7 @@ const CONTENT_TYPES = new Map<string, string>([
 export function resolveWithinRoot(
   root: string,
   requestPath: string,
+  pathModule: typeof path = path,
 ): string | undefined {
   let decoded: string;
   try {
@@ -82,9 +83,13 @@ export function resolveWithinRoot(
     return undefined;
   }
   if (decoded.includes("\0")) return undefined;
-  const base = resolve(root);
-  const candidate = resolve(base, `.${normalize(decoded)}`);
-  if (candidate !== base && !candidate.startsWith(base + sep)) return undefined;
+  const base = pathModule.resolve(root);
+  const candidate = pathModule.resolve(
+    base,
+    `.${pathModule.normalize(decoded)}`,
+  );
+  if (candidate !== base && !candidate.startsWith(base + pathModule.sep))
+    return undefined;
   return candidate;
 }
 

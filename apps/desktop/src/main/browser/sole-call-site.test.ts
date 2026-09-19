@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import path, { dirname, join, posix, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ALLOWED_METHODS } from "../../shell-core/browser/allowlist";
@@ -17,34 +17,41 @@ import { ALLOWED_METHODS } from "../../shell-core/browser/allowlist";
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = join(here, "../..");
+const src = join(here, "..", "..");
 
-function walk(dir: string): string[] {
+function walk(dir: string, pathModule: typeof path, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) return walk(path);
-    return path.endsWith(".ts") || path.endsWith(".tsx") ? [path] : [];
+    const relativePath = pathModule.join(prefix, entry.name);
+    if (entry.isDirectory())
+      return walk(join(dir, entry.name), pathModule, relativePath);
+    return relativePath.endsWith(".ts") || relativePath.endsWith(".tsx")
+      ? [relativePath]
+      : [];
   });
 }
 
 const CALL = /\.sendCommand\s*\(/;
 const ATTACH = /\.debugger\b|\bdebugger\.attach\s*\(/;
 
-describe("the CDP call site", () => {
-  const files = walk(src).filter((file) => !file.endsWith(".test.ts"));
+describe.each([
+  { label: "native", pathModule: path },
+  { label: "POSIX", pathModule: posix },
+  { label: "Windows", pathModule: win32 },
+])("the CDP call site ($label)", ({ pathModule }) => {
+  const files = walk(src, pathModule).filter(
+    (file) => !file.endsWith(".test.ts"),
+  );
+  const readSource = (file: string) =>
+    readFileSync(join(src, ...file.split(pathModule.sep)), "utf8");
 
   it("exists in exactly one file", () => {
-    const callers = files
-      .filter((file) => CALL.test(readFileSync(file, "utf8")))
-      .map((file) => relative(src, file));
-    expect(callers).toEqual(["main/browser/cdp.ts"]);
+    const callers = files.filter((file) => CALL.test(readSource(file)));
+    expect(callers).toEqual([pathModule.join("main", "browser", "cdp.ts")]);
   });
 
   it("reaches the debugger from that one file only", () => {
-    const users = files
-      .filter((file) => ATTACH.test(readFileSync(file, "utf8")))
-      .map((file) => relative(src, file));
-    expect(users).toEqual(["main/browser/cdp.ts"]);
+    const users = files.filter((file) => ATTACH.test(readSource(file)));
+    expect(users).toEqual([pathModule.join("main", "browser", "cdp.ts")]);
   });
 
   it("the regexes match what they are meant to and nothing else", () => {
@@ -66,33 +73,30 @@ describe("the CDP call site", () => {
 
   it("nobody evaluates JavaScript in a page by any other door", () => {
     for (const file of files) {
-      const source = readFileSync(file, "utf8");
+      const source = readSource(file);
       for (const door of [
         "executeJavaScript(",
         "insertCSS(",
         "webFrame.",
         "eval(",
       ]) {
-        expect(
-          source.includes(door),
-          `${relative(src, file)} contains ${door}`,
-        ).toBe(false);
+        expect(source.includes(door), `${file} contains ${door}`).toBe(false);
       }
     }
   });
 
   it("the words Runtime.evaluate appear only where they are refused", () => {
-    const mentions = files
-      .filter((file) => readFileSync(file, "utf8").includes("Runtime.evaluate"))
-      .map((file) => relative(src, file));
-    expect(mentions).toEqual(["shell-core/browser/allowlist.ts"]);
+    const mentions = files.filter((file) =>
+      readSource(file).includes("Runtime.evaluate"),
+    );
+    expect(mentions).toEqual([
+      pathModule.join("shell-core", "browser", "allowlist.ts"),
+    ]);
   });
 
   it("the allowlist offers no reachable way to write a cookie", () => {
-    // `Network.setCookie` is not in the table at all. nodeterm allowed it and
-    // pinned it as unreachable; here the same guarantee costs one absence,
-    // which is cheaper to keep true. A page that could be given a session
-    // cookie for accounts.google.com turns the next human visit into somebody
+    // No Network method is allowed. A page given a session cookie for
+    // accounts.google.com could turn the next human visit into somebody
     // else's login.
     expect(
       ALLOWED_METHODS.some((method) => method.startsWith("Network.")),
