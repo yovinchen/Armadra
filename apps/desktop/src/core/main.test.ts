@@ -267,10 +267,27 @@ describe("what the core answers", () => {
     expect(
       await upgrade(
         core,
-        "/api/workspaces/ws-1/events",
+        "/api/terminals/session-1/ws",
         "http://127.0.0.1:1420",
       ),
     ).toMatch(/^HTTP\/1\.1 501/);
+  });
+
+  /**
+   * A stream that exists refuses on its own terms instead. The workspace
+   * event route checks the workspace before the upgrade, exactly as the Rust
+   * route does, so an unknown one is an HTTP 404 rather than a socket that
+   * opens and immediately closes.
+   */
+  it("lets a stream that exists answer its own refusal", async () => {
+    const { core } = await start(temporary());
+    expect(
+      await upgrade(
+        core,
+        "/api/workspaces/ws-1/events",
+        "http://127.0.0.1:1420",
+      ),
+    ).toMatch(/^HTTP\/1\.1 404/);
   });
 
   it("stops accepting once it has stopped", async () => {

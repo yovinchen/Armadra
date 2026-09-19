@@ -13,8 +13,11 @@ import {
   serviceEndpointNow,
   withdraw,
 } from "./endpoints";
+import { install as installEvents } from "./events";
 import { CoreServer } from "./http/server";
 import { VERSION, announcement, instanceId } from "./instance";
+import { install as installSettings } from "./settings";
+import { install as installUsage } from "./usage";
 import { type ListenSpec, bind, formatListenSpec, release } from "./listen";
 import { databaseFile, endpointsFile, resolveDataDir } from "./paths";
 import {
@@ -85,11 +88,16 @@ export interface RunningCore extends CoreContext {
 
 /** The domains assembled by default; each phase adds its `install` here. */
 export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
-  // Workspaces first: it mints the default workspace, and the other two read
-  // a workspace row before they do anything.
+  // Events first: a domain installed after it may emit during its own
+  // installation, and a fan-out that is not listening yet would drop that.
+  installEvents,
+  // Workspaces next: it mints the default workspace, and the domains after it
+  // read a workspace row before they do anything.
   installWorkspaces,
   installCanvas,
   installAssets,
+  installSettings,
+  installUsage,
 ];
 
 export async function run(options: RunOptions = {}): Promise<RunningCore> {
