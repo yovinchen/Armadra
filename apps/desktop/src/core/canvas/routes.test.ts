@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { WorkspaceEventFrame } from "../bus";
+import type { WorkspaceEvent } from "../bus";
 import { type Fixture, fixture } from "../workspaces/fixture";
 import { uuidV7 } from "../workspaces/support";
 import { install as installWorkspaces } from "../workspaces/routes";
@@ -129,7 +129,7 @@ describe("the board routes", () => {
       whiteboard: '{"store":{}}',
     };
 
-    const frames: { workspaceId: string; event: WorkspaceEventFrame }[] = [];
+    const frames: { workspaceId: string; event: WorkspaceEvent }[] = [];
     core.bus.on("workspace.event", (frame) => frames.push(frame));
 
     const saved = await core.call("PUT", documentUri, body);
