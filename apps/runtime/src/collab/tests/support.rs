@@ -259,7 +259,7 @@ pub(super) async fn add_agent_node(
     handle: Option<&str>,
     linked: bool,
 ) -> String {
-    let mut data = json!({ "kind": "terminal", "cwd": ".", "agent": { "id": "gemini" } });
+    let mut data = json!({ "kind": "terminal", "cwd": ".", "agent": { "id": "codex" } });
     if let Some(handle) = handle {
         data["handle"] = json!(handle);
     }

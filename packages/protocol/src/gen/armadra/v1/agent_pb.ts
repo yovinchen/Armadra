@@ -579,7 +579,7 @@ export type HookEvent = Message<"armadra.v1.HookEvent"> & {
   workspaceId: string;
 
   /**
-   * `claude`, `codex`, `gemini`, … The Host records it and routes on it; it
+   * `claude`, `codex`, `copilot`, … The Host records it and routes on it; it
    * does not interpret it.
    *
    * @generated from field: string provider = 10;

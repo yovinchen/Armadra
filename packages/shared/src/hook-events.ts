@@ -48,20 +48,6 @@ export const CODEX_HOOK_EVENTS = [
   "SubagentStop",
 ] as const;
 
-/**
- * Gemini CLI — `~/.gemini/settings.json`. `AfterModel` is deliberately not
- * subscribed: it fires per streamed chunk and carries no state we need.
- */
-export const GEMINI_HOOK_EVENTS = [
-  "SessionStart",
-  "BeforeAgent",
-  "AfterAgent",
-  "BeforeTool",
-  "AfterTool",
-  "Notification",
-  "SessionEnd",
-] as const;
-
 /** opencode — plugin on the `event` bus, so the names are bus topics. */
 export const OPENCODE_HOOK_EVENTS = [
   "session.idle",
@@ -140,7 +126,6 @@ export const HOOK_EVENTS: Readonly<Record<BuiltinAgentId, readonly string[]>> =
   {
     claude: CLAUDE_HOOK_EVENTS,
     codex: CODEX_HOOK_EVENTS,
-    gemini: GEMINI_HOOK_EVENTS,
     opencode: OPENCODE_HOOK_EVENTS,
     pi: PI_HOOK_EVENTS,
     omp: OMP_HOOK_EVENTS,
@@ -149,7 +134,6 @@ export const HOOK_EVENTS: Readonly<Record<BuiltinAgentId, readonly string[]>> =
 
 export type ClaudeHookEvent = (typeof CLAUDE_HOOK_EVENTS)[number];
 export type CodexHookEvent = (typeof CODEX_HOOK_EVENTS)[number];
-export type GeminiHookEvent = (typeof GEMINI_HOOK_EVENTS)[number];
 export type OpencodeHookEvent = (typeof OPENCODE_HOOK_EVENTS)[number];
 export type PiHookEvent = (typeof PI_HOOK_EVENTS)[number];
 export type OmpHookEvent = (typeof OMP_HOOK_EVENTS)[number];

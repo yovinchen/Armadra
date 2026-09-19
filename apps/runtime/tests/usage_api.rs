@@ -190,7 +190,7 @@ async fn copilot_signs_in_by_device_flow_and_the_dashboard_reports_quota_and_cos
             "enabled": true,
             "refreshMinutes": 5,
             // Only Copilot may be contacted; the mock is the only server up.
-            "providers": {"claude": false, "codex": false, "gemini": false, "copilot": true},
+            "providers": {"claude": false, "codex": false, "copilot": true},
             "cost": {"enabled": true}
         }
     }));
@@ -265,7 +265,7 @@ async fn copilot_signs_in_by_device_flow_and_the_dashboard_reports_quota_and_cos
 
     // The switched-off providers were never contacted and report exactly what a
     // machine without that CLI reports.
-    for id in ["claude", "codex", "gemini"] {
+    for id in ["claude", "codex"] {
         let provider = providers
             .iter()
             .find(|provider| provider["id"] == json!(id))

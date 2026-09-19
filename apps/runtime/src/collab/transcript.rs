@@ -59,7 +59,8 @@ pub fn read_tail(path: &Path, max_bytes: u64) -> std::io::Result<String> {
 /// Renders JSONL (or a JSON array / object of messages) into one line per
 /// message. Unknown lines are skipped rather than reported.
 pub fn render(text: &str) -> Vec<String> {
-    // A whole-file JSON document (gemini writes one) is unwrapped first.
+    // A whole-file JSON document (an array or an object of messages) is
+    // unwrapped first.
     let trimmed = text.trim_start();
     if (trimmed.starts_with('[') || trimmed.starts_with('{'))
         && let Ok(value) = serde_json::from_str::<Value>(trimmed)
@@ -243,13 +244,6 @@ pub fn locate(
             origin: format!("Codex 会话记录 {}", path.display()),
             path,
         }),
-        "gemini" => find_under(&gemini_home().join("tmp"), |name| {
-            name.contains(session_id) && name.ends_with(".json")
-        })
-        .map(|path| Located {
-            origin: format!("Gemini 会话记录 {}", path.display()),
-            path,
-        }),
         _ => None,
     }
 }
@@ -268,32 +262,7 @@ pub fn codex_home() -> PathBuf {
         .unwrap_or_else(|| home().join(".codex"))
 }
 
-/// `~/.gemini`, or `$GEMINI_CLI_HOME/.gemini`.
-///
-/// `GEMINI_CLI_HOME` overrides the *home directory* the CLI reads from, not the
-/// `.gemini` folder inside it: gemini-cli's own `homedir()` returns the
-/// variable and `Storage::getGlobalGeminiDir()` joins `.gemini` onto the
-/// result. Reading the variable as the config directory itself sent every
-/// transcript lookup one level too high, where nothing matches and the honest
-/// answer "no transcript" is indistinguishable from a real absence.
-pub fn gemini_home() -> PathBuf {
-    gemini_home_in(
-        std::env::var_os("GEMINI_CLI_HOME")
-            .map(PathBuf::from)
-            .filter(|path| !path.as_os_str().is_empty()),
-        &home(),
-    )
-}
-
-/// The rule on its own, with the environment passed in so a test can state it
-/// without mutating a process-global the rest of the suite also reads.
-pub fn gemini_home_in(cli_home: Option<PathBuf>, home: &Path) -> PathBuf {
-    cli_home
-        .unwrap_or_else(|| home.to_path_buf())
-        .join(".gemini")
-}
-
-/// A bounded breadth-first walk. Neither CLI documents its directory layout, so
+/// A bounded breadth-first walk. Codex does not document its directory layout, so
 /// the search is by file name; the bounds are what keep a surprising layout
 /// (a symlink loop, a million-file cache) from turning a read into a hang.
 pub fn find_under(root: &Path, matches: impl Fn(&str) -> bool) -> Option<PathBuf> {

@@ -1,7 +1,7 @@
 //! The conversations index — docs/contracts/v3-agent-terminal-plan.md §16 / §17.
 //!
 //! Every agent CLI leaves its history somewhere under the user's home
-//! directory. This module walks those three directories, reads the first user
+//! directory. This module walks those directories, reads the first user
 //! message out of each transcript, and keeps a `(provider, session_id) → title`
 //! table so the command palette can offer "resume this conversation" across
 //! projects — the one palette group the v3 design called for that we lacked.
@@ -22,7 +22,6 @@
 
 pub mod claude;
 pub mod codex;
-pub mod gemini;
 pub mod scan;
 
 #[cfg(test)]
@@ -36,7 +35,7 @@ use sqlx::{Row, SqlitePool};
 use crate::{error::AppResult, model::Conversation};
 
 /// Providers whose transcripts we know how to read.
-pub const PROVIDERS: &[&str] = &["claude", "codex", "gemini"];
+pub const PROVIDERS: &[&str] = &["claude", "codex"];
 
 /// How often the index is refreshed once the runtime is up (plan §17).
 const REFRESH_INTERVAL: Duration = Duration::from_secs(60);
@@ -106,11 +105,7 @@ pub fn start(pool: SqlitePool) {
 
 /// Where each provider keeps its transcripts on this machine.
 pub fn default_roots() -> Vec<(&'static str, PathBuf)> {
-    vec![
-        ("claude", claude::root()),
-        ("codex", codex::root()),
-        ("gemini", gemini::root()),
-    ]
+    vec![("claude", claude::root()), ("codex", codex::root())]
 }
 
 /// One pass over every provider. Safe to call concurrently with the timer: the
@@ -156,9 +151,8 @@ fn scan_provider(
     known: &HashMap<String, String>,
 ) -> (Vec<IndexRow>, Vec<String>) {
     let candidates = match provider {
-        "claude" => claude::candidates(root),
         "codex" => codex::candidates(root),
-        _ => gemini::candidates(root),
+        _ => claude::candidates(root),
     };
     let mut rows = Vec::new();
     let mut seen = Vec::with_capacity(candidates.len());
@@ -175,9 +169,8 @@ fn scan_provider(
             continue;
         }
         let parsed = match provider {
-            "claude" => claude::parse(&candidate.path),
             "codex" => codex::parse(&candidate.path),
-            _ => gemini::parse(&candidate.path),
+            _ => claude::parse(&candidate.path),
         };
         let Some(parsed) = parsed.filter(|parsed| !parsed.session_id.is_empty()) else {
             continue;
@@ -361,7 +354,6 @@ pub fn transcript_title(agent_id: &str, path: &std::path::Path) -> Option<String
     }
     let parsed = match agent_id {
         "codex" => codex::parse(path),
-        "gemini" => gemini::parse(path),
         // Custom agents borrow a base agent's adapter and claude's JSONL shape
         // is the common one, so it is also the default.
         _ => claude::parse(path),

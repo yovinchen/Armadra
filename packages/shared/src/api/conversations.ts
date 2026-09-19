@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Which CLI wrote the transcript a conversation row was read from. */
-export const CONVERSATION_PROVIDERS = ["claude", "codex", "gemini"] as const;
+export const CONVERSATION_PROVIDERS = ["claude", "codex"] as const;
 export const conversationProviderSchema = z.enum(CONVERSATION_PROVIDERS);
 
 /**

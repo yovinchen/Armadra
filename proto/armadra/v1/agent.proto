@@ -291,7 +291,7 @@ message HookEvent {
   string session_id = 3;
   uint64 generation = 4;
   string workspace_id = 5;
-  // `claude`, `codex`, `gemini`, … The Host records it and routes on it; it
+  // `claude`, `codex`, `copilot`, … The Host records it and routes on it; it
   // does not interpret it.
   string provider = 10;
   bytes payload = 11;

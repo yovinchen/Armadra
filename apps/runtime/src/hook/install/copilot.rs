@@ -8,7 +8,7 @@
 //! itself. Those are kept, exactly as the other installers keep foreign
 //! handlers inside a shared settings file.
 //!
-//! Two shape differences from Claude / Codex / Gemini, both verified against
+//! Two shape differences from Claude / Codex, both verified against
 //! Copilot CLI 1.0.83:
 //!
 //!   * an event maps straight to a **flat list of hook entries**, with no

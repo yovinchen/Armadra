@@ -1,9 +1,9 @@
 //! Context usage for the providers that report none — design §2.1.
 //!
 //! Claude publishes a live window through its status line, so its reading is
-//! `provider_hook` / `reported` and nothing here touches it. Codex and Gemini
-//! write a *structured* transcript instead: a JSONL rollout and a JSON chat
-//! document. Those can be summed, and a sum is worth showing — but only ever as
+//! `provider_hook` / `reported` and nothing here touches it. Codex writes a
+//! *structured* transcript instead: a JSONL rollout. That can be summed, and
+//! a sum is worth showing — but only ever as
 //! `source: structured_transcript`, `quality: estimated`, with the heuristic and
 //! its confidence attached so the popover can say what the number is:
 //!
@@ -216,7 +216,6 @@ pub fn estimate_transcript(agent_id: &str, path: &Path) -> Option<Estimated> {
     let (text, truncated) = read_head(path).ok()?;
     match agent_id {
         "codex" => estimate_jsonl(&text, truncated),
-        "gemini" => estimate_document(&text, truncated),
         "copilot" => estimate_events_jsonl(&text, truncated),
         _ => None,
     }
@@ -257,33 +256,6 @@ fn estimate_jsonl(text: &str, truncated: bool) -> Option<Estimated> {
     finish(tokens, messages, model, session, truncated, sampled)
 }
 
-/// Gemini chats: one JSON document with a `messages` array.
-fn estimate_document(text: &str, truncated: bool) -> Option<Estimated> {
-    // A truncated document is not valid JSON, so there is nothing to sum; the
-    // caller gets no reading rather than a partial one presented as a total.
-    let document = serde_json::from_str::<Value>(text.trim()).ok()?;
-    let mut tokens = 0u64;
-    let mut messages = 0u64;
-    let items = document
-        .get("messages")
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default();
-    for item in items.iter().take(MAX_RECORDS) {
-        if count_record(item, &mut tokens) {
-            messages += 1;
-        }
-    }
-    finish(
-        tokens,
-        messages,
-        find_model(&document),
-        find_session_id(&document, &["sessionId", "session_id"]),
-        truncated || items.len() > MAX_RECORDS,
-        text.len() as u64,
-    )
-}
-
 /// Copilot `events.jsonl` — 协作通道 §2.1 / §4.
 ///
 /// **Not wired to a capability.** `copilot` does not declare `contextUsage`,
@@ -296,7 +268,7 @@ fn estimate_document(text: &str, truncated: bool) -> Option<Estimated> {
 /// (An older build wrote `outputTokens` on each `assistant.message`; that is
 /// the reply's own length, not what the window holds, and 1.0.83 no longer
 /// writes it at all.) So a Copilot reading could only ever be the same
-/// `chars-v1` estimate codex and gemini get, and until that is a product
+/// `chars-v1` estimate codex gets, and until that is a product
 /// decision the capability stays off. This function is what flipping it needs.
 ///
 /// The file is an envelope per line — `{id, parentId, timestamp, type, data}` —
@@ -743,28 +715,6 @@ mod tests {
         );
         assert!(estimate_transcript("opencode", &path).is_none());
         assert!(estimate_transcript("claude", &path).is_none());
-    }
-
-    #[test]
-    fn a_gemini_chat_document_is_summed_from_its_messages() {
-        let directory = tempfile::tempdir().unwrap();
-        let document = json!({
-            "sessionId": "gem-1",
-            "projectHash": "abc",
-            "messages": [
-                {"type":"user","content":"abcdabcd"},
-                {"type":"gemini","content":"中文"},
-            ]
-        })
-        .to_string();
-        let path = write(directory.path(), "chat.json", &document);
-        let estimated = estimate_transcript("gemini", &path).unwrap();
-        assert_eq!(estimated.used_tokens, 4);
-        assert_eq!(estimated.estimate.messages, 2);
-        assert_eq!(estimated.provider_session_id.as_deref(), Some("gem-1"));
-        // The document names no model, so the caller must fall back to the
-        // session's own selection rather than assume one.
-        assert_eq!(estimated.model_id, None);
     }
 
     #[test]

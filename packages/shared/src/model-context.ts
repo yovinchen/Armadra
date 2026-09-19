@@ -37,10 +37,6 @@ const WINDOWS: readonly Window[] = [
   { match: /^gpt-4\.1/, capacityTokens: 1_047_576 },
   { match: /^gpt-4o/, capacityTokens: 128_000 },
   { match: /^o[134]\b|^o[134]-/, capacityTokens: 200_000 },
-
-  // Google. 1.5 Pro is the only two-million-token window in the family.
-  { match: /^gemini-1\.5-pro/, capacityTokens: 2_097_152 },
-  { match: /^gemini-(1\.5|2\.0|2\.5|3)/, capacityTokens: 1_048_576 },
 ];
 
 /** Strip a router prefix and normalise case: `Anthropic/Claude-Opus-4` → `claude-opus-4`. */

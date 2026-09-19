@@ -79,7 +79,6 @@
   /* ── Agent 品牌色 ────────────────────────────────────────────────── */
   --color-agent-claude: var(--agent-claude);
   --color-agent-codex: var(--agent-codex);
-  --color-agent-gemini: var(--agent-gemini);
   --color-agent-opencode: var(--agent-opencode);
 
   /* ── 圆角 ────────────────────────────────────────────────────────── */

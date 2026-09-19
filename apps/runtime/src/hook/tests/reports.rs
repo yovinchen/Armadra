@@ -759,7 +759,7 @@ async fn a_custom_agent_reports_through_its_base_provider() {
         .settings
         .patch(&json!({ "agents": { "custom": [{
             "id": "custom:echo", "label": "Echo",
-            "launchCmd": "/bin/echo", "baseAgent": "gemini",
+            "launchCmd": "/bin/echo", "baseAgent": "copilot",
         }] } }))
         .unwrap();
     // The session row is what tells the ingest which agent owns the node.
@@ -784,15 +784,15 @@ async fn a_custom_agent_reports_through_its_base_provider() {
         .hooks
         .issue_node_token(&fixture.node_id)
         .unwrap();
-    // Gemini's vocabulary on Gemini's path — the Claude adapter reads nothing
-    // out of `AfterAgent`, so a `done` here proves the base picked the parser.
+    // Copilot's vocabulary on Copilot's path — the Claude adapter reads nothing
+    // out of `agentStop`, so a `done` here proves the base picked the parser.
     assert_eq!(
         fixture
             .post_hook(
-                "gemini",
+                "copilot",
                 json!({
                     "nodeId": fixture.node_id,
-                    "payload": { "hook_event_name": "AfterAgent" }
+                    "payload": { "hookEventName": "agentStop" }
                 }),
                 &[
                     ("x-armadra-hook-token", &fixture.bearer),

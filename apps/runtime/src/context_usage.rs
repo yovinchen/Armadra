@@ -532,7 +532,7 @@ pub async fn get_snapshot(
     Ok(estimated_snapshot(state, node_id, &session, query).await)
 }
 
-/// A `structured_transcript` reading for codex / gemini — design §2.1.
+/// A `structured_transcript` reading for codex — design §2.1.
 ///
 /// Every step here can decline, and declining produces an explicit unknown
 /// rather than a zero: no status row, no locatable transcript, nothing readable

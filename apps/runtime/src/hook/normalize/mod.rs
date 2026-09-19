@@ -1,7 +1,7 @@
 //! Provider payload → one normalized `AgentEvent` (plan §5.4).
 //!
 //! Every CLI reports something different: Claude and Codex send a flat object
-//! keyed by `hook_event_name`, Gemini sends the same shape with its own event
+//! keyed by `hook_event_name`, Copilot sends camelCase event names with its own
 //! vocabulary, opencode sends a bus topic with a `properties` bag. The reducer
 //! must not know any of that, so each provider gets a module here whose only
 //! job is to answer one question: *what does this payload say about the node's
@@ -14,7 +14,6 @@
 pub mod claude;
 pub mod codex;
 pub mod copilot;
-pub mod gemini;
 pub mod opencode;
 pub mod pi;
 
@@ -186,7 +185,6 @@ pub fn normalize_as(
     match provider {
         "codex" => codex::normalize(node_id, agent_id, payload),
         "copilot" => copilot::normalize(node_id, agent_id, payload),
-        "gemini" => gemini::normalize(node_id, agent_id, payload),
         "opencode" => opencode::normalize(node_id, agent_id, payload),
         // One parser for both: OMP is a fork of Pi's extension API and the
         // vocabularies differ by an alias, not by a shape.
@@ -240,7 +238,7 @@ pub(super) fn truncate(value: &str, limit: usize) -> String {
     value.chars().take(limit).collect()
 }
 
-/// Common to Claude, Codex and Gemini: the transcript and session identity ride
+/// Common to Claude and Codex: the transcript and session identity ride
 /// along on every event, whatever the event says.
 pub(super) fn apply_common(event: &mut AgentEvent, payload: &Value) {
     if event.session_id.is_none() {
@@ -331,13 +329,13 @@ mod tests {
 
     #[test]
     fn a_custom_agent_is_parsed_as_its_base_and_attributed_to_itself() {
-        // Gemini's vocabulary, not Claude's: the fallback parser would find
+        // Copilot's vocabulary, not Claude's: the fallback parser would find
         // nothing here, so this only passes if the base picked the parser.
         let event = normalize_as(
-            "gemini",
+            "copilot",
             "custom:wrapper",
             "node-a",
-            &json!({ "hook_event_name": "AfterAgent" }),
+            &json!({ "hookEventName": "agentStop" }),
         )
         .unwrap();
         assert_eq!(event.agent_id, "custom:wrapper");
@@ -346,7 +344,7 @@ mod tests {
             normalize(
                 "custom:wrapper",
                 "node-a",
-                &json!({ "hook_event_name": "AfterAgent" })
+                &json!({ "hookEventName": "agentStop" })
             )
             .is_none()
         );

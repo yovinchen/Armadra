@@ -225,7 +225,7 @@ mod tests {
             parse_version("codex-cli 0.104.0").as_deref(),
             Some("0.104.0")
         );
-        assert_eq!(parse_version("gemini 1.2").as_deref(), Some("1.2.0"));
+        assert_eq!(parse_version("opencode 1.2").as_deref(), Some("1.2.0"));
         assert_eq!(parse_version("v18.1.8\n").as_deref(), Some("18.1.8"));
         // No version is `None`, never a zero a comparison could accept.
         assert_eq!(parse_version("unknown build"), None);

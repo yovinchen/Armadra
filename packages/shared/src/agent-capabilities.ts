@@ -237,7 +237,6 @@ export const AGENT_MODEL_SUGGESTIONS: Readonly<
 > = {
   claude: ["opus", "sonnet", "haiku"],
   codex: ["gpt-5-codex", "gpt-5"],
-  gemini: ["gemini-2.5-pro", "gemini-2.5-flash"],
   opencode: [],
   pi: [],
   omp: [],

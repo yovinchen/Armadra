@@ -48,7 +48,6 @@ impl Rule {
 
 const CLAUDE_FAMILIES: &[&str] = &["opus", "sonnet", "haiku"];
 const OPENAI_REASONING: &[&str] = &["o1", "o3", "o4"];
-const GEMINI_LONG: &[&str] = &["gemini-1.5", "gemini-2.0", "gemini-2.5", "gemini-3"];
 
 const WINDOWS: &[(Rule, u64)] = &[
     // Anthropic. The long-context variant is opt-in and carries its own
@@ -64,9 +63,6 @@ const WINDOWS: &[(Rule, u64)] = &[
     (Rule::Prefix("gpt-4.1"), 1_047_576),
     (Rule::Prefix("gpt-4o"), 128_000),
     (Rule::AnyPrefix(OPENAI_REASONING), 200_000),
-    // Google. 1.5 Pro is the only two-million-token window in the family.
-    (Rule::Prefix("gemini-1.5-pro"), 2_097_152),
-    (Rule::AnyPrefix(GEMINI_LONG), 1_048_576),
 ];
 
 /// `Anthropic/Claude-Opus-4` → `claude-opus-4`: lower-cased, router prefix off.
@@ -123,8 +119,6 @@ mod tests {
         assert_eq!(context_capacity(Some("gpt-5-codex")), Some(400_000));
         assert_eq!(context_capacity(Some("gpt-4o-mini")), Some(128_000));
         assert_eq!(context_capacity(Some("o3-mini")), Some(200_000));
-        assert_eq!(context_capacity(Some("gemini-2.5-pro")), Some(1_048_576));
-        assert_eq!(context_capacity(Some("gemini-1.5-pro")), Some(2_097_152));
         // No guessing: an unfamiliar id has no denominator at all.
         assert_eq!(context_capacity(Some("some-local-llm")), None);
         assert_eq!(context_capacity(Some("  ")), None);
@@ -174,9 +168,6 @@ mod tests {
             "claude-sonnet-4-5"
         );
         assert_eq!(context_capacity(Some("openai/gpt-5")), Some(400_000));
-        assert_eq!(
-            context_capacity(Some("GOOGLE/Gemini-2.5-Flash")),
-            Some(1_048_576)
-        );
+        assert_eq!(context_capacity(Some("OPENAI/GPT-5-Codex")), Some(400_000));
     }
 }

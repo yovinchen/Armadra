@@ -17,8 +17,7 @@
 //! by hand sees that on the next read, with nothing having to notice.
 //!
 //! The marker exists because the adapter cannot carry a revision: Codex hashes
-//! its hook entries and Gemini shows them in `gemini hooks`, so a field only we
-//! read would either break the hash or show up in the user's listing. It lives
+//! its hook entries, so a field only we read would break the hash. It lives
 //! beside our own files in the data directory and is removed with them.
 
 use std::path::{Path, PathBuf};
@@ -111,7 +110,6 @@ pub fn adapter_path(agent_id: &str, config_home: &Path) -> AppResult<PathBuf> {
     Ok(match agent_id {
         "claude" => super::claude::managed_settings_path(&crate::paths::integration_dir(agent_id)),
         "codex" => super::codex::hooks_path(config_home),
-        "gemini" => super::gemini::settings_path(config_home),
         "copilot" => super::copilot::hooks_path(config_home),
         "opencode" => super::opencode::plugin_path(config_home),
         "pi" | "omp" => super::pi::extension_path(config_home),
@@ -282,7 +280,7 @@ mod tests {
             super::super::injection_mode("claude"),
             InjectionMode::Launch
         );
-        for agent_id in ["codex", "gemini", "copilot", "opencode", "pi", "omp"] {
+        for agent_id in ["codex", "copilot", "opencode", "pi", "omp"] {
             assert!(super::super::injection_mode(agent_id) != InjectionMode::Launch);
             assert!(launch_args(agent_id).is_empty(), "{agent_id}");
         }

@@ -12,8 +12,7 @@
 //!   * Codex's `hooks.json` with a top-level `version`, which that CLI parses
 //!     with `deny_unknown_fields` — one stale key and *every* hook in the file
 //!     stops running, the user's included;
-//!   * instruction blocks in the CLI's global `AGENTS.md` / `GEMINI.md` /
-//!     `CLAUDE.md`, fenced `<!-- nodeterm:<name>:start -->` … `:end -->`
+//!   * instruction blocks in the CLI's global `AGENTS.md` / `CLAUDE.md`, fenced `<!-- nodeterm:<name>:start -->` … `:end -->`
 //!     (or `aicc:`), two hundred lines telling the model to drive the canvas
 //!     through a `nodeterm.sh` that answers "not a nodeterm agent node" — the
 //!     model believes the instructions and never looks for the current skill.
@@ -165,7 +164,7 @@ pub fn scan_in(agent_id: &str, config_home: &Path) -> Vec<LegacyFinding> {
 
 /// The global instruction files a provider reads and earlier versions wrote
 /// blocks into. Claude reads `CLAUDE.md`; the current installer's own block
-/// goes to `AGENTS.md` for everything but Gemini, and old ones may be in either.
+/// goes to `AGENTS.md`, and old ones may be in either.
 fn instruction_files(agent_id: &str, config_home: &Path) -> Vec<PathBuf> {
     let mut files = vec![crate::collab::skills::instruction_file(
         agent_id,
@@ -251,7 +250,7 @@ pub fn strip_legacy_blocks(text: &str) -> (String, Vec<String>) {
 /// to rewrite unless it holds one of our commands.
 fn hook_files(agent_id: &str, config_home: &Path) -> Vec<PathBuf> {
     match agent_id {
-        "claude" | "gemini" => vec![config_home.join("settings.json")],
+        "claude" => vec![config_home.join("settings.json")],
         "codex" => vec![config_home.join("hooks.json")],
         "copilot" => json_files(&config_home.join("hooks")),
         _ => Vec::new(),
@@ -295,9 +294,9 @@ fn json_files(directory: &Path) -> Vec<PathBuf> {
 
 fn scan_hook_file(agent_id: &str, path: &Path) -> Vec<LegacyFinding> {
     let Ok(document) = read_json_object(path) else {
-        // A file we cannot parse is not residue we recognise. Codex and Gemini
-        // both report it themselves, and guessing at its contents is how a
-        // repair turns into a deletion.
+        // A file we cannot parse is not residue we recognise. Codex reports
+        // it itself, and guessing at its contents is how a repair turns into
+        // a deletion.
         return Vec::new();
     };
     let mut found = Vec::new();
@@ -324,8 +323,8 @@ fn scan_hook_file(agent_id: &str, path: &Path) -> Vec<LegacyFinding> {
     found
 }
 
-/// Every command string under `hooks`, in both shapes: the grouped one Claude,
-/// Codex and Gemini use, and Copilot's flat list of entries with `exec`/`args`.
+/// Every command string under `hooks`, in both shapes: the grouped one Claude
+/// and Codex use, and Copilot's flat list of entries with `exec`/`args`.
 fn hook_commands(document: &Map<String, Value>) -> Vec<String> {
     let mut commands = Vec::new();
     let Some(events) = document.get("hooks").and_then(Value::as_object) else {

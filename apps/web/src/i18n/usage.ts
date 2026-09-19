@@ -73,7 +73,6 @@ export const usage: MessageModule = {
     "usage.dockLabel": "用量 {value}",
     "usage.provider.claude": "Claude", // i18n-exempt
     "usage.provider.codex": "Codex", // i18n-exempt
-    "usage.provider.gemini": "Gemini", // i18n-exempt
     "usage.window.quota": "模型额度",
     "usage.window.5h": "5 小时",
     "usage.window.7d": "7 天",
@@ -153,7 +152,6 @@ export const usage: MessageModule = {
     "usage.dockLabel": "Usage {value}",
     "usage.provider.claude": "Claude",
     "usage.provider.codex": "Codex",
-    "usage.provider.gemini": "Gemini",
     "usage.window.quota": "Model quota",
     "usage.window.5h": "5h",
     "usage.window.7d": "7d",

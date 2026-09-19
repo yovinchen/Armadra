@@ -21,8 +21,8 @@ CORS 只放行 `http://127.0.0.1:*`、`http://localhost:*`、`tauri://localhost`
 | `terminal/`                           | 三种后端：`tmux`（默认，会话跨重启存活）、`direct`（portable-pty）、`ssh`；快照重连、背压、回收        |
 | `hook/`                               | hook 端点（回环 TCP + Unix socket）、per-node token 鉴权、各 CLI 的 hook 安装与载荷归一化、状态 reduce |
 | `collab/`                             | 上下文链接、控制动词、消息投递、审批、技能安装、板日志                                                 |
-| `index/`                              | 扫描 Claude / Codex / Gemini 的本地转录，建 `(provider, sessionId) → 标题` 索引                        |
-| `usage/`                              | Claude / Codex / Gemini 配额快照，按 Runtime 自己的节奏拉取并缓存                                      |
+| `index/`                              | 扫描 Claude / Codex 的本地转录 ，建 `(provider, sessionId) → 标题` 索引                                |
+| `usage/`                              | Claude / Codex / Copilot 配额快照，按 Runtime 自己的节奏拉取并缓存                                     |
 | `files.rs` / `git.rs` / `security.rs` | 文件读写（原子替换）、Git 包装、路径限制在工作区根内                                                   |
 
 ## 接口

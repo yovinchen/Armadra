@@ -56,35 +56,34 @@ describe("agent registry", () => {
     // direction a custom entry may move it.
     expect(
       inheritedAgentCapabilities({
-        baseAgent: "gemini",
+        baseAgent: "codex",
         disabledCapabilities: [],
       }),
     ).toContain("contextUsage");
     expect(
       inheritedAgentCapabilities({
-        baseAgent: "gemini",
+        baseAgent: "codex",
         disabledCapabilities: ["contextUsage"],
       }),
     ).not.toContain("contextUsage");
     // …and one the base adapter never declared stays absent either way.
     expect(
       inheritedAgentCapabilities({
-        baseAgent: "gemini",
+        baseAgent: "codex",
         disabledCapabilities: [],
       }),
-    ).not.toContain("usage");
+    ).not.toContain("nativeRecurrence");
   });
-  it("covers the seven built-in CLIs with a full permission table", () => {
+  it("covers the six built-in CLIs with a full permission table", () => {
     expect(AGENT_IDS).toEqual([
       "claude",
       "codex",
-      "gemini",
       "opencode",
       "pi",
       "omp",
       "copilot",
     ]);
-    expect(AGENT_LIST).toHaveLength(7);
+    expect(AGENT_LIST).toHaveLength(6);
     for (const agent of AGENT_LIST) {
       expect(agent.launchCmd.length).toBeGreaterThan(0);
       expect(agent.color).toMatch(/^#[0-9a-f]{6}$/);
@@ -97,7 +96,7 @@ describe("agent registry", () => {
         expect(Array.isArray(agent.permissionFlag[mode])).toBe(true);
       }
     }
-    expect(AGENT_REGISTRY.gemini.promptFlag).toBeDefined();
+    expect(AGENT_REGISTRY.opencode.promptFlag).toBeDefined();
     expect(AGENT_REGISTRY.claude.sessionIdFlag).toBe("--session-id");
   });
 
@@ -134,7 +133,6 @@ describe("hook events", () => {
     }
     expect(CLAUDE_HOOK_EVENTS).toContain("PermissionRequest");
     expect(CLAUDE_HOOK_EVENTS).toContain("SubagentStop");
-    expect(HOOK_EVENTS.gemini).not.toContain("AfterModel");
     expect(HOOK_EVENTS.opencode).toContain("session.idle");
     // Codex has no Notification event; the installer skipped it on every run.
     expect(HOOK_EVENTS.codex).not.toContain("Notification");
@@ -175,14 +173,6 @@ describe("assembleLaunchCommand", () => {
     ).toEqual({ command: "codex hello" });
   });
 
-  it("uses the prompt flag for gemini", () => {
-    expect(
-      assembleLaunchCommand({ agentId: "gemini", prompt: "explain this repo" }),
-    ).toEqual({
-      command: "gemini --prompt-interactive 'explain this repo'",
-    });
-  });
-
   it("uses OpenCode’s supported interactive prompt flag", () => {
     expect(
       assembleLaunchCommand({ agentId: "opencode", prompt: "run the tests" }),
@@ -213,8 +203,8 @@ describe("assembleLaunchCommand", () => {
 
   it("ignores a session id flag the CLI does not have", () => {
     expect(
-      assembleLaunchCommand({ agentId: "gemini", sessionId: "abc" }).command,
-    ).toBe("gemini");
+      assembleLaunchCommand({ agentId: "opencode", sessionId: "abc" }).command,
+    ).toBe("opencode");
   });
 
   it("honours a program override and extra args", () => {
@@ -271,17 +261,17 @@ describe("resuming a conversation", () => {
     );
   });
 
-  it("uses --resume for claude and gemini", () => {
+  it("uses --resume for claude and copilot", () => {
     expect(
       assembleLaunchCommand({ agentId: "claude", resume: "abc-123" }).command,
     ).toBe("claude --resume abc-123");
     expect(
       assembleLaunchCommand({
-        agentId: "gemini",
+        agentId: "copilot",
         resume: "abc-123",
         prompt: "carry on",
       }).command,
-    ).toBe("gemini --resume abc-123 --prompt-interactive 'carry on'");
+    ).toBe("copilot --resume abc-123 --interactive 'carry on'");
   });
 
   it("resumes OpenCode via its session flag", () => {
@@ -372,14 +362,14 @@ describe("自定义 Agent", () => {
   });
 
   it("takes the prompt mode and the flags from the base agent", () => {
-    const gemini = { ...echo, baseAgent: "gemini" as const };
+    const copilot = { ...echo, baseAgent: "copilot" as const };
     expect(
       assembleLaunchCommand({
         agentId: "custom:echo",
-        custom: gemini,
+        custom: copilot,
         prompt: "go",
       }).command,
-    ).toContain("--prompt-interactive go");
+    ).toContain("--interactive go");
 
     const opencode = { ...echo, baseAgent: "opencode" as const, args: [] };
     const launch = assembleLaunchCommand({

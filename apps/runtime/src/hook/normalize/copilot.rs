@@ -1,7 +1,7 @@
 //! GitHub Copilot CLI hook payloads — 协作通道 §3.3.
 //!
 //! Copilot is the one provider whose payload does **not** name its own event.
-//! Claude, Codex and Gemini all send `hook_event_name`; Copilot sends a bare
+//! Claude and Codex both send `hook_event_name`; Copilot sends a bare
 //! object — `{sessionId, timestamp, cwd, …}` plus whatever that event adds —
 //! and the event name exists only as the key in the hooks file. Verified
 //! against Copilot CLI 1.0.83 on 2026-09-06 by installing a probe hook on every

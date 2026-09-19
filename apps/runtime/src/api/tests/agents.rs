@@ -23,7 +23,7 @@ async fn custom_agents_are_listed_after_the_built_ins_and_borrow_their_base() {
         "/api/settings",
         Some(json!({ "agents": { "custom": [
             { "id": "custom:echo", "label": "Echo", "launchCmd": program,
-              "args": ["hello"], "baseAgent": "gemini",
+              "args": ["hello"], "baseAgent": "codex",
               "env": { "GREETING": "hi" } },
             { "id": "custom:broken", "label": "", "launchCmd": "x" },
         ] } })),
@@ -41,12 +41,12 @@ async fn custom_agents_are_listed_after_the_built_ins_and_borrow_their_base() {
     assert_eq!(custom["label"], "Echo");
     assert_eq!(custom["launchCmd"], program);
     assert_eq!(custom["args"], json!(["hello"]));
-    assert_eq!(custom["baseAgent"], "gemini");
+    assert_eq!(custom["baseAgent"], "codex");
     // Colour, prompt mode and capabilities are the base agent's.
-    let gemini = agents.iter().find(|a| a["id"] == "gemini").unwrap();
-    assert_eq!(custom["color"], gemini["color"]);
-    assert_eq!(custom["promptMode"], gemini["promptMode"]);
-    assert_eq!(custom["capabilities"], gemini["capabilities"]);
+    let codex = agents.iter().find(|a| a["id"] == "codex").unwrap();
+    assert_eq!(custom["color"], codex["color"]);
+    assert_eq!(custom["promptMode"], codex["promptMode"]);
+    assert_eq!(custom["capabilities"], codex["capabilities"]);
     // An absolute program resolves even though it is on no PATH entry.
     assert_eq!(custom["resolvedPath"], program);
     assert_eq!(custom["installed"], true);

@@ -1,7 +1,7 @@
 //! What the node header's model menu may offer, per CLI — 用户实测反馈 F7.
 //!
 //! The menu used to be a constant in `packages/shared`: `gpt-5-codex` and
-//! `gpt-5` for Codex, three Claude aliases, two Gemini ids. A user whose CLI
+//! `gpt-5` for Codex, three Claude aliases. A user whose CLI
 //! was already running `gpt-6-astra-high` opened the menu and found neither
 //! the model they were on nor any way to reach it. A list that is out of date
 //! the day it ships is worse than no list, because it looks authoritative.
@@ -12,9 +12,8 @@
 //!    anything we know: it is the only source that reflects this account's
 //!    entitlements and this machine's configuration. `claude --help` documents
 //!    its `--model` aliases; Codex's `config.toml` names the model (and the
-//!    profiles) the user actually configured. Neither `codex --help` nor
-//!    `gemini --help` enumerates models — checked against both CLIs on
-//!    2026-09-13 — so for those there is nothing more to read.
+//!    profiles) the user actually configured. `codex --help` enumerates no
+//!    models — checked on 2026-09-13 — so there is nothing more to read.
 //! 2. **The models.dev catalog** ([`super::catalog`]), filtered to the
 //!    provider that CLI talks to and sorted newest first.
 //! 3. **The built-in fallback**, for a Runtime that has never reached the
@@ -82,7 +81,6 @@ fn catalog_provider(base_agent: &str) -> Option<&'static str> {
     match base_agent {
         "claude" => Some("anthropic"),
         "codex" => Some("openai"),
-        "gemini" => Some("google"),
         "copilot" => Some("github-copilot"),
         _ => None,
     }
@@ -93,18 +91,17 @@ fn builtin_models(base_agent: &str) -> &'static [&'static str] {
     match base_agent {
         "claude" => &["opus", "sonnet", "haiku"],
         "codex" => &["gpt-5-codex", "gpt-5"],
-        "gemini" => &["gemini-2.5-pro", "gemini-2.5-flash"],
         _ => &[],
     }
 }
 
 /// A catalog id this CLI can actually be asked to run.
 ///
-/// Google publishes image, video and embedding models in the same provider as
-/// the Gemini chat models; offering `lyria-3-clip-preview` in a coding agent's
-/// menu would be noise. Anthropic and OpenAI publish other modalities too, and
-/// the same rule applies: a model the CLI cannot drive does not belong here.
-fn is_selectable(provider: &str, model_id: &str) -> bool {
+/// Anthropic and OpenAI publish image, audio and embedding models in the same
+/// provider as the chat models; offering `text-embedding-3-large` in a coding
+/// agent's menu would be noise. A model the CLI cannot drive does not belong
+/// here.
+fn is_selectable(_provider: &str, model_id: &str) -> bool {
     let id = model_id.to_ascii_lowercase();
     let excluded = [
         "embedding",
@@ -116,18 +113,8 @@ fn is_selectable(provider: &str, model_id: &str) -> bool {
         "moderation",
         "realtime",
         "search",
-        "veo",
-        "imagen",
-        "lyria",
-        "gemma",
     ];
-    if excluded.iter().any(|needle| id.contains(needle)) {
-        return false;
-    }
-    match provider {
-        "google" => id.starts_with("gemini"),
-        _ => true,
-    }
+    !excluded.iter().any(|needle| id.contains(needle))
 }
 
 /// Assembles the list for one adapter.
@@ -231,7 +218,7 @@ pub fn assemble(
 async fn cli_models(base_agent: &str, launch_cmd: Option<&str>) -> Vec<String> {
     match base_agent {
         // `claude --help` spells its aliases out in the `--model` description.
-        // Neither `codex --help` nor `gemini --help` lists any (2026-09-13).
+        // `codex --help` lists none (2026-09-13).
         "claude" => match launch_cmd.and_then(crate::agent::resolve_command) {
             Some(program) => {
                 parse_claude_model_aliases(&run_help(&program).await.unwrap_or_default())

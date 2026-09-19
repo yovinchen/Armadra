@@ -76,7 +76,7 @@ async fn an_extension_report_is_recorded_as_an_extension() {
     );
 }
 
-/// The one thing Pi and Oh My Pi have that Codex and Gemini do not: a number
+/// The one thing Pi and Oh My Pi have that Codex does not: a number
 /// the CLI measured. `ctx.getContextUsage()` is forwarded on the same
 /// `armadraContextUsage` payload Claude's status line uses, so the reading has
 /// to come back `provider_hook` / `reported` rather than an estimate — and a

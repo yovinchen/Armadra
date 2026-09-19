@@ -246,20 +246,20 @@ fn non_json_stdin_is_wrapped_on_the_wire() {
     let endpoint = write_endpoint_file(dir.path(), port);
 
     let output = run(
-        &["gemini"],
+        &["codex"],
         &[
             ("ARMADRA_NODE_ID", "node-7"),
             ("ARMADRA_ENDPOINT_FILE", endpoint.to_str().unwrap()),
         ],
-        "BeforeAgent\n",
+        "UserPromptSubmit\n",
     );
     assert!(output.status.success());
 
     let captured = requests.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!(captured.request_line(), "POST /hook/gemini HTTP/1.1");
+    assert_eq!(captured.request_line(), "POST /hook/codex HTTP/1.1");
     assert_eq!(
         captured.body,
-        r#"{"nodeId":"node-7","payload":{"raw":"BeforeAgent\n"},"version":1}"#
+        r#"{"nodeId":"node-7","payload":{"raw":"UserPromptSubmit\n"},"version":1}"#
     );
 }
 

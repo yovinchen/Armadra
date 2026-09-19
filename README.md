@@ -3,7 +3,7 @@
 # Armadra
 
 本地优先的桌面画布：将真实 CLI Agent 放在无限画布上，通过连线共享上下文。
-支持 Claude Code、Codex、Gemini CLI、OpenCode、Pi、OMP 和 GitHub Copilot。
+支持 Claude Code、Codex、OpenCode、Pi、OMP 和 GitHub Copilot。
 
 ## 能做什么
 
@@ -12,7 +12,7 @@
 - **协作**：按连线读取上下文，使用 `post / inbox / ack` 消息箱；默认不向其他终端自动粘贴消息。
 - **开发工具**：Git 状态与提交、会话检索、用量、主题、语言、数据备份。
 
-会话索引目前覆盖 Claude / Codex / Gemini；各 Agent 的能力差异见 [协作说明](docs/guides/agent-collaboration.md)。
+会话索引目前覆盖 Claude / Codex；各 Agent 的能力差异见 [协作说明](docs/guides/agent-collaboration.md)。
 
 ## 快速开始
 

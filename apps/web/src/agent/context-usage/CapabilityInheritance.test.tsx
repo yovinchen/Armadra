@@ -21,16 +21,16 @@ describe("capability inheritance", () => {
     expect(changed).toHaveBeenCalledWith(["contextUsage"]);
     rendered.rerender(
       <CapabilityInheritance
-        baseAgent="gemini"
+        baseAgent="copilot"
         disabledCapabilities={[]}
         onChange={changed}
       />,
     );
-    // gemini reads its own transcript, so it does declare session context; it
-    // has no subagent adapter, so that one never appears.
+    // copilot declares neither a context reading nor a subagent adapter, so
+    // neither checkbox appears; the status hooks it does have still do.
     expect(
-      screen.getByRole("checkbox", { name: /Session context/ }),
-    ).toBeTruthy();
+      screen.queryByRole("checkbox", { name: /Session context/ }),
+    ).toBeNull();
     expect(screen.queryByRole("checkbox", { name: /Subagents/ })).toBeNull();
     expect(screen.getByRole("checkbox", { name: /Status hooks/ })).toBeTruthy();
   });
