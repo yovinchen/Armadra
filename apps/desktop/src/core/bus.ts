@@ -20,6 +20,35 @@ export interface CoreEvents {
    * the instance id so a subscriber that attached to the wrong core can tell.
    */
   "runtime.hello": { readonly instanceId: string; readonly version: string };
+  /**
+   * One frame of `WS /api/workspaces/{id}/events`, with the workspace it
+   * belongs to beside it.
+   *
+   * The envelope exists because the stream is *scoped* and the frame is
+   * *contractual*. `workspaceEventSchema` in packages/shared is a discriminated
+   * union on `type`, and two of its members — `board.changed` is the clearest —
+   * carry no workspace id at all: the Rust `EventHub::publish(&workspace_id, …)`
+   * kept the routing key outside the payload, and so does this. So a publisher
+   * sets `workspaceId` for the fan-out to route on, and `event` is forwarded to
+   * subscribers byte for byte.
+   *
+   * The authoritative list of what `event` may be is `workspaceEventSchema` in
+   * `packages/shared/src/api/events.ts` — 21 `type` strings, contractual and
+   * unchanged (design §5). It is not restated as a union here: the core does
+   * not depend on that package, and a second copy of the list would be a
+   * second thing to drift. What guards the shape instead is the parity check,
+   * which parses every frame this core emits with the real schema.
+   */
+  "workspace.event": {
+    readonly workspaceId: string;
+    readonly event: WorkspaceEventFrame;
+  };
+}
+
+/** One frame of the workspace stream: a contractual `type`, plus its fields. */
+export interface WorkspaceEventFrame {
+  readonly type: string;
+  readonly [field: string]: unknown;
 }
 
 export type EventName = keyof CoreEvents;

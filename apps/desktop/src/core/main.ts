@@ -1,5 +1,8 @@
 import type { Server } from "node:http";
 import { USAGE, parseArguments } from "./args";
+import { install as installAssets } from "./assets/routes";
+import { install as installCanvas } from "./canvas/routes";
+import { install as installWorkspaces } from "./workspaces/routes";
 import { EventBus } from "./bus";
 import { DatabaseRefused, type OpenedDatabase, openDatabase } from "./db/open";
 import { resolveMigrationsDir } from "./db/migrations";
@@ -81,7 +84,13 @@ export interface RunningCore extends CoreContext {
 }
 
 /** The domains assembled by default; each phase adds its `install` here. */
-export const DOMAINS: readonly ((context: CoreContext) => void)[] = [];
+export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
+  // Workspaces first: it mints the default workspace, and the other two read
+  // a workspace row before they do anything.
+  installWorkspaces,
+  installCanvas,
+  installAssets,
+];
 
 export async function run(options: RunOptions = {}): Promise<RunningCore> {
   const env = options.env ?? process.env;
