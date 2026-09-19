@@ -145,6 +145,48 @@ export function ownsRuntime(
   return !development || explicitOwnership === "1";
 }
 
+/**
+ * The Runtime's published HTTP and WebSocket bases, from `endpoints.json`.
+ *
+ * This is how the shell finds a Runtime it did NOT start: the port is
+ * kernel-assigned, so the document is the only thing that knows it.
+ * `apps/web/vite.config.ts` reads the same file for its dev proxy, so the page
+ * and the shell agree on which Runtime is meant. A record naming anything but
+ * a loopback HTTP base is refused rather than passed on — the shell must not
+ * point the page at a machine nobody asked for.
+ */
+export function publishedRuntimeBases(
+  endpointsJson: string,
+): { http: string; websocket: string } | undefined {
+  let document: unknown;
+  try {
+    document = JSON.parse(endpointsJson);
+  } catch {
+    return undefined;
+  }
+  const runtime = (document as { runtime?: unknown } | null)?.runtime;
+  if (typeof runtime !== "object" || runtime === null) return undefined;
+  const record = runtime as Record<string, unknown>;
+  if (typeof record.http !== "string") return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(record.http);
+  } catch {
+    return undefined;
+  }
+  if (
+    parsed.protocol !== "http:" ||
+    (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost")
+  ) {
+    return undefined;
+  }
+  const websocket =
+    typeof record.websocket === "string"
+      ? record.websocket
+      : parsed.origin.replace(/^http/, "ws");
+  return { http: parsed.origin, websocket };
+}
+
 /** The address this shell asked the Runtime to listen on. */
 export type RuntimeAddress =
   | { readonly kind: "socket"; readonly path: string }

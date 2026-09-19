@@ -6,6 +6,7 @@ import {
   ownsRuntime,
   parseAnnouncement,
   parseHealth,
+  publishedRuntimeBases,
   staleRuntimeRecord,
 } from "./identity";
 
@@ -150,6 +151,43 @@ describe("the published endpoint record", () => {
     ).toBe(false);
     expect(staleRuntimeRecord('{"version":1}', address).ok).toBe(false);
     expect(staleRuntimeRecord("not json", address).ok).toBe(false);
+  });
+
+  it("yields the bases the page should use", () => {
+    expect(
+      publishedRuntimeBases(
+        JSON.stringify({
+          runtime: {
+            http: "http://127.0.0.1:61611",
+            websocket: "ws://127.0.0.1:61611",
+          },
+        }),
+      ),
+    ).toEqual({
+      http: "http://127.0.0.1:61611",
+      websocket: "ws://127.0.0.1:61611",
+    });
+    // A record with only an http base still implies its WebSocket origin.
+    expect(
+      publishedRuntimeBases('{"runtime":{"http":"http://localhost:9"}}'),
+    ).toEqual({
+      http: "http://localhost:9",
+      websocket: "ws://localhost:9",
+    });
+  });
+
+  it("refuses a base that is not loopback http", () => {
+    for (const document of [
+      '{"runtime":{"http":"https://127.0.0.1:61611"}}',
+      '{"runtime":{"http":"http://example.test"}}',
+      '{"runtime":{"http":"not a url"}}',
+      '{"runtime":{"http":42}}',
+      '{"runtime":{}}',
+      '{"version":1}',
+      "not json",
+    ]) {
+      expect(publishedRuntimeBases(document), document).toBeUndefined();
+    }
   });
 
   it("matches a TCP Runtime on its published http base", () => {

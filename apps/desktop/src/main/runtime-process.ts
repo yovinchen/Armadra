@@ -27,6 +27,7 @@ import {
   runtimeBinaryName,
   staleRuntimeRecord,
 } from "../shell-core/runtime/identity";
+import { repoRoot } from "./repo-root";
 
 /**
  * The Runtime process this shell owns, and how it is asked to stop.
@@ -239,14 +240,14 @@ export function runtimeExecutable(
   packaged = !!process.env.ARMADRA_DESKTOP_PACKAGED,
   env: NodeJS.ProcessEnv = process.env,
   resourcesPath: string = process.resourcesPath,
-  repoRoot: string = resolve(__dirname, "../../../.."),
+  repoDir: string = repoRoot(),
 ): string {
   const name = runtimeBinaryName();
   if (env.ARMADRA_RUNTIME_BINARY) return env.ARMADRA_RUNTIME_BINARY;
   if (packaged) return join(resourcesPath, name);
   const target = env.CARGO_TARGET_DIR
-    ? resolve(repoRoot, env.CARGO_TARGET_DIR)
-    : join(repoRoot, "target");
+    ? resolve(repoDir, env.CARGO_TARGET_DIR)
+    : join(repoDir, "target");
   return join(target, "debug", name);
 }
 

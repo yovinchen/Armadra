@@ -22,6 +22,14 @@ const web = resolve(here, "../web");
 const EXTERNAL = ["electron"];
 
 /**
+ * Workspace packages go the other way: they must be BUNDLED. A packaged app
+ * has no `node_modules/@armadra/*` to require, and `@armadra/protocol` is
+ * ESM-only — its `exports` declares no `require` condition, so a CJS main
+ * process cannot load it at runtime even in development.
+ */
+const BUNDLED_WORKSPACE_PACKAGES = ["@armadra/protocol"];
+
+/**
  * CJS output for both. electron-vite defaults to ESM (`.mjs`), and an
  * asar-packaged Electron app needs a CJS entry point for the main process and
  * for the preload script.
@@ -73,7 +81,7 @@ function renderer(command: "serve" | "build", mode: string): UserConfig {
 
 export default defineConfig(({ command, mode }) => ({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: BUNDLED_WORKSPACE_PACKAGES })],
     build: {
       rollupOptions: {
         input: { index: resolve(here, "src/main/index.ts") },
@@ -83,7 +91,7 @@ export default defineConfig(({ command, mode }) => ({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: BUNDLED_WORKSPACE_PACKAGES })],
     build: {
       rollupOptions: {
         input: { index: resolve(here, "src/preload/index.ts") },
