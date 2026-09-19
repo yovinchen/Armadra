@@ -38,6 +38,7 @@ import {
   optionalString,
 } from "../workspaces/support";
 import { answerApproval } from "./approvals";
+import { audit } from "../identity/audit";
 import type { CoreRequest, HandlerResult, RouteMatch } from "../http/router";
 
 /**
@@ -205,6 +206,13 @@ export function installRoutes(deps: AgentRouteDeps): void {
             : {}),
         },
       );
+      // 审批答复是设计 §4.5 的五个审计写入点之一：一次「允许」可能让 Agent 动
+      // 到磁盘，事后必须查得到是谁在什么时候答的。
+      audit({
+        action: "approval.answer",
+        target: param(match, "pendingId"),
+        detail: { decision },
+      });
       return { status: 200, body: { ...approval, route } };
     }),
   );

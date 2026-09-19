@@ -8,6 +8,8 @@
  * caller reads).
  */
 
+import { allows } from "../identity/gate";
+import { scope } from "../identity/scopes";
 import type { CoreContext } from "../main";
 import { workspaceExists } from "./workspaces";
 import { catchUp } from "./outbox";
@@ -87,6 +89,13 @@ export function install(context: CoreContext): WorkspaceEventStream {
       const workspaceId = params.workspaceId ?? "";
       if (!workspaceExists(context.db.database, workspaceId)) {
         return { status: 404, reason: "Not Found" };
+      }
+      // 订阅的 scope 判定（设计 §4.2 / S6）。事件流按工作空间扇出，所以
+      // 「谁能收到这块画布的帧」正好是一条 `events:read@workspace`。今天订阅者
+      // 恒为 owner，这里恒通过；有第二个 principal 之后，拒绝必须发生在升级
+      // **之前**——一个开了又关的 socket 会让页面按 1 秒的下限无限重连。
+      if (!allows([scope("events:read", workspaceId)])) {
+        return { status: 403, reason: "Forbidden" };
       }
       // 游标的三档判定在升级之前，和 `catchup.go` 一样：三个状态是三个答案，
       // 不是同一个答案的深浅。拒绝写在状态行上（`409 SNAPSHOT_REQUIRED`），

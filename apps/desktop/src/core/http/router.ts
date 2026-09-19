@@ -4,6 +4,7 @@ import {
   notFound,
   notImplemented,
 } from "./errors";
+import { type RouteScopeRequirement, routeScope } from "./route-scopes";
 import { ROUTES, type RouteEntry } from "./routes";
 
 /**
@@ -66,9 +67,24 @@ interface Compiled {
   readonly literals: number;
 }
 
+/** What a registration may say about itself beyond the handler. */
+export interface RouteOptions {
+  /**
+   * The permission this route requires, overriding `route-scopes.ts`.
+   *
+   * Almost nothing needs it: the table there covers every implemented path by
+   * family, and a family is the unit a person reasons about when sharing a
+   * board. It is here for the route whose requirement does not follow from its
+   * path — and so that a domain *can* state its own without editing a table
+   * that lives in another file.
+   */
+  readonly scope?: string;
+}
+
 export class Router {
   private readonly compiled: Compiled[];
   private readonly handlers = new Map<string, Handler>();
+  private readonly declared = new Map<string, string>();
 
   constructor(
     entries: readonly RouteEntry[] = ROUTES,
@@ -93,7 +109,12 @@ export class Router {
    * `route-parity` cannot check, and a typo would otherwise register a handler
    * that is never reached.
    */
-  handle(method: string, path: string, handler: Handler): void {
+  handle(
+    method: string,
+    path: string,
+    handler: Handler,
+    options: RouteOptions = {},
+  ): void {
     const known = this.compiled.some((route) => route.entry.path === path);
     if (!known) {
       throw new Error(
@@ -101,6 +122,38 @@ export class Router {
       );
     }
     this.handlers.set(key(method, path), handler);
+    if (options.scope !== undefined) {
+      this.declared.set(key(method, path), options.scope);
+    }
+  }
+
+  /**
+   * What a caller must hold to be allowed through here.
+   *
+   * The decision itself is not here — it is `core/identity/authorize.ts`, and
+   * today it says yes to the owner without consulting this at all. What this
+   * answers is the question that has to be written down *before* there is a
+   * second principal: which permission does this path stand for. A route the
+   * table does not cover requires nothing, which is the honest answer for
+   * `/health` and for the hook surface's own credentialled face.
+   */
+  requiredScope(
+    method: string,
+    path: string,
+  ): RouteScopeRequirement | undefined {
+    const found = this.match(path);
+    const pattern = found?.entry.path ?? path;
+    const workspaceId = found?.params.workspaceId ?? "";
+    const declared = this.declared.get(key(method, pattern));
+    if (declared !== undefined) {
+      return { permission: declared, workspaceId };
+    }
+    const requirement = routeScope(method, pattern);
+    if (requirement === undefined) return undefined;
+    // 模式里的 `{workspaceId}` 不是一个工作空间；真实路径上的那个才是。
+    return requirement.workspaceId === "" && workspaceId !== ""
+      ? { ...requirement, workspaceId }
+      : requirement;
   }
 
   match(path: string): RouteMatch | undefined {

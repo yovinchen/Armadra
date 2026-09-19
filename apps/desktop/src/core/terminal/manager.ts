@@ -15,6 +15,7 @@ import {
   notFound,
   persistent,
   sessionKey,
+  TerminalError,
 } from "./backend";
 import { AttachmentBook } from "./attachments";
 import {
@@ -35,7 +36,15 @@ import {
   mergeReports,
   reconcile,
 } from "./gc";
-import { InputLedger, InputSafety } from "./input";
+import { audit } from "../identity/audit";
+import { allows } from "../identity/gate";
+import { scope } from "../identity/scopes";
+import {
+  DriveBook,
+  InputLedger,
+  InputSafety,
+  type TerminalWriter,
+} from "./input";
 
 /**
  * The manager: what a session *is*, as opposed to what a backend *runs*.
@@ -177,6 +186,8 @@ export class TerminalManager {
   private readonly gates = new Map<SessionKey, Promise<unknown>>();
   private readonly attachments: AttachmentBook;
   private readonly inputs = new InputLedger();
+  /** 会话的创建者，`terminal:drive` 判定的另一半。 */
+  private readonly drive = new DriveBook();
   private readonly timers: NodeJS.Timeout[] = [];
   private readonly lastRowWrite = new Map<string, number>();
   private readonly now: () => string;
@@ -507,6 +518,9 @@ export class TerminalManager {
 
   private remember(record: SessionRecord): void {
     this.byKey.set(record.key, record.id);
+    // 创建者今天恒为本机 owner（空串）。会话与工作空间的这一对是 drive 判定
+    // 的输入：向别人开的终端写入要 `terminal:drive@那块画布`。
+    this.drive.remember(record.id, record.workspaceId);
     this.attachments.register(record.id);
     this.records.set(record.id, record);
   }
@@ -517,6 +531,7 @@ export class TerminalManager {
     this.records.delete(sessionId);
     this.attachments.forget(sessionId);
     this.lastRowWrite.delete(sessionId);
+    this.drive.forget(sessionId);
     // The marks describe a pty that no longer exists. Keeping them would let a
     // later session with the same id claim input it never wrote.
     this.inputs.forget(sessionId);
@@ -644,8 +659,37 @@ export class TerminalManager {
     sessionId: string,
     generation: number,
     data: string,
+    writer?: TerminalWriter,
   ): Promise<void> {
     const first = this.checked(sessionId, generation);
+    // `terminal:drive` 的判定入口（设计 §4.4）：写入者 ≠ 会话创建者时才要这条
+    // 授权。今天两者都是本机 owner，所以恒通过——入口在这里，是为了让第二个
+    // principal 出现时不必重新找一遍所有写入路径。
+    const takeover =
+      this.drive.creator(sessionId) !== undefined &&
+      (writer?.principalId ?? "") !== this.drive.creator(sessionId);
+    if (
+      !this.drive.permits(sessionId, writer, (workspaceId) =>
+        allows([scope("terminal:drive", workspaceId)]),
+      )
+    ) {
+      throw new TerminalError(
+        403,
+        "forbidden",
+        "Writing into another person's terminal requires terminal:drive",
+      );
+    }
+    if (takeover) {
+      // 终端接管，设计 §4.5 的第五个审计写入点。写在这里而不是附着时：附着只
+      // 是看，而接管是「有人开始替另一个人按键」，那一刻才值得记。
+      audit({
+        action: "terminal.drive",
+        target: sessionId,
+        principalId: writer?.principalId ?? "",
+        workspaceId: first.workspaceId,
+        detail: { creator: this.drive.creator(sessionId) ?? "" },
+      });
+    }
     return this.withKey(first.key, async () => {
       const record = this.checked(sessionId, generation);
       const bytes = Buffer.from(data, "utf8");
