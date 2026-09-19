@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   browserAvailabilitySchema,
-  browserInputRequestSchema,
   browserReadSchema,
   browserSessionSchema,
-  browserSubscribeRequestSchema,
-  browserSubscriptionSchema,
   browserTabListSchema,
   browserUploadedSchema,
   browserViewportSchema,
@@ -35,7 +32,7 @@ const browserSession = {
 };
 
 describe("runtime browser API", () => {
-  it("models a controlled browser session, its input batches and its reads", () => {
+  it("models a controlled browser session and its reads", () => {
     const parsed = browserSessionSchema.parse(browserSession);
     expect(parsed.navigationEpoch).toBe(3);
     // 一个 viewport 至少是 1×1，缩放因子默认 1（设计 §8）。
@@ -50,33 +47,6 @@ describe("runtime browser API", () => {
     expect(
       browserSessionSchema.safeParse({ ...browserSession, state: "napping" })
         .success,
-    ).toBe(false);
-
-    // 一次点击只写它关心的字段，其余补默认值。
-    const batch = browserInputRequestSchema.parse({
-      navigationEpoch: 3,
-      frameSeq: 12,
-      events: [{ kind: "mousePressed", x: 10, y: 20, button: "left" }],
-    });
-    expect(batch.events[0]).toMatchObject({
-      kind: "mousePressed",
-      x: 10,
-      y: 20,
-      button: "left",
-      deltaX: 0,
-      clickCount: 0,
-      text: "",
-    });
-    // 空批次没有意义，超过 64 条要拆——两头都在 schema 里挡住。
-    expect(
-      browserInputRequestSchema.safeParse({ navigationEpoch: 0, events: [] })
-        .success,
-    ).toBe(false);
-    expect(
-      browserInputRequestSchema.safeParse({
-        navigationEpoch: 0,
-        events: Array.from({ length: 65 }, () => ({ kind: "mouseMoved" })),
-      }).success,
     ).toBe(false);
 
     // 读页面的列表字段都可缺省，旧 Runtime 少给一段不该炸。
@@ -103,38 +73,6 @@ describe("runtime browser API", () => {
         reasonCode: "chrome_not_found",
       }).searched,
     ).toEqual([]);
-  });
-
-  it("negotiates a frame encoding and defaults to JPEG for an older runtime", () => {
-    expect(
-      browserSubscribeRequestSchema.parse({
-        visibility: "focused",
-        acceptedEncodings: ["webp", "jpeg"],
-      }).acceptedEncodings,
-    ).toEqual(["webp", "jpeg"]);
-    // 一个说不出编码的客户端和一个不带 `encoding` 的旧 Runtime，结论都是
-    // JPEG——两边任何一边缺席都不会把 WebP 猜出来。
-    expect(
-      browserSubscribeRequestSchema.parse({ visibility: "visible" })
-        .acceptedEncodings,
-    ).toBeUndefined();
-    expect(
-      browserSubscriptionSchema.parse({
-        subscriptionId: "s-1",
-        expiresAt: timestamp,
-        quality: 65,
-        maxFps: 15,
-      }).encoding,
-    ).toBe("jpeg");
-    expect(
-      browserSubscriptionSchema.safeParse({
-        subscriptionId: "s-1",
-        expiresAt: timestamp,
-        quality: 65,
-        maxFps: 15,
-        encoding: "avif",
-      }).success,
-    ).toBe(false);
   });
 
   it("models a tab strip and an upload receipt", () => {
