@@ -12,8 +12,9 @@ import { useKeybindings } from "@/keybindings";
 
 import { NodeShell } from "../NodeShell";
 import type { NodeBodyProps } from "../registry";
+import { useBrowserAlerts } from "./alerts";
 import { control, isDriven, useDrive } from "./drive";
-import { LeaseBadge } from "./Lease";
+import { ActivityStatus, LeaseBadge } from "./Lease";
 import { useIsGhost } from "./pool";
 import { GuestBoundary } from "./GuestBoundary";
 import { WebviewGuest } from "./WebviewGuest";
@@ -82,6 +83,11 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
     },
   });
   const driven = isDriven(lease);
+  /**
+   * Agent 驱动期间页面弹的对话框与文件请求。人不参与答复（那在主进程），
+   * 但必须看得见：一个停在对话框上的页面在画布上和一个正常页面一模一样。
+   */
+  const alerts = useBrowserAlerts(id, lease);
   const [leaseBusy, setLeaseBusy] = React.useState(false);
   const flow = useReactFlow();
   // 画布缩放，只服务右键菜单的坐标换算。跟着渲染走就够——缩放变化必然重渲。
@@ -188,6 +194,11 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
         busy={leaseBusy}
         onTakeover={() => void handControl("takeover")}
         onHandback={() => void handControl("release")}
+      />
+      <ActivityStatus
+        activity={alerts.activity}
+        dialog={alerts.dialog}
+        chooser={alerts.chooser}
       />
       <IconButton
         label={t("browser.back")}
