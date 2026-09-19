@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { renderFlow } from "@/canvas/test-support";
 import type { CanvasNode } from "@armadra/shared";
 
@@ -51,6 +51,7 @@ vi.mock("sonner", () => ({
 }));
 
 import { BrowserNode } from "./BrowserNode";
+import { BROWSER_DISCARD_MS, DISCARD_TICK_MS } from "./discard";
 
 const node = {
   id: "b1",
@@ -189,5 +190,83 @@ describe("导航", () => {
     expect(store.updateNodeData).toHaveBeenCalledWith("b1", {
       url: "https://example.test/deep",
     });
+  });
+});
+
+describe("隐藏回收（W3.2）", () => {
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  /** 隐藏一个 guest：开第二个标签，第一个就退到后台。 */
+  function backgroundTheFirstTab() {
+    fireEvent(
+      guests()[0]!,
+      Object.assign(new Event("new-window"), { url: "https://second.test/" }),
+    );
+  }
+
+  it("隐藏超过 5 分钟后卸载元素，并给出「为省内存释放了」的提示", () => {
+    paint();
+    // guest 停在一个比初始 src 更深的地址上——回收要记住的是**这一页**。
+    fireEvent(
+      guests()[0]!,
+      Object.assign(new Event("did-navigate"), {
+        url: "https://example.test/deep",
+      }),
+    );
+    // 加载中是回收的一条否决，所以先让页面加载完。
+    fireEvent(guests()[0]!, new Event("did-stop-loading"));
+    backgroundTheFirstTab();
+    expect(guests()).toHaveLength(2);
+
+    act(() => {
+      vi.advanceTimersByTime(BROWSER_DISCARD_MS + DISCARD_TICK_MS * 2);
+    });
+
+    // 后台那一个的元素没了（= 进程释放），活动标签一动不动。
+    expect(guests()).toHaveLength(1);
+    const notice = document.querySelector('[data-slot="browser-discarded"]');
+    expect(notice).not.toBeNull();
+    // 说的是内存，不是权限。
+    expect(notice!.textContent).toContain("为省内存释放");
+  });
+
+  it("回到被回收的标签时重放记住的 URL，且不把那次导航回写成新事实", () => {
+    paint();
+    fireEvent(
+      guests()[0]!,
+      Object.assign(new Event("did-navigate"), {
+        url: "https://example.test/deep",
+      }),
+    );
+    // 加载中是回收的一条否决，所以先让页面加载完。
+    fireEvent(guests()[0]!, new Event("did-stop-loading"));
+    backgroundTheFirstTab();
+    act(() => {
+      vi.advanceTimersByTime(BROWSER_DISCARD_MS + DISCARD_TICK_MS * 2);
+    });
+
+    // 切回第一个标签。
+    const tabs = document.querySelectorAll<HTMLElement>('[role="tab"]');
+    act(() => {
+      fireEvent.click(tabs[0]!);
+    });
+
+    const restored = guests().find(
+      (each) => each.getAttribute("src") === "https://example.test/deep",
+    );
+    expect(restored).toBeDefined();
+
+    // 重放触发的 `did-navigate` 是回声：它不该再写一次文档。
+    store.updateNodeData.mockClear();
+    act(() => {
+      fireEvent(
+        restored!,
+        Object.assign(new Event("did-navigate"), {
+          url: "https://example.test/deep",
+        }),
+      );
+    });
+    expect(store.updateNodeData).not.toHaveBeenCalled();
   });
 });
