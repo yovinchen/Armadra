@@ -44,20 +44,59 @@ export async function pickDirectory(): Promise<string | null> {
   return null;
 }
 
-/** Opens a URL outside the app window. */
-export async function openExternal(url: string): Promise<void> {
+/**
+ * 在应用窗口之外打开一个 URL。返回**是否真的打开了**。
+ *
+ * 失败不再只写 `console.error` 就算了：壳按 scheme 白名单拒绝
+ *（`scheme_not_allowed`）时，用户看到的是一个点了没反应的链接，而调用处
+ * 只要拿得到 `false` 就能弹一条提示。仍然**不**回退到 `window.open`——
+ * 那会把壳刚拦下来的东西交给 webview 再试一次。
+ */
+export async function openExternal(url: string): Promise<boolean> {
   const shell = bridge();
   if (shell) {
     try {
       await shell.shell.openExternal(url);
+      return true;
     } catch (cause) {
-      // 壳按 scheme 白名单拒绝时也走这里（`scheme_not_allowed`）。不回退到
-      // `window.open`：那会把壳刚拦下来的东西交给 webview 再试一次。
       console.error("openExternal failed", cause);
+      return false;
     }
-    return;
   }
-  window.open(url, "_blank", "noopener");
+  return window.open(url, "_blank", "noopener") !== null;
+}
+
+/** `revealPath` 的三种结局，调用处按它选提示语。 */
+export type RevealOutcome = "revealed" | "copied" | "failed";
+
+/**
+ * 在系统文件管理器里定位一个绝对路径（设置 → 数据的「显示数据目录」）。
+ *
+ * 壳里走 `shell:show-item-in-folder`，那条通道自己带根目录白名单；**不**走
+ * `openExternal(file://…)`，因为那条路的 scheme 白名单只认 http/https，
+ * 而为了这一个按钮去放宽它，等于给所有到 `openExternal` 的 URL 一起放宽。
+ *
+ * 浏览器里没有文件管理器可开，退而求其次：把路径复制到剪贴板，调用处照着
+ * `"copied"` 说一句。剪贴板也用不了就是 `"failed"`。
+ */
+export async function revealPath(path: string): Promise<RevealOutcome> {
+  const shell = bridge();
+  if (shell) {
+    try {
+      await shell.shell.showItemInFolder(path);
+      return "revealed";
+    } catch (cause) {
+      console.error("revealPath failed", cause);
+      return "failed";
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(path);
+    return "copied";
+  } catch (cause) {
+    console.error("revealPath clipboard fallback failed", cause);
+    return "failed";
+  }
 }
 
 export type FileDropPosition = { x: number; y: number };

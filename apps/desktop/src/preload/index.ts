@@ -91,6 +91,12 @@ export interface ArmadraDesktopApi {
   };
   readonly shell: {
     openExternal(url: string): Promise<void>;
+    /**
+     * Opens a file manager window on `path`. Refused with `path_not_allowed`
+     * unless the path is inside the data or downloads directory — the page
+     * names the path, so the main process decides which ones exist for it.
+     */
+    showItemInFolder(path: string): Promise<{ ok: boolean }>;
   };
   readonly updates: {
     state(): Promise<unknown>;
@@ -163,6 +169,8 @@ const api: ArmadraDesktopApi = {
   shell: {
     openExternal: (url) =>
       ipcRenderer.invoke(IPC.shellOpenExternal.channel, url),
+    showItemInFolder: (path) =>
+      ipcRenderer.invoke(IPC.shellShowItemInFolder.channel, path),
   },
   updates: {
     state: () => ipcRenderer.invoke(IPC.updatesState.channel),

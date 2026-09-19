@@ -181,6 +181,8 @@ export const modals: MessageModule = {
 
     "settings.dataDir": "数据目录",
     "settings.reveal": "在访达中打开",
+    "settings.reveal.copied": "路径已复制到剪贴板",
+    "settings.reveal.failed": "打不开这个目录",
     "settings.dbSize": "数据库大小",
     "settings.conversationIndex": "对话索引",
     "settings.conversationCount": "{value} 条",
@@ -456,6 +458,8 @@ export const modals: MessageModule = {
 
     "settings.dataDir": "Data folder",
     "settings.reveal": "Reveal in Finder",
+    "settings.reveal.copied": "Path copied to the clipboard",
+    "settings.reveal.failed": "That folder could not be opened",
     "settings.dbSize": "Database size",
     "settings.conversationIndex": "Conversation index",
     "settings.conversationCount": "{value} entries",
