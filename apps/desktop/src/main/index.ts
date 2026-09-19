@@ -1,4 +1,6 @@
 import { app, dialog, ipcMain } from "electron";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   ALL_CHANNELS,
   IMPLEMENTED_CHANNELS,
@@ -28,7 +30,10 @@ import {
   markQuitting,
   revealWindow,
 } from "./window";
-import { ownsRuntime } from "../shell-core/runtime/identity";
+import {
+  ownsRuntime,
+  publishedRuntimeBases,
+} from "../shell-core/runtime/identity";
 
 /**
  * The application's assembly. Everything with a rule worth stating lives in
@@ -92,13 +97,29 @@ function registerIpc(): void {
  * serves the page itself and these become its own bases.
  */
 async function transportEndpoints(): Promise<TransportEndpoints> {
-  const base = externalRuntimeBase();
+  const directory = dataDir();
+  const published = await readPublishedBases(directory);
+  // The documented default port is the fallback, not a guess dressed up as an
+  // answer: without `endpoints.json` there is nothing else the page could try.
+  const fallback = externalRuntimeBase();
   return {
-    httpBase: base,
-    wsBase: base.replace(/^http/, "ws"),
+    httpBase: published?.http ?? fallback,
+    wsBase: published?.websocket ?? fallback.replace(/^http/, "ws"),
     hostBase: HOST_ENDPOINT,
-    dataDir: dataDir(),
+    dataDir: directory,
   };
+}
+
+async function readPublishedBases(
+  directory: string,
+): Promise<{ http: string; websocket: string } | undefined> {
+  try {
+    return publishedRuntimeBases(
+      await readFile(join(directory, "endpoints.json"), "utf8"),
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 /* ------------------------------- the quit path ---------------------------- */

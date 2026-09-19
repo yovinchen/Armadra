@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import type { HostStatus } from "@armadra/protocol";
 import {
   HOST_ENDPOINT,
@@ -15,6 +14,7 @@ import {
   decodeStopped,
   portlessRunning,
 } from "../../shell-core/host/verify";
+import { repoRoot } from "../repo-root";
 import { runCli, runStart } from "./launch";
 import { verifyOrigin } from "./verify";
 
@@ -45,7 +45,7 @@ export function configFromEnvironment(
   endpointsDir: string,
   env: NodeJS.ProcessEnv = process.env,
   executable: string = process.execPath,
-  repo: string = resolve(__dirname, "../../../../.."),
+  repo: string = repoRoot(),
 ): HostLaunchConfig {
   const binary = resolveBinary(
     development,
