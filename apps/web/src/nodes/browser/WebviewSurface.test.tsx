@@ -102,10 +102,16 @@ describe("浏览器节点的分流", () => {
     expect(guests()[0]!.getAttribute("src")).toBe("https://example.test/");
   });
 
-  it("壳不在时一个 <webview> 都不渲染——旧 screencast 路径原样保留", () => {
+  it("壳不在时不渲染 guest，只说明节点为什么用不了（W3.5）", () => {
     delete (window as unknown as Record<string, unknown>).armadra;
-    paint();
+    const view = paint();
     expect(guests()).toHaveLength(0);
+    // 既不是空白，也不是一个按不动的工具栏：一条说清楚原因的提示。
+    expect(
+      view.container.textContent?.includes("browser.unavailable.desktopOnly") ||
+        view.container.textContent?.includes("桌面应用") ||
+        view.container.textContent?.includes("desktop app"),
+    ).toBe(true);
   });
 });
 

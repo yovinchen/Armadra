@@ -52,19 +52,3 @@ export function languageSessionUrl(
     `/api/workspaces/${workspaceId}/language/sessions/${query(sessionId)}/stream`,
   );
 }
-
-/**
- * 单个浏览器会话的专用画面流（设计 §2.9）。
- *
- * 帧是二进制 Protobuf，不走工作空间事件通道：那条通道是所有客户端共读的，
- * 一路 base64 图片会让每个客户端都付一次解码代价，而且它没法逐订阅者确认。
- * Host 的 `proxyStream` 原样代理这条连接，不看里面是什么。
- */
-export function browserStreamUrl(
-  workspaceId: string,
-  sessionId: string,
-): string {
-  return socketUrl(
-    `/api/workspaces/${query(workspaceId)}/browser/sessions/${query(sessionId)}/stream`,
-  );
-}

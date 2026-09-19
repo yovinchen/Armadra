@@ -15,7 +15,6 @@ import { languageApi } from "./language";
 import { searchApi } from "./search";
 import { terminalsApi } from "./terminals";
 import { resourcesApi } from "./resources";
-import { browserApi } from "./browser";
 import { conversationsApi } from "./conversations";
 import { handoffApi } from "./handoff";
 import { gitApi } from "./git";
@@ -62,7 +61,6 @@ export const runtimeApi = {
   ...searchApi,
   ...terminalsApi,
   ...resourcesApi,
-  ...browserApi,
   ...conversationsApi,
   ...handoffApi,
   ...gitApi,
