@@ -81,6 +81,20 @@ export interface RunOptions {
    * request. Each domain exports one `install(context)`; `main` lists them.
    */
   readonly domains?: readonly ((context: CoreContext) => void)[];
+  /**
+   * 这次装配用哪一份 `CorePlatform`。
+   *
+   * core 与壳之间只有这一条缝，而壳有两种：桌面壳用默认的 `nodePlatform`，
+   * 服务器壳（`apps/server`）要换掉三样东西——没有 `safeStorage`、没有
+   * `resourcesPath`、`openExternal` 是 no-op。给的是工厂而不是对象，因为数据
+   * 目录要等参数解析完才知道，而平台必须带着已经解析好的那一个。
+   */
+  readonly platform?: (base: {
+    dataDir: string;
+    appVersion: string;
+    isPackaged: boolean;
+    log: ReturnType<typeof createLog>;
+  }) => CorePlatform;
 }
 
 /**
@@ -168,13 +182,21 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
 
   const dataDir = resolveDataDir(parsed.args.dataDir, process.platform, env);
   const log = createLog(logLevel(env.ARMADRA_LOG));
-  const platform = nodePlatform({
-    dataDir,
-    appVersion: VERSION,
-    isPackaged: env.ARMADRA_DESKTOP_PACKAGED === "1",
-    resourcesPath: process.resourcesPath,
-    log,
-  });
+  const isPackaged = env.ARMADRA_DESKTOP_PACKAGED === "1";
+  const platform =
+    options.platform?.({
+      dataDir,
+      appVersion: VERSION,
+      isPackaged,
+      log,
+    }) ??
+    nodePlatform({
+      dataDir,
+      appVersion: VERSION,
+      isPackaged,
+      resourcesPath: process.resourcesPath,
+      log,
+    });
 
   // Step 1 — before anything can fail.
   write(`${announcement()}\n`);
