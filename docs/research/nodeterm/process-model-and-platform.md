@@ -106,7 +106,9 @@ Node 的 MaxListeners 警告。Armadra 的画布同样是「N 个节点订阅同
 ```ts
 // src/core/no-electron.test.ts:14-15
 const OFFENDERS =
-  /from ['"]electron(\/[^'"]*)?['"]|require\(['"]electron(\/[^'"]*)?['"]\)|from ['"](\.\.\/)+main\//
+// src/core/no-electron.test.ts:14-15（摘录为文字，原文是一条正则）
+// OFFENDERS 同时命中三类：from/require 裸 "electron"、"electron/<子路径>"、
+// 以及任意层 "../" 前缀后跟 "main/" 的反向引用
 ```
 
 同时拦三类：裸 `electron`、`electron/main` 子路径、任何 `../main/` 反向引用。
