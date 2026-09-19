@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ABSORBED_TABLES,
+  PROJECTED_TABLES,
   absorbHostDatabase,
   absorbedName,
   hostDatabaseFile,
@@ -148,6 +149,16 @@ describe("absorbing the old host database", () => {
       identity_devices: 1,
       identity_sessions: 1,
       identity_bootstrap_tickets: 0,
+      // 这份夹具里没有自动化数据；报 0 而不是不报，因为「这张表搬了，里面是
+      // 空的」和「这张表根本没搬」是两件事。
+      automation_payloads: 0,
+      automation_grants: 0,
+      command_roots: 0,
+      command_sessions: 0,
+      automation_plans: 0,
+      automation_activations: 0,
+      automation_runs: 0,
+      automation_gates: 0,
     });
     expect(result.renamedTo).toBe(
       `${hostDatabaseFile(directory)}.absorbed-20260919T000000Z`,
@@ -218,13 +229,25 @@ describe("absorbing the old host database", () => {
     ).toBe("/data/host.db.absorbed-20260102T030405Z");
   });
 
-  it("imports exactly the five tables R1 needs", () => {
+  it("imports exactly the tables the unified core has taken over", () => {
     expect([...ABSORBED_TABLES]).toEqual([
       "store_meta",
       "identity_owner",
       "identity_devices",
       "identity_sessions",
       "identity_bootstrap_tickets",
+      "automation_payloads",
+      "automation_grants",
+      "command_roots",
+      "command_sessions",
+    ]);
+    // 这四张不在逐列照搬的名单里，因为 Host 那边它们根本不是表——它们由
+    // `legacy.entities` 投影出来。空判断仍然把它们算上。
+    expect([...PROJECTED_TABLES]).toEqual([
+      "automation_plans",
+      "automation_activations",
+      "automation_runs",
+      "automation_gates",
     ]);
   });
 
