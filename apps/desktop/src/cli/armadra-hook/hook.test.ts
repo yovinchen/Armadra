@@ -23,7 +23,7 @@ import {
 import { asObject, canonicalJson, parseJson } from "./json.js";
 import type { JsonValue } from "./json.js";
 import { launcherFileName, launcherScript } from "./launcher.js";
-import { MAX_PAYLOAD_BYTES } from "./usage.js";
+import { CLIENT_VERSION, MAX_PAYLOAD_BYTES } from "./usage.js";
 
 const temporaries: string[] = [];
 
@@ -78,6 +78,19 @@ describe("payload", () => {
 
   it("caps the payload at the contract's 1 MiB", () => {
     expect(MAX_PAYLOAD_BYTES).toBe(1024 * 1024);
+  });
+
+  it("reports the same version the shell's manifest declares", () => {
+    // The Rust client prints its crate version, which `tools/release/version.mjs`
+    // keeps equal to this manifest's. A literal here is a fourth site that
+    // check does not know about, so this is the thing that catches its drift.
+    const manifest = JSON.parse(
+      fs.readFileSync(
+        path.resolve(import.meta.dirname, "../../../package.json"),
+        "utf8",
+      ),
+    ) as { version: string };
+    expect(CLIENT_VERSION).toBe(manifest.version);
   });
 });
 
