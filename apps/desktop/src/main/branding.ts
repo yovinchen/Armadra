@@ -70,8 +70,12 @@ export function setApplicationName(): void {
  * The development-mode Dock icon. Packaged builds never call this: their icon
  * is `electron-builder.yml`'s `mac.icon`, already inside the bundle.
  */
-export function setDockIcon(icon: string = iconPath()): void {
-  if (process.platform !== "darwin") return;
+export function setDockIcon(
+  icon: string = iconPath(),
+  platform: NodeJS.Platform = process.platform,
+): void {
+  // Only macOS has a Dock; on the other platforms the window icon is the brand.
+  if (platform !== "darwin") return;
   app.dock?.setIcon(icon);
 }
 
