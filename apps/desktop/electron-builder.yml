@@ -74,6 +74,55 @@ asarUnpack:
 # per-platform list is `binariesFor()` in stage-binaries.mjs, which the hook
 # reads, so nothing here can drift from what was staged.
 
+mac:
+  extraResources:
+    # The TypeScript hook client (R3c). Unlike the sidecar binaries it is not a
+    # binary: it is one CJS file the installer's generated launcher runs as
+    # `ELECTRON_RUN_AS_NODE=1 <Electron> <resources>/cli/armadra-hook.js`,
+    # because a packaged machine is not guaranteed to have a system `node`.
+    # Outside the asar so that path is a real file on disk — the Electron
+    # binary is the only interpreter we can count on, and asking it to read an
+    # entry point out of an archive is a dependency this does not need.
+    - from: out/cli/armadra-hook.js
+      to: cli/armadra-hook.js
+  category: public.developer-tools
+  icon: build/icons/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Whether this build actually notarizes is decided by
+  # `scripts/signing-electron.mjs` before packaging starts (three-state
+  # sign / skip / refuse): it reads APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
+  # APPLE_TEAM_ID from the
+  # environment and disables notarization here via `-c.mac.notarize=false`
+  # when they are absent, the same "decide before the twenty-minute build, not
+  # after" reasoning as docs/guides/ci-release.md §2.6.
+  notarize: true
+  extendInfo:
+    # macOS 15+ gates any connection to an address on the user's own subnet
+    # behind Local Network privacy, attributed to the RESPONSIBLE PROCESS —
+    # for everything this shell spawns (the Runtime, the Go Host, agent CLIs)
+    # that is Armadra.app, not the child. Without this string there is no
+    # prompt and no row in System Settings → Privacy & Security → Local
+    # Network: the denial is silent and ungrantable, and it surfaces as
+    # `EHOSTUNREACH` from an agent session while Apple-signed `/usr/bin/curl`
+    # succeeds at the same instant. The reviewed allowlist is enforced by
+    # `scripts/info-plist.test.mjs`.
+    NSLocalNetworkUsageDescription: "Armadra 的 Runtime 与已连接的 Agent CLI 需要访问本机局域网内的设备与服务。"
+    # The name macOS shows under the Dock icon, in Spotlight and in the Force
+    # Quit list — distinct from `CFBundleName` (electron-builder derives that
+    # from `productName` above), which is the shorter internal name the
+    # system falls back to when this key is absent. Without it a build whose
+    # `productName` ever needs a short/long split would silently show the
+    # short form everywhere a user actually reads the app's name.
+    CFBundleDisplayName: Armadra
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+
 win:
   icon: build/icons/icon.ico
   extraResources:
