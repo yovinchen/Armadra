@@ -260,6 +260,10 @@ LSP 发现与 mux（多客户端复用一个 server）、会话流 WS；主机�
 
 `crates/session-host` → `apps/desktop/src/session-host/`：node-pty 的 conpty 后端 + 独立守护进程，**只接受一个 argv（`userDataDir`），其余全部派生**（命令行不出现敏感信息）；esbuild 打成 `out/session-host/host.cjs`，`--external:node-pty`；以 `ELECTRON_RUN_AS_NODE=1` 拉起同一个 Electron 二进制（打包机器不保证有系统 node）。管道名派生（`\\.\pipe\armadra-session-<sid>-<hash>-v<major>`）、受保护 DACL、每条连接核对客户端 SID、`first_pipe_instance` 兼作并发闸、Job Object 的 `KILL_ON_JOB_CLOSE`、generation 栅栏、有界回放（最近 200 KiB，截断点避开 UTF-8 与转义序列中间）全部保留。ConPTY 的关闭必须拿到「确实关掉了这一个 HPCON」的阳性证明，拿不到就显式报错而不是假设成功。
 
+**远程浏览器节点（2026-09-20 追加，用户决定）**：服务器壳上没有 `<webview>`，浏览器节点按壳分两套后端——桌面壳 `<webview>`（已做）；服务器壳 `core/browser/headless/`：headless Chromium（系统 Chromium 或按需下载）+ CDP `Page.startScreencast`（WebP/JPEG，单观看者、无扇出）+ `Input.*` 回传，租约/授权/17 个动词面复用 `core/browser` 已有的裁决，前端 `WebviewSurface` 之外恢复一个只服务远程的 `StreamSurface`（画到 `<canvas>`，输入映射）。体验预期是远程桌面级（100–200 ms、无原生选字与输入法精细行为），只在服务器壳启用。规模 +L、+1 Agent。
+
+**账号与共享的预留**：本阶段的认证按 [服务器账号、中转与共享](server-accounts-and-sharing.md) 的模型实现（多 principal、口令 + passkey、邀请、组与授予编译成 scope）；其中 §4 的五处预留在 R6 之前落地。
+
 **验收**：手机浏览器完成一次配对 → 看同一块画布 → 输入终端 → 答一次审批；撤销设备后流立即终止；真 Windows 机上跑通建 / 附 / 断 / 重附 / 重启（这是首次真机验证——现有 Rust 实现的 Windows 行为至今一次真机都没跑过）。
 **风险**：服务器壳的认证是**从零实现**（见 §9）；Windows 全链路首次真机。
 

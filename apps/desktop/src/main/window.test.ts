@@ -142,7 +142,9 @@ beforeEach(() => {
 });
 
 function open(): FakeWindow {
-  createMainWindow();
+  // The close-means-hide rule is macOS's; the suite states it explicitly so
+  // it holds on the Linux runner too.
+  createMainWindow("darwin");
   return windows.at(-1) as FakeWindow;
 }
 
