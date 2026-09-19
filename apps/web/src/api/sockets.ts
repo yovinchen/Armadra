@@ -38,6 +38,19 @@ export function workspaceEventsUrl(workspaceId: string): string {
 }
 
 /**
+ * 远程浏览器节点的画面流（R6c）。
+ *
+ * 只有服务器壳答这条：那边没有窗口，页面在 core 起的 headless Chromium 里。
+ * 桌面壳里浏览器节点是本窗口的一个 `<webview>`，这条路由回 501，页面也不会
+ * 去开它。一个节点同时只接受一个观看者，第二个在升级之前就被回 409。
+ */
+export function browserStreamUrl(workspaceId: string, nodeId: string): string {
+  return socketUrl(
+    `/api/workspaces/${workspaceId}/browser/${query(nodeId)}/stream`,
+  );
+}
+
+/**
  * 一个语言会话一条 WebSocket（语言服务设计 §2.9）。
  *
  * 文本帧就是一条 JSON-RPC 消息。不复用工作空间事件流：那条是单向推送，
