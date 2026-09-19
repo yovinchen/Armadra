@@ -19,6 +19,72 @@ const NATIVE_SHELL_ORIGINS: Record<string, string> = {
 /** 壳自己回答的一条路由；只有它知道 WebSocket 回环转发端口。 */
 export const TRANSPORT_PATH = "/__armadra/transport";
 
+/**
+ * Electron 壳（electron-migration §2.1）：页面由壳的回环 HTTP 静态服务提供，
+ * `fetch` / `WebSocket` 直连 Runtime。Runtime 的端口由内核分配，只有壳知道，
+ * 所以基址从 preload 桥一次性取来。
+ *
+ * 同步读取是必须的：`request.ts` 在模块求值时就要定下 `RUNTIME_URL`，那时还
+ * 没有 `await` 可用。壳在窗口加载页面之前就把答案准备好了，所以这里是读一个
+ * 已决定的值，不是等一次调用。
+ */
+export interface ShellEndpoints {
+  readonly httpBase: string;
+  readonly wsBase: string;
+  readonly hostBase: string;
+}
+
+let cachedShell: ShellEndpoints | null | undefined;
+
+function readShellEndpoints(): ShellEndpoints | null {
+  const bridge = globalThis.window?.armadra;
+  if (typeof bridge?.transport !== "object") return null;
+  try {
+    const endpoints = bridge.transport.endpointsSync();
+    // 壳给的地址只接受回环 HTTP：壳本来就只会给这个，别的都不该出现在这条路上。
+    if (!loopbackBase(endpoints.httpBase, "http:")) return null;
+    return {
+      httpBase: trimBase(endpoints.httpBase),
+      wsBase: loopbackBase(endpoints.wsBase, "ws:")
+        ? trimBase(endpoints.wsBase)
+        : trimBase(endpoints.httpBase).replace(/^http/, "ws"),
+      hostBase: endpoints.hostBase,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 壳给出的基址，取一次后缓存；不在 Electron 壳里返回 `null`。 */
+export function shellEndpoints(): ShellEndpoints | null {
+  cachedShell ??= readShellEndpoints();
+  return cachedShell;
+}
+
+/** 测试与壳重载后重置。 */
+export function resetShellEndpoints(): void {
+  cachedShell = undefined;
+}
+
+function trimBase(base: string): string {
+  return base.replace(/\/+$/, "");
+}
+
+function loopbackBase(base: string, protocol: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(base);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === protocol &&
+    (url.hostname === "127.0.0.1" || url.hostname === "localhost") &&
+    !url.username &&
+    !url.password
+  );
+}
+
 /** An explicit relative/empty URL opts a web deployment into its own origin. */
 export function resolveRuntimeUrl(
   configured: string | undefined,
@@ -27,6 +93,9 @@ export function resolveRuntimeUrl(
   // 显式配置永远优先：桌面开发模式靠它连外部 Runtime。
   if (configured === undefined)
     return (
+      // Electron 壳先问：它拉起的 Runtime 端口是内核分配的，页面地址推不出来，
+      // 而且开发模式下页面来源是 Vite，回环默认端口多半是别人的 Runtime。
+      shellEndpoints()?.httpBase ??
       nativeShellRuntimeUrl(pageUrl) ??
       hostServedOrigin(pageUrl) ??
       LOCAL_RUNTIME
@@ -98,10 +167,25 @@ export function isHostServed(
   return origin !== null && resolveRuntimeUrl(configured, pageUrl) === origin;
 }
 
-/** 这个基址是不是壳的自定义协议（而不是一个真实的 HTTP 端点）。 */
+/**
+ * 这个基址是不是桌面壳给的。
+ *
+ * 两种壳的答案不一样，但调用方关心的是同一件事「这条路由是壳安排的」：
+ * Tauri 是自定义协议（不是真实 HTTP 端点，WebSocket 走不了，得另问壳要转发
+ * 端口）；Electron 是真实的回环 HTTP 端点，WebSocket 基址壳已经一并给了。
+ */
 export function isShellTransport(base: string): boolean {
+  const shell = shellEndpoints();
+  if (shell !== null && trimBase(base) === shell.httpBase) return true;
   return Object.values(NATIVE_SHELL_ORIGINS).some(
-    (shell) => base === shell || base.startsWith(`${shell}/`),
+    (origin) => base === origin || base.startsWith(`${origin}/`),
+  );
+}
+
+/** 这个基址是不是 Tauri 的自定义协议（WebSocket 过不去，要另问壳）。 */
+function isCustomSchemeTransport(base: string): boolean {
+  return Object.values(NATIVE_SHELL_ORIGINS).some(
+    (origin) => base === origin || base.startsWith(`${origin}/`),
   );
 }
 
@@ -123,8 +207,11 @@ export async function resolveSocketBase(
   base: string,
   fetcher: typeof fetch = fetch,
 ): Promise<string> {
+  // Electron 壳：没有自定义协议，也就没有转发端口——壳给的 `wsBase` 就是答案。
+  const shell = shellEndpoints();
+  if (shell !== null && trimBase(base) === shell.httpBase) return shell.wsBase;
   // 浏览器 / 开发模式：Runtime 的 HTTP 端口就是它的 WebSocket 端口。
-  if (!isShellTransport(base)) return base;
+  if (!isCustomSchemeTransport(base)) return base;
   try {
     const response = await fetcher(`${base}${TRANSPORT_PATH}`);
     if (!response.ok) return base;

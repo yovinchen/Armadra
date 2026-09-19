@@ -1,22 +1,6 @@
 import { HostIdentityError } from "./identity.js";
 
-/**
- * The page origins a packaged desktop shell presents: Tauri's own scheme on
- * macOS / Linux and the two WebView2 spellings on Windows. The native session
- * transport (docs/design/host-native-session.md §3) exists for these alone.
- */
-export const NATIVE_PAGE_ORIGINS = [
-  "tauri://localhost",
-  "http://tauri.localhost",
-  "https://tauri.localhost",
-] as const;
-
-export function isNativePageOrigin(origin: string | undefined): boolean {
-  return (
-    typeof origin === "string" &&
-    (NATIVE_PAGE_ORIGINS as readonly string[]).includes(origin)
-  );
-}
+export { NATIVE_PAGE_ORIGINS, isNativePageOrigin } from "./origins.js";
 
 export interface HostNativeCredentialsOptions {
   /**
