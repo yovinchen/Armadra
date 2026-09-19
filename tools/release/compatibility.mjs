@@ -2,20 +2,21 @@
  * The compatibility range a release declares, and the fence it is published in.
  *
  * A GitHub release has nowhere structured to put "which installed versions can
- * move to this one", so the Host reads a fenced JSON block out of the release
+ * move to this one", so it is read out of a fenced JSON block in the release
  * note. A release without the fence is refused rather than assumed compatible
  * (design §1.4): an upgrade whose migration path nobody stated is a data
  * hazard, and silence is not a promise.
  *
- * `compatibility.json` is the only place the range is written. Go asserts the
- * protocol numbers against the Host's own, and `version.mjs check` asserts the
- * minimum against the version being released, so the fence in a release note
- * can never disagree with the code that release contains.
+ * `compatibility.json` is the only place the range is written, and
+ * `version.mjs check` asserts its minimum against the version being released,
+ * so the fence in a release note can never disagree with the code that release
+ * contains. It carries versions only: there is no cross-process protocol left
+ * to declare a major for.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-/** The fence marker the Host looks for. Must match updates.CompatibilityFence. */
+/** The fence marker the release note carries. */
 export const FENCE = "armadra-compatibility";
 
 export const COMPATIBILITY_FILE = fileURLToPath(
@@ -39,7 +40,7 @@ export function parseVersion(value) {
 }
 
 /**
- * Order two versions the way the Host does: a pre-release sorts below the
+ * Order two versions the way the updater does: a pre-release sorts below the
  * final release of the same numbers, and pre-release suffixes compare as text.
  */
 export function compareVersions(left, right) {
@@ -61,18 +62,12 @@ export function readCompatibility(path = COMPATIBILITY_FILE) {
 }
 
 /**
- * Validate a compatibility document. Unknown keys are refused: the Host parses
- * the fence with DisallowUnknownFields, so a key it would reject must fail
- * here rather than at the moment a client tries to update.
+ * Validate a compatibility document. Unknown keys are refused: the fence is
+ * parsed strictly on the reading side, so a key it would reject must fail here
+ * rather than at the moment a client tries to update.
  */
 export function normalize(document) {
-  const allowed = new Set([
-    "$comment",
-    "minimumInstalled",
-    "maximumInstalled",
-    "protocolMajor",
-    "minimumProtocolMinor",
-  ]);
+  const allowed = new Set(["$comment", "minimumInstalled", "maximumInstalled"]);
   for (const key of Object.keys(document)) {
     if (!allowed.has(key)) throw new Error(`unknown compatibility key: ${key}`);
   }
@@ -83,17 +78,7 @@ export function normalize(document) {
       : parseVersion(document.maximumInstalled).text;
   if (maximum && compareVersions(minimum, maximum) > 0)
     throw new Error("minimumInstalled is above maximumInstalled");
-  for (const key of ["protocolMajor", "minimumProtocolMinor"]) {
-    if (!Number.isInteger(document[key]) || document[key] < 0)
-      throw new Error(`${key} must be a non-negative integer`);
-  }
-  if (document.protocolMajor === 0)
-    throw new Error("protocolMajor 0 is not a protocol any Host speaks");
-  const result = {
-    minimumInstalled: minimum,
-    protocolMajor: document.protocolMajor,
-    minimumProtocolMinor: document.minimumProtocolMinor,
-  };
+  const result = { minimumInstalled: minimum };
   if (maximum) result.maximumInstalled = maximum;
   return result;
 }
@@ -110,13 +95,11 @@ export function renderFence(compatibility) {
     ...(value.maximumInstalled
       ? { maximumInstalled: value.maximumInstalled }
       : {}),
-    protocolMajor: value.protocolMajor,
-    minimumProtocolMinor: value.minimumProtocolMinor,
   };
   return "```" + FENCE + "\n" + JSON.stringify(ordered) + "\n```";
 }
 
-/** Read the fence back out of a release note, the way the Host does. */
+/** Read the fence back out of a release note. */
 export function extractFence(note) {
   const marker = "```" + FENCE;
   const start = String(note ?? "").indexOf(marker);
@@ -128,7 +111,7 @@ export function extractFence(note) {
 
 /**
  * The release note body: the changelog section for this version, then the
- * fence. Everything outside the fence is for people; the Host does not read it.
+ * fence. Everything outside the fence is for people; nothing parses it.
  */
 export function releaseNote({
   version,

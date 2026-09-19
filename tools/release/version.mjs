@@ -1,12 +1,11 @@
 /**
- * One version, four files, one tag.
+ * One version, three manifests, one tag.
  *
- * The workspace version in the root Cargo.toml is the only source; every other
- * place that repeats it is checked against it, and the Host's own version is
- * stamped in at link time from the same value. A release built from files that
- * disagree would ship a desktop shell and a Host that report different
- * versions, and the update check compares versions — so this runs first in CI
- * and refuses the tag rather than producing that release.
+ * The root `package.json` is the only source; the two shells are checked
+ * against it. A release built from files that disagree would ship a desktop
+ * shell and a server shell that report different versions, and the update
+ * check compares versions — so this runs first in CI and refuses the tag
+ * rather than producing that release.
  *
  *   node tools/release/version.mjs check [--tag vX.Y.Z]
  *   node tools/release/version.mjs set X.Y.Z
@@ -23,23 +22,22 @@ import {
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
 /**
- * Every file that repeats the version. The Cargo workspace is first because it
+ * Every file that repeats the version. The root manifest is first because it
  * is the source; the rest are compared with it.
+ *
+ * Both shells are here because both are published: electron-builder reads the
+ * version out of the desktop manifest, and the server shell reports its own.
  */
 export const VERSION_SITES = [
-  { path: "Cargo.toml", kind: "cargo-workspace" },
   { path: "package.json", kind: "json" },
-  // electron-builder reads the version out of this manifest, so there is no
-  // fourth site to keep in step any more.
   { path: "apps/desktop/package.json", kind: "json" },
+  { path: "apps/server/package.json", kind: "json" },
 ];
 
-const CARGO_VERSION =
-  /(\[workspace\.package\][^[]*?\bversion\s*=\s*")([^"]*)(")/s;
 const JSON_VERSION = /^(\s*"version"\s*:\s*")([^"]*)(")/m;
 
-function pattern(kind) {
-  return kind === "cargo-workspace" ? CARGO_VERSION : JSON_VERSION;
+function pattern() {
+  return JSON_VERSION;
 }
 
 /** Read the version each site declares. */
@@ -52,7 +50,7 @@ export function readVersions(base = root) {
   });
 }
 
-/** The version the workspace declares — the one everything else must equal. */
+/** The version the root manifest declares — the one everything else must equal. */
 export function workspaceVersion(base = root) {
   return readVersions(base)[0].version;
 }
@@ -76,7 +74,7 @@ export function checkVersions({ base = root, tag = "", compatibility } = {}) {
   for (const site of sites.slice(1)) {
     if (site.version !== expected)
       problems.push(
-        `${site.path} says ${site.version}, the workspace says ${expected}`,
+        `${site.path} says ${site.version}, the root manifest says ${expected}`,
       );
   }
   if (tag) {

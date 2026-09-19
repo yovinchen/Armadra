@@ -5,7 +5,7 @@
  *     --repo owner/name --tag vX.Y.Z [--unnotarized macOS,Windows] \
  *     [--note release-note.md]
  *
- * In order: check that every file is one the Host can place, sign every
+ * In order: check that every file is one the updater can place, sign every
  * artifact, write latest.json from the signatures that produced, write
  * SHA256SUMS, then verify what was just produced. The last step matters most —
  * it is the only one that can catch a release that each individual step was
@@ -34,7 +34,7 @@ import { keyFromSecret, publicKeyFile } from "./minisign.mjs";
 import { SECRET_ENV, signDirectory, verifyDirectory } from "./sign.mjs";
 import { writeManifest } from "./updater-manifest.mjs";
 
-/** Every file must be one the Host can place, or it can never be offered. */
+/** Every file must be one the updater can place, or it can never be offered. */
 export function checkNames(directory) {
   const problems = [];
   for (const name of readdirSync(directory)) {
@@ -46,12 +46,12 @@ export function checkNames(directory) {
       continue;
     const component = assetComponent(name);
     if (component === "") {
-      problems.push(`${name} declares no component the Host can read`);
+      problems.push(`${name} declares no component the updater can read`);
       continue;
     }
     if (component === "web") continue;
     if (assetTarget(name) === "")
-      problems.push(`${name} declares no target the Host can read`);
+      problems.push(`${name} declares no target the updater can read`);
   }
   return problems;
 }

@@ -60,8 +60,6 @@ test("one file left behind fails the check", () => {
       base,
       compatibility: normalize({
         minimumInstalled: "0.1.0",
-        protocolMajor: 1,
-        minimumProtocolMinor: 1,
       }),
     });
     assert.equal(problems.length, 1);
@@ -75,8 +73,6 @@ test("a tag that does not name the version fails the check", () => {
   const base = workspace();
   const compatibility = normalize({
     minimumInstalled: "0.1.0",
-    protocolMajor: 1,
-    minimumProtocolMinor: 1,
   });
   try {
     assert.deepEqual(
@@ -103,8 +99,6 @@ test("a compatibility range that excludes the release fails the check", () => {
   try {
     const tooNew = normalize({
       minimumInstalled: "0.3.0",
-      protocolMajor: 1,
-      minimumProtocolMinor: 1,
     });
     assert.match(
       checkVersions({ base, compatibility: tooNew }).problems[0],
@@ -113,8 +107,6 @@ test("a compatibility range that excludes the release fails the check", () => {
     const uselessCeiling = normalize({
       minimumInstalled: "0.1.0",
       maximumInstalled: "0.2.0",
-      protocolMajor: 1,
-      minimumProtocolMinor: 1,
     });
     assert.match(
       checkVersions({ base, compatibility: uselessCeiling }).problems[0],
@@ -143,36 +135,33 @@ test("set writes every site and reports what changed", () => {
   }
 });
 
-test("versions order the way the Host orders them", () => {
+test("versions order the way the updater orders them", () => {
   assert.equal(compareVersions("0.2.0", "0.1.9"), 1);
   assert.equal(compareVersions("0.2.0-beta.1", "0.2.0"), -1);
   assert.equal(compareVersions("0.2.0-beta.1", "0.2.0-beta.2"), -1);
   assert.equal(compareVersions("1.0.0", "1.0.0"), 0);
 });
 
-test("the fence round-trips and refuses what the Host would refuse", () => {
-  const range = {
-    minimumInstalled: "0.1.0",
-    protocolMajor: 1,
-    minimumProtocolMinor: 2,
-  };
+test("the fence round-trips and refuses what a reader would refuse", () => {
+  const range = { minimumInstalled: "0.1.0" };
   const fence = renderFence(range);
-  assert.equal(
-    fence.split("\n")[1],
-    '{"minimumInstalled":"0.1.0","protocolMajor":1,"minimumProtocolMinor":2}',
-  );
+  assert.equal(fence.split("\n")[1], '{"minimumInstalled":"0.1.0"}');
   assert.deepEqual(extractFence(`notes\n\n${fence}\n\nmore`), range);
   assert.equal(extractFence("no fence here"), null);
-  // The Host parses the fence with DisallowUnknownFields, so an extra key must
-  // fail here rather than at the moment a client tries to update.
-  assert.throws(
-    () => normalize({ ...range, channel: "stable" }),
-    /unknown compatibility key/,
-  );
-  assert.throws(
-    () => normalize({ ...range, protocolMajor: 0 }),
-    /protocolMajor 0/,
-  );
+  // The fence is parsed strictly, so an extra key must fail here rather than
+  // at the moment a client tries to update. The protocol numbers the fence
+  // used to carry are exactly such a key now: there is no second process to
+  // declare a protocol to.
+  for (const extra of [
+    { channel: "stable" },
+    { protocolMajor: 1 },
+    { minimumProtocolMinor: 2 },
+  ]) {
+    assert.throws(
+      () => normalize({ ...range, ...extra }),
+      /unknown compatibility key/,
+    );
+  }
   assert.throws(
     () => normalize({ ...range, maximumInstalled: "0.0.1" }),
     /minimumInstalled is above maximumInstalled/,
@@ -180,11 +169,7 @@ test("the fence round-trips and refuses what the Host would refuse", () => {
 });
 
 test("a release note carries the fence and says when nothing notarised it", () => {
-  const range = {
-    minimumInstalled: "0.1.0",
-    protocolMajor: 1,
-    minimumProtocolMinor: 2,
-  };
+  const range = { minimumInstalled: "0.1.0" };
   const plain = releaseNote({
     version: "0.2.0",
     notes: "Fixes.",

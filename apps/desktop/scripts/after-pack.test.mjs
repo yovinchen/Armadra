@@ -1,15 +1,19 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
 
-import { copyWithRetry, placements, tripleFor } from "./after-pack.mjs";
-import { bundleResources } from "./sidecar-targets.mjs";
-import { binariesFor } from "./stage-binaries.mjs";
+import {
+  bundleResources,
+  copyWithRetry,
+  migrationResources,
+  placements,
+  platformFor,
+} from "./after-pack.mjs";
 
-test("every packaged platform/arch pair maps to the triple stage-binaries used", () => {
-  assert.equal(tripleFor("darwin", "arm64"), "aarch64-apple-darwin");
-  assert.equal(tripleFor("win32", "x64"), "x86_64-pc-windows-msvc");
-  assert.equal(tripleFor("linux", "arm64"), "aarch64-unknown-linux-gnu");
-  assert.throws(() => tripleFor("win32", "ia32"), /no sidecar target/);
+test("only the platform/arch pairs this shell ships are packaged", () => {
+  assert.equal(platformFor("darwin", "arm64"), "darwin");
+  assert.equal(platformFor("win32", "x64"), "win32");
+  assert.equal(platformFor("linux", "arm64"), "linux");
+  assert.throws(() => platformFor("win32", "ia32"), /no bundle target/);
 });
 
 test("a busy file is retried until it copies, and the holder is reported once", () => {
@@ -69,22 +73,38 @@ test("an error that is not a sharing violation is not retried", () => {
   assert.equal(calls, 1);
 });
 
-test("a target's placements are its staged binaries plus its out/ bundles, nothing else", () => {
-  for (const triple of [
-    "x86_64-pc-windows-msvc",
-    "aarch64-apple-darwin",
-    "x86_64-unknown-linux-gnu",
-  ]) {
-    const placed = placements(triple);
-    const binaries = placed.filter((p) => p.executable).map((p) => p.to);
-    const ext = triple.includes("windows") ? ".exe" : "";
+test("a platform's placements are its out/ bundles plus every migration, nothing else", () => {
+  for (const platform of ["win32", "darwin", "linux"]) {
+    const placed = placements(platform);
+    // Nothing is an executable any more: the core runs on the Electron the
+    // bundle already carries, and there are no sidecar binaries left to chmod.
+    assert.deepEqual(placed.filter((p) => p.executable), []);
     assert.deepEqual(
-      binaries,
-      binariesFor(triple).map((b) => `${b}${ext}`),
-    );
-    assert.deepEqual(
-      placed.filter((p) => !p.executable).map((p) => `${p.from} -> ${p.to}`),
-      bundleResources(triple).map((b) => `${b.from} -> ${b.to}`),
+      placed.map((p) => `${p.from} -> ${p.to}`),
+      [...bundleResources(platform), ...migrationResources()].map(
+        (r) => `${r.from} -> ${r.to}`,
+      ),
     );
   }
+  // Only Windows carries the session host; every platform carries the hook.
+  assert.deepEqual(
+    bundleResources("darwin").map((r) => r.to),
+    ["cli/armadra-hook.js"],
+  );
+  assert.deepEqual(
+    bundleResources("win32").map((r) => r.to),
+    ["cli/armadra-hook.js", "session-host/host.cjs"],
+  );
+});
+
+test("the migrations go where a packaged core looks for them", () => {
+  const migrations = migrationResources();
+  // `core/db/migrations.ts` joins `resourcesPath` with exactly "migrations".
+  assert.ok(migrations.every((m) => m.to.startsWith("migrations/")));
+  assert.ok(migrations.every((m) => m.to.endsWith(".sql")));
+  // One continuous sequence from 1: the same set the ledger preflight reads.
+  assert.deepEqual(
+    migrations.map((m) => Number(m.to.slice("migrations/".length, -".sql".length).slice(0, 4))),
+    migrations.map((_, index) => index + 1),
+  );
 });

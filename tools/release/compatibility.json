@@ -1,6 +1,4 @@
 {
-  "$comment": "发布兼容范围的唯一来源，渲染进 Release 说明的 armadra-compatibility 围栏（docs/design/updates-and-service-install.md §1.4）。protocolMajor 必须等于 apps/host/internal/server 的 ProtocolMajor，minimumProtocolMinor 不得超过 ProtocolMinor，由 apps/host/internal/server/compatibility_test.go 锁定；minimumInstalled 不得高于当前版本，由 tools/release/version.mjs check 锁定。",
-  "minimumInstalled": "0.1.0",
-  "protocolMajor": 1,
-  "minimumProtocolMinor": 2
+  "$comment": "发布兼容范围的唯一来源，渲染进 Release 说明的 armadra-compatibility 围栏（docs/design/updates-and-service-install.md §1.4）。minimumInstalled 不得高于当前版本，由 tools/release/version.mjs check 锁定；桌面壳与服务器壳同版本发布，两者的版本一致性由同一条检查看住。",
+  "minimumInstalled": "0.1.0"
 }
