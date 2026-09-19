@@ -103,8 +103,10 @@ export function sendToWindow(channel: string, ...args: unknown[]): void {
   getMainWindow()?.webContents.send(channel, ...args);
 }
 
-export function createMainWindow(): BrowserWindow {
-  const darwin = process.platform === "darwin";
+export function createMainWindow(
+  platform: NodeJS.Platform = process.platform,
+): BrowserWindow {
+  const darwin = platform === "darwin";
   const window = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -140,11 +142,7 @@ export function createMainWindow(): BrowserWindow {
 
   window.on("close", (event) => {
     traceLifecycle("foreground close requested");
-    const action = closeAction(
-      process.platform,
-      quitting,
-      window.isFullScreen(),
-    );
+    const action = closeAction(platform, quitting, window.isFullScreen());
     if (action === "default") return;
     event.preventDefault();
     if (action === "hide") {

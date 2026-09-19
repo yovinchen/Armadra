@@ -55,6 +55,7 @@
 | [Agent 接入统一管理](design/agent-integration.md)               | Hook + 技能一个安装单元、启动时注入、旧残留修复                |
 | [桌面壳原生 Host 会话](design/host-native-session.md)           | 打包桌面壳经私有通道取票、Bearer 会话                          |
 | [全面修改方案（2026-09）](design/overhaul-plan.md)              | 本轮总纲：界面补齐、Mermaid、功能复查、TS 核心、收尾与多端编译 |
+| [服务器账号、中转与共享](design/server-accounts-and-sharing.md) | 多 principal、组与授予编译成 scope、接口与现有代码的预留点     |
 | [桌面壳迁移到 Electron](design/electron-migration.md)           | 换壳、`<webview>` 浏览器节点、画布性能前置与六条工作流         |
 | [TypeScript Core](design/typescript-core.md)                    | Go Host 与 Rust Runtime 合一为一个 TS core，两种壳、R0–R7      |
 | [画板导入 Mermaid 图](design/mermaid-import.md)                 | flowchart → 原生白板对象，其余图种 → 图片回退                  |
