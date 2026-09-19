@@ -1,6 +1,6 @@
 # 服务器端账号、数据中转与共享（预留设计）
 
-> 状态：目标设计（预留）。本文回答一个前置问题：当核心以服务器壳（[TypeScript Core](typescript-core.md) R6）跑在无图形界面的 Linux 上、多台设备从外部访问时，账号登录、数据中转、设备绑定，以及将来「开一个组、组内共享某人的看板并可操作」这类能力，需要**现在**在数据模型、鉴权与接口上预留什么，才能按设置逐步施工而不返工。本文只定模型与接口边界，不排实施批次；实施挂在 R6 之后的 R8。
+> 状态：目标设计。**§2 的数据模型、§3 的接口形状与 §4 的五处预留已经落地**（R6b，迁移 `0019_accounts.sql`，实测与偏差见 [TypeScript Core 实施进度](../status/typescript-core-status.md) §10）；§3 里 passkey、OAuth 绑定、开放注册按设计要求返回 501。剩下的是服务器壳的传输与认证（R6a）与真正把共享用起来（R8）。本文回答一个前置问题：当核心以服务器壳（[TypeScript Core](typescript-core.md) R6）跑在无图形界面的 Linux 上、多台设备从外部访问时，账号登录、数据中转、设备绑定，以及将来「开一个组、组内共享某人的看板并可操作」这类能力，需要**现在**在数据模型、鉴权与接口上预留什么，才能按设置逐步施工而不返工。本文只定模型与接口边界，不排实施批次；实施挂在 R6 之后的 R8。
 > 范围：`core/identity`（已有：单 owner、设备、会话、票据、scope）、`core/canvas`、`core/events`、服务器壳的传输与认证。不涉及计费、组织层级、SSO。
 > 输入：R1c 已落地的 `identity_*` 表与 `scope(permission, workspaceId?, executionHostId?)` 授权模型；R1b 的按工作空间扇出的事件流；R1a 的画布 CAS 保存。
 
@@ -17,6 +17,8 @@
 | S7  | **登录方式可插拔，账号模型不依赖任何一家**                                                                                | 首版：本地口令 + passkey（WebAuthn）；OAuth（GitHub 等）作为「绑定」而非账号来源，避免账号被第三方决定                                                                      |
 
 ## 2. 数据模型（在 `identity_*` 上增量，编号迁移）
+
+> 已落地：迁移 `0019_accounts.sql`。实际表名比下面多一个前缀（`groups` → `identity_groups`、`group_members` → `identity_group_members`、`grants` → `identity_grants`），因为统一库里所有身份域的表都带这个前缀；列按下表，凭据那张多了 KDF 参数的四列（`kdf_cost` / `kdf_block` / `kdf_parallel` / `kdf_length`）与盐，参数存行里才能在升参数之后仍然校验得了旧哈希。`identity_grants.workspace_id` 没有外键（理由写在迁移里）。
 
 ```
 identity_principals   principal_id PK, kind('owner'|'member'|'service'), display_name, created_at_ms, disabled_at_ms
@@ -45,6 +47,8 @@ audit_log             id PK, at_ms, principal_id, device_id?, action, target, de
 
 ## 3. 接口预留（现在就按这些形状写，未实现的返回 501）
 
+> 已落地，**路径有一处偏差**：组、共享、审计挂在 `/api/identity/` 下（`identity/groups`、`identity/grants?workspaceId=`、`identity/audit`），不是 `/api/groups`、`/api/workspaces/{id}/grants`、`/api/audit`——`/api/workspaces/*` 属于那张与 Rust Runtime 逐条对账的路由表（契约到 R7）。做实的是 principal、口令凭据与登录、邀请、组、授予、审计只读；passkey、OAuth 绑定、开放注册是 501。
+
 | 面   | 路由                                                                                                                                                       | 备注                                                             |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | 账号 | `POST /api/identity/register`（仅当 `allow_registration` 设置开启或持邀请）、`POST /api/identity/login`（password / passkey）、`POST /api/identity/logout` | 与现有 `session/*` 同一张 `identity_sessions`                    |
@@ -59,6 +63,8 @@ audit_log             id PK, at_ms, principal_id, device_id?, action, target, de
 所有响应 camelCase、错误 `{ code, message }`；权限不足统一 `403 { code: "forbidden" }`，不泄露是否存在。
 
 ## 4. 现有代码里现在就要做的预留（R6 之前，零功能改动）
+
+> 五条都已落地，落点逐条列在 [实施进度](../status/typescript-core-status.md) §10.2。判定入口是 `core/identity/authorize.ts` 与 `core/identity/gate.ts`，今天对 owner 恒真。
 
 1. `core/identity/scopes.ts` 的 `PERMISSIONS` 列表补齐 §2 的权限名（`canvas:read/write`、`events:read`、`terminal:read/create/drive`、`agent:launch`、`approval:answer`、`assets:read/write`、`workspace:share`、`identity:manage`），并让每条已实现路由声明自己要求的 scope（现在桌面壳是 owner 全量，判定恒真，但路由上的声明是后面组权限的落点）。
 2. `identity_owner` 改为 `identity_principals`（一次编号迁移，owner 行 `kind='owner'`），`identity_devices.role` 放开 CHECK。

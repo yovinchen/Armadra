@@ -5,16 +5,16 @@
 
 ## 1. 阶段状态
 
-| 阶段   | 范围                                                                               | 状态                   |
-| ------ | ---------------------------------------------------------------------------------- | ---------------------- |
-| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                    | 已合入（`c1644c10d`）  |
-| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                          | 已合入（`0b098c650`）  |
-| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                   | 已合入（`aa180c6e7`）  |
-| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                           | 已合入（`aa180c6e7`）  |
-| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`601095795`）  |
-| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`）  |
-| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | R6a 已合入，其余进行中 |
-| R7     | 收尾                                                                               | 未开始                 |
+| 阶段   | 范围                                                                               | 状态                        |
+| ------ | ---------------------------------------------------------------------------------- | --------------------------- |
+| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                    | 已合入（`c1644c10d`）       |
+| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                          | 已合入（`0b098c650`）       |
+| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                   | 已合入（`aa180c6e7`）       |
+| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                           | 已合入（`aa180c6e7`）       |
+| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`601095795`）       |
+| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`）       |
+| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | R6a、R6b 已合入，其余进行中 |
+| R7     | 收尾                                                                               | 未开始                      |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -264,3 +264,44 @@ pnpm --filter @armadra/server build     # esbuild → apps/server/out/main.js
 - **不注册服务**：`install` 没有 `--register`，也不打算有——「只生成定义」是这条线的硬规则。
 - **不自动更新**：`upgrade` 只认运维指过来的本地候选，不下载发布清单（设计里服务器壳本来就是「不自动更新，`status` 报版本」）。
 - **`serve` 要求数据目录已经过统一库迁移**（`ARMADRA_CORE=ts` 的单向门），否则拒绝启动而不是自己去过门。
+
+## 12. R6b：服务器账号、组与共享的数据模型与预留
+
+落地的是 [服务器端账号、数据中转与共享](../design/server-accounts-and-sharing.md) 的 §2 数据模型、§3 接口与 §4 五处预留。**功能上今天什么都没变**：桌面壳里只有 owner，判定入口对 owner 恒真，页面看不出区别。变的是此后可以有第二个 principal。
+
+### 12.1 迁移 0019
+
+`apps/desktop/src/core/db/migrations/0019_accounts.sql`：
+
+- `identity_owner`（单行表）→ `identity_principals`（`kind` ∈ owner / member / service），owner 行在同一条迁移里搬过来，`principal_id` 一个字节不变；「只有一个 owner」由 `WHERE kind='owner'` 的唯一索引接住；
+- `identity_devices.role` 从 `CHECK(role='owner')` 放开成 `'owner' | 'member'`，外键改指 `identity_principals`。SQLite 改不动 CHECK 与外键，所以设备表整表重建，**会话表跟着重建一次**——删一个还被引用的父表会记下延迟外键违例，改回同名也消不掉，提交时照炸；顺序与理由写在迁移的注释里；
+- 新增 `identity_credentials`（口令走 `crypto.scrypt`，KDF 参数逐列存）、`identity_invitations`、`identity_groups` / `identity_group_members`、`identity_grants`、`audit_log`（**无外键**：审计要比它提到的组、授予活得久）；
+- 角色 → scope 的编译表**不在库里**，在 `core/identity/roles.ts`：库里存角色名，改权限集合是改一个常量而不是一条迁移。
+
+`core/db/absorb-host.ts` 跟着改：旧 `host.db` 的 `identity_owner` 现在是一次**投影**而不是拷贝（列不同、行的含义相同）。
+
+**这个 worktree 里 `pnpm repo:check` 会报「迁移编号不连续：第 18 个为 19」**——0018 属于并行的另一条线，合并之后这条提示自行消失。
+
+### 12.2 五处预留各在哪儿
+
+| 设计 | 落点                                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| §4.1 | `core/http/route-scopes.ts`（路径族 → 权限）+ `Router.requiredScope()`；单条路由可用 `handle(..., { scope })` 就地声明并覆盖表                                                        |
+| §4.2 | `core/events/index.ts` 的升级 guard：`allows([scope("events:read", workspaceId)])`，拒绝发生在升级**之前**                                                                            |
+| §4.3 | `core/terminal/input.ts` 的 `DriveBook` + `core/terminal/manager.ts` 的 `input()`：写入者 ≠ 会话创建者才要 `terminal:drive`                                                           |
+| §4.4 | 同上（设计里 §4 的第 3、4 条合在一处判定）                                                                                                                                            |
+| §4.5 | 审计写入点：登录与设备撤销在 `core/identity/service.ts`，授予 / 组 / 凭据变更在 `core/identity/accounts.ts`，审批答复在 `core/agent/routes.ts`，终端接管在 `core/terminal/manager.ts` |
+
+判定入口是 `core/identity/authorize.ts`（`Authorizer`）与 `core/identity/gate.ts`（模块级的门，域们问它，身份域装配时换成真实现）。**owner 恒真**；其余主体按「会话快照 ∪ 编译出来的授予」判。
+
+### 12.3 接口：做实的与 501
+
+全部挂在身份域已有的 `/api/identity/` 前缀下。**与设计的一处偏差**：设计把组写作 `/api/groups`、共享写作 `/api/workspaces/{id}/grants`、审计写作 `/api/audit`；这里是 `/api/identity/{groups,grants,audit}`，因为 `/api/workspaces/*` 属于那张与 Rust Runtime 逐条对账的路由表（契约到 R7），往里加一条 Rust 没有的路由就是让两边对不上。改回设计里的写法时，改的是 `core/identity/accounts-http.ts` 的分发表。
+
+做实：principal 列表 / 新建 / 停用、口令设置与撤销、`POST login`（口令登录，落在同一张 `identity_sessions` 上，授权快照 = owner 全量 / 成员的 `identity:read` + 编译出来的授予）、邀请签发 / 列表 / 接受（一次性、会过期）、组与成员的增删改查、授予的读 / 写 / 撤销（返回编译后的权限名）、审计只读。
+
+501（形状一致的 `{ code: "NOT_IMPLEMENTED", message }`）：passkey 的注册与断言、OAuth 绑定的 start / callback、开放注册（要一个还不存在的 `allowRegistration` 设置）。
+
+### 12.4 验证
+
+`pnpm --filter @armadra/desktop test`（2250 例通过，其中 R6b 新增 43 例：迁移升级、角色编译快照、判定入口、口令派生与参数升级、邀请一次性与过期、审计写入、路由 scope 声明无遗漏，以及 `ARMADRA_CORE=ts` 真起 core 跑通 `/api/identity/principals`、登录与 501 形状）、`typecheck`、`pnpm check`（除 10.1 那条迁移编号提示）。
