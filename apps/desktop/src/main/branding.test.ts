@@ -54,10 +54,16 @@ describe("the application name", () => {
 
 describe("the development Dock icon", () => {
   it("is set from the repository's build/icons/icon.png", () => {
-    setDockIcon("/repo/apps/desktop/build/icons/icon.png");
+    setDockIcon("/repo/apps/desktop/build/icons/icon.png", "darwin");
     expect(calls).toEqual([
       "dock.setIcon:/repo/apps/desktop/build/icons/icon.png",
     ]);
+  });
+
+  it("does nothing where there is no Dock", () => {
+    setDockIcon("/repo/apps/desktop/build/icons/icon.png", "linux");
+    setDockIcon("/repo/apps/desktop/build/icons/icon.png", "win32");
+    expect(calls).toEqual([]);
   });
 });
 
