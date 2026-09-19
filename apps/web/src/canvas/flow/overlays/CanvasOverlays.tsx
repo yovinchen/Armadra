@@ -43,10 +43,28 @@ export function CanvasOverlays() {
   const edges = useDerivedEdges();
   const placements = useSubagentPlacements();
 
+  /**
+   * **按需算，不全量铺。**
+   *
+   * 派生边通常是个位数，而这张表以前给**每一个**节点都算一次包围盒——一块
+   * 三十节点的板子上，一次节点数据更新就是三十次 `nodeBox`（它还要沿 parent
+   * 链往上找），产出的三十个格子里有二十几个从没被读过
+   * （[画布调研](../../../../docs/research/nodeterm/canvas-nodes-and-state.md) §7.3-7）。
+   * 现在只算真正连着派生边的那几个，外加子代理卡片的落位。
+   */
   const boxes = React.useMemo(() => {
     const map = new Map<string, Box>();
     const list = nodes ?? [];
-    for (const node of list) map.set(node.id, nodeBox(list, node));
+    if (list.length > 0 && edges.length > 0) {
+      const wanted = new Set<string>();
+      for (const edge of edges) {
+        wanted.add(edge.source);
+        wanted.add(edge.target);
+      }
+      for (const node of list) {
+        if (wanted.has(node.id)) map.set(node.id, nodeBox(list, node));
+      }
+    }
     for (const placement of placements) {
       map.set(placement.id, {
         x: placement.x,
@@ -56,7 +74,7 @@ export function CanvasOverlays() {
       });
     }
     return map;
-  }, [nodes, placements]);
+  }, [nodes, edges, placements]);
 
   return (
     <>

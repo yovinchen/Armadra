@@ -56,6 +56,15 @@ export type LinkFlowEdge = Edge<Record<string, never>, "link">;
 export type ReferenceFlowEdge = Edge<Record<string, never>, "reference">;
 export type CanvasFlowEdge = LinkFlowEdge | ReferenceFlowEdge;
 
+/**
+ * 投影要的全部文档输入：两张表，没有 `board`。
+ *
+ * 写成这个形状是为了让调用方能**只订阅这两个数组**：`board.viewport` 在每
+ * 一次平移里都换，而它和投影毫无关系（`flow/use-flow-nodes.ts` 的注释记了
+ * 实测数字）。`BoardDocument` 仍然可以直接传进来——它是这个形状的超集。
+ */
+export type CanvasTables = Pick<BoardDocument, "nodes" | "edges">;
+
 export interface Selection {
   nodes: ReadonlySet<string>;
   edges: ReadonlySet<string>;
@@ -222,7 +231,7 @@ function projectItem(item: Item, selected: boolean): CanvasFlowNode {
  * 分组一律排在最前，白板对象跟在节点后面（`zIndex` 才决定压盖关系）。
  */
 export function projectNodes(
-  document: BoardDocument | null,
+  document: CanvasTables | null,
   whiteboard: WhiteboardDoc,
   drafts: DraftMap,
   selection: Selection = EMPTY_SELECTION,
@@ -339,7 +348,7 @@ function referenceSourceId(
 
 /** 两端有一个不在画布上的边投影不出来（远端刚删掉那个节点时会发生）。 */
 export function projectEdges(
-  document: BoardDocument | null,
+  document: CanvasTables | null,
   whiteboard: WhiteboardDoc,
   selection: Selection = EMPTY_SELECTION,
 ): CanvasFlowEdge[] {

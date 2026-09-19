@@ -69,6 +69,18 @@ const EMPTY: WhiteboardDoc = emptyWhiteboard();
 beforeEach(resetProjectionCache);
 
 describe("projectNodes", () => {
+  /**
+   * 投影只吃两张表。这一条把它钉住：换一份 `board`（平移就是这么发生的，
+   * `store/canvas/view.ts` 的 `setViewport` 重建整个 document）而两张表不动
+   * 时，投影出来的仍然是同一批对象——调用方因此可以只订阅这两个数组。
+   */
+  it("只认 nodes / edges 两张表，board 换了不影响投影", () => {
+    const nodes = [node(NODE)];
+    const first = projectNodes({ nodes, edges: [] }, EMPTY, NO_DRAFTS)[0];
+    const second = projectNodes({ nodes, edges: [] }, EMPTY, NO_DRAFTS)[0];
+    expect(second).toBe(first);
+  });
+
   it("没变的节点返回同一个对象：一次相机移动不该让终端全部重渲", () => {
     const document = board([node(NODE)]);
     const first = projectNodes(document, EMPTY, NO_DRAFTS)[0];

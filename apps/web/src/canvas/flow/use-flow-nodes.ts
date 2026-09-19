@@ -104,7 +104,20 @@ function commitDrag(dragged: readonly CanvasFlowNode[]): void {
 }
 
 export function useFlowNodes(): FlowBindings {
-  const document = useCanvasStore((state) => state.document);
+  /**
+   * **不订阅整份 `document`。**
+   *
+   * `document` 的对象身份在每一次 `updateNodeData` 和**每一次平移**时都会换
+   * （`store/canvas/view.ts` 的 `setViewport` 也重建 document）。订阅整份等于
+   * 把「相机动了」翻译成「重投影全部节点 + React Flow 重建一次节点表」：实测
+   * 十秒手形平移触发 72 次 `projectNodes`、2,232 次节点投影，而这期间
+   * `commit()` 一次都没跑（`docs/status/canvas-performance-baseline.md`）。
+   *
+   * 投影真正要的只有两张表，所以就订这两个数组引用；`board.viewport` 变了它们
+   * 不动，一次平移的投影代价归零。
+   */
+  const documentNodes = useCanvasStore((state) => state.document?.nodes);
+  const documentEdges = useCanvasStore((state) => state.document?.edges);
   const whiteboard = useCanvasStore((state) => state.whiteboard);
   const drafts = useDrafts();
   const selection = useCanvasStore(
@@ -124,13 +137,22 @@ export function useFlowNodes(): FlowBindings {
     [selection],
   );
 
+  /** 投影的全部输入就这两张表；身份只在表本身变了的时候换。 */
+  const tables = React.useMemo(
+    () =>
+      documentNodes
+        ? { nodes: documentNodes, edges: documentEdges ?? [] }
+        : null,
+    [documentNodes, documentEdges],
+  );
+
   const nodes = React.useMemo(
-    () => projectNodes(document, whiteboard, drafts, selected),
-    [document, whiteboard, drafts, selected],
+    () => projectNodes(tables, whiteboard, drafts, selected),
+    [tables, whiteboard, drafts, selected],
   );
   const edges = React.useMemo(
-    () => projectEdges(document, whiteboard, selected),
-    [document, whiteboard, selected],
+    () => projectEdges(tables, whiteboard, selected),
+    [tables, whiteboard, selected],
   );
 
   /**

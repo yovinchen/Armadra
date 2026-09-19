@@ -139,7 +139,20 @@ function onBoardOpened(document: BoardDocument): void {
 
 const ATTRIBUTION = { hideAttribution: true } as const;
 
-export function FlowWorkspace() {
+/**
+ * **画布自己订阅，不跟着应用壳重渲。**
+ *
+ * `AppShell` 里挂着一排查询与事件订阅：一次会话结束会让 `sessions` /
+ * `git-status` / `board` 几个查询接连失效，实测一次会话状态跳动里 `AppShell`
+ * 为根的重渲有四次、每次约 1,045 个组件，而画布这一整棵子树就在里面
+ * （`docs/status/canvas-performance-baseline.md`）。
+ *
+ * 它一个 prop 都不收，所以 `memo` 是一道干净的墙：壳自己重渲多少次都到此为
+ * 止，画布只在它订阅的 store 真的变了的时候重画。
+ */
+export const FlowWorkspace = React.memo(FlowWorkspaceInner);
+
+function FlowWorkspaceInner() {
   const t = useT();
   const flow = useReactFlow();
   const theme = useResolvedTheme();
