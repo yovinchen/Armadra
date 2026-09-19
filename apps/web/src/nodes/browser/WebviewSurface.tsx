@@ -11,14 +11,13 @@ import { useKeybindings } from "@/keybindings";
 
 import { NodeShell } from "../NodeShell";
 import type { NodeBodyProps } from "../registry";
-import { browserPartition } from "./desktop";
 import { control, isDriven, useDrive } from "./drive";
 import { LeaseBadge } from "./Lease";
 import { useIsGhost } from "./pool";
 import { GuestBoundary } from "./GuestBoundary";
 import { WebviewGuest } from "./WebviewGuest";
 import { WebviewTabs } from "./WebviewTabs";
-import { searchOrUrl } from "./webview";
+import { browserPartition, searchOrUrl } from "./webview";
 import type { WebviewElement } from "./webview";
 import { useWebviewTabs } from "./webview-tabs";
 
@@ -42,12 +41,8 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
    * **创建时定一次、永不变更**（探针 C：attach 之后改 partition 被静默忽略）。
    * `useState` 的惰性初值就是「一次」的最短写法；`workspaceId` 后来变了也不
    * 重算——那时候这个节点已经属于另一个工作空间的 pool ghost 了。
-   *
-   * `driver` 现在恒为 `"user"`。Agent 开的节点走另一个 jar，那条路是 W3.3。
    */
-  const [partition] = React.useState(() =>
-    browserPartition(workspaceId, "user"),
-  );
+  const [partition] = React.useState(() => browserPartition(workspaceId));
 
   const tabs = useWebviewTabs(url);
   const [address, setAddress] = React.useState(url);
