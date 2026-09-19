@@ -78,7 +78,10 @@ test("a platform's placements are its out/ bundles plus every migration, nothing
     const placed = placements(platform);
     // Nothing is an executable any more: the core runs on the Electron the
     // bundle already carries, and there are no sidecar binaries left to chmod.
-    assert.deepEqual(placed.filter((p) => p.executable), []);
+    assert.deepEqual(
+      placed.filter((p) => p.executable),
+      [],
+    );
     assert.deepEqual(
       placed.map((p) => `${p.from} -> ${p.to}`),
       [...bundleResources(platform), ...migrationResources()].map(
@@ -104,7 +107,9 @@ test("the migrations go where a packaged core looks for them", () => {
   assert.ok(migrations.every((m) => m.to.endsWith(".sql")));
   // One continuous sequence from 1: the same set the ledger preflight reads.
   assert.deepEqual(
-    migrations.map((m) => Number(m.to.slice("migrations/".length, -".sql".length).slice(0, 4))),
+    migrations.map((m) =>
+      Number(m.to.slice("migrations/".length, -".sql".length).slice(0, 4)),
+    ),
     migrations.map((_, index) => index + 1),
   );
 });

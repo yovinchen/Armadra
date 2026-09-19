@@ -490,4 +490,3 @@ test("an unplaceable file fails assembly", async () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
-

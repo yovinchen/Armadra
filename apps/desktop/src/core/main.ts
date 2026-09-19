@@ -219,10 +219,9 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
     migrations: opened.migrations.length,
   });
   if (opened.backup !== null) {
-    log.warn(
-      "统一库迁移已应用：这个库旧实现不再打得开，回滚请用备份替换",
-      { backup: opened.backup },
-    );
+    log.warn("统一库迁移已应用：这个库旧实现不再打得开，回滚请用备份替换", {
+      backup: opened.backup,
+    });
   }
   if (opened.unified) {
     // 搬运必须在任何域读 `store_meta` 之前：`host_id` 要从旧库带过来，晚一步

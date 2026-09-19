@@ -40,14 +40,7 @@
     "directoryOnly": ["history", "research"]
   },
   "links": {
-    "include": [
-      "*.md",
-      "apps/",
-      "assets/",
-      "docs/",
-      "packages/",
-      "tools/"
-    ],
+    "include": ["*.md", "apps/", "assets/", "docs/", "packages/", "tools/"],
     "exclude": [".claude/"]
   },
   "naming": [
