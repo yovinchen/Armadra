@@ -205,13 +205,13 @@ describe("what the core answers", () => {
 
   it("answers a route it has not written with 501 and the feature's name", async () => {
     const { core } = await start(temporary());
-    // Ownership is the one table entry no phase claims: a single core has
-    // nothing to split, so it stays 501 until R7 removes the route.
-    const response = await fetch(`${base(core)}/api/ownership`);
+    // The power lease surface is a table entry no phase has written yet, so it
+    // is the one place a 501 can still be observed.
+    const response = await fetch(`${base(core)}/api/power`);
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
       code: "not_implemented",
-      message: "写入所有权记录（R1）",
+      message: "电源租约（R5）",
     });
   });
 

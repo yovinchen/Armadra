@@ -16,22 +16,6 @@ vi.mock("../api/client", async () => {
     ...actual,
     runtimeApi: {
       createWorkspace: (input: unknown) => createWorkspace(input),
-      // Creating a workspace goes through the filesystem gateway, which reads
-      // who owns the domain before it decides where the root is registered.
-      // Here it stays with the Runtime, which is what these cases are about.
-      ownershipDomains: () =>
-        Promise.resolve(
-          ["canvas", "settings", "filesystem", "session", "agent", "git"].map(
-            (domain) => ({
-              domain,
-              owner: "runtime",
-              phase: "settled",
-              epoch: 1n,
-              reasonCode: "ownership.initial",
-              updatedAt: "2026-09-06T00:00:00.000Z",
-            }),
-          ),
-        ),
     },
   };
 });

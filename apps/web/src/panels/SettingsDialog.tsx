@@ -21,7 +21,6 @@ import { UpdatesPage } from "./settings/pages/UpdatesPage";
 import { WhiteboardPage } from "./settings/pages/WhiteboardPage";
 import { WorkspacePage } from "./settings/pages/WorkspacePage";
 import { subpageTitleKey } from "./settings/subpage";
-import { SettingsWriteGuard } from "./settings/WriteGuard";
 import {
   DEFAULT_SETTINGS_SECTION,
   groupSections,
@@ -153,9 +152,7 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
           data-section={active}
           className="settings-page flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pt-5 pb-8 duration-150 animate-in fade-in motion-reduce:animate-none"
         >
-          <SettingsWriteGuard section={active}>
-            <Page />
-          </SettingsWriteGuard>
+          <Page />
         </div>
       </div>
     </div>

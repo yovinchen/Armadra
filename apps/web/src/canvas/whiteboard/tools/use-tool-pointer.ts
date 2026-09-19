@@ -3,7 +3,6 @@ import { useReactFlow, useStoreApi } from "@xyflow/react";
 import type { Position } from "@armadra/shared";
 
 import { usePreferencesStore } from "@/app/preferences-store";
-import { canEditCanvas, useCanvasOwnership } from "@/canvas-ownership";
 import { useCanvasStore } from "@/store/canvas-store";
 import { defaultNodeSize } from "@/store/defaults";
 import { isCanvasLocked } from "../../canvas-lock";
@@ -57,13 +56,11 @@ export function useToolPointer(): ToolPointerState {
   const flow = useReactFlow();
   const store = useStoreApi();
   const preferences = usePreferencesStore((state) => state.whiteboard);
-  const ownership = useCanvasOwnership((state) => state.status);
-  const editable = canEditCanvas(ownership);
   const [draft, setDraft] = React.useState<Draft | null>(null);
 
   // 回调里要读最新的偏好，但 effect 不该因为改了一次网格间距就重挂。
-  const latest = React.useRef({ preferences, tool, editable });
-  latest.current = { preferences, tool, editable };
+  const latest = React.useRef({ preferences, tool });
+  latest.current = { preferences, tool };
 
   React.useEffect(() => {
     const dom = store.getState().domNode;
@@ -144,7 +141,7 @@ export function useToolPointer(): ToolPointerState {
         return;
       }
       const active = latest.current;
-      if (isCanvasLocked() || !active.editable) return;
+      if (isCanvasLocked()) return;
       swallowClick = true;
       event.stopPropagation();
       event.preventDefault();

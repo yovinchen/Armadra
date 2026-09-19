@@ -38,18 +38,8 @@ export {
 } from "./sockets";
 export { executionHostRefusal, runtimeSettingsSchema } from "./settings";
 export type { RuntimeSettings, RuntimeSettingsPatch } from "./settings";
-export {
-  canvasOwnershipSchema,
-  dataBackupSchema,
-  dataInfoSchema,
-  ownershipDomainSchema,
-  ownershipDomainsSchema,
-} from "./system";
-export type {
-  CanvasOwnershipRecord,
-  DataInfo,
-  OwnershipDomainRecord,
-} from "./system";
+export { dataBackupSchema, dataInfoSchema } from "./system";
+export type { DataInfo } from "./system";
 
 export const runtimeApi = {
   ...agentsApi,

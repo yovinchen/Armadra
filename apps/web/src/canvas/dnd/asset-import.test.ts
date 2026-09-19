@@ -38,11 +38,6 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("../../canvas-ownership", () => ({
-  canEditCanvas: () => true,
-  useCanvasOwnership: { getState: () => ({ status: "owned" }) },
-}));
-
 const addNode = vi.fn();
 const items: Record<string, unknown>[] = [];
 const state = {

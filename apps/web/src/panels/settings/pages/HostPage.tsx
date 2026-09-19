@@ -9,7 +9,6 @@ import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { ExternalServicePanel } from "./ExternalServicePanel";
 import { HostIdentityPanel } from "./HostIdentityPanel";
-import { OwnershipPanel } from "./OwnershipPanel";
 
 /**
  * Hello 里显式报告为不支持的预留能力（H04 / S02）。
@@ -182,7 +181,6 @@ export function HostPage() {
         hello={state.status === "connected" ? state.hello : undefined}
       />
       <ExternalServicePanel />
-      <OwnershipPanel />
     </>
   );
 }

@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import type { Position } from "@armadra/shared";
 
 import { t, usePreferencesStore } from "@/app/preferences-store";
-import { canEditCanvas, useCanvasOwnership } from "@/canvas-ownership";
 import { useCanvasStore } from "@/store/canvas-store";
 import { isCanvasLocked } from "../../canvas-lock";
 import { registerCanvasCommands } from "../../commands";
@@ -50,22 +49,19 @@ export function useClipboardCommands(): void {
   const pasteAtCursor = usePreferencesStore(
     (state) => state.whiteboard.pasteAtCursor,
   );
-  const ownership = useCanvasOwnership((state) => state.status);
-  const editable = canEditCanvas(ownership);
-
-  const latest = React.useRef({ pasteAtCursor, editable });
-  latest.current = { pasteAtCursor, editable };
+  const latest = React.useRef({ pasteAtCursor });
+  latest.current = { pasteAtCursor };
 
   React.useEffect(
     () =>
       registerCanvasCommands({
         "canvas.copy": () => void copySelection(false),
         "canvas.cut": () => {
-          if (!latest.current.editable || isCanvasLocked()) return;
+          if (isCanvasLocked()) return;
           void copySelection(true);
         },
         "canvas.paste": () => {
-          if (!latest.current.editable || isCanvasLocked()) return;
+          if (isCanvasLocked()) return;
           void pasteFromSystem(pastePoint(latest.current.pasteAtCursor));
         },
       }),

@@ -2,14 +2,12 @@ import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  Lock,
   PlugZap,
   Recycle,
   TerminalSquare,
   X,
 } from "lucide-react";
 import { runtimeApi } from "../api/client";
-import { canEditCanvas, useCanvasOwnership } from "../canvas-ownership";
 import { usePreferencesStore, useT } from "../app/preferences-store";
 import { useEnabledAgents } from "../app/use-agents";
 import { useCanvasStore } from "../store/canvas-store";
@@ -34,8 +32,6 @@ export function Banners() {
     (state) => state.setLastSettingsSection,
   );
   const agents = useEnabledAgents();
-  const ownership = useCanvasOwnership((state) => state.status);
-  const probeOwnership = useCanvasOwnership((state) => state.probe);
   const [dismissed, setDismissed] = useState<string[]>([]);
 
   const health = useQuery({
@@ -80,27 +76,6 @@ export function Banners() {
   });
 
   const items: ReactNode[] = [];
-
-  /**
-   * 画布只读（H01 §4）。不做成可关闭：关掉它之后画布看起来能编辑、
-   * 保存指示灯又不动，用户只会以为保存坏了。切换窗口结束后它自己消失。
-   */
-  if (ownership === "maintenance" || ownership === "error") {
-    items.push(
-      <Banner
-        key="ownership"
-        tone="warn"
-        icon={<Lock />}
-        text={t(
-          ownership === "maintenance"
-            ? "ownership.maintenance"
-            : "ownership.error",
-        )}
-        actionLabel={t("ownership.recheck")}
-        onAction={() => void probeOwnership()}
-      />,
-    );
-  }
 
   if (saveState === "error" && !dismissed.includes("save")) {
     items.push(

@@ -14,7 +14,6 @@ import { AssetTooLargeError, uploadAsset } from "../assets";
 import { addItems } from "../whiteboard/store";
 import { isMermaidFileName } from "../whiteboard/mermaid/detect";
 import { openMermaidImport } from "../whiteboard/mermaid/open";
-import { canEditCanvas, useCanvasOwnership } from "../../canvas-ownership";
 import { viewportCentre } from "../interaction/pointer";
 import { t } from "../../app/preferences-store";
 import { useCanvasStore } from "../../store/canvas-store";
@@ -294,15 +293,14 @@ export function captureImportTarget(): ImportTarget | null {
 /**
  * 这次导入的目标还是当初那块画布吗？
  *
- * 三件事一起看：工作空间没换、画布没换、这块画布现在能写。最后一条以前
- * 问的是 `editor.getIsReadonly()`，现在问归属网关（F36）——只读态由它决定。
+ * 两件事一起看：工作空间没换、画布没换。导入是异步的，中途切走之后把节点
+ * 落到另一块板上，是把用户的文件放到了他没看着的地方。
  */
 export function importTargetIsActive(target: ImportTarget): boolean {
   const state = useCanvasStore.getState();
   return (
     state.workspace?.id === target.workspaceId &&
-    state.document?.board.id === target.boardId &&
-    canEditCanvas(useCanvasOwnership.getState().status)
+    state.document?.board.id === target.boardId
   );
 }
 

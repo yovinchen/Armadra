@@ -4,11 +4,6 @@ import type { BoardDocument } from "@armadra/shared";
 import { runtimeApi } from "../api/client";
 import { onWorkspaceEvent } from "../api/events";
 import { useDraftsActive } from "../canvas/flow/drafts";
-import {
-  useCanvasEventFollower,
-  useCanvasOwnership,
-  canvasGateway,
-} from "../canvas-ownership";
 import { flushBoardSaves } from "../save/autosave";
 import { SAVE_RETRY_EVENT } from "../shell/Banners";
 import { useCanvasStore } from "../store/canvas-store";
@@ -83,16 +78,6 @@ export function useBoardSync() {
 
   const workspaces = useWorkspacesQuery();
 
-  /**
-   * 启动就探一次画布写归属（H01 §4）。
-   *
-   * 探到之前保存是停的：不知道该写给谁的时候写出去，等于赌一把。
-   * 探测失败也是一个真状态，不会被当成「Runtime 在写」蒙混过去。
-   */
-  useEffect(() => {
-    void useCanvasOwnership.getState().probe();
-  }, []);
-
   const boards = useQuery({
     queryKey: ["boards", workspace?.id],
     queryFn: () => runtimeApi.listBoards(workspace!.id),
@@ -101,16 +86,13 @@ export function useBoardSync() {
 
   const board = useQuery({
     queryKey: ["board", workspace?.id, boardId],
-    queryFn: () => canvasGateway.loadBoard(workspace!.id, boardId!),
+    queryFn: () => runtimeApi.loadBoard(workspace!.id, boardId!),
     enabled: Boolean(workspace && boardId),
   });
 
   /**
-   * Host 在写时按 sequence 续订它的事件（H01 §3.3）。
-   *
-   * Runtime 那条路上有工作空间事件 WebSocket；Host 这条没有，所以这里保留
-   * 一个游标，只取读完之后发生的改动。这里**只让文档查询失效**，不直接改
-   * store：本地还没落盘的编辑不该被一次轮询盖掉，合并仍然走保存冲突那条路。
+   * 别处改过这块板时**只让文档查询失效**，不直接改 store：本地还没落盘的
+   * 编辑不该被一次重取盖掉，合并仍然走保存冲突那条路。
    */
   const queryClient = useQueryClient();
   const workspaceId = workspace?.id ?? null;
@@ -119,10 +101,9 @@ export function useBoardSync() {
     void queryClient.invalidateQueries({ queryKey: ["board", workspaceId] });
     void queryClient.invalidateQueries({ queryKey: ["boards", workspaceId] });
   }, [queryClient, workspaceId]);
-  useCanvasEventFollower(workspaceId, onCanvasChanged);
 
   /**
-   * Runtime 在写时的同一件事（A04）。
+   * `board.changed`（A04）。
    *
    * `board.changed` 带着保存之后的 `updatedAt`，那就是这块板的版本号：和
    * 手里这份一样就是**自己刚存的那一次**，重取回来只会得到同一份，什么都

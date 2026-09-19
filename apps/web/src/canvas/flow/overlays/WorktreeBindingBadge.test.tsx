@@ -11,7 +11,6 @@ import type {
 
 import { runtimeApi } from "@/api/client";
 import { usePreferencesStore } from "@/app/preferences-store";
-import { OWNERSHIP_DOMAINS, useOwnership } from "@/ownership/store";
 import { installDomPolyfills, TestProviders } from "@/app/test-harness";
 import { useCanvasStore } from "@/store/canvas-store";
 import { WorktreeBindingBadge } from "./WorktreeBindingBadge";
@@ -124,17 +123,6 @@ function mount(bound: FrameBinding) {
 
 beforeEach(() => {
   usePreferencesStore.setState({ locale: "en" });
-  // 重建 worktree 是一次写，网关先要知道谁在写。摆的是产品自己的初始状态。
-  useOwnership.setState({
-    domains: OWNERSHIP_DOMAINS.map((domain) => ({
-      domain,
-      status: "runtime" as const,
-      epoch: 1n,
-      reasonCode: "ownership.initial",
-      updatedAt: "1970-01-01T00:00:00Z",
-    })),
-    failed: false,
-  });
   useCanvasStore.setState({
     workspace: null,
     document: null,
