@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
 } from "node:fs";
@@ -10,6 +12,11 @@ import { basename, join } from "node:path";
 import type { DownloadItem, Session } from "electron";
 
 import { DRIVE_CODES } from "../../shell-core/browser/drive";
+import {
+  expiredStagedFiles,
+  uniqueDownloadPath,
+  userDownloadName,
+} from "../../shell-core/browser/downloads";
 import {
   jailMessage,
   jailWritePath,
@@ -20,12 +27,21 @@ import { CdpRefusal } from "./cdp";
  * Files moving in and out of a guest: downloads the page started, and the file
  * chooser it opened.
  *
- * A download is STAGED, never saved. Bytes a page chose land in a private
- * directory with a name this shell picked, and stay there until somebody says
- * `download --accept`, which is the only thing in the browser surface that
- * writes a page's bytes into somebody's project. Rejecting deletes the staged
- * file; nothing expires on its own, because a queue that empties itself is a
- * queue that loses the thing a person was about to look at.
+ * WHO STARTED IT decides where it goes, and the rule is in
+ * `shell-core/browser/downloads.ts`:
+ *
+ *   * A download a PERSON started is saved to the system downloads directory,
+ *     numbered if the name is taken, with no dialog — the ordinary browser
+ *     behaviour. It used to be staged along with everything else, and since
+ *     nothing in the product can accept a staged download except an agent's
+ *     `download --accept`, a person clicking a link got a file they could
+ *     never reach.
+ *   * A download an AGENT caused is STAGED, never saved. Bytes a page chose
+ *     land in a private directory with a name this shell picked, and stay
+ *     there until somebody says `download --accept`, which is the only thing
+ *     in the browser surface that writes a page's bytes into somebody's
+ *     project. Rejecting deletes the staged file, and anything older than
+ *     `STAGING_MAX_AGE_MS` is swept at startup.
  */
 
 export interface StagedDownload {
@@ -42,11 +58,44 @@ export interface StagedDownload {
 
 const staged = new Map<string, StagedDownload>();
 let stagingDirectory = "";
+/** Where a person's own downloads land. Supplied by the assembly, because
+ * `app.getPath('downloads')` is Electron's answer and this module holds none
+ * of Electron. */
+let downloadsDirectory = "";
 
-export function configureStaging(dataDir: string): string {
+export function configureStaging(dataDir: string, downloads: string): string {
   stagingDirectory = join(dataDir, "browser-staging");
   mkdirSync(stagingDirectory, { recursive: true, mode: 0o700 });
+  downloadsDirectory = downloads;
+  sweepStaging();
   return stagingDirectory;
+}
+
+/**
+ * Deletes staged files older than a day.
+ *
+ * Startup only, and by modification time on disk rather than by the in-memory
+ * table: the files this is for are exactly the ones no table survived to
+ * remember — a previous run's, left behind by a crash or a quit.
+ */
+export function sweepStaging(nowMs: number = Date.now()): string[] {
+  let entries: { name: string; modifiedAtMs: number }[];
+  try {
+    entries = readdirSync(stagingDirectory, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => ({
+        name: entry.name,
+        modifiedAtMs: statSync(join(stagingDirectory, entry.name)).mtimeMs,
+      }));
+  } catch {
+    // No staging directory yet, or one this process may not read: there is
+    // nothing to sweep and nothing worth failing startup over.
+    return [];
+  }
+  const expired = expiredStagedFiles(entries, nowMs);
+  for (const name of expired)
+    rmSync(join(stagingDirectory, name), { force: true });
+  return expired;
 }
 
 /**
@@ -60,6 +109,7 @@ export function configureStaging(dataDir: string): string {
 export function watchDownloads(
   guestSession: Session,
   nodeIdFor: (webContentsId: number) => string | null,
+  agentDriven: (webContentsId: number) => boolean,
   announce: (download: StagedDownload) => void,
 ): void {
   if (watched.has(guestSession)) return;
@@ -70,6 +120,20 @@ export function watchDownloads(
       // A download from something this shell does not know is not something it
       // can file, and saving it somewhere anyway is the worst of both.
       item.cancel();
+      return;
+    }
+    // The ledger of who is driving is the guest's own session: a lease is
+    // exactly what makes one drivable, and nothing else in this process
+    // attaches to a guest. No lease means the keyboard and the mouse in front
+    // of the window are the only thing that could have started this.
+    if (contents && downloadsDirectory !== "" && !agentDriven(contents.id)) {
+      item.setSavePath(
+        uniqueDownloadPath(
+          downloadsDirectory,
+          userDownloadName(item.getFilename()),
+          existsSync,
+        ),
+      );
       return;
     }
     const id = randomUUID();
