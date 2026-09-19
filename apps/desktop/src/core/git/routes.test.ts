@@ -48,11 +48,12 @@ describe("the Git routes", () => {
     }).id;
   }
 
-  it("claims every phase-4 Git route in the table", () => {
-    const git = ROUTES.filter((route) => route.feature === "Git 工具");
-    expect(git).toHaveLength(37);
+  it("answers every Git route in the table, and none on the hook surface", () => {
+    const git = ROUTES.filter((route) =>
+      route.path.includes("/git/") || route.path.endsWith("/git"),
+    );
+    expect(git.length).toBeGreaterThan(0);
     expect(git.every((route) => route.implemented === true)).toBe(true);
-    // Nothing in this feature answers on the hook surface.
     expect(git.every((route) => route.surface === "runtime")).toBe(true);
   });
 

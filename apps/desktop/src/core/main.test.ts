@@ -206,15 +206,14 @@ describe("what the core answers", () => {
     });
   });
 
-  it("answers a route it has not written with 501 and the feature's name", async () => {
+  it("answers a route it has not written with 501 naming that path", async () => {
     const { core } = await start(temporary());
-    // The power lease surface is a table entry no phase has written yet, so it
-    // is the one place a 501 can still be observed.
+    // 电源租约这一条在表里但还没写，所以它是唯一一处能观察到 501 的地方。
     const response = await fetch(`${base(core)}/api/power`);
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
       code: "not_implemented",
-      message: "电源租约（R5）",
+      message: "未实现：/api/power",
     });
   });
 

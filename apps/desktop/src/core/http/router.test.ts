@@ -8,29 +8,21 @@ const TABLE: RouteEntry[] = [
     path: "/api/workspaces",
     methods: ["GET", "POST"],
     surface: "runtime",
-    feature: "工作空间",
-    phase: 1,
   },
   {
     path: "/api/workspaces/remote",
     methods: ["POST"],
     surface: "runtime",
-    feature: "工作空间",
-    phase: 1,
   },
   {
     path: "/api/workspaces/{workspaceId}",
     methods: ["PATCH", "DELETE"],
     surface: "runtime",
-    feature: "工作空间",
-    phase: 1,
   },
   {
     path: "/hook/{agentId}",
     methods: ["POST"],
     surface: "hook",
-    feature: "Hook 事件接收",
-    phase: 3,
   },
 ];
 
@@ -84,12 +76,12 @@ describe("dispatch", () => {
     expect((answer.body as { code: string }).code).toBe("method_not_allowed");
   });
 
-  it("501s an unwritten route with the feature's name", async () => {
+  it("501s an unwritten route, naming that path", async () => {
     const answer = await router().dispatch("POST", "/api/workspaces");
     expect(answer.status).toBe(501);
     expect(answer.body).toEqual({
       code: "not_implemented",
-      message: "工作空间（R1）",
+      message: "未实现：/api/workspaces",
     });
   });
 

@@ -19,7 +19,7 @@ describe("the error envelope", () => {
       badRequest("x"),
       forbidden("x"),
       internal("x"),
-      notImplemented("终端会话", 2),
+      notImplemented("/api/terminals"),
     ]) {
       expect(Object.keys(answer.body).sort()).toEqual(["code", "message"]);
       expect(typeof answer.body.code).toBe("string");
@@ -34,7 +34,7 @@ describe("the error envelope", () => {
       badRequest("x"),
       forbidden("x"),
       internal("x"),
-      notImplemented("x", 1),
+      notImplemented("/x"),
     ]) {
       expect(answer.body.code).toMatch(/^[a-z][a-z_]*$/);
     }
@@ -46,13 +46,13 @@ describe("the error envelope", () => {
     expect(badRequest("x").status).toBe(400);
     expect(forbidden("x").status).toBe(403);
     expect(internal("x").status).toBe(500);
-    expect(notImplemented("x", 1).status).toBe(501);
+    expect(notImplemented("/x").status).toBe(501);
   });
 
-  it("names the feature and the phase in a 501", () => {
-    expect(notImplemented("终端会话", 2).body).toEqual({
+  it("names the path in a 501", () => {
+    expect(notImplemented("/api/terminals").body).toEqual({
       code: "not_implemented",
-      message: "终端会话（R2）",
+      message: "未实现：/api/terminals",
     });
   });
 
