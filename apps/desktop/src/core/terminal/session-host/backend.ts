@@ -42,7 +42,6 @@ import {
   type LinkEvent,
   Link,
   endpointFor,
-  hostFlavour,
   hostLaunch,
   startHost,
   waitForHost,
@@ -63,13 +62,11 @@ import { type HelloAuth, ensureKey, signHello } from "./auth";
  *   * `detachAll` closes connections and leaves the host alone. Core shutdown
  *     must not take a user's agents with it; that is the whole point.
  *
- * ## Which host is on the other end (R6d)
+ * ## Which host is on the other end
  *
- * Both ends are TypeScript now. The default host is the daemon in
- * `apps/desktop/src/session-host/`, bundled to `out/session-host/host.cjs`
- * and started through this process' own executable with
- * `ELECTRON_RUN_AS_NODE=1`. `ARMADRA_SESSION_HOST=rust` still reaches the
- * `crates/session-host` binary, which speaks the same wire; R7 deletes it.
+ * 两端都是 TypeScript。host 是 `apps/desktop/src/session-host/` 里那个守护进程，
+ * 打包成 `out/session-host/host.cjs`，由这个进程自己的可执行文件带
+ * `ELECTRON_RUN_AS_NODE=1` 起来。
  *
  * Two facts are written down rather than discovered:
  *
@@ -165,16 +162,11 @@ export class SessionHostBackend implements AdoptableBackend {
   /**
    * The proof this core presents with every `hello`.
    *
-   * `undefined` under the Rust host, which has no notion of one and would
-   * ignore the field: sending it there would be harmless but would also make
-   * a missing key file fail a connection that does not need it.
-   *
    * A **fresh** proof per connection, never a cached one: the nonce is
    * single-use and the host refuses a repeat, so a cached proof would work
    * exactly once and then look like an authentication failure.
    */
-  private proof(): HelloAuth | undefined {
-    if (hostFlavour() === "rust") return undefined;
+  private proof(): HelloAuth {
     return signHello(ensureKey(this.options.dataDir), this.endpoint());
   }
 

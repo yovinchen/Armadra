@@ -17,7 +17,6 @@ import {
  * first `await`, which is why a snapshot exists at all.
  */
 
-const HOST = "http://127.0.0.1:43121";
 const EXTERNAL = "http://127.0.0.1:43120";
 let directory = "";
 
@@ -43,19 +42,18 @@ describe("resolving the page's bases", () => {
         websocket: "ws://127.0.0.1:52341",
       },
     });
-    expect(await resolveEndpoints(directory, EXTERNAL, HOST)).toEqual({
+    expect(await resolveEndpoints(directory, EXTERNAL)).toEqual({
       httpBase: "http://127.0.0.1:52341",
       wsBase: "ws://127.0.0.1:52341",
-      hostBase: HOST,
       dataDir: directory,
     });
   });
 
   it("falls back to the documented port when nothing is published", async () => {
-    expect(await resolveEndpoints(directory, EXTERNAL, HOST)).toEqual(
-      fallbackEndpoints(EXTERNAL, HOST, directory),
+    expect(await resolveEndpoints(directory, EXTERNAL)).toEqual(
+      fallbackEndpoints(EXTERNAL, directory),
     );
-    expect(fallbackEndpoints(EXTERNAL, HOST, directory).wsBase).toBe(
+    expect(fallbackEndpoints(EXTERNAL, directory).wsBase).toBe(
       "ws://127.0.0.1:43120",
     );
   });
@@ -71,7 +69,7 @@ describe("resolving the page's bases", () => {
       // The page is given the fallback rather than an address nobody asked
       // for: pointing it at another machine is the one failure that would
       // look like it worked.
-      expect((await resolveEndpoints(directory, EXTERNAL, HOST)).httpBase).toBe(
+      expect((await resolveEndpoints(directory, EXTERNAL)).httpBase).toBe(
         EXTERNAL,
       );
     }
@@ -86,7 +84,7 @@ describe("resolving the page's bases", () => {
 
 describe("the snapshot the page reads before its first await", () => {
   it("answers the published value, and the fallback until there is one", () => {
-    const fallback = fallbackEndpoints(EXTERNAL, HOST, directory);
+    const fallback = fallbackEndpoints(EXTERNAL, directory);
     // Never a hang and never a throw: a pending promise here would look to the
     // front end exactly like a dead Runtime.
     expect(endpointsSnapshot(() => fallback)).toEqual(fallback);

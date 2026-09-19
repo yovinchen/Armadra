@@ -3,15 +3,11 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { NativeTicketError } from "../../shell-core/host/ticket";
-import {
-  CORE_CONTROL_SOCKET,
-  checkCoreTicket,
-  issueCoreTicket,
-} from "./ticket";
+import { NativeTicketError, checkCoreTicket } from "../shell-core/ticket";
+import { CORE_CONTROL_SOCKET, issueCoreTicket } from "./core-ticket";
 
 /**
- * 壳这一侧的 `ARMADRA_CORE=ts` 取票路径。core 的那一半在
+ * 壳这一侧的取票路径。core 的那一半在
  * `core/identity/control.test.ts`；这里断言的是壳只接受什么、以及失败时只有一个
  * 稳定标记会传出去。
  */

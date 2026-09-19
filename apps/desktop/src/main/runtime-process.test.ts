@@ -2,26 +2,23 @@ import { afterEach, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import path, { join, posix, win32 } from "node:path";
+import { join } from "node:path";
 import type { RuntimeRecord } from "../shell-core/runtime/identity";
 import {
   RuntimeProcess,
   addressIsHeld,
+  CORE_PROCESS_MARKER,
   coreEntry,
-  coreImplementation,
-  coreProcessMarker,
   externalRuntimeBase,
   processCommandLine,
-  startsHost,
   isPackagedShell,
-  runtimeExecutable,
   setPackagedShell,
   stopStaleRuntime,
   waitForExit,
@@ -29,10 +26,9 @@ import {
 } from "./runtime-process";
 
 /**
- * The half of the Rust shell's runtime-process suite that needs a real OS
- * process: the shutdown frame on stdin, the announcement read off a real pipe,
- * SIGTERM sent only to a Runtime we recognise, and what "the address is free"
- * means. These are worth nothing against a fake, which is why they spawn.
+ * 这一半需要一个真的操作系统进程：公告从一根真的管道上读回来、SIGTERM 只发给
+ * 认得出来的那个 core、以及「地址空出来了」到底是什么意思。这几件事对着假对象
+ * 一文不值，所以它们真的起进程。
  */
 
 const unix = process.platform !== "win32";
@@ -62,47 +58,25 @@ function holding(child: ReturnType<typeof spawn>): RuntimeProcess {
   return runtime;
 }
 
-describe.runIf(unix)("stopping the Runtime this shell owns", () => {
-  it("sends the shutdown frame and requires a successful exit", async () => {
-    const path = join(temporary(), "frame");
-    // Reads exactly the six bytes of the control frame, then exits 0.
-    const child = spawn(
-      "/bin/sh",
-      ["-c", `dd bs=1 count=6 of="${path}" 2>/dev/null`],
-      {
-        stdio: ["pipe", "ignore", "ignore"],
-      },
-    );
-    const runtime = holding(child);
-    await expect(runtime.stop()).resolves.toBeUndefined();
-    // A 4-byte big-endian length, then a one-field protobuf: the same six
-    // bytes the Rust shell wrote.
-    expect([...readFileSync(path)]).toEqual([0, 0, 0, 2, 10, 0]);
-    // A second stop on a holder with no child is a no-op, not a failure.
-    await expect(runtime.stop()).resolves.toBeUndefined();
-  });
-
-  it("never lets a failed shutdown read as success on a second quit", async () => {
-    const child = spawn("/bin/sh", ["-c", "exit 0"], {
-      stdio: ["pipe", "ignore", "ignore"],
-    });
-    await waitForExit(child, 5_000);
-    const runtime = holding(child);
-    // An ordinary exit — even exit 0 — may intentionally leave tmux alive.
-    await expect(runtime.stop()).rejects.toThrow(/already exited/);
-    await expect(runtime.stop()).rejects.toThrow(
-      /previous Runtime shutdown failed/,
-    );
-  });
-
-  it("fails when the Runtime does not exit successfully", async () => {
-    const child = spawn("/bin/sh", ["-c", "cat >/dev/null; exit 3"], {
+describe.runIf(unix)("停掉这个壳自己起的 core", () => {
+  it("SIGTERM，而且等它真的退出来", async () => {
+    const child = spawn("/bin/sh", ["-c", "sleep 30"], {
       stdio: ["pipe", "ignore", "ignore"],
     });
     const runtime = holding(child);
-    await expect(runtime.stop()).rejects.toThrow(
-      /failed to stop all managed sessions/,
-    );
+    await expect(runtime.stop()).resolves.toBeUndefined();
+    expect(child.signalCode).toBe("SIGTERM");
+    // 手上没有子进程时再停一次是空操作，不是失败。
+    await expect(runtime.stop()).resolves.toBeUndefined();
+  });
+
+  it("一次没确认的停止不会在第二次退出时读成成功", async () => {
+    // 走过 SIGKILL 那一支的 core 留下的状态：这里直接摆出那个状态，因为触发它
+    // 要等满 12 秒的预算，而这条用例守的是**那之后**的事。
+    const runtime = new RuntimeProcess();
+    (runtime as unknown as { shutdownFailed: boolean }).shutdownFailed = true;
+    await expect(runtime.stop()).rejects.toThrow(/previous core shutdown/);
+    await expect(runtime.stop()).rejects.toThrow(/previous core shutdown/);
   });
 });
 
@@ -135,7 +109,10 @@ describe.runIf(unix)("taking the address back", () => {
    * passes, so the process-table check sees what it would see in production.
    */
   function staleStandIn(directory: string): ReturnType<typeof spawn> {
-    const program = join(directory, "armadra-runtime");
+    // 命令行要同时有 `core/main.js` 与 `--desktop-control-stdin`，进程表那一关
+    // 看到的就和生产里一样。
+    mkdirSync(join(directory, "core"), { recursive: true });
+    const program = join(directory, "core", "main.js");
     writeFileSync(program, "#!/bin/sh\nsleep 30\n");
     chmodSync(program, 0o700);
     return spawn(
@@ -147,7 +124,7 @@ describe.runIf(unix)("taking the address back", () => {
     );
   }
 
-  it("recognises a Runtime a previous shell left, and stops it with SIGTERM", async () => {
+  it("recognises a core a previous shell left, and stops it with SIGTERM", async () => {
     const stale = staleStandIn(temporary());
     const pid = stale.pid as number;
     const commandLine = await processCommandLine(pid);
@@ -163,13 +140,12 @@ describe.runIf(unix)("taking the address back", () => {
     };
     await stopStaleRuntime(record);
     const exit = await waitForExit(stale, 5_000);
-    expect(exit, "the stale Runtime ignored the stop request").toBeDefined();
-    // SIGTERM, not SIGKILL: the Runtime's handler is what detaches tmux
-    // instead of ending it.
+    expect(exit, "the stale core ignored the stop request").toBeDefined();
+    // SIGTERM，不是 SIGKILL：core 自己的处理才会把 tmux 会话解绑而不是结束掉。
     expect(exit?.signal).toBe("SIGTERM");
   });
 
-  it("never signals a process that is not one of our Runtimes", async () => {
+  it("never signals a process that is not one of our cores", async () => {
     const other = spawn("/bin/sleep", ["30"], {
       stdio: ["ignore", "ignore", "ignore"],
     });
@@ -181,7 +157,7 @@ describe.runIf(unix)("taking the address back", () => {
       http: undefined,
     };
     await expect(stopStaleRuntime(record)).rejects.toThrow(
-      /not an Armadra Runtime/,
+      /not an Armadra core/,
     );
     expect(
       await waitForExit(other, 300),
@@ -218,70 +194,8 @@ describe.runIf(unix)("taking the address back", () => {
   });
 });
 
-describe.each([
-  {
-    label: "native",
-    platform: process.platform,
-    pathModule: path,
-    repo: path.resolve("/repo"),
-  },
-  { label: "POSIX", platform: "darwin", pathModule: posix, repo: "/repo" },
-  {
-    label: "Windows",
-    platform: "win32",
-    pathModule: win32,
-    repo: String.raw`D:\repo`,
-  },
-])("where the Runtime binary is ($label)", ({ platform, pathModule, repo }) => {
-  const resources = pathModule.resolve(
-    repo,
-    "..",
-    "App",
-    "Contents",
-    "Resources",
-  );
-  const name = platform === "win32" ? "armadra-runtime.exe" : "armadra-runtime";
-  const executable = (packaged: boolean | undefined, env: NodeJS.ProcessEnv) =>
-    runtimeExecutable(packaged, env, resources, repo, platform, pathModule);
-
-  it("comes out of the cargo target directory in development", () => {
-    const target = pathModule.resolve(repo, "..", "build", "target");
-    expect(executable(false, { CARGO_TARGET_DIR: target })).toBe(
-      pathModule.join(target, "debug", name),
-    );
-    expect(executable(false, {})).toBe(
-      pathModule.join(repo, "target", "debug", name),
-    );
-    // A relative CARGO_TARGET_DIR resolves against the repo, as cargo does.
-    expect(
-      executable(false, {
-        CARGO_TARGET_DIR: pathModule.join("build", "..", "target"),
-      }),
-    ).toBe(pathModule.join(repo, "target", "debug", name));
-    if (platform === "win32") {
-      // A root-relative target keeps the repository's drive, not the process cwd's.
-      expect(
-        executable(false, { CARGO_TARGET_DIR: String.raw`\build\target` }),
-      ).toBe(
-        pathModule.join(
-          pathModule.parse(repo).root,
-          "build",
-          "target",
-          "debug",
-          name,
-        ),
-      );
-      expect(
-        executable(false, { CARGO_TARGET_DIR: String.raw`E:\build\target` }),
-      ).toBe(String.raw`E:\build\target\debug\armadra-runtime.exe`);
-    }
-  });
-
-  it("comes out of the bundle's resources when packaged", () => {
-    expect(executable(true, {})).toBe(pathModule.join(resources, name));
-  });
-
-  it("learns it is packaged from Electron, not from the environment", () => {
+describe("是不是一份打好包的应用", () => {
+  it("答案来自 Electron，不是环境变量", () => {
     setPackagedShell(false);
     try {
       expect(isPackagedShell({})).toBe(false);
@@ -289,11 +203,6 @@ describe.each([
       expect(isPackagedShell({ ARMADRA_DESKTOP_PACKAGED: "0" })).toBe(false);
       setPackagedShell(true);
       expect(isPackagedShell({})).toBe(true);
-      expect(executable(undefined, {})).toBe(pathModule.join(resources, name));
-      setPackagedShell(false);
-      expect(executable(undefined, {})).toBe(
-        pathModule.join(repo, "target", "debug", name),
-      );
     } finally {
       setPackagedShell(false);
     }
@@ -316,21 +225,7 @@ describe("the external development Runtime", () => {
   });
 });
 
-describe("which core this shell runs", () => {
-  it("defaults to the Rust Runtime and only the exact string switches it", () => {
-    expect(coreImplementation({})).toBe("rust");
-    expect(coreImplementation({ ARMADRA_CORE: "rust" })).toBe("rust");
-    expect(coreImplementation({ ARMADRA_CORE: "TS" })).toBe("rust");
-    expect(coreImplementation({ ARMADRA_CORE: "" })).toBe("rust");
-    expect(coreImplementation({ ARMADRA_CORE: "ts" })).toBe("ts");
-  });
-
-  it("starts the Host only beside the Rust Runtime", () => {
-    // Two writers of one database is the arrangement the merge removes.
-    expect(startsHost({})).toBe(true);
-    expect(startsHost({ ARMADRA_CORE: "ts" })).toBe(false);
-  });
-
+describe("壳启动的 core", () => {
   it("finds the core bundle beside the main bundle in both layouts", () => {
     expect(coreEntry({}, "/app/out/main")).toBe("/app/out/core/main.js");
     expect(coreEntry({ ARMADRA_CORE_ENTRY: "/elsewhere/main.js" })).toBe(
@@ -338,10 +233,7 @@ describe("which core this shell runs", () => {
     );
   });
 
-  it("looks for the right process marker when sweeping orphans", () => {
-    // A TypeScript core's command line names the bundle, not the Rust binary,
-    // so the orphan sweep would otherwise never recognise its own child.
-    expect(coreProcessMarker("rust")).toMatch(/^armadra-runtime(\.exe)?$/);
-    expect(coreProcessMarker("ts")).toBe("core/main.js");
+  it("孤儿清扫认的是 core 的那段命令行", () => {
+    expect(CORE_PROCESS_MARKER).toBe("core/main.js");
   });
 });

@@ -1,15 +1,9 @@
-import { type ChildProcess, execFile, fork, spawn } from "node:child_process";
+import { type ChildProcess, execFile, fork } from "node:child_process";
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { connect } from "node:net";
-import path, { join } from "node:path";
-import {
-  DesktopRuntimeControlSchema,
-  DesktopShutdownRequestSchema,
-  create,
-  toBinary,
-} from "@armadra/protocol";
+import { join } from "node:path";
 import { dataDir, endpointsFile } from "../shell-core/paths";
 import {
   type HealthResponse,
@@ -24,54 +18,23 @@ import {
   listenArgument,
   parseAnnouncement,
   parseHealth,
-  runtimeBinaryName,
   staleRuntimeRecord,
 } from "../shell-core/runtime/identity";
 import {
   DRIVE_ADDRESS_ENV,
   DRIVE_TOKEN_ENV,
 } from "../shell-core/browser/drive";
-import { repoRoot } from "./repo-root";
 
 /**
  * The two variables the browser drive channel travels on (§4.2).
  *
- * Set by the assembly before the Runtime is spawned, and empty when the channel
- * could not bind — in which case the Runtime simply never has a shell to drive
+ * Set by the assembly before the core is spawned, and empty when the channel
+ * could not bind — in which case the core simply never has a shell to drive
  * through and answers `browser_unavailable`, which is the honest answer.
  */
 let driveEnvironment: Record<string, string> = {};
 
-/* ------------------------- which core this shell runs --------------------- */
-
-/**
- * `ARMADRA_CORE=rust|ts`, the only switch for the changeover.
- *
- * `rust` — the shell spawns the `armadra-runtime` binary and starts the Go
- * Host, exactly as it always has. `ts` — the shell forks
- * `out/core/main.js` and starts **no Host**: the TypeScript core is the merge
- * of both, so a Host beside it would be a second writer of one database, which
- * is precisely the arrangement the merge exists to remove.
- *
- * Everything downstream of the spawn is deliberately shared: the announcement
- * line is byte-identical, `/health` reports the same `instanceId`, and the
- * stale-process takeover reads the same `endpoints.json`. That is what makes
- * the switch a switch and not a fork of the shell.
- *
- * The default stays `rust` until R6.
- */
-export type CoreImplementation = "rust" | "ts";
-
-export function coreImplementation(
-  env: NodeJS.ProcessEnv = process.env,
-): CoreImplementation {
-  return env.ARMADRA_CORE === "ts" ? "ts" : "rust";
-}
-
-/** Whether this shell also starts the Go Host. Never while the TS core runs. */
-export function startsHost(env: NodeJS.ProcessEnv = process.env): boolean {
-  return coreImplementation(env) === "rust";
-}
+/* ------------------------------ 壳启动的 core ----------------------------- */
 
 /**
  * The core bundle. `out/core/main.js` sits beside `out/main/index.js` in both
@@ -86,33 +49,27 @@ export function coreEntry(
 }
 
 /**
- * The substring that proves a command line belongs to a core this shell
- * started, for the orphan sweep. The Rust half is the binary name plus
- * `--desktop-control-stdin`; the TypeScript half is the bundle path plus the
- * same flag, which the core accepts for exactly this reason.
+ * 命令行里证明「这是壳起的 core」的那一小段，给孤儿进程清扫用。
+ *
+ * 另一半是 `--desktop-control-stdin`，它是把一个人从终端里手跑的 core 挡在接管
+ * 逻辑之外的那一条。
  */
-export function coreProcessMarker(
-  implementation: CoreImplementation = coreImplementation(),
-): string {
-  return implementation === "ts" ? "core/main.js" : runtimeBinaryName();
-}
+export const CORE_PROCESS_MARKER = "core/main.js";
 
 export function setDriveEnvironment(address: string, token: string): void {
   driveEnvironment = { [DRIVE_ADDRESS_ENV]: address, [DRIVE_TOKEN_ENV]: token };
 }
 
 /**
- * The Runtime process this shell owns, and how it is asked to stop.
+ * 这个壳自己起的那个 core 进程，以及怎么请它停下。
  *
- * A packaged shell starts the Runtime itself; a development Runtime is
- * somebody else's process on a loopback port, and this module never signals
- * one it did not start. Ported from the Rust shell this one replaced.
+ * 打好包的壳自己起 core；开发时的 core 是别人的进程，这个模块从不给一个不是自己
+ * 起的进程发信号。
  *
- * The owned Runtime listens twice: on a Unix socket in the data directory,
- * which is what `/health` and the stale-Runtime takeover use because they need
- * an address known before the spawn, and on a kernel-assigned loopback TCP
- * port, which is what the page uses. Only `endpoints.json` knows the second
- * one, and `transport:endpoints` is how the page is told.
+ * 自己起的 core 监听两处：数据目录里的一个 Unix socket——`/health` 与「接管上一个
+ * 还活着的 core」用它，因为那两件事要在 spawn **之前**就知道地址；以及一个由内核
+ * 分配的回环 TCP 端口——页面用它。第二个只有 `endpoints.json` 知道，
+ * `transport:endpoints` 是告诉页面的那条路。
  */
 
 const sleep = (ms: number): Promise<void> =>
@@ -131,12 +88,6 @@ export class RuntimeProcess {
   /** Remembered so a replacement can be started on the same address. */
   private address: RuntimeAddress | null = null;
   private exited = false;
-  /** Which implementation the running child is; decided at spawn time. */
-  private implementation: CoreImplementation = "rust";
-
-  runningImplementation(): CoreImplementation {
-    return this.implementation;
-  }
 
   /** True when this shell started the Runtime, and so may stop it. */
   owns(): boolean {
@@ -176,9 +127,7 @@ export class RuntimeProcess {
   }
 
   private spawn(address: RuntimeAddress): void {
-    const implementation = coreImplementation();
-    const executable =
-      implementation === "ts" ? coreEntry() : runtimeExecutable();
+    const executable = coreEntry();
     const args = [
       "--desktop-control-stdin",
       "--listen",
@@ -202,32 +151,21 @@ export class RuntimeProcess {
     // exist only here and in the environment of this one child. Nothing is
     // written to disk, and a Runtime this shell did not start has no channel.
     const env = { ...process.env, ...driveEnvironment };
-    const child =
-      implementation === "ts"
-        ? // `child_process.fork`, not `utilityProcess.fork`: everything below
-          // this line — the announcement reader, the exit bookkeeping, the
-          // SIGKILL fallback — is written against a `ChildProcess`, and
-          // `utilityProcess` has neither `exitCode` nor a signal-taking
-          // `kill`. `silent` is what gives us the stdout pipe the announcement
-          // arrives on. `ELECTRON_RUN_AS_NODE` makes `process.execPath` — the
-          // Electron binary, the only interpreter a packaged install is sure
-          // to have — behave as plain Node.
-          fork(executable, args, {
-            silent: true,
-            env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
-          })
-        : spawn(executable, args, {
-            // stdout is piped, not discarded: the first line identifies this
-            // run and the rest is the Runtime's own log, which the Rust shell
-            // used to throw away entirely in a packaged build.
-            stdio: ["pipe", "pipe", "ignore"],
-            env,
-          });
-    this.implementation = implementation;
+    // `child_process.fork`, not `utilityProcess.fork`: everything below this
+    // line — the announcement reader, the exit bookkeeping, the SIGKILL
+    // fallback — is written against a `ChildProcess`, and `utilityProcess` has
+    // neither `exitCode` nor a signal-taking `kill`. `silent` is what gives us
+    // the stdout pipe the announcement arrives on. `ELECTRON_RUN_AS_NODE`
+    // makes `process.execPath` — the Electron binary, the only interpreter a
+    // packaged install is sure to have — behave as plain Node.
+    const child = fork(executable, args, {
+      silent: true,
+      env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+    });
     child.on("error", (error) => {
       this.exited = true;
       process.stderr.write(
-        `Could not start Runtime at ${executable}: ${error.message}\n`,
+        `Could not start the core at ${executable}: ${error.message}\n`,
       );
     });
     child.on("exit", () => {
@@ -250,88 +188,36 @@ export class RuntimeProcess {
     lines.on("line", (line) => {
       const id = parseAnnouncement(line);
       if (id !== undefined && this.announced === undefined) this.announced = id;
-      process.stderr.write(`runtime: ${line}\n`);
+      process.stderr.write(`core: ${line}\n`);
     });
   }
 
   /**
-   * Asks the Runtime to stop every managed session and confirm it did.
+   * 请 core 停下来，并确认它真的停了。
    *
-   * An ordinary exit — even exit 0 — may intentionally leave tmux alive. Only
-   * the explicit control request confirms cleanup, so a child that is already
-   * gone is a failure, not a success.
+   * SIGTERM 走的是 core 自己的处理：撤回端点记录、关掉监听、关库。超时之后的
+   * SIGKILL 只结束这一个子进程，它**不是**「被管理的会话都收好了」的证据，所以
+   * 那次失败要留下来给用户看见，而不能在第二次退出时读成成功。
    */
   async stop(): Promise<void> {
     const child = this.child;
     this.child = null;
     if (child === null) {
-      // A development Runtime is external and not ours to kill. But a failure
-      // recorded earlier must not read as success on a second quit.
+      // 开发时的 core 是别人的进程，不归这里杀。
       if (this.shutdownFailed) {
         throw new Error(
-          "A previous Runtime shutdown failed; managed sessions require inspection",
+          "A previous core shutdown failed; managed sessions require inspection",
         );
       }
       return;
     }
-    // The TypeScript core speaks no stdin control frame: it has no tmux
-    // sessions to confirm the shutdown of until R2, and SIGTERM already runs
-    // its handler — withdraw the endpoint record, close the listeners, close
-    // the database. When R2 lands, this branch grows the same confirmation the
-    // Rust one has rather than losing it.
-    if (this.implementation === "ts") {
-      child.kill("SIGTERM");
-      const status = await waitForExit(child, 12_000);
-      if (status === undefined) {
-        this.shutdownFailed = true;
-        child.kill("SIGKILL");
-        await waitForExit(child, 2_000);
-        throw new Error("Core shutdown timed out");
-      }
-      return;
-    }
-    const control = toBinary(
-      DesktopRuntimeControlSchema,
-      create(DesktopRuntimeControlSchema, {
-        action: {
-          case: "shutdown",
-          value: create(DesktopShutdownRequestSchema, {}),
-        },
-      }),
-    );
-    let failure: string | undefined;
-    try {
-      if (this.exited || child.exitCode !== null || child.signalCode !== null) {
-        throw new Error(
-          "Runtime already exited; managed-session shutdown was not confirmed",
-        );
-      }
-      const stdin = child.stdin;
-      if (!stdin) throw new Error("Runtime control pipe unavailable");
-      const length = Buffer.alloc(4);
-      length.writeUInt32BE(control.length, 0);
-      stdin.write(length);
-      stdin.write(Buffer.from(control));
-      stdin.end();
-      const status = await waitForExit(child, 12_000);
-      if (status === undefined) {
-        throw new Error(
-          "Runtime shutdown timed out; managed sessions may still be running",
-        );
-      }
-      if (status.code !== 0) {
-        throw new Error("Runtime failed to stop all managed sessions");
-      }
-    } catch (error) {
-      failure = error instanceof Error ? error.message : String(error);
-    }
-    if (failure !== undefined) {
+    child.kill("SIGTERM");
+    const status = await waitForExit(child, 12_000);
+    if (status === undefined) {
       this.shutdownFailed = true;
-      // SIGKILL terminates only this owned child; it is not proof that
-      // persistent sessions stopped, so the failure is retained for the user.
       child.kill("SIGKILL");
       await waitForExit(child, 2_000);
-      throw new Error(failure);
+      throw new Error("Core shutdown timed out");
     }
   }
 }
@@ -358,17 +244,12 @@ export function waitForExit(
 }
 
 /**
- * Whether this shell is a packaged application, which is what decides where
- * every managed binary is looked for.
+ * 这个壳是不是一份打好包的应用。它决定被管理的文件去哪里找。
  *
- * The answer is Electron's `app.isPackaged`, handed in by `main/index.ts` —
- * NOT an environment variable. An installed application nobody set a variable
- * for was resolving its Runtime against a development path
- * (`Contents/target/debug/armadra-runtime`) and simply did not start; a
- * double-clicked `.app` inherits nothing from anybody's shell.
+ * 答案来自 Electron 的 `app.isPackaged`，由 `main/index.ts` 交进来——**不是**
+ * 环境变量：一个双击打开的 `.app` 什么都继承不到。
  *
- * `ARMADRA_DESKTOP_PACKAGED=1` remains as an override for exercising the
- * packaged layout without packaging.
+ * `ARMADRA_DESKTOP_PACKAGED=1` 留着，用来在不打包的情况下走打包后的布局。
  */
 let packagedShell = false;
 
@@ -378,29 +259,6 @@ export function setPackagedShell(packaged: boolean): void {
 
 export function isPackagedShell(env: NodeJS.ProcessEnv = process.env): boolean {
   return packagedShell || env.ARMADRA_DESKTOP_PACKAGED === "1";
-}
-
-/**
- * The Runtime binary. A packaged shell takes the one `extraResources` staged
- * beside the bundle's resources; in development it comes out of
- * `CARGO_TARGET_DIR` (or the repo's `target/`), which is where
- * `cargo build -p armadra-runtime` leaves it.
- */
-export function runtimeExecutable(
-  packaged = isPackagedShell(),
-  env: NodeJS.ProcessEnv = process.env,
-  resourcesPath: string = process.resourcesPath,
-  repoDir: string = repoRoot(),
-  platform: string = process.platform,
-  pathModule: typeof path = path,
-): string {
-  const name = runtimeBinaryName(platform);
-  if (env.ARMADRA_RUNTIME_BINARY) return env.ARMADRA_RUNTIME_BINARY;
-  if (packaged) return pathModule.join(resourcesPath, name);
-  const target = env.CARGO_TARGET_DIR
-    ? pathModule.resolve(repoDir, env.CARGO_TARGET_DIR)
-    : pathModule.join(repoDir, "target");
-  return pathModule.join(target, "debug", name);
 }
 
 /* --------------------------- reaching /health ---------------------------- */
@@ -602,13 +460,11 @@ export async function stopStaleRuntime(record: RuntimeRecord): Promise<void> {
       `process ${record.processId} from endpoints.json is no longer running`,
     );
   }
-  // The marker depends on which implementation this shell would start: a TS
-  // core's command line names the bundle, not the Rust binary. The
-  // `--desktop-control-stdin` half of the check is unchanged and is what keeps
-  // a development core somebody is running from a terminal out of reach.
-  if (!isDesktopStartedRuntime(commandLine, coreProcessMarker())) {
+  // `--desktop-control-stdin` 那一半是把一个人从终端里手跑的 core 挡在外面的那
+  // 一条：只有壳起的 core 才带着它。
+  if (!isDesktopStartedRuntime(commandLine, CORE_PROCESS_MARKER)) {
     throw new Error(
-      `process ${record.processId} is not an Armadra Runtime started by a desktop shell (${commandLine})`,
+      `process ${record.processId} is not an Armadra core started by a desktop shell (${commandLine})`,
     );
   }
   try {

@@ -1,118 +1,46 @@
-import type { HostStatus } from "@armadra/protocol";
 import { LifecycleState } from "../shell-core/lifecycle-state";
-import { type HostLaunchConfig, ensureHost, stopHost } from "./host";
 import type { RuntimeProcess } from "./runtime-process";
 
 /**
- * Closing the foreground keeps its document and services alive. Explicit quit
- * serializes with Host startup, stops the configured Host, then our Runtime.
+ * 关掉前台窗口不停任何服务；显式退出才停 core。
  *
- * Ported from the Rust shell this one replaced, quit orchestration included.
- * The three-phase state itself is pure and
- * lives in `shell-core/lifecycle-state.ts`.
+ * 三段式的状态本身是纯的，住在 `shell-core/lifecycle-state.ts`。
  */
-
-/** A promise chain that serializes Host startup, shutdown and quit. */
-class Serial {
-  private tail: Promise<unknown> = Promise.resolve();
-
-  run<T>(work: () => Promise<T>): Promise<T> {
-    const next = this.tail.then(work, work);
-    // A rejection must not poison the chain for the next caller, but it still
-    // has to reach the one who asked.
-    this.tail = next.catch(() => undefined);
-    return next;
-  }
-}
 
 export class DesktopLifecycle {
   readonly state = new LifecycleState();
-  private hostConfig: HostLaunchConfig | null = null;
-  /**
-   * What the last successful startup observed. Kept rather than re-read so a
-   * later caller talks about exactly the Host instance this shell verified.
-   */
-  private hostStatus: HostStatus | null = null;
-  private readonly hostOperation = new Serial();
-
-  configureHost(config: HostLaunchConfig): void {
-    this.hostConfig = config;
-  }
-
-  hostLaunchConfig(): HostLaunchConfig | null {
-    return this.hostConfig;
-  }
-
-  observedHost(): HostStatus | null {
-    return this.hostStatus;
-  }
-
-  async startHost(): Promise<void> {
-    await this.hostOperation.run(async () => {
-      // Quit may have won before this startup task was first scheduled.
-      if (this.state.isQuitting()) return;
-      const config = this.hostConfig;
-      if (config === null) return;
-      this.hostStatus = await ensureHost(config);
-    });
-  }
-
-  async stopConfiguredHost(): Promise<void> {
-    await this.hostOperation.run(async () => {
-      this.hostStatus = null;
-      const config = this.hostConfig;
-      if (config === null) return;
-      await stopHost(config);
-    });
-  }
 }
 
 export interface QuitOutcome {
   readonly ok: boolean;
-  /** Present only when `ok` is false; already safe to show to the user. */
+  /** 只有 `ok` 为 false 时有；已经是可以直接给用户看的一句话。 */
   readonly message?: string;
 }
 
 /**
- * The quit sequence: Host first, then the Runtime, and the application exits
- * only if BOTH confirmed.
+ * 退出：请 core 停下，确认了才真的退出。
  *
- * The order is not cosmetic. The Host holds the ownership record and drains
- * its own clients; the Runtime is what detaches tmux sessions instead of
- * ending them. Stopping the Runtime first would leave the Host talking to a
- * service that is gone.
- *
- * A failure does NOT exit. The window comes back and the user is told, because
- * the alternative — quitting anyway — silently leaves background services and
- * the user's sessions in a state nobody inspected.
+ * 失败**不**退出。窗口回来，并把原因告诉用户——另一种做法（照退不误）等于悄悄
+ * 把后台服务和用户的会话留在一个没人看过的状态里。
  */
 export async function runQuitSequence(
   lifecycle: DesktopLifecycle,
   runtime: RuntimeProcess,
 ): Promise<QuitOutcome> {
-  const failures: string[] = [];
   try {
-    await lifecycle.stopConfiguredHost();
-  } catch (error) {
-    failures.push(error instanceof Error ? error.message : String(error));
-  }
-  try {
-    // The Runtime is stopped even when the Host failed: leaving it running
-    // would be a second orphan on top of the one the user already has to
-    // deal with, and its own stop path is what detaches tmux cleanly.
     await runtime.stop();
   } catch (error) {
-    failures.push(error instanceof Error ? error.message : String(error));
-  }
-  if (failures.length > 0) {
     lifecycle.state.quitFailed();
-    return { ok: false, message: failures.join("\n") };
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
   }
   lifecycle.state.quitCompleted();
   return { ok: true };
 }
 
-/** The dialog text for a quit that could not finish. */
+/** 退出没走完时的那段对话框文案。 */
 export function quitFailureDialog(message: string): {
   title: string;
   body: string;
