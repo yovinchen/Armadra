@@ -19,7 +19,6 @@
     "test": "vitest run && node --test scripts/*.test.mjs"
   },
   "dependencies": {
-    "@armadra/protocol": "workspace:*",
     "electron-updater": "6.8.9",
     "node-pty": "1.1.0",
     "ws": "8.18.3"

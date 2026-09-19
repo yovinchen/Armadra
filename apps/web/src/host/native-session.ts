@@ -167,16 +167,3 @@ export function nativeSessionFailureKey(error: unknown): string | null {
     ? `hostNative.blocked.${error.reason}`
     : null;
 }
-
-/**
- * R7a 之前还在用 `packages/host-client` 的那两个面从这里取旧接线。
- * 它们改打 JSON 面之后 `host-client-compat.ts` 整文件删除。
- */
-export {
-  createHostIdentity,
-  hasHostSessionCapability,
-  hostSessionBlock,
-  nativeCredentials,
-  resetNativeSession,
-  type HostSessionBlock,
-} from "./host-client-compat";

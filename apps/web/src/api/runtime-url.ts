@@ -12,7 +12,6 @@ const LOCAL_RUNTIME = "http://127.0.0.1:43120";
 export interface ShellEndpoints {
   readonly httpBase: string;
   readonly wsBase: string;
-  readonly hostBase: string;
 }
 
 let cachedShell: ShellEndpoints | null | undefined;
@@ -29,7 +28,6 @@ function readShellEndpoints(): ShellEndpoints | null {
       wsBase: loopbackBase(endpoints.wsBase, "ws:")
         ? trimBase(endpoints.wsBase)
         : trimBase(endpoints.httpBase).replace(/^http/, "ws"),
-      hostBase: endpoints.hostBase,
     };
   } catch {
     return null;

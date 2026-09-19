@@ -18,7 +18,6 @@ interface ArmadraTransportEndpoints {
   /** The Runtime's WebSocket base, no trailing slash. */
   readonly wsBase: string;
   /** The Host's loopback base, no trailing slash. */
-  readonly hostBase: string;
   /** The data directory the Runtime and the Host agreed on. */
   readonly dataDir: string;
 }

@@ -35,15 +35,3 @@ export function hostErrorKey(error: unknown): string {
   // zod 解析失败落在这里：连上了，但回来的不是一份认得出的 hello。
   return "host.error.invalidResponse";
 }
-
-/**
- * R7a 之前还在用 `packages/host-client` 的那两个面从这里取旧接线。
- * 它们改打 JSON 面之后 `host-client-compat.ts` 整文件删除。
- */
-export {
-  DEFAULT_HOST_ADDRESS,
-  HOST_ADDRESS_STORAGE_KEY,
-  loadHostAddress,
-  probeHost as probeHostAt,
-  rememberHostAddress,
-} from "./host-client-compat";

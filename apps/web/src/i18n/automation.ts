@@ -21,8 +21,6 @@ const zh = {
 
   /* 不可用状态（§5：不出现伪按钮） */
   "automation.blocked.noWorkspace": "先打开一个工作空间",
-  "automation.blocked.tlsRequired": "Host 地址必须是同源的 HTTPS 地址",
-  "automation.blocked.sameOrigin": "Host 地址与当前页面不同源",
   "automation.blocked.nativeSession":
     "桌面壳未能建立本机会话，原因见「设置 → 连接 → 后台服务」",
   "automation.blocked.disconnected": "连不上 Host",
@@ -228,10 +226,6 @@ const en: Record<keyof typeof zh, string> = {
   "automation.loading": "Loading",
 
   "automation.blocked.noWorkspace": "Open a workspace first",
-  "automation.blocked.tlsRequired":
-    "The Host address must be a same-origin HTTPS address",
-  "automation.blocked.sameOrigin":
-    "The Host address is not the origin of this page",
   "automation.blocked.nativeSession":
     "The desktop shell could not open a local session; see Settings → Connection → Background service",
   "automation.blocked.disconnected": "Cannot reach the Host",
