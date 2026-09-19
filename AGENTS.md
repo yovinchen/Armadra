@@ -14,6 +14,6 @@
 - 任务涉及的专项文档从 [文档索引](docs/README.md) 查找：`guides/` 是现状，`design/` 是目标设计，`status/` 是已验证进度，`history/` 与 `research/` 只用于追溯。
 - `docs/contracts/` 的 §N 被代码引用，保留章节编号；新增文档登记进 `docs/README.md`。
 - 目录、文档登记、迁移与协议覆盖的规则由 `pnpm repo:check` 校验（规则在 `repo.rules.json`）；改动结构后跑 `pnpm check`。
-- 前端检查用 `pnpm --filter @armadra/web test` / `typecheck`，Runtime 用 `cargo test -p armadra-runtime`，Host 用 `go -C apps/host test ./...`。
-- 协议改动运行 `pnpm protocol:check` 与 `pnpm protocol:test`；桌面脚本测试用 `pnpm --filter @armadra/desktop test`。
+- 前端检查用 `pnpm --filter @armadra/web test` / `typecheck`，Runtime 用 `cargo test -p armadra-runtime -p armadra-hook`，Host 用 `go -C apps/host test ./...`。
+- 协议改动运行 `pnpm protocol:check` 与 `pnpm protocol:test`；桌面脚本测试用 `pnpm --filter @armadra/desktop test`，跑之前先 `pnpm libs:build`，否则依赖 `@armadra/protocol` 的用例会整文件失败。
 - 仓库级脚本在 `tools/`，各 app 自己的脚本仍在各自的 `scripts/`。
