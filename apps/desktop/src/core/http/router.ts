@@ -201,10 +201,7 @@ export class Router {
     }
     const handler = this.handlers.get(key(verb, found.entry.path));
     if (handler === undefined) {
-      return notImplemented(
-        found.entry.feature ?? found.entry.path,
-        found.entry.phase ?? 1,
-      );
+      return notImplemented(found.entry.path);
     }
     return handler(found, request);
   }

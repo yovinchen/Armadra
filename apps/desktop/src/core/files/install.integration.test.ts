@@ -111,8 +111,8 @@ describe("the assembled filesystem and import domains", () => {
       const answer = await send("GET", path);
       expect(answer.status, path).toBe(200);
     }
-    // A path that has not been written answers 501 with the feature's name, so
-    // a 200 above is evidence the claim took rather than evidence of nothing.
+    // 表里有、还没写的那条答 501，所以上面的 200 是「真的答了」的证据，而不是
+    // 「什么都没发生」的证据。
     const notYet = await send("GET", "/api/power");
     expect(notYet.status).toBe(501);
   });

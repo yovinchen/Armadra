@@ -39,14 +39,11 @@ export const internal = (message: string): ErrorResponse =>
   coreError(500, "internal", message);
 
 /**
- * The answer every route this build has not written yet gives.
+ * 表里有、这个构建没写的路由答的那一句。
  *
- * 501 rather than 404 on purpose. During the changeover the front end talks to
- * whichever core the switch selected, and a 404 reads as "you asked for
- * something that does not exist" — indistinguishable from a typo in a URL. A
- * 501 that names the feature and the phase it lands in says what actually
- * happened, and is what the UI degrades on.
+ * 501 而不是 404，是因为 404 读起来是「你要的东西不存在」——和一个拼错的 URL
+ * 分不开。501 说的是「这条路在契约里，这个构建还没写」，页面据此降级。
  */
-export function notImplemented(feature: string, phase: number): ErrorResponse {
-  return coreError(501, "not_implemented", `${feature}（R${phase}）`);
+export function notImplemented(path: string): ErrorResponse {
+  return coreError(501, "not_implemented", `未实现：${path}`);
 }
