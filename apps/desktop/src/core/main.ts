@@ -4,8 +4,11 @@ import { install as installAssets } from "./assets/routes";
 import { install as installCanvas } from "./canvas/routes";
 import { install as installWorkspaces } from "./workspaces/routes";
 import { EventBus } from "./bus";
+import { absorbHostDatabase } from "./db/absorb-host";
 import { DatabaseRefused, type OpenedDatabase, openDatabase } from "./db/open";
 import { resolveMigrationsDir } from "./db/migrations";
+import { resolveUnifiedMigrationsDir, unifiedEnabled } from "./db/unified";
+import { installIdentity } from "./identity";
 import {
   RUNTIME_SERVICE,
   type ServiceEndpoint,
@@ -98,6 +101,7 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installAssets,
   installSettings,
   installUsage,
+  installIdentity,
 ];
 
 export async function run(options: RunOptions = {}): Promise<RunningCore> {
@@ -127,6 +131,11 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
   write(`${announcement()}\n`);
 
   // Step 2.
+  //
+  // `ARMADRA_CORE=ts` 时多叠一个迁移目录：统一库迁移 0015。它是单向门——应用
+  // 之后 Rust Runtime 会因为「这条迁移本构建不认识」拒绝启动，所以应用前先把
+  // 整个库复制成 `canvas.db.before-ts-core-<ts>`，那是唯一的回滚点。
+  const unified = unifiedEnabled(env);
   const opened = openDatabase({
     file: databaseFile(dataDir),
     migrationsDir: resolveMigrationsDir({
@@ -134,11 +143,37 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
       resourcesPath: platform.resourcesPath,
       from: options.moduleDir,
     }),
+    ...(unified
+      ? {
+          unifiedMigrationsDir: resolveUnifiedMigrationsDir({
+            env,
+            resourcesPath: platform.resourcesPath,
+            from: options.moduleDir,
+          }),
+        }
+      : {}),
   });
   log.info("opened the database", {
     file: databaseFile(dataDir),
     migrations: opened.migrations.length,
   });
+  if (opened.backup !== null) {
+    log.warn(
+      "统一库迁移已应用：这个库 Rust Runtime 不再打得开，回滚请用备份替换",
+      { backup: opened.backup },
+    );
+  }
+  if (opened.unified) {
+    // 搬运必须在任何域读 `store_meta` 之前：`host_id` 要从旧库带过来，晚一步
+    // 就会先生成一个新的，页面记下的那个 Host 就认不出来了。
+    const absorbed = absorbHostDatabase({ database: opened.database, dataDir });
+    if (absorbed.absorbed) {
+      log.info("旧 host.db 已并入统一库", {
+        rows: absorbed.rows,
+        renamedTo: absorbed.renamedTo,
+      });
+    }
+  }
 
   const bus = new EventBus();
   const server = new CoreServer({ platform, bus, version: VERSION });
