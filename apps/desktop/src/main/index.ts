@@ -310,7 +310,10 @@ async function start(): Promise<void> {
   // A shell that cannot bind it opens anyway: browser nodes then answer
   // `browser_unavailable`, which is a named absence rather than a broken window.
   try {
-    const wiring = await installBrowser(dataDir());
+    // The downloads directory is Electron's answer, and only this file is in
+    // a position to ask: a download a PERSON started goes there rather than
+    // into the agent's staging queue (`shell-core/browser/downloads.ts`).
+    const wiring = await installBrowser(dataDir(), app.getPath("downloads"));
     setDriveEnvironment(wiring.driveAddress, wiring.driveToken);
     traceLifecycle("browser drive channel ready");
   } catch (error) {

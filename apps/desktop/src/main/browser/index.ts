@@ -50,8 +50,11 @@ export interface BrowserWiring {
  * in the Runtime's spawn environment. There is no other way for the Runtime to
  * learn them: not a file, not a well-known port, not a constant.
  */
-export async function installBrowser(dataDir: string): Promise<BrowserWiring> {
-  configureStaging(dataDir);
+export async function installBrowser(
+  dataDir: string,
+  downloadsDir: string,
+): Promise<BrowserWiring> {
+  configureStaging(dataDir, downloadsDir);
   server = await startDriveServer(runVerb, (notice, nodeId, detail) => {
     if (notice === "lease") {
       // Straight through to the node's badge. The shell does not decide who
@@ -217,6 +220,11 @@ function wireGuest(contents: WebContents, nodeId: string): void {
   watchDownloads(
     contents.session,
     (webContentsId) => guestByWebContentsId(webContentsId)?.nodeId ?? null,
+    // An attached session IS the lease: it is created on the first verb and
+    // dropped the moment a person takes the page back, so asking it is asking
+    // the ledger rather than keeping a second copy of it.
+    (webContentsId) =>
+      guestByWebContentsId(webContentsId)?.session?.isAttached() ?? false,
     (download) => {
       publishEvent({
         type: "event",
