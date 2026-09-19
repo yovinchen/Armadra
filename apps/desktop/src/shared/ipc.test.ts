@@ -4,7 +4,9 @@ import {
   IMPLEMENTED_CHANNELS,
   IPC,
   NOT_IMPLEMENTED,
+  errorCode,
   ipcError,
+  ipcRejection,
 } from "./ipc";
 
 /**
@@ -104,5 +106,35 @@ describe("the IPC table", () => {
       code: "not_implemented",
       message: "later",
     });
+  });
+
+  it("puts the code where the IPC boundary cannot drop it", () => {
+    // Electron serializes a rejected handler's error by message and stack;
+    // own properties do not survive. So the page has to be able to read the
+    // code back out of the message, however Electron wrapped it.
+    const rejection = ipcRejection("scheme_not_allowed", "only http and https");
+    expect(rejection.code).toBe("scheme_not_allowed");
+    expect(errorCode(rejection)).toBe("scheme_not_allowed");
+    expect(
+      errorCode(
+        new Error(
+          `Error invoking remote method 'shell:open-external': Error: ${rejection.message}`,
+        ),
+      ),
+    ).toBe("scheme_not_allowed");
+    expect(errorCode(ipcRejection(NOT_IMPLEMENTED, "later"))).toBe(
+      NOT_IMPLEMENTED,
+    );
+  });
+
+  it("reports no code rather than inventing one", () => {
+    for (const value of [
+      new Error("something went wrong"),
+      new Error("Error: plain text"),
+      "a string",
+      null,
+      undefined,
+    ])
+      expect(errorCode(value), JSON.stringify(value)).toBeUndefined();
   });
 });
