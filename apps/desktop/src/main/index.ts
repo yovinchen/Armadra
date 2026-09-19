@@ -19,8 +19,7 @@ import {
   setApplicationName,
   setDockIcon,
 } from "./branding";
-import { HOST_ENDPOINT, configFromEnvironment } from "./host";
-import { deviceName, issueCoreTicket, issueNativeTicket } from "./host/ticket";
+import { deviceName, issueCoreTicket } from "./core-ticket";
 import {
   DesktopLifecycle,
   quitFailureDialog,
@@ -30,9 +29,7 @@ import {
   RuntimeProcess,
   externalRuntimeBase,
   ownedRuntimeAddress,
-  coreImplementation,
   setPackagedShell,
-  startsHost,
   waitForRuntime,
 } from "./runtime-process";
 import { type PageSource, startPageSource } from "./static-server";
@@ -211,31 +208,18 @@ function registerIpc(): void {
  * answer — without the document there is nothing else the page could try.
  */
 function transportEndpoints(): Promise<TransportEndpoints> {
-  return resolveEndpoints(dataDir(), externalRuntimeBase(), hostBase());
+  return resolveEndpoints(dataDir(), externalRuntimeBase());
 }
 
 function fallbackTransport(): TransportEndpoints {
-  return fallbackEndpoints(externalRuntimeBase(), hostBase(), dataDir());
+  return fallbackEndpoints(externalRuntimeBase(), dataDir());
 }
 
 /**
- * The Host this shell is talking to. What startup actually observed when there
- * is one, then what it asked for, then the documented port — a development
- * shell may have been sent elsewhere, and reporting the constant would send
- * the page to somebody else's Host.
- */
-function hostBase(): string {
-  const observed = lifecycle.observedHost()?.httpEndpoint;
-  if (observed) return observed;
-  return lifecycle.hostLaunchConfig()?.expectedHttpEndpoint ?? HOST_ENDPOINT;
-}
-
-/**
- * One native Host session ticket for the page (§4.4).
+ * 给页面的一张原生会话票（§4.4）。
  *
- * The origin is the shell's own page origin, never one the page named, and
- * the Host is the instance startup verified. `armadra-host pair` itself stays
- * on this side of the bridge: the page gets a ticket, not the ability to pair.
+ * 来源永远是壳自己的页面来源，不是页面报的那个。配对本身留在桥的这一侧：页面拿到
+ * 的是一张票，而不是配对的能力。
  *
  * A refusal is RETURNED, not thrown. Electron serializes a rejected
  * `ipcMain.handle` to its message alone — `{ code, message }` would arrive as
@@ -244,34 +228,16 @@ function hostBase(): string {
  * for, carried in the result.
  */
 async function nativeTicket(): Promise<NativeTicketAnswer> {
-  // `ARMADRA_CORE=ts` 里没有 Host 可以调：票由 core 的私有通道直接签（设计
-  // D6）。取票的规则一个字没变——来源仍是壳自己的页面来源，票仍是一次性的，
-  // 页面拿到的仍然只是一张票，而不是配对本身。
-  if (coreImplementation() === "ts") {
-    try {
-      return {
-        ok: true,
-        ticket: await issueCoreTicket({
-          dataDir: dataDir(),
-          origin: page?.origin ?? "",
-          deviceName: deviceName(app.getLocale()),
-        }),
-      };
-    } catch (thrown) {
-      return ticketRefusal(thrown);
-    }
-  }
-  const config = lifecycle.hostLaunchConfig();
-  if (config === null)
-    return { ok: false, error: ipcError("hostUnavailable", "no Host") };
+  // 票由 core 的私有通道直接签（设计 D6）：core 与壳在同一棵进程树里，通道是
+  // 数据目录下一个 0600 的 socket，文件权限就是鉴权。
   try {
     return {
       ok: true,
-      ticket: await issueNativeTicket(
-        config,
-        lifecycle.observedHost(),
-        deviceName(app.getLocale()),
-      ),
+      ticket: await issueCoreTicket({
+        dataDir: dataDir(),
+        origin: page?.origin ?? "",
+        deviceName: deviceName(app.getLocale()),
+      }),
     };
   } catch (thrown) {
     return ticketRefusal(thrown);
@@ -279,8 +245,8 @@ async function nativeTicket(): Promise<NativeTicketAnswer> {
 }
 
 /**
- * Only the stable reason travels. Whatever the CLI or the core wrote was
- * already dropped where it was read; nothing here may add it back.
+ * 只有那个稳定标记会传出去。core 写了什么在读到的地方就已经丢掉了，这里不许
+ * 加回来。
  */
 function ticketRefusal(thrown: unknown): NativeTicketAnswer {
   const reason =
@@ -379,38 +345,6 @@ async function start(): Promise<void> {
     devServer: Boolean(process.env.ELECTRON_RENDERER_URL),
   });
   traceLifecycle(`page origin ${page.origin}`);
-
-  // The Host's launch configuration is resolved even when the Host itself is
-  // unavailable: a shell that cannot describe its Host is a configuration
-  // error worth reporting, not a reason to refuse to open a window.
-  //
-  // `ARMADRA_CORE=ts` starts no Host at all: the TypeScript core absorbed the
-  // Host's responsibilities, and a Host beside it would be a second writer of
-  // one database — the arrangement the merge exists to remove.
-  try {
-    if (startsHost())
-      lifecycle.configureHost({
-        ...configFromEnvironment(development, page.origin, dataDir()),
-        // Development also grants apps/web's own dev server, so the same Host
-        // answers the shell's window and a browser tab on the same front end.
-        // Neither can mint a ticket, which is what makes the grant cheap.
-        additionalOrigins:
-          development && page.origin !== DEFAULT_DEV_RENDERER_URL
-            ? [DEFAULT_DEV_RENDERER_URL]
-            : [],
-      });
-  } catch (error) {
-    process.stderr.write(
-      `Background ${error instanceof Error ? error.message : error}\n`,
-    );
-  }
-  // Serialize startup with explicit quit, so a late startup cannot revive the
-  // Host after the user requested all services to stop.
-  void lifecycle.startHost().catch((error: unknown) => {
-    process.stderr.write(
-      `Background ${error instanceof Error ? error.message : error}\n`,
-    );
-  });
 
   if (ownsRuntime(development, process.env.ARMADRA_DESKTOP_OWNS_RUNTIME)) {
     const address = ownedRuntimeAddress();

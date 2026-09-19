@@ -57,9 +57,6 @@ export const REQUEST_TIMEOUT_MS = 10_000;
 export const START_TIMEOUT_MS = 5_000;
 /** The protocol major both sides must agree on. */
 export const PROTOCOL_MAJOR = 1;
-/** The file name the core looks for beside itself. */
-export const HOST_BINARY = "armadra-session-host.exe";
-
 export type FrameKind = "json" | "output" | "snapshot" | "snapshotEnd";
 
 const KIND_BYTES: Record<FrameKind, number> = {

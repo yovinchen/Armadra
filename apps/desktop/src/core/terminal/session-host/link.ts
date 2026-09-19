@@ -9,7 +9,6 @@ import {
   type Greeting,
   type HelloAuth,
   type HostMessage,
-  HOST_BINARY,
   OutputTracker,
   PROTOCOL_MAJOR,
   REQUEST_TIMEOUT_MS,
@@ -358,48 +357,8 @@ export function endpointFor(dataDir: string): string {
   return pipeEndpoint(currentSid(), dataDir);
 }
 
-/**
- * Which host this core starts.
- *
- * `ts` is the default from R6d: the TypeScript daemon under
- * `apps/desktop/src/session-host/`, bundled to `out/session-host/host.cjs`.
- * `rust` is the `armadra-session-host.exe` of `crates/session-host`, kept
- * reachable until R7 deletes the crate so that a Windows machine which hits a
- * problem with the new one has somewhere to stand.
- *
- * Both speak the same wire (`protocol.ts`); the only difference at this level
- * is what gets executed and whether a handshake proof is required.
- */
-export type HostFlavour = "ts" | "rust";
-
-export function hostFlavour(
-  ambient: NodeJS.ProcessEnv = process.env,
-): HostFlavour {
-  return ambient.ARMADRA_SESSION_HOST === "rust" ? "rust" : "ts";
-}
-
-/** The file name of the TypeScript host's bundle. */
+/** The file name of the host's bundle. */
 export const HOST_BUNDLE = "host.cjs";
-
-/**
- * The Rust host binary, beside this executable — or wherever
- * `ARMADRA_SESSION_HOST_BIN` points, which is how a development run and the
- * probe reach one that is not next to Electron.
- */
-export function resolveHostBinary(
-  ambient: NodeJS.ProcessEnv = process.env,
-): string {
-  const named = ambient.ARMADRA_SESSION_HOST_BIN;
-  if (named !== undefined && named !== "") {
-    if (existsSync(named)) return named;
-    throw new Error(
-      `ARMADRA_SESSION_HOST_BIN does not point at a file: ${named}`,
-    );
-  }
-  const sibling = join(dirname(process.execPath), HOST_BINARY);
-  if (existsSync(sibling)) return sibling;
-  throw new Error(`could not find ${HOST_BINARY} next to ${process.execPath}`);
-}
 
 /**
  * The places a built `host.cjs` can be, in the order they are tried.
@@ -441,10 +400,10 @@ export interface HostLaunch {
 }
 
 /**
- * What to execute to bring a host up, for the flavour in effect.
+ * What to execute to bring a host up.
  *
- * The TypeScript host is JavaScript, and a packaged machine is not guaranteed
- * to have a system `node` — so it is run by **this process' own executable**
+ * The host is JavaScript, and a packaged machine is not guaranteed to have a
+ * system `node` — so it is run by **this process' own executable**
  * with `ELECTRON_RUN_AS_NODE=1`, exactly as `armadra-hook`'s launcher does.
  * `ARMADRA_SESSION_HOST_RUNNER` overrides the interpreter, which is how a
  * plain-Node server shell and the integration tests reach it.
@@ -457,13 +416,6 @@ export function hostLaunch(
   dataDir: string,
   ambient: NodeJS.ProcessEnv = process.env,
 ): HostLaunch {
-  if (hostFlavour(ambient) === "rust") {
-    return {
-      command: resolveHostBinary(ambient),
-      args: [dataDir],
-      env: { ...ambient },
-    };
-  }
   const runner = ambient.ARMADRA_SESSION_HOST_RUNNER;
   return {
     command: runner !== undefined && runner !== "" ? runner : process.execPath,

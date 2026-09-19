@@ -322,7 +322,6 @@ export interface ShortcutOutcome {
 export interface TransportEndpoints {
   readonly httpBase: string;
   readonly wsBase: string;
-  readonly hostBase: string;
   readonly dataDir: string;
 }
 

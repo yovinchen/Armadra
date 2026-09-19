@@ -23,13 +23,11 @@ let snapshot: TransportEndpoints | null = null;
 /** The fallback: an external Runtime on its documented loopback port. */
 export function fallbackEndpoints(
   externalBase: string,
-  hostBase: string,
   directory: string,
 ): TransportEndpoints {
   return {
     httpBase: externalBase,
     wsBase: externalBase.replace(/^http/, "ws"),
-    hostBase,
     dataDir: directory,
   };
 }
@@ -57,15 +55,13 @@ export async function readRuntimeBases(
 export async function resolveEndpoints(
   directory: string,
   externalBase: string,
-  hostBase: string,
 ): Promise<TransportEndpoints> {
   const published = await readRuntimeBases(directory);
   if (published === undefined)
-    return fallbackEndpoints(externalBase, hostBase, directory);
+    return fallbackEndpoints(externalBase, directory);
   return {
     httpBase: published.http,
     wsBase: published.websocket,
-    hostBase,
     dataDir: directory,
   };
 }
