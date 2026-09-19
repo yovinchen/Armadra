@@ -70,15 +70,34 @@ node tools/probes/core-terminal-bench.mjs --megabytes 200 --requests 200
 
 量测本身有一个坑值得记：**探针不能用 `fetch`**。同一个 core、同一条路由，`fetch` 稳定报 ~494 ms，而 `curl` 与 `node:http` 都报 ~1.1 ms。基线比被测量大 450 倍的探针回答不了它被写出来要回答的问题，所以 `core-terminal-bench.mjs` 走 `node:http`。
 
-### 3.3 打包
+### 3.3 打包：产物位置对，打包版真能开终端
 
-`pnpm --filter @armadra/desktop dist` 之后：
+`pnpm --filter @armadra/desktop dist` 出 `mac` 与 `mac-arm64` 两个 `Armadra.app`（未签名、未公证：本机没有证书，`signing-electron.mjs` 三态判定走的是 skip）。两项检查都过：
 
 ```
-node tools/probes/core-terminal-bench.mjs --packaging
+node tools/probes/core-terminal-bench.mjs --packaging   # 产物位置
+node tools/probes/core-terminal-packaged.mjs            # 打包版 + ARMADRA_CORE=ts 真开一个终端
 ```
 
-断言 `Armadra.app/Contents/Resources/app.asar.unpacked/node_modules/node-pty/build/Release/` 下同时有 `pty.node` 与可执行的 `spawn-helper`。两者都必须在 asar **外面**：`posix_spawn` 执行不了归档里的文件，而 node-pty 的 macOS 路径就是 spawn 那个 helper。
+第一项断言两个 app 的 `Contents/Resources/app.asar.unpacked/node_modules/node-pty/build/Release/` 下同时有 `pty.node` 与**可执行的** `spawn-helper`。两者都必须在 asar **外面**：`posix_spawn` 执行不了归档里的文件，而 node-pty 的 macOS 路径就是 spawn 那个 helper。
+
+第二项起打包版、CDP 连真渲染进程，在页面里按页面自己的方式取地址（`window.armadra.transport.endpointsSync()`）、`POST /api/terminals`、开 WS：
+
+```json
+{
+  "type": "hello",
+  "generation": 1,
+  "backend": "tmux",
+  "rows": 24,
+  "cols": 80,
+  "alive": true,
+  "acknowledgedInput": 0
+}
+```
+
+`hello` 到达，随后打字的 `echo` 原样回显。这条走完才算证明 asar 外的 `.node` 在真壳里加载得起来。
+
+探针的调试端口是运行时选的空闲端口。固定端口踩过一次：机器上另一个 Electron 占着 9333，探针连上了**别人的**渲染进程，报出来的样子和打包失败一模一样。
 
 ## 4. node-pty 的两个已知缺陷
 

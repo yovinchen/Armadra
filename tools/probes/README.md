@@ -90,3 +90,22 @@ cargo build --locked --manifest-path tools/probes/conpty-smoke/Cargo.toml --targ
 **cargo check 成功不等于链接成功，更不等于 Windows 实机验收。** 此源码是 API 编译探针，不能拿来验证并发 I/O、CLI 行为或句柄生命周期；实机阶段应增加独立输入/输出线程和持续输出排空后再扩展运行测试。
 
 实测记录与待办见 [M0 执行器核验](../../docs/research/m0-executor-probes.md)。
+
+## TypeScript Core 的终端域（R2）
+
+三个脚本，三个不同的问题。结果与结论记在 [TypeScript Core 进度](../../docs/status/typescript-core-status.md)。
+
+```sh
+pnpm --filter @armadra/desktop build                      # 产出 out/core/main.js
+
+node tools/probes/core-terminal-smoke.mjs                 # 建 / 附 / 打字 / 断 / 重附 / 销毁
+node tools/probes/core-terminal-bench.mjs                 # 吞吐与同期 HTTP 延迟，Rust 与 TS 对跑
+node tools/probes/core-terminal-bench.mjs --packaging     # 只看 release/ 里 node-pty 的位置
+node tools/probes/core-terminal-packaged.mjs              # 打包版 + ARMADRA_CORE=ts，从页面开一个终端
+```
+
+- **smoke**：起一个 core，开终端，打字看回显，关掉 WS 再开一次确认看得见刚才那屏（`sawEarlierOutput`），最后销毁会话；顺带验证不存在的会话在升级前就被 404 拒掉。
+- **bench**：`--megabytes`（默认 200）与 `--requests`（默认 200）。要对跑得先 `cargo build -p armadra-runtime`；只跑一侧用 `--only ts|rust`。延迟走 `node:http` 而不是 `fetch`——同一条路由 `fetch` 稳定多报约 490 ms。
+- **packaged**：需要先 `pnpm --filter @armadra/desktop dist`。调试端口是运行时选的空闲端口，不是固定值：机器上另一个 Electron 占着固定端口时，探针会连上别人的渲染进程，失败起来和打包出错一模一样。
+
+三个脚本都用 `mktemp` 的数据目录与各自私有的 tmux socket，跑完 `kill-server` 并删掉目录；不碰操作者自己的数据目录或 tmux server。工作空间那一行由脚本直接写库——`POST /api/workspaces` 是 R1 的，本阶段还没有。
