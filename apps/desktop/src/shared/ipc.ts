@@ -152,6 +152,38 @@ export function ipcError(code: string, message: string): IpcError {
   return { code, message };
 }
 
+/**
+ * The Error an `ipcMain.handle` handler throws to reject with a code.
+ *
+ * The code has to be IN THE MESSAGE, and that is not decoration. Electron
+ * serializes a rejected handler's error across the IPC boundary by its message
+ * and stack alone — own properties, including the `code` this module's whole
+ * error contract is about, are dropped on the way. Verified against a running
+ * shell: `shell:open-external` rejecting a `file://` URL reached the page as
+ * `Error: Error invoking remote method 'shell:open-external': Error: <message>`
+ * and nothing else. So a handler that attaches `{ code }` and expects the page
+ * to read it has, in practice, no code at all.
+ *
+ * `errorCode()` is the other half, for the page.
+ */
+export function ipcRejection(code: string, message: string): Error & IpcError {
+  // The code goes into `message` itself, not beside it: `Object.assign`ing an
+  // `{ code, message }` onto the Error would put the bare text back and undo
+  // the prefix, and the bare text is the only part Electron forwards.
+  const text = `${code}: ${message}`;
+  return Object.assign(new Error(text), { code, message: text });
+}
+
+/** The code out of whatever arrived on the page, or `undefined`. */
+export function errorCode(error: unknown): string | undefined {
+  if (typeof error === "object" && error !== null) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+  }
+  const text = error instanceof Error ? error.message : String(error);
+  return /(?:^|: )([a-z][a-z0-9_]*): /.exec(text)?.[1];
+}
+
 export const NOT_IMPLEMENTED = "not_implemented";
 
 /** What `dialog:pick-directory` / `dialog:pick-files` accept. Paths, never

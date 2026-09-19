@@ -1,5 +1,5 @@
 import { shell } from "electron";
-import { ipcError } from "../shared/ipc";
+import { ipcRejection } from "../shared/ipc";
 import {
   SCHEME_NOT_ALLOWED,
   isAllowedExternalUrl,
@@ -17,14 +17,10 @@ import {
  * code lets the page say why.
  */
 export async function openExternal(url: unknown): Promise<void> {
-  if (!isAllowedExternalUrl(url)) {
-    throw Object.assign(
-      new Error("only http and https links may be opened outside the app"),
-      ipcError(
-        SCHEME_NOT_ALLOWED,
-        "only http and https links may be opened outside the app",
-      ),
+  if (!isAllowedExternalUrl(url))
+    throw ipcRejection(
+      SCHEME_NOT_ALLOWED,
+      "only http and https links may be opened outside the app",
     );
-  }
   await shell.openExternal(url);
 }

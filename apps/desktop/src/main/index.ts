@@ -8,7 +8,7 @@ import {
   NOT_IMPLEMENTED,
   type PickOptions,
   type TransportEndpoints,
-  ipcError,
+  ipcRejection,
 } from "../shared/ipc";
 import { dataDir } from "../shell-core/paths";
 import { HOST_ENDPOINT, configFromEnvironment } from "./host";
@@ -98,9 +98,9 @@ function registerIpc(): void {
       continue;
     }
     ipcMain.handle(spec.channel, () => {
-      throw Object.assign(
-        new Error(`${spec.channel} is not implemented yet`),
-        ipcError(NOT_IMPLEMENTED, `${spec.channel} is not implemented yet`),
+      throw ipcRejection(
+        NOT_IMPLEMENTED,
+        `${spec.channel} is not implemented yet`,
       );
     });
   }
