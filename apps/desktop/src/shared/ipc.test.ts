@@ -35,12 +35,23 @@ describe("the IPC table", () => {
       expect(declared.has(channel), channel).toBe(true);
   });
 
-  it("implements exactly the three channels W1.0 promised", () => {
-    expect([...IMPLEMENTED_CHANNELS].sort()).toEqual([
-      "app:locale",
-      "transport:endpoints",
-      "window:is-focused",
-    ]);
+  it("implements exactly the channels the batches so far promised", () => {
+    expect([...IMPLEMENTED_CHANNELS].sort()).toEqual(
+      [
+        // W1.0 / W1.1
+        "app:locale",
+        "transport:endpoints",
+        "window:is-focused",
+        // W2.2: the seven update commands
+        "updates:cancel",
+        "updates:check",
+        "updates:dismiss",
+        "updates:download",
+        "updates:install",
+        "updates:restart-report",
+        "updates:state",
+      ].sort(),
+    );
   });
 
   it("covers every domain the migration design §2.2 lists", () => {
