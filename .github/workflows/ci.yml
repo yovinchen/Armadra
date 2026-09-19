@@ -1,11 +1,10 @@
 # 作业矩阵见 docs/guides/ci-release.md。
 #
 # 一个矩阵作业跑三种 runner：同一串检查在 Linux、macOS 与 Windows 上各跑一遍，
-# 因为这个仓库的平台差异不在前端而在 Runtime——tmux 与 Unix socket 在 Windows
-# 上换成 ConPTY 与命名管道，只有真的在三个系统上编译过才知道换得对不对。
-# 平台相关的用例用 `cfg(unix)` / `cfg(target_os = ...)` 在源码里门控，CI 不做
-# 任何按名字过滤的测试排除：一条在 Windows 上不该跑的用例，应该在 Windows 上
-# 压根不存在。
+# 因为这个仓库的平台差异不在前端而在 core——tmux 与 Unix socket 在 Windows 上
+# 换成 ConPTY 与命名管道，只有真的在三个系统上跑过才知道换得对不对。平台相关
+# 的用例在源码里按 `process.platform` 门控，CI 不做任何按名字过滤的测试排除：
+# 一条在 Windows 上不该跑的用例，应该在 Windows 上压根不存在。
 name: ci
 
 on:
@@ -23,15 +22,6 @@ permissions:
 env:
   PNPM_VERSION: "11.18.0"
   NODE_VERSION: "22"
-  GO_VERSION: "1.24"
-  CARGO_TERM_COLOR: always
-  # 一次 `cargo test --workspace` 要链接四十多个测试二进制；带完整调试信息时
-  # 它们在 ubuntu runner 的 14 GB 磁盘上放不下，链接器会以 Bus error 收场
-  # （2026-09-13 的第一次真实 dry-run）。测试不需要行号以外的调试信息。
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
-  CARGO_PROFILE_TEST_DEBUG: line-tables-only
-  CARGO_INCREMENTAL: "0"
-  RUST_BACKTRACE: "1"
 
 jobs:
   check:
@@ -44,19 +34,13 @@ jobs:
         include:
           - runner: ubuntu-latest
             label: linux-x86_64
-            # cgo 是 -race 的前提，Linux 与 macOS runner 都自带 C 编译器。
-            go_race: "-race"
           - runner: macos-14
             label: macos-aarch64
-            go_race: "-race"
           - runner: windows-latest
             label: windows-x86_64
-            # windows/amd64 的 race detector 需要外部 gcc，镜像里没有可依赖的
-            # 一个；这里跑不带 race 的同一批用例，竞态由另外两个平台覆盖。
-            go_race: ""
     steps:
       - uses: actions/checkout@v4
-      # Runtime 的 Git 操作（merge / cherry-pick / amend）用仓库或全局配置里的
+      # core 的 Git 操作（merge / cherry-pick / amend）用仓库或全局配置里的
       # 身份提交；runner 两者都没有，Git 会在动树之前拒绝，测试就把它记成
       # unknownOutcome。开发机上是全局配置在兜底，这里也放一份全局配置——
       # 不用环境变量，因为 GIT_AUTHOR_* 会压过测试夹具自己 `-c user.name` 写的作者。
@@ -74,23 +58,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: apps/host/go.sum
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.label }}
-          workspaces: . -> target
 
       - run: pnpm install --frozen-lockfile
 
-      # pnpm check = libs:build + prettier + cargo fmt + typecheck +
-      # protocol:check + repo:check + ci:workflows + release:check。
-      # 三个平台都跑：换行、路径分隔符与生成物字节比对都是平台差异的常见出口。
+      # pnpm check = libs:build + prettier + typecheck + repo:check +
+      # ci:workflows + release:check。
+      # 三个平台都跑：换行与路径分隔符都是平台差异的常见出口。
       - run: pnpm check
 
       # shell: bash 不是装饰：Windows 默认的 pwsh 只看多行 run 里最后一条命令的
@@ -102,44 +75,16 @@ jobs:
           pnpm repo:test
           pnpm release:test
 
-      # Web、shared、protocol、host-client 与桌面脚本的测试与类型检查。这一步
-      # 已经跑了 @armadra/desktop 的 `test`（vitest + `node --test scripts/*.test.mjs`），
-      # 覆盖 electron-builder.yml、entitlements、signing-electron.mjs、
-      # stage-binaries.mjs 与产物矩阵一致性的全部单测；不再重复一遍。
+      # web、shared、两种壳与桌面脚本的测试与类型检查。这一步已经跑了
+      # @armadra/desktop 的 `test`（vitest + `node --test scripts/*.test.mjs`），
+      # 覆盖 core 的全部单测，以及 electron-builder.yml、entitlements、
+      # signing-electron.mjs、after-pack.mjs 与产物矩阵一致性；不再重复一遍。
       - run: pnpm -r --if-present test
       - run: pnpm -r --if-present typecheck
       - run: pnpm --filter @armadra/web build
 
-      # 桌面壳的 main/preload/renderer 三个 target 编译一遍，但不打包：
-      # 打包（electron-builder）要真的受管二进制与平台特定的证书/公证输入，
-      # 是发布流水线的事。这里要的是三个平台上 electron-vite 的构建图都过得去。
+      # 桌面壳的 main/preload/renderer/core 四个 target 编译一遍，但不打包：
+      # 打包（electron-builder）要平台特定的证书/公证输入，是发布流水线的事。
+      # 这里要的是三个平台上 electron-vite 的构建图都过得去。
       - name: 桌面壳构建（不打包）
         run: pnpm --filter @armadra/desktop build
-
-      - name: 三端协议契约
-        run: pnpm protocol:test
-
-      - name: Rust lint
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      # 不在第一个失败的二进制处停下：一次运行就要把一个平台上所有失败的
-      # 套件都列出来，而不是修一个、推一次、再看下一个。
-      - name: Rust 测试
-        run: cargo test --workspace --no-fail-fast
-
-      - name: Go vet 与测试
-        shell: bash
-        run: |
-          set -euo pipefail
-          go -C apps/host vet ./...
-          go -C apps/host test ${{ matrix.go_race }} -count=1 ./...
-
-      # Host 要能为另外两个平台交叉编译：打包受管二进制时就是这么做的。
-      - name: Go 交叉编译另外两个平台
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          GOOS=windows GOARCH=amd64 go -C apps/host build ./...
-          GOOS=darwin GOARCH=arm64 go -C apps/host build ./...
-          GOOS=linux GOARCH=arm64 go -C apps/host build ./...

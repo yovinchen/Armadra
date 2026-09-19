@@ -36,8 +36,12 @@ test("the parser reads the shapes a workflow actually uses", () => {
     document.jobs.check.strategy.matrix.include.map((entry) => entry.runner),
     ["ubuntu-latest", "macos-14", "windows-latest"],
   );
-  const cross = document.jobs.check.steps.at(-1);
-  assert.match(cross.run, /GOOS=windows[\s\S]*GOOS=darwin/);
+  // A block scalar with several lines, read back whole.
+  const identity = document.jobs.check.steps.find(
+    (step) => step.name === "给 Git 一个身份",
+  );
+  assert.match(identity.run, /set -euo pipefail[\s\S]*user\.email/);
+  assert.equal(document.jobs.check.steps.at(-1).name, "桌面壳构建（不打包）");
 });
 
 test("the three platforms are all in the matrix, and none is filtered out", () => {
@@ -111,7 +115,7 @@ jobs:
   assert.match(problems[0], /GitHub does not offer/);
 });
 
-test("a matrix triple or target the packaging code cannot map is reported", () => {
+test("a matrix target the packaging code cannot map is reported", () => {
   const problems = check(`
 name: x
 on:
@@ -124,12 +128,10 @@ jobs:
         include:
           - runner: ubuntu-latest
             target: linux-riscv64
-            triple: riscv64gc-unknown-linux-gnu
     steps:
       - run: echo hi
 `);
-  assert.equal(problems.length, 2);
-  assert.match(problems.join("\n"), /sidecar-targets\.mjs cannot map/);
+  assert.equal(problems.length, 1);
   assert.match(
     problems.join("\n"),
     /not a target in tools\/release\/artifacts\.mjs/,
