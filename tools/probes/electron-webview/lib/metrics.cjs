@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 /*
  * Pixel statistics used by acceptance item 3 (bitmap upscale vs re-raster).
  *
@@ -19,7 +19,10 @@ function toLuminance(image) {
   const bitmap = image.toBitmap(); // BGRA
   const dip = image.getSize();
   const pixels = bitmap.length / 4;
-  const scale = Math.max(1, Math.round(Math.sqrt(pixels / Math.max(1, dip.width * dip.height))));
+  const scale = Math.max(
+    1,
+    Math.round(Math.sqrt(pixels / Math.max(1, dip.width * dip.height))),
+  );
   const w = Math.round(dip.width * scale);
   const h = Math.round(pixels / Math.max(1, w));
   const lum = new Float32Array(w * h);
