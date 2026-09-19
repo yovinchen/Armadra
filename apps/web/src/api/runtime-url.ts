@@ -71,13 +71,18 @@ export function resolveRuntimeUrl(
   configured: string | undefined,
   pageUrl: string,
 ): string {
+  const shell = shellEndpoints();
   // 显式配置永远优先：桌面开发模式靠它连外部 Runtime。
   if (configured === undefined)
     return (
       // 壳先问：它拉起的 Runtime 端口是内核分配的，页面地址推不出来，而且开发
       // 模式下页面来源是 Vite，回环默认端口多半是别人的 Runtime。
-      shellEndpoints()?.httpBase ?? hostServedOrigin(pageUrl) ?? LOCAL_RUNTIME
+      shell?.httpBase ?? hostServedOrigin(pageUrl) ?? LOCAL_RUNTIME
     );
+  // Vite 开发服务器发现 Runtime 后会把这个值定义成 `""`，让浏览器标签页走同源
+  // 代理。壳里的页面不该走那条弯路：壳知道内核分配的端口，打包版也从不经代理，
+  // 而且代理在连接关闭时会往主进程日志里刷 EPIPE。非空的显式地址仍然最优先。
+  if (configured.trim() === "" && shell) return shell.httpBase;
   const url = new URL(configured.trim() || "/", pageUrl);
   if (
     !/^https?:$/.test(url.protocol) ||
