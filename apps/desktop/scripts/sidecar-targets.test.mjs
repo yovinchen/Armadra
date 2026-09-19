@@ -200,46 +200,39 @@ test("the Windows session host is found under the target triple directory", () =
 });
 
 /**
- * `bundleResources()` and `electron-builder.yml` are one decision in two
- * files: a bundle listed here that electron-builder never copies is a daemon
- * the packaged app cannot start, and a `{from, to}` pair in the yml that
- * nothing here knows about is a file whose existence nobody is checking.
- * electron-builder resolves `from` as a literal path and *silently packages
- * without it* when it is missing, so this correspondence is the only thing
- * that would catch a rename.
+ * `bundleResources()` is what `after-pack.mjs` places; nothing may travel as
+ * an `extraResources` entry any more, because electron-builder's one-shot
+ * copy is exactly what the hook exists to replace. A `{from, to}` pair that
+ * crept back into the yml would be a file copied without a retry — and, on
+ * the Windows runners, a build that fails one time in three.
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const BUILDER = load(
   readFileSync(join(here, "..", "electron-builder.yml"), "utf8"),
 );
 
-test("every platform's extraResources carries exactly the bundles that platform needs", () => {
-  for (const [triple, platform] of [
-    ["x86_64-pc-windows-msvc", "win"],
-    ["aarch64-apple-darwin", "mac"],
-    ["x86_64-unknown-linux-gnu", "linux"],
-  ]) {
-    const declared = BUILDER[platform].extraResources.map(
-      (entry) => `${entry.from} -> ${entry.to}`,
+test("no platform section lists extraResources; after-pack.mjs places the bundles", async () => {
+  for (const platform of ["win", "mac", "linux"]) {
+    assert.equal(
+      BUILDER[platform].extraResources,
+      undefined,
+      `${platform}: extraResources is back in electron-builder.yml`,
     );
+  }
+  assert.equal(BUILDER.afterPack, "./scripts/after-pack.mjs");
+  const { placements } = await import("./after-pack.mjs");
+  for (const triple of [
+    "x86_64-pc-windows-msvc",
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+  ]) {
+    const placed = placements(triple).map((p) => `${p.from} -> ${p.to}`);
     for (const bundle of bundleResources(triple)) {
       assert.ok(
-        declared.includes(`${bundle.from} -> ${bundle.to}`),
-        `${platform}: electron-builder.yml never copies ${bundle.from}`,
+        placed.includes(`${bundle.from} -> ${bundle.to}`),
+        `${triple}: after-pack never places ${bundle.from}`,
       );
     }
-    // And nothing under `out/` is copied that this file does not know about.
-    const copied = BUILDER[platform].extraResources
-      .filter((entry) => entry.from.startsWith("out/"))
-      .map((entry) => entry.from)
-      .sort();
-    assert.deepEqual(
-      copied,
-      bundleResources(triple)
-        .map((bundle) => bundle.from)
-        .sort(),
-      `${platform}: extraResources and bundleResources() disagree`,
-    );
   }
 });
 

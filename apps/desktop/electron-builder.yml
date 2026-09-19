@@ -14,11 +14,12 @@ productName: Armadra
 # the Linux binary name from it — `@armadradesktop`, which AppImage refuses as
 # a file name. Every platform gets the same short executable name.
 executableName: armadra
-# The staged sidecar binaries (`resources/<binary>[.exe]`) are placed into the
-# unpacked app by this hook, not by `extraResources`: electron-builder copies
-# once, and on the Windows runners that one copy meets a transient sharing
-# violation. The hook retries (scripts/after-pack.mjs). It runs before
-# signing, so the binaries are signed with the bundle as before.
+# The staged sidecar binaries (`resources/<binary>[.exe]`) and the `out/`
+# bundles are placed into the unpacked app by this hook, not by
+# `extraResources`: electron-builder copies once, and on the Windows runners
+# that one copy meets a transient sharing violation. The hook retries
+# (scripts/after-pack.mjs). It runs before signing, so everything it places
+# is signed with the bundle as an extraResources entry would have been.
 afterPack: ./scripts/after-pack.mjs
 
 directories:
@@ -35,8 +36,8 @@ directories:
 files:
   - out/**/*
   - package.json
-  # `out/cli/` is deliberately NOT in the asar: it ships through
-  # `extraResources` below, as a plain file the generated launcher can name
+  # `out/cli/` is deliberately NOT in the asar: after-pack.mjs places it
+  # under `resources/cli/`, as a plain file the generated launcher can name
   # with an absolute path. Keeping a second copy in the archive would only
   # invite someone to point a hook at the one that needs asar support to be
   # readable.
@@ -61,8 +62,10 @@ asarUnpack:
   - node_modules/node-pty/**
 
 # The sidecar binaries `scripts/stage-binaries.mjs` stages into `resources/`
-# before packaging are placed into the bundle by `scripts/after-pack.mjs`
-# (see `afterPack` above). Electron's `process.resourcesPath` is exactly
+# before packaging, and the `out/` bundles `bundleResources()` lists (the
+# hook client, the Windows session host), are placed into the bundle by
+# `scripts/after-pack.mjs` (see `afterPack` above); no platform section
+# carries an `extraResources` list. Electron's `process.resourcesPath` is exactly
 # that directory on every platform, which is what `runtime-process.ts`'s
 # `runtimeExecutable()` already resolves against — no `-<triple>` suffix
 # needed, unlike the `<name>-<triple>` convention the previous bundler imposed
@@ -75,16 +78,6 @@ asarUnpack:
 # reads, so nothing here can drift from what was staged.
 
 mac:
-  extraResources:
-    # The TypeScript hook client (R3c). Unlike the sidecar binaries it is not a
-    # binary: it is one CJS file the installer's generated launcher runs as
-    # `ELECTRON_RUN_AS_NODE=1 <Electron> <resources>/cli/armadra-hook.js`,
-    # because a packaged machine is not guaranteed to have a system `node`.
-    # Outside the asar so that path is a real file on disk — the Electron
-    # binary is the only interpreter we can count on, and asking it to read an
-    # entry point out of an archive is a dependency this does not need.
-    - from: out/cli/armadra-hook.js
-      to: cli/armadra-hook.js
   category: public.developer-tools
   icon: build/icons/icon.icns
   hardenedRuntime: true
@@ -125,21 +118,6 @@ mac:
 
 win:
   icon: build/icons/icon.ico
-  extraResources:
-    # See the macOS entry: the launcher is `armadra-hook.cmd` here, and it
-    # names this exact path.
-    - from: out/cli/armadra-hook.js
-      to: cli/armadra-hook.js
-    # The TypeScript session host (R6d). The Rust `armadra-session-host.exe`
-    # is still placed by after-pack.mjs: both speak the same wire,
-    # `ARMADRA_SESSION_HOST` picks one, and the default is this bundle. R7
-    # deletes the Rust one
-    # together with `crates/session-host`. Windows only — the daemon exists
-    # because ConPTY sessions must outlive the shell, which tmux already
-    # handles elsewhere. `apps/desktop/scripts/sidecar-targets.mjs`'
-    # `bundleResources()` holds this list.
-    - from: out/session-host/host.cjs
-      to: session-host/host.cjs
   target:
     - target: nsis
       arch: [x64, arm64]
@@ -163,10 +141,6 @@ rpm:
 linux:
   icon: build/icons/icon.png
   category: Development
-  extraResources:
-    # See the macOS entry.
-    - from: out/cli/armadra-hook.js
-      to: cli/armadra-hook.js
   target:
     - target: AppImage
       arch: [x64, arm64]
