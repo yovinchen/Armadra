@@ -52,6 +52,47 @@ export function ensurePrebuiltExecutable(root = nodePtyDir()) {
 }
 
 /**
+ * Makes sure Node itself can load `node-pty`.
+ *
+ * The package ships prebuilds for macOS and Windows only; on Linux its own
+ * `install` script would compile one, and `pnpm-workspace.yaml` deliberately
+ * keeps that script off (the shell wants the patched source built for
+ * Electron's ABI, not this one). So a Linux checkout has no `pty.node` at all
+ * until something builds one, and `vitest` under Node then fails every direct
+ * backend test with "Failed to load native module". This compiles the plain
+ * Node-ABI build once, into `build/Release`, where node-pty's loader looks
+ * first; `--rebuild` overwrites it with the Electron one afterwards.
+ */
+export function ensureNodeAbiBuild(root = nodePtyDir()) {
+  const shipped = join(
+    root,
+    "prebuilds",
+    `${process.platform}-${process.arch}`,
+  );
+  if (existsSync(join(shipped, "pty.node"))) return "prebuilt";
+  if (existsSync(join(root, "build/Release/pty.node"))) return "built";
+  // node-gyp is not a dependency of ours; it is `@electron/rebuild`'s, and
+  // pnpm keeps it beside that package rather than in our `node_modules`.
+  const rebuildDir = dirname(
+    require.resolve("@electron/rebuild/package.json", { paths: [app] }),
+  );
+  const gyp = require.resolve("node-gyp/bin/node-gyp.js", {
+    paths: [rebuildDir],
+  });
+  const result = spawnSync(process.execPath, [gyp, "rebuild"], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  if (result.status !== 0) {
+    process.stderr.write(
+      "node-gyp could not build node-pty for Node; direct terminals will not open\n",
+    );
+    process.exit(result.status ?? 1);
+  }
+  return "compiled";
+}
+
+/**
  * Patch and rebuild for this Electron's ABI. Both halves, in this order: the
  * patch must land before anything is compiled, because what ships is the
  * compiled artefact; the rebuild is needed because the prebuild is for Node's
@@ -123,6 +164,8 @@ export function assertNativeArch(releaseDir) {
 if (process.argv[1] && process.argv[1].endsWith("ensure-node-pty.mjs")) {
   if (process.argv.includes("--rebuild")) ensureNodePtyForElectron();
   else {
+    if (ensureNodeAbiBuild() === "compiled")
+      process.stdout.write("node-pty: compiled the Node-ABI build\n");
     const fixed = ensurePrebuiltExecutable();
     if (fixed.length > 0)
       process.stdout.write(
