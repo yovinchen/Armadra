@@ -87,3 +87,55 @@ fn the_default_terminal_is_probed_and_falls_back() {
     assert!(matches!(terminal, "tmux-256color" | "screen-256color"));
     assert!(rendered_conf().contains(&format!("set -g default-terminal \"{terminal}\"")));
 }
+
+/// nodeterm research §2.3: `session_activity` is bumped to `now` by every
+/// client attach, independent of pane output, and is therefore useless as an
+/// idle judgement. `list_alive` must read `window_activity` instead.
+#[test]
+fn list_alive_reads_window_activity_not_session_activity() {
+    assert!(LIST_ALIVE_FORMAT.contains("#{window_activity}"));
+    assert!(!LIST_ALIVE_FORMAT.contains("#{session_activity}"));
+}
+
+/// The copy-mode guard and the paste itself must be one tmux invocation
+/// (nodeterm research §2.6), and `-r` must be present so embedded newlines
+/// survive as `\n`.
+#[test]
+fn the_paste_plan_guards_copy_mode_in_the_same_call_and_keeps_newlines() {
+    let plan = paste_plan(
+        "armadra-buf",
+        Path::new("/tmp/armadra-buf.txt"),
+        "armadra-session",
+        true,
+    );
+    assert_eq!(plan.len(), 3);
+    assert_eq!(
+        plan[0],
+        vec!["load-buffer", "-b", "armadra-buf", "/tmp/armadra-buf.txt",]
+    );
+    assert_eq!(
+        plan[1],
+        vec![
+            "if-shell",
+            "-F",
+            "#{pane_in_mode}",
+            "send-keys -X cancel",
+            ";",
+            "paste-buffer",
+            "-p",
+            "-r",
+            "-d",
+            "-b",
+            "armadra-buf",
+            "-t",
+            "armadra-session",
+        ]
+    );
+    assert_eq!(plan[2], vec!["send-keys", "-t", "armadra-session", "Enter"]);
+}
+
+#[test]
+fn the_paste_plan_skips_enter_when_not_requested() {
+    let plan = paste_plan("armadra-buf", Path::new("/tmp/armadra-buf.txt"), "s", false);
+    assert_eq!(plan.len(), 2);
+}

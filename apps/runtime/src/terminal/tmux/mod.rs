@@ -42,6 +42,66 @@ pub use config::{MINIMUM_VERSION, TmuxDetection, detect, ensure_conf};
 
 use control::{TmuxClient, TmuxSession};
 
+/// `#{window_activity}`, not `#{session_activity}`: tmux bumps
+/// `session_activity` to `now` on every client **attach**, regardless of
+/// whether the pane has produced any output (nodeterm research,
+/// `docs/research/nodeterm/terminal-and-tmux.md` §2.3 — one 67-session
+/// server had a newest `session_activity` of 33 minutes and a newest
+/// `window_activity` of 37 hours). Using `session_activity` as an idle
+/// judgement would call a long-attached, silent session "just active" every
+/// time something reattaches to it. `window_activity` only moves when the
+/// active window's pane actually emits output.
+const LIST_ALIVE_FORMAT: &str = "#{session_name} #{session_attached} #{window_activity}";
+
+/// The tmux invocations issued by [`TerminalBackend::paste`], broken out as a
+/// pure function so the argument sequence can be asserted without a live
+/// tmux server.
+///
+/// Two guards beyond the plain `load-buffer` / `paste-buffer` / `send-keys
+/// Enter` sequence (nodeterm research §2.6):
+/// - `-r` on `paste-buffer` keeps `\n` as `\n` instead of rewriting it to
+///   `\r`.
+/// - the copy-mode exit (`send-keys -X cancel`) is gated by `if-shell
+///   -F '#{pane_in_mode}'` **inside the same tmux invocation** as
+///   `paste-buffer`, not a separate round trip beforehand: `paste-buffer -p`
+///   silently does nothing while the pane is in copy-mode, and a prior,
+///   separate exit call leaves a window where that state could still change
+///   before the paste itself runs.
+fn paste_plan(buffer: &str, file: &Path, session: &str, press_enter: bool) -> Vec<Vec<String>> {
+    let mut plan = vec![
+        vec![
+            "load-buffer".to_owned(),
+            "-b".to_owned(),
+            buffer.to_owned(),
+            file.to_string_lossy().into_owned(),
+        ],
+        vec![
+            "if-shell".to_owned(),
+            "-F".to_owned(),
+            "#{pane_in_mode}".to_owned(),
+            "send-keys -X cancel".to_owned(),
+            ";".to_owned(),
+            "paste-buffer".to_owned(),
+            "-p".to_owned(),
+            "-r".to_owned(),
+            "-d".to_owned(),
+            "-b".to_owned(),
+            buffer.to_owned(),
+            "-t".to_owned(),
+            session.to_owned(),
+        ],
+    ];
+    if press_enter {
+        plan.push(vec![
+            "send-keys".to_owned(),
+            "-t".to_owned(),
+            session.to_owned(),
+            "Enter".to_owned(),
+        ]);
+    }
+    plan
+}
+
 #[derive(Clone)]
 pub struct TmuxBackend {
     socket: PathBuf,
@@ -315,33 +375,18 @@ impl TerminalBackend for TmuxBackend {
     /// sequence, `-d` deletes the buffer afterwards.
     async fn paste(&self, key: &SessionKey, text: &str, press_enter: bool) -> AppResult<()> {
         let session = self.session(key).await?;
-        self.leave_copy_mode(&session).await;
         let buffer = format!("armadra-{}", uuid::Uuid::now_v7().simple());
         let file = std::env::temp_dir().join(format!("{buffer}.txt"));
         std::fs::write(&file, sanitize_paste(text).as_bytes())?;
         paths::harden_file(&file);
+        let plan = paste_plan(&buffer, &file, &session.name, press_enter);
         let result = async {
-            self.run([
-                "load-buffer",
-                "-b",
-                &buffer,
-                file.to_string_lossy().as_ref(),
-            ])
-            .await?;
-            self.run([
-                "paste-buffer",
-                "-p",
-                "-d",
-                "-b",
-                &buffer,
-                "-t",
-                &session.name,
-            ])
-            .await?;
-            if press_enter {
-                self.run(["send-keys", "-t", &session.name, "Enter"])
-                    .await?;
+            for arguments in &plan {
+                self.run(arguments).await?;
             }
+            // The plan's `if-shell` guard force-exits copy-mode regardless of
+            // the cached flag's prior value.
+            session.in_copy_mode.store(false, Ordering::SeqCst);
             Ok::<(), AppError>(())
         }
         .await;
@@ -443,14 +488,7 @@ impl TerminalBackend for TmuxBackend {
     }
 
     async fn list_alive(&self) -> AppResult<Vec<BackendRef>> {
-        let output = match self
-            .run([
-                "list-sessions",
-                "-F",
-                "#{session_name} #{session_attached} #{session_activity}",
-            ])
-            .await
-        {
+        let output = match self.run(["list-sessions", "-F", LIST_ALIVE_FORMAT]).await {
             Ok(output) => output,
             // "no server running on ..." is the empty case, not a failure.
             Err(_) => return Ok(Vec::new()),
