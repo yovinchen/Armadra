@@ -29,9 +29,11 @@
  *     no part in it and keeps no session across one.
  */
 
+import type { DatabaseSync } from "node:sqlite";
 import type { WebSocket } from "ws";
 
 import type { EventBus, WorkspaceEvent } from "../bus";
+import { appendEvent, catchUp, outboxReady, prune, watermark } from "./outbox";
 
 /**
  * How far behind one connection may fall before it starts losing frames.
@@ -43,6 +45,9 @@ import type { EventBus, WorkspaceEvent } from "../bus";
  * has to be kept here.
  */
 export const MAX_QUEUED_FRAMES = 256;
+
+/** 一次续订最多读多少页 outbox。有界，所以一个坏游标转不起来。 */
+export const MAX_REPLAY_PASSES = 32;
 
 /**
  * What a subscriber is, once the socket details are stripped away.
@@ -66,6 +71,31 @@ interface Subscription {
   closed: boolean;
   /** How many frames this connection has lost to the bound, for diagnostics. */
   dropped: number;
+  /**
+   * 这条订阅带了 `?cursor=`，所以它还要收游标控制帧。
+   *
+   * 默认关。页面（`apps/web/src/api/events.ts`）从不带游标，于是它永远只看到
+   * 那 21 个契约事件；控制帧只发给明确要求续订的客户端。
+   */
+  readonly cursored: boolean;
+}
+
+/**
+ * 游标控制帧。
+ *
+ * **不是第 22 个 `WorkspaceEvent`**：它只发给带了 `?cursor=` 的订阅，而契约说的
+ * 那 21 个 `type` 字符串是「页面会解析的那些」。`workspaceEventSchema` 解不开
+ * 这一帧，`parseFrame` 直接丢掉——但页面根本收不到它，因为页面不带游标。
+ *
+ * 帧本身不加 `seq` 字段是同一条契约的另一半：加一个字段要同步改
+ * `packages/shared`，那是破坏性改动。位置信息走带外，就是这一帧。
+ */
+export function cursorFrame(
+  cursor: number,
+  floor: number,
+  watermark: number,
+): string {
+  return JSON.stringify({ type: "cursor", cursor, floor, watermark });
 }
 
 /**
@@ -79,6 +109,10 @@ interface Subscription {
  */
 export class WorkspaceEventStream {
   private readonly subscriptions = new Map<string, Set<Subscription>>();
+  /** 有库就有 outbox；没有就退回 R1b 的纯内存扇出。 */
+  private database: DatabaseSync | undefined;
+  /** 每写多少帧裁剪一次，摊掉 `DELETE` 的成本。 */
+  private sincePrune = 0;
 
   /**
    * Attaches to a bus and returns the detach function.
@@ -92,6 +126,24 @@ export class WorkspaceEventStream {
   }
 
   /**
+   * 接上 outbox。
+   *
+   * 分成两步而不是构造参数，因为装配顺序是「事件域第一个装」——它要在任何域可
+   * 能发事件之前就位，而那时候库已经开好了。没过 0018 的库没有 `events` 表，
+   * 这时候什么都不接：实时扇出照常，只是补发不了。
+   */
+  useOutbox(database: DatabaseSync): boolean {
+    if (!outboxReady(database)) return false;
+    this.database = database;
+    return true;
+  }
+
+  /** outbox 在不在。带 `?cursor=` 的升级靠它决定拒绝还是补发。 */
+  get durable(): DatabaseSync | undefined {
+    return this.database;
+  }
+
+  /**
    * Hands one event to everybody watching that workspace.
    *
    * Serialised once for all of them: the frame is identical per connection, and
@@ -101,21 +153,58 @@ export class WorkspaceEventStream {
    * save.
    */
   publish(workspaceId: string, event: WorkspaceEvent): number {
+    // 序列化在扇出之前，也在 outbox 之前：补发的必须是当初发出去的那一帧，
+    // 从记录里重新拼一次就给了它一个走样的机会。
+    const frame = JSON.stringify(event);
+    const seq = this.record(workspaceId, event, frame);
     const watchers = this.subscriptions.get(workspaceId);
     if (watchers === undefined || watchers.size === 0) return 0;
-    const frame = JSON.stringify(event);
-    for (const subscription of watchers) this.enqueue(subscription, frame);
+    for (const subscription of watchers) this.enqueue(subscription, frame, seq);
     return watchers.size;
   }
 
+  /**
+   * 写 outbox。
+   *
+   * 不开自己的事务：调用方要么已经在一次业务写入的事务里（那这条记录搭同一班
+   * 车），要么那次写入本身就是单语句事务。这是 outbox 模式唯一要紧的那条规矩。
+   *
+   * 写不进去不往上抛：一次存下来的看板文档仍然是存下来了，广播补发不了只是
+   * 少了一次续订的机会，不该把那次保存变成失败。
+   */
+  private record(
+    workspaceId: string,
+    event: WorkspaceEvent,
+    frame: string,
+  ): number {
+    const database = this.database;
+    if (database === undefined || workspaceId === "") return 0;
+    try {
+      const seq = appendEvent(database, workspaceId, event, frame);
+      this.sincePrune += 1;
+      if (this.sincePrune >= 256) {
+        this.sincePrune = 0;
+        prune(database);
+      }
+      return seq;
+    } catch {
+      return 0;
+    }
+  }
+
   /** Registers a sink and returns the function that removes it. */
-  subscribe(workspaceId: string, sink: EventSink): () => void {
+  subscribe(
+    workspaceId: string,
+    sink: EventSink,
+    options: { readonly cursored?: boolean } = {},
+  ): () => void {
     const subscription: Subscription = {
       sink,
       queue: [],
       writing: false,
       closed: false,
       dropped: 0,
+      cursored: options.cursored === true,
     };
     const watchers =
       this.subscriptions.get(workspaceId) ?? new Set<Subscription>();
@@ -141,9 +230,15 @@ export class WorkspaceEventStream {
     return [...this.subscriptions.keys()];
   }
 
-  private enqueue(subscription: Subscription, frame: string): void {
+  private enqueue(subscription: Subscription, frame: string, seq = 0): void {
     if (subscription.closed) return;
     subscription.queue.push(frame);
+    // 续订客户端在每一帧之后收到它的序号。两条消息而不是一个字段，因为帧的
+    // 形状是契约；控制帧排在业务帧之后，所以客户端记下的游标永远指向一条它
+    // 已经收下的帧。
+    if (subscription.cursored && seq > 0) {
+      subscription.queue.push(cursorFrame(seq, 0, seq));
+    }
     // The ring overwrites its oldest entry, and the Rust receiver resumes at
     // the oldest one still in it. Dropping from the front is the same thing
     // said from the other end.
@@ -187,17 +282,54 @@ export class WorkspaceEventStream {
    *
    * Returns the release function; the caller wires it to `close`.
    */
-  attachSocket(workspaceId: string, socket: WebSocket): () => void {
-    return this.subscribe(workspaceId, {
-      send(frame, written) {
-        socket.send(frame, () => {
-          // A failed write is a socket on its way out; `close` will arrive and
-          // release the subscription. Advancing anyway keeps the queue from
-          // wedging in the meantime.
-          written();
-        });
+  attachSocket(
+    workspaceId: string,
+    socket: WebSocket,
+    options: { readonly cursor?: number } = {},
+  ): () => void {
+    const cursored = options.cursor !== undefined;
+    if (cursored) this.replay(workspaceId, socket, options.cursor as number);
+    return this.subscribe(
+      workspaceId,
+      {
+        send(frame, written) {
+          socket.send(frame, () => {
+            // A failed write is a socket on its way out; `close` will arrive and
+            // release the subscription. Advancing anyway keeps the queue from
+            // wedging in the meantime.
+            written();
+          });
+        },
       },
-    });
+      { cursored },
+    );
+  }
+
+  /**
+   * 把 `cursor` 之后那一段直接写进 socket，然后交给实时扇出。
+   *
+   * 整段是同步的，中间发不出一次 `publish`——单线程里「读一页、写出去、挂上
+   * 订阅」之间没有别的代码能跑，所以补发和推送之间不会有缝，也不会重。
+   *
+   * 补发的帧不走那条有界队列：队列的上限是为了挡住「跟不上的客户端」，而一次
+   * 续订正是要把历史完整地交出去，中途丢帧等于没补。
+   */
+  private replay(workspaceId: string, socket: WebSocket, cursor: number): void {
+    const database = this.database;
+    if (database === undefined) return;
+    let position = cursor;
+    for (let pass = 0; pass < MAX_REPLAY_PASSES; pass += 1) {
+      const page = catchUp(database, workspaceId, position);
+      if (page.status !== "ok") return;
+      for (const record of page.records) {
+        socket.send(record.frame);
+        socket.send(cursorFrame(record.seq, page.floor, page.watermark));
+      }
+      position = page.nextCursor;
+      if (!page.hasMore) break;
+    }
+    const bounds = watermark(database);
+    socket.send(cursorFrame(position, bounds.floor, bounds.watermark));
   }
 
   /** Diagnostics: how many frames each connection has lost to the bound. */
