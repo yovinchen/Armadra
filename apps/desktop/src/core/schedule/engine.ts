@@ -37,6 +37,23 @@ import {
   validTime,
   window as dueWindow,
 } from "./plan";
+import {
+  ATTENTION_THRESHOLD,
+  activationDigest,
+  dispatchHash,
+  equalBytes,
+  noteAttention,
+  outcomeState,
+} from "./digest";
+import type {
+  Authorization,
+  Authorizer,
+  Dispatcher,
+  EngineOptions,
+  PlanSnapshot,
+  RunSnapshot,
+  TargetStatus,
+} from "./contracts";
 import { type Snapshot, ScheduleStore, conflict } from "./store";
 
 /**
@@ -52,74 +69,9 @@ import { type Snapshot, ScheduleStore, conflict } from "./store";
  * 不同（有人暂停了计划、有人改了配置），而那正是 Go 那边反复重读再比对的理由。
  */
 
-/** 调用方的稳定身份。**永远不要**把浏览器的访问/刷新密钥放进这两个字段。 */
-export interface Authorization {
-  readonly principalId: string;
-  readonly authorizationId: string;
-}
-
-export type TargetState =
-  | "unknown"
-  | "ready"
-  | "busy"
-  | "offline"
-  | "unsupported";
-
-export interface TargetStatus {
-  readonly state: TargetState;
-  readonly generation: number;
-}
-
-/**
- * 投递方。实现必须尊重超时；`lookup` 的「不知道」包括日志本身读不到，
- * 而「没投递」必须有肯定的、持久的证据。
- */
-export interface Dispatcher {
-  supports(target: AutomationTarget): Promise<TargetStatus>;
-  dispatch(run: AutomationRun): Promise<AutomationReceipt | undefined>;
-  /** 拿整个运行而不只是操作标识：哪本日志记着这张收据是目标的性质。 */
-  lookup(run: AutomationRun): Promise<AutomationReceipt | undefined>;
-}
-
-/** 投递时重新核一次授权。核的是当初记下来的那份，不是一个活会话。 */
-export interface Authorizer {
-  verify(
-    authorization: Authorization,
-    config: AutomationPlanConfig,
-  ): Promise<void>;
-}
-
-export interface EngineOptions {
-  readonly store: ScheduleStore;
-  readonly dispatcher: Dispatcher;
-  readonly authorizer: Authorizer;
-  readonly hostId: string;
-  readonly instanceId?: string;
-  readonly clock?: () => number;
-  /** 独立注入，给时钟跳变的用例。只管进程内的等待，不进任何持久标识。 */
-  readonly monotonic?: () => number;
-  readonly claimLeaseMs?: number;
-  readonly dispatchTimeoutMs?: number;
-  readonly pollIntervalMs?: number;
-}
-
-export interface PlanSnapshot {
-  readonly plan: AutomationPlan;
-  readonly revision: number;
-}
-
-export interface RunSnapshot {
-  readonly run: AutomationRun;
-  readonly revision: number;
-}
-
-/** 连续多少次不可修复的目标拒绝会把计划标成「需要处理」。 */
-export const ATTENTION_THRESHOLD = 2;
-
 const DEFAULT_LEASE_MS = 30_000;
 const DEFAULT_DISPATCH_TIMEOUT_MS = 10_000;
 const DEFAULT_POLL_MS = 1_000;
-const MAX_UINT32 = 4_294_967_295;
 const MAX_INT64_NUMBER = 9_223_372_036_854_775_807;
 
 interface IntervalClock {
@@ -1461,105 +1413,20 @@ export class ScheduleEngine {
   }
 }
 
-/* --------------------------------- 纯函数 --------------------------------- */
-
-export function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index]) return false;
-  }
-  return true;
-}
-
-/** 激活摘要：授权时刻与摘要本身不参与，这样同一次批准算出同一个数。 */
-export function activationDigest(activation: AutomationActivation): Uint8Array {
-  const hashed = fromBinary(
-    AutomationActivationSchema,
-    toBinary(AutomationActivationSchema, activation),
-  );
-  hashed.authorizedAtUnixMs = 0n;
-  hashed.activationSha256 = new Uint8Array(0);
-  return createHash("sha256")
-    .update(toBinary(AutomationActivationSchema, hashed))
-    .digest();
-}
-
-/**
- * 投递摘要：冻结的是「这次投递到底要做什么」。
- *
- * 状态、租约、尝试次数都不在里面——它们会变，而一次投递的身份不能跟着变，否则
- * 重试时收据就对不上号了。
- */
-export function dispatchHash(run: AutomationRun): Uint8Array {
-  const frozen = create(AutomationRunSchema, {
-    id: run.id,
-    planId: run.planId,
-    workspaceId: run.workspaceId,
-    configVersion: run.configVersion,
-    scheduledSlot: run.scheduledSlot,
-    scheduledAtUnixMs: run.scheduledAtUnixMs,
-    ...(run.frozenConfig === undefined
-      ? {}
-      : { frozenConfig: run.frozenConfig }),
-    ...(run.activation === undefined ? {} : { activation: run.activation }),
-    operationId: run.operationId,
-    misfire: run.misfire,
-    missedSlots: run.missedSlots,
-    missedSlotsTruncated: run.missedSlotsTruncated,
-  });
-  return createHash("sha256")
-    .update(toBinary(AutomationRunSchema, frozen))
-    .digest();
-}
-
-function outcomeState(
-  outcome: AutomationOutcome,
-): AutomationRunState | undefined {
-  switch (outcome) {
-    case AutomationOutcome.DELIVERED:
-      return AutomationRunState.DELIVERED;
-    case AutomationOutcome.RUNNING:
-      return AutomationRunState.RUNNING;
-    case AutomationOutcome.SUCCEEDED:
-      return AutomationRunState.SUCCEEDED;
-    case AutomationOutcome.FAILED:
-      return AutomationRunState.FAILED;
-    case AutomationOutcome.CANCELLED:
-      return AutomationRunState.CANCELLED;
-    case AutomationOutcome.UNKNOWN:
-      return AutomationRunState.UNKNOWN;
-    default:
-      return undefined;
-  }
-}
-
-/**
- * 只有不可修复的拒绝才累计。
- *
- * 一次拒绝可能只是终端正在重启；第二次就意味着得有人去修目标或者改计划。反过来
- * 只有「确实观察到送达」才清零——取消、暂停、过期都不能证明目标好了。
- */
-function noteAttention(
-  plan: AutomationPlan,
-  run: AutomationRun,
-  state: AutomationRunState,
-  reason: string,
-): void {
-  if (run.deliveryObserved) {
-    plan.needsAttention = false;
-    plan.attentionReasonCode = "";
-    plan.attentionStreak = 0;
-    return;
-  }
-  const unrepairable =
-    state === AutomationRunState.SKIPPED &&
-    (reason === "TARGET_UNSUPPORTED" || reason === "STALE_GENERATION");
-  if (!unrepairable) return;
-  if (plan.attentionStreak < MAX_UINT32) plan.attentionStreak += 1;
-  if (plan.attentionStreak >= ATTENTION_THRESHOLD) {
-    plan.needsAttention = true;
-    plan.attentionReasonCode = reason;
-  }
-}
-
+export type {
+  Authorization,
+  Authorizer,
+  Dispatcher,
+  EngineOptions,
+  PlanSnapshot,
+  RunSnapshot,
+  TargetState,
+  TargetStatus,
+} from "./contracts";
+export {
+  ATTENTION_THRESHOLD,
+  activationDigest,
+  dispatchHash,
+  equalBytes,
+} from "./digest";
 export { agentTarget };
