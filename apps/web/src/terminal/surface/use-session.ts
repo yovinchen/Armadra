@@ -70,10 +70,16 @@ export function useTerminalSession(
         });
         refs.freshSessionRef.current = true;
         refs.launchPhaseRef.current = "idle";
-        useCanvasStore.getState().updateNodeData(nodeId, {
-          sessionId: started.sessionId,
-          lastExitCode: null,
-        });
+        // 会话 id 要存盘（重开应用靠它重新贴回同一个 pane），但它不是用户的
+        // 编辑：`history: "ignore"` 把它挡在撤销栈外。否则开一块三十个终端的
+        // 板子，⌘Z 要按三十次才碰得到自己的第一次改动。
+        useCanvasStore
+          .getState()
+          .updateNodeData(
+            nodeId,
+            { sessionId: started.sessionId, lastExitCode: null },
+            { history: "ignore" },
+          );
         setSessionId(started.sessionId);
         patch({ connection: "connecting", exitCode: null });
       } catch (cause) {

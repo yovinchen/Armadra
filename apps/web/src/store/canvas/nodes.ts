@@ -103,21 +103,25 @@ export function createNodesSlice(
       });
     },
 
-    updateNodeData: (id, patch) => {
+    updateNodeData: (id, patch, options) => {
       set((state) => {
-        const next = commit(state, (document) => {
-          let changed = false;
-          const nodes = document.nodes.map((node) => {
-            if (node.id !== id) return node;
-            changed = true;
-            return {
-              ...node,
-              data: { ...node.data, ...patch, kind: node.data.kind },
-              updatedAt: now(),
-            } as CanvasNode;
-          });
-          return changed ? { ...document, nodes } : null;
-        });
+        const next = commit(
+          state,
+          (document) => {
+            let changed = false;
+            const nodes = document.nodes.map((node) => {
+              if (node.id !== id) return node;
+              changed = true;
+              return {
+                ...node,
+                data: { ...node.data, ...patch, kind: node.data.kind },
+                updatedAt: now(),
+              } as CanvasNode;
+            });
+            return changed ? { ...document, nodes } : null;
+          },
+          options,
+        );
         return next ?? state;
       });
     },

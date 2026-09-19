@@ -67,6 +67,12 @@ export function commit(
   if (!state.document) return null;
   const next = mutate(state.document);
   if (!next) return null;
+  // TEMP-PROBE
+  const probe = ((globalThis as any).__armadraCounters ??= {});
+  probe.commit = (probe.commit ?? 0) + 1;
+  probe.commitLabels ??= {};
+  const label = options.label ?? "edit";
+  probe.commitLabels[label] = (probe.commitLabels[label] ?? 0) + 1;
   const items = state.whiteboard.items;
   const references = state.whiteboard.references;
   const diff = diffSnapshots(

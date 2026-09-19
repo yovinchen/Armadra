@@ -22,7 +22,7 @@ import { notify } from "@/platform";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { formatMetricBytes, formatPercent, UNKNOWN } from "./metrics";
 import { claimAlert, crossedThreshold } from "./memory-alert";
-import { useResources } from "./use-resources";
+import { useSessionResources } from "./use-resources";
 import { useOnScreen, usePageVisible } from "./use-visibility";
 
 export interface MemoryBadgeProps {
@@ -65,18 +65,15 @@ export function MemoryBadge({
   const pageVisible = usePageVisible();
   const watched = visible && onScreen && pageVisible;
   const cadence = watched ? "fast" : "slow";
-  const { snapshot } = useResources(workspaceId, Boolean(sessionId), cadence);
-
-  // 只认这个会话这一代的行。换代之后旧行的数字属于另一次运行，不能拿来
-  // 当这个终端「现在」的占用。
-  const session: SessionResources | null =
-    (sessionId &&
-      snapshot?.sessions.find(
-        (entry) =>
-          entry.sessionId === sessionId &&
-          (generation === null || entry.generation === generation),
-      )) ||
-    null;
+  // 只认这个会话这一代的行（换代之后旧行的数字属于另一次运行），而且只在
+  // **这一行**变了的时候才重渲——整份快照进 state 的写法会让一屏三十个徽标
+  // 每个采样 tick 全部重画一遍（见 `use-resources.ts` 的 `useSessionResources`）。
+  const session: SessionResources | null = useSessionResources(
+    workspaceId,
+    sessionId,
+    generation,
+    cadence,
+  );
 
   const memory = session?.memoryBytes ?? null;
   const over = crossedThreshold(memory, threshold);

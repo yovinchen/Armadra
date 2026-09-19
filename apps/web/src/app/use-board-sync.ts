@@ -56,7 +56,17 @@ export function useBoardSync() {
 
   const workspace = useCanvasStore((state) => state.workspace);
   const boardId = useCanvasStore((state) => state.boardId);
-  const document = useCanvasStore((state) => state.document);
+  /**
+   * **只订阅板 id，不订阅整份 `document`。**
+   *
+   * 这个 hook 住在 `AppShell` 里，而 `document` 的对象身份在每一次
+   * `updateNodeData`、甚至每一次平移（`setViewport` 也换 document）时都会变。
+   * 订阅整份的代价是整个应用壳跟着重渲：实测一次会话状态跳动里，`AppShell`
+   * 为根的重渲有四次、每次约 1,045 个组件（`docs/status/canvas-performance-baseline.md`）。
+   * 下面那个合并 effect 真正要的只有「手里这份是不是同一块板」，剩下的用
+   * `getState()` 当场读——照 nodeterm `Canvas.tsx:1575-1579` 的纪律。
+   */
+  const documentBoardId = useCanvasStore((state) => state.document?.board.id);
   const saveState = useCanvasStore((state) => state.saveState);
   const setWorkspace = useCanvasStore((state) => state.setWorkspace);
   const setBoards = useCanvasStore((state) => state.setBoards);
@@ -214,7 +224,7 @@ export function useBoardSync() {
     if (!workspace || !board.data) return;
     if (board.data.board.workspaceId !== workspace.id) return;
     if (board.data.board.id !== boardId) return;
-    if (document?.board.id !== board.data.board.id) {
+    if (documentBoardId !== board.data.board.id) {
       mergedRef.current = board.data;
       setDocument(board.data);
       return;
@@ -225,7 +235,7 @@ export function useBoardSync() {
   }, [
     board.data,
     boardId,
-    document,
+    documentBoardId,
     dragging,
     mergeRemoteDocument,
     setDocument,
