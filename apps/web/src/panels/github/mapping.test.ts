@@ -1,10 +1,4 @@
 import { describe, expect, it } from "vitest";
-import {
-  create,
-  GithubRepositoryRefSchema,
-  GithubStatusMappingSchema,
-} from "@armadra/protocol";
-import { GithubIssueState, GithubStatusSource } from "@armadra/host-client";
 
 import {
   draftFromMapping,
@@ -13,8 +7,15 @@ import {
   mappingFromDraft,
   type StatusMappingDraft,
 } from "./mapping";
+import {
+  GithubIssueState,
+  GithubStatusSource,
+  githubRepositoryRef,
+  githubStatusGroup,
+  githubStatusMapping,
+} from "../../api/github";
 
-const repository = create(GithubRepositoryRefSchema, {
+const repository = githubRepositoryRef({
   owner: "armadra",
   name: "armadra",
   apiBase: "https://api.github.com",
@@ -122,10 +123,10 @@ describe("status mapping drafts", () => {
   });
 
   it("reads a stored mapping back into the same draft", () => {
-    const stored = create(GithubStatusMappingSchema, {
+    const stored = githubStatusMapping({
       repository,
       source: GithubStatusSource.LABEL,
-      groups: [{ id: "todo", title: "Todo", label: "todo" }],
+      groups: [githubStatusGroup({ id: "todo", title: "Todo", label: "todo" })],
       stateGroups: [{ state: GithubIssueState.CLOSED, groupId: "todo" }],
       revision: 3n,
     });

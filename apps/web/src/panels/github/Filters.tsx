@@ -1,20 +1,16 @@
-import {
-  create,
-  GithubIssueFilterSchema,
-  GithubPullFilterSchema,
-} from "@armadra/protocol";
-import {
-  GithubIssueState,
-  GithubPullState,
-  type GithubIssueFilter,
-  type GithubPullFilter,
-} from "@armadra/host-client";
-
 import { Button } from "@/ui/button";
 import { Input } from "@/ui/input";
 import { useT } from "@/app/preferences-store";
 import { Check, Field, selectClass } from "../git/forms";
 import type { GithubTab } from "./open";
+import {
+  GithubIssueFilter,
+  GithubIssueState,
+  GithubPullFilter,
+  GithubPullState,
+  githubIssueFilter,
+  githubPullFilter,
+} from "../../api/github";
 
 /** One filter form for both tabs; each tab shows the fields that apply. */
 export interface GithubFilterState {
@@ -47,7 +43,7 @@ function list(value: string): string[] {
 }
 
 export function issueFilter(state: GithubFilterState): GithubIssueFilter {
-  return create(GithubIssueFilterSchema, {
+  return githubIssueFilter({
     state:
       state.state === "open"
         ? GithubIssueState.OPEN
@@ -62,7 +58,7 @@ export function issueFilter(state: GithubFilterState): GithubIssueFilter {
 }
 
 export function pullFilter(state: GithubFilterState): GithubPullFilter {
-  return create(GithubPullFilterSchema, {
+  return githubPullFilter({
     state:
       state.state === "open"
         ? GithubPullState.OPEN

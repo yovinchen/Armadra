@@ -720,6 +720,47 @@ export const githubPullRequest = zero<GithubPullRequest>({
   observedAtUnixMs: 0n,
 });
 
+export const resolveGithubRepositoryResponse =
+  zero<ResolveGithubRepositoryResponse>({
+    hostMismatch: false,
+    reasonCode: "",
+  });
+
+export const githubRepository = zero<GithubRepository>({
+  id: 0n,
+  defaultBranch: "",
+  private: false,
+  fork: false,
+  hasIssues: false,
+  allowedMergeMethods: [],
+  permission: "",
+  observedAtUnixMs: 0n,
+});
+
+export const githubCredentialStatus = zero<GithubCredentialStatus>({
+  source: GithubCredentialSource.UNSPECIFIED,
+  store: GithubSecretStore.UNSPECIFIED,
+  available: false,
+  apiBase: "",
+  enterprise: false,
+  accountLogin: "",
+  tokenScopes: [],
+  checkedAtUnixMs: 0n,
+  reasonCode: "",
+  revision: 0n,
+});
+
+export const githubCheckRun = zero<GithubCheckRun>({
+  name: "",
+  app: "",
+  conclusion: GithubCheckConclusion.UNSPECIFIED,
+  detailsUrl: "",
+  startedAtUnixMs: 0n,
+  completedAtUnixMs: 0n,
+  rerunnable: false,
+  workflowRunId: 0n,
+});
+
 export const githubCheckSummary = zero<GithubCheckSummary>({
   headSha: "",
   runs: [],

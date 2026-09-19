@@ -1,18 +1,17 @@
-import { create } from "@armadra/protocol";
-import {
-  AutomationColdStartPolicy,
-  AutomationConcurrencyPolicy,
-  AutomationMisfirePolicy,
-  AutomationPlanConfigSchema,
-  AutomationTargetKind,
-  CommandLaunchSpecSchema,
-  type AgentLaunchSpec,
-  type AutomationPlanConfig,
-  type CommandLaunchSpec,
-} from "@armadra/protocol";
 import type { AutomationScheduleKind } from "@armadra/shared";
 
 import { validCron, validTimezone } from "./model";
+import {
+  AgentLaunchSpec,
+  AutomationColdStartPolicy,
+  AutomationConcurrencyPolicy,
+  AutomationMisfirePolicy,
+  AutomationPlanConfig,
+  AutomationTargetKind,
+  CommandLaunchSpec,
+  automationPlanConfig,
+  commandLaunchSpec,
+} from "../../api/automations";
 
 /**
  * Turns the create form into exactly the configuration the Host will store.
@@ -99,7 +98,7 @@ export function defaultWizardState(now = Date.now()): WizardState {
  * The wizard state that reproduces a stored plan, for editing it.
  *
  * Everything the Host keeps is read back from the configuration; the payload
- * comes separately (`HostAutomationClient.planPayload`) because the Host stores
+ * comes separately (`AutomationApi.planPayload`) because the Host stores
  * it apart from the configuration. Anything the Host does not store — there is
  * nothing today — would have to be left blank rather than invented, because a
  * field the form filled in by guessing would be saved as if it had been read.
@@ -202,7 +201,7 @@ export function buildLaunchSpec(input: {
   const timeout = bounded(input.timeoutMs, MIN_PERIOD_MS, MAX_TIMEOUT_MS);
   if (timeout === null)
     return { messageKey: "automation.wizard.invalidInterval" };
-  return create(CommandLaunchSpecSchema, {
+  return commandLaunchSpec({
     executable,
     args: input.args
       .split("\n")
@@ -327,10 +326,9 @@ export function buildPlanConfig(
           messageKey: "automation.wizard.invalidTime",
         };
       schedule = {
-        $typeName: "armadra.v1.AutomationSchedule",
         kind: {
           case: "once",
-          value: { $typeName: "armadra.v1.AutomationOnce", atUnixMs: at },
+          value: { atUnixMs: at },
         },
       };
       break;
@@ -351,11 +349,9 @@ export function buildPlanConfig(
           messageKey: "automation.wizard.invalidInterval",
         };
       schedule = {
-        $typeName: "armadra.v1.AutomationSchedule",
         kind: {
           case: "interval",
           value: {
-            $typeName: "armadra.v1.AutomationInterval",
             anchorUnixMs: anchor,
             intervalMs: every,
           },
@@ -378,11 +374,9 @@ export function buildPlanConfig(
           messageKey: "automation.wizard.invalidTimezone",
         };
       schedule = {
-        $typeName: "armadra.v1.AutomationSchedule",
         kind: {
           case: "cron",
           value: {
-            $typeName: "armadra.v1.AutomationCron",
             expression: state.cron.trim().split(/\s+/).join(" "),
             timezone: state.timezone.trim(),
           },
@@ -406,11 +400,9 @@ export function buildPlanConfig(
           messageKey: "automation.wizard.loopBound",
         };
       schedule = {
-        $typeName: "armadra.v1.AutomationSchedule",
         kind: {
           case: "loopAfterCompletion",
           value: {
-            $typeName: "armadra.v1.AutomationLoopAfterCompletion",
             delayMs: delay,
           },
         },
@@ -421,7 +413,7 @@ export function buildPlanConfig(
 
   return {
     ok: true,
-    config: create(AutomationPlanConfigSchema, {
+    config: automationPlanConfig({
       workspaceId: target.workspaceId,
       title,
       schedule,

@@ -1,12 +1,6 @@
 import * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type {
-  GithubExternalReference,
-  GithubReferenceKind,
-  GithubRepositoryRef,
-  HostGithubClient,
-} from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -20,9 +14,15 @@ import {
   useLinkTargets,
 } from "./link-targets";
 import { githubKeys } from "./queries";
+import {
+  GithubApi,
+  GithubExternalReference,
+  GithubReferenceKind,
+  GithubRepositoryRef,
+} from "../../api/github";
 
 export interface ReferenceSectionProps {
-  client: HostGithubClient;
+  client: GithubApi;
   workspaceId: string;
   repository: GithubRepositoryRef;
   kind: GithubReferenceKind;

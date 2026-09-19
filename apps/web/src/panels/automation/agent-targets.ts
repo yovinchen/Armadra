@@ -1,8 +1,7 @@
-import { create, AgentLaunchSpecSchema } from "@armadra/protocol";
-import type { AgentLaunchSpec } from "@armadra/protocol";
 import type { CanvasNode } from "@armadra/shared";
 
 import { buildAgentLaunchArgv } from "@/agent/launch";
+import { AgentLaunchSpec, agentLaunchSpec } from "../../api/automations";
 
 /**
  * 画布上可以作为「定时提示词」目标的 Agent 终端（自动化设计 §4）。
@@ -54,7 +53,7 @@ export function frozenLaunch(
   const argv = agent
     ? buildAgentLaunchArgv(agent)
     : { program: "", args: [] as string[] };
-  return create(AgentLaunchSpecSchema, {
+  return agentLaunchSpec({
     agentId: option.agentId,
     workingDirectory: option.cwd,
     args: argv.args,

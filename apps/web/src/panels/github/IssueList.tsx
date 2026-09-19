@@ -1,9 +1,3 @@
-import {
-  GithubIssueState,
-  type GithubIssue,
-  type GithubStatusMapping,
-} from "@armadra/host-client";
-
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import {
@@ -16,6 +10,11 @@ import { useT } from "@/app/preferences-store";
 import { Freshness } from "./Freshness";
 import { groupIssues, instant, issueStateKey } from "./model";
 import type { IssuePage } from "./queries";
+import {
+  GithubIssue,
+  GithubIssueState,
+  GithubStatusMapping,
+} from "../../api/github";
 
 export interface MoveIssueRequest {
   issue: GithubIssue;

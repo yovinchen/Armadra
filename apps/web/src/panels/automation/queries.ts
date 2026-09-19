@@ -1,9 +1,9 @@
-import type {
+import {
+  AutomationApi,
   AutomationCommandSession,
   AutomationPlanSnapshot,
   AutomationRunSnapshot,
-  HostAutomationClient,
-} from "@armadra/host-client";
+} from "../../api/automations";
 
 /**
  * Paging helpers for the automation surface.
@@ -34,7 +34,7 @@ export const automationKeys = {
 };
 
 export async function allPlans(
-  client: HostAutomationClient,
+  client: AutomationApi,
 ): Promise<AutomationPlanSnapshot[]> {
   const plans: AutomationPlanSnapshot[] = [];
   let cursor = "";
@@ -48,7 +48,7 @@ export async function allPlans(
 }
 
 export async function allCommandSessions(
-  client: HostAutomationClient,
+  client: AutomationApi,
 ): Promise<AutomationCommandSession[]> {
   const sessions: AutomationCommandSession[] = [];
   let cursor = "";
@@ -74,7 +74,7 @@ export interface RunPage {
  * refuses one from another plan rather than paging through its history.
  */
 export async function runPage(
-  client: HostAutomationClient,
+  client: AutomationApi,
   planId: string,
   cursor: string,
 ): Promise<RunPage> {

@@ -1,3 +1,9 @@
+import {
+  AutomationColdStartPolicy,
+  AutomationConcurrencyPolicy,
+  AutomationMisfirePolicy,
+  AutomationTargetKind,
+} from "../../api/automations";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -136,10 +142,18 @@ describe("plan configuration", () => {
   });
 
   it("maps the policy choices onto their enum values", () => {
-    expect(built({ misfire: "skip" }).misfirePolicy).toBe(1);
-    expect(built({ misfire: "coalesce" }).misfirePolicy).toBe(2);
-    expect(built({ concurrency: "forbid" }).concurrencyPolicy).toBe(1);
-    expect(built({ concurrency: "queue" }).concurrencyPolicy).toBe(2);
+    expect(built({ misfire: "skip" }).misfirePolicy).toBe(
+      AutomationMisfirePolicy.SKIP,
+    );
+    expect(built({ misfire: "coalesce" }).misfirePolicy).toBe(
+      AutomationMisfirePolicy.COALESCE_ONE,
+    );
+    expect(built({ concurrency: "forbid" }).concurrencyPolicy).toBe(
+      AutomationConcurrencyPolicy.FORBID,
+    );
+    expect(built({ concurrency: "queue" }).concurrencyPolicy).toBe(
+      AutomationConcurrencyPolicy.QUEUE_ONE,
+    );
   });
 
   it("leaves the payload digest to the Host", () => {
@@ -205,7 +219,6 @@ describe("agent terminal targets", () => {
     generation: 3n,
     nodeId: "9f1d0f66-0f7b-7c1f-9a2c-2f7b0f7c1f9a",
     agentLaunch: {
-      $typeName: "armadra.v1.AgentLaunchSpec",
       agentId: "claude",
       workingDirectory: ".",
       args: ["--permission-mode", "plan"],
@@ -227,7 +240,7 @@ describe("agent terminal targets", () => {
 
   it("freezes the node and the launch definition the executor re-checks", () => {
     const target = agentConfig().target!;
-    expect(target.kind).toBe(2);
+    expect(target.kind).toBe(AutomationTargetKind.AGENT_SESSION_PROMPT);
     expect(target.nodeId).toBe(agentTarget.nodeId);
     expect(target.agentLaunch?.args).toEqual(["--permission-mode", "plan"]);
     // The definition names no executable: the program is resolved from the
@@ -236,12 +249,16 @@ describe("agent terminal targets", () => {
   });
 
   it("only carries the permission to launch when it was asked for", () => {
-    expect(agentConfig().target?.coldStartPolicy).toBe(1);
+    expect(agentConfig().target?.coldStartPolicy).toBe(
+      AutomationColdStartPolicy.SKIP,
+    );
     const warm = buildPlanConfig(form({ payload: "每晚复盘" }), {
       ...agentTarget,
       coldStart: true,
     });
-    expect(warm.ok && warm.config.target?.coldStartPolicy).toBe(2);
+    expect(warm.ok && warm.config.target?.coldStartPolicy).toBe(
+      AutomationColdStartPolicy.LAUNCH_FROZEN,
+    );
   });
 
   it("refuses a plan that would type nothing into somebody's terminal", () => {
@@ -255,10 +272,12 @@ describe("agent terminal targets", () => {
 
   it("leaves a command plan free of any agent identity", () => {
     const config = built();
-    expect(config.target?.kind).toBe(1);
+    expect(config.target?.kind).toBe(
+      AutomationTargetKind.NON_INTERACTIVE_COMMAND,
+    );
     expect(config.target?.nodeId).toBe("");
     expect(config.target?.agentLaunch).toBeUndefined();
-    expect(config.target?.coldStartPolicy).toBe(1);
+    expect(config.target?.coldStartPolicy).toBe(AutomationColdStartPolicy.SKIP);
   });
 });
 
@@ -276,7 +295,6 @@ describe("editing an existing plan", () => {
     generation: 3n,
     nodeId: "9f1d0f66-0f7b-7c1f-9a2c-2f7b0f7c1f9a",
     agentLaunch: {
-      $typeName: "armadra.v1.AgentLaunchSpec",
       agentId: "claude",
       workingDirectory: ".",
       args: ["--permission-mode", "plan"],

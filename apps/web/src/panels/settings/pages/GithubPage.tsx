@@ -1,10 +1,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  GithubCredentialSource,
-  GithubSecretStore,
-} from "@armadra/host-client";
+import { GithubCredentialSource, GithubSecretStore } from "../../../api/github";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -128,9 +125,8 @@ export function GithubPage() {
                   className={selectClass}
                   value={String(source)}
                   onChange={(event) =>
-                    setSource(
-                      Number(event.target.value) as GithubCredentialSource,
-                    )
+                    // 枚举在线上是名字，下拉框的值就是那个名字。
+                    setSource(event.target.value as GithubCredentialSource)
                   }
                 >
                   <option value={String(GithubCredentialSource.NONE)}>

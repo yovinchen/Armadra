@@ -1,16 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  GithubMergeMethod,
-  GithubMergeableState,
-  GithubReferenceKind,
-  GithubReviewState,
-  type GithubRepositoryRef,
-  type GithubReviewCommentDraft,
-  type HostGithubClient,
-  type MergeGithubPullResponse,
-} from "@armadra/host-client";
 
 import {
   AlertDialog,
@@ -44,9 +34,19 @@ import {
 } from "./model";
 import { ReferenceSection } from "./ReferenceSection";
 import { githubKeys } from "./queries";
+import {
+  GithubApi,
+  GithubMergeMethod,
+  GithubMergeableState,
+  GithubReferenceKind,
+  GithubRepositoryRef,
+  GithubReviewCommentDraft,
+  GithubReviewState,
+  MergeGithubPullResponse,
+} from "../../api/github";
 
 export interface PullDetailProps {
-  client: HostGithubClient;
+  client: GithubApi;
   workspaceId: string;
   repository: GithubRepositoryRef;
   number: bigint;
@@ -385,9 +385,8 @@ export function PullDetail({
                       className={selectClass}
                       value={String(chosen ?? "")}
                       onChange={(event) =>
-                        setMethod(
-                          Number(event.target.value) as GithubMergeMethod,
-                        )
+                        // 枚举在线上是名字，所以下拉框的值就是那个名字。
+                        setMethod(event.target.value as GithubMergeMethod)
                       }
                     >
                       {methods.map((value) => (

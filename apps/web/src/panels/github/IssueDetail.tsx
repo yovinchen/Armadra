@@ -1,12 +1,6 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { create, GithubIssuePatchSchema } from "@armadra/protocol";
-import {
-  GithubReferenceKind,
-  type GithubRepositoryRef,
-  type HostGithubClient,
-} from "@armadra/host-client";
 
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
@@ -17,9 +11,15 @@ import { Field } from "../git/forms";
 import { failureKey, instant, issueStateKey, pollInterval } from "./model";
 import { ReferenceSection } from "./ReferenceSection";
 import { githubKeys } from "./queries";
+import {
+  GithubApi,
+  GithubReferenceKind,
+  GithubRepositoryRef,
+  githubIssuePatch,
+} from "../../api/github";
 
 export interface IssueDetailProps {
-  client: HostGithubClient;
+  client: GithubApi;
   workspaceId: string;
   repository: GithubRepositoryRef;
   number: bigint;
@@ -84,7 +84,7 @@ export function IssueDetail({
       client.updateIssue({
         repository,
         number,
-        patch: create(GithubIssuePatchSchema, {
+        patch: githubIssuePatch({
           title: title.trim(),
           body,
           replaceLabels: true,

@@ -560,6 +560,15 @@ export const commandLaunchSpec = zero<CommandLaunchSpec>({
   timeoutMs: 0n,
 });
 
+export const automationTarget = zero<AutomationTarget>({
+  executionHostId: "",
+  sessionId: "",
+  generation: 0n,
+  kind: AutomationTargetKind.UNSPECIFIED,
+  nodeId: "",
+  coldStartPolicy: AutomationColdStartPolicy.UNSPECIFIED,
+});
+
 export const automationPlanConfig = zero<AutomationPlanConfig>({
   workspaceId: "",
   title: "",
