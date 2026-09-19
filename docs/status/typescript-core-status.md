@@ -14,6 +14,7 @@
 | **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`601095795`） |
 | **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`601095795`） |
 | **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | 全部已合入            |
+| R7a    | GitHub 与自动化改打 JSON 面（R7 的前置）                                           | 已合入                |
 | R7     | 收尾                                                                               | 未开始                |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
@@ -459,3 +460,49 @@ GitHub 与自动化两个面由并行的一条线改造。它们依赖的旧接�
 ### 15.6 验证
 
 `pnpm --filter @armadra/web test`、`pnpm --filter @armadra/desktop test`、`pnpm -r typecheck`、`pnpm check` 全绿。新增用例：`api/identity.test.ts`（两条传输各自的凭据、CSRF 只取一次、会话变更只通知一次、`#pair=` 只读一次）、`api/request.csrf.test.ts`（服务器壳那条路上的双提交头与一次性重试）、`api/events.test.ts` 的续订四例、`core/events/outbox.integration.test.ts` 的 `cursor=now` 一例。
+
+## 16. R7a：GitHub 与自动化切到 JSON 面
+
+R7 要删 `proto/`、`packages/protocol`、`packages/host-client` 与 core 里的 `/rpc/*`。删之前页面必须先不再依赖它们——这一批做的就是那一步，前后端一起纵切。形状写在[core 的 JSON 面](../contracts/core-json-api.md)，本节只记事实与偏差。
+
+### 16.1 自动化：载荷从 protobuf 字节改成 JSON
+
+迁移 `0020_automation_json.sql` 给 `automation_plans`、`automation_activations`、`automation_runs`、`automation_receipts` 与 `command_sessions` 各加一个 JSON 列，BLOB 列改可空；SQLite 去不掉 `NOT NULL`，所以这五张表按「建新表 → 搬数据 → 换名字」重建，索引按原名建回去。
+
+迁移本身不解码任何字节（SQL 里没有 protobuf 解码器）。转换由 core 启动时的 `core/schedule/convert-legacy.ts` 做一遍：只碰 `payload_json IS NULL AND payload IS NOT NULL` 的行、一个事务、解不开就整体回滚。跑第二遍什么也不做。**R7 删掉那个文件与那两组 BLOB 列。**
+
+`core/db/absorb-host.ts` 的自动化投影改为投影时就解码成 JSON；`command_sessions` 从「逐列拷贝」变成一次投影，因为旧 `host.db` 那张表的 `launch` 是字节而新表是 JSON。
+
+**摘要换了一个数。** `configSha256` 与 `command_sessions.launch_sha256` 从「protobuf 字节的 SHA-256」改成「规范 JSON（键排序、无空白、UTF-8）的 SHA-256」。直接后果是**已经激活的计划要重新授权一次**；产品未发布，这是可接受的代价，换来的是摘要不再依赖一份 protobuf 序列化器的字段顺序。`convert-legacy.test.ts` 有一条用例就是断言这个数**确实变了**，而不是希望它没变。
+
+### 16.2 三张面上的认证多一条
+
+`/api/github/*` 与 `/api/automations/*` 本来只认会话凭据。问题是页面经 `apps/web/src/api/request.ts` 打这一面，而**桌面壳的会话是原生的**：密钥在壳里，既不发 Cookie 也到不了那个 `fetch`（`HostIdentityClient` 只会发 `/rpc/` 的 protobuf 帧，令牌是它的私有字段）。
+
+所以这两面多一条：**明文回环来源 + 没带任何凭据**时，按本机主人处理（`IdentityService.localOwner`：owner principal + 它最新一台没被撤销的设备）。TLS 的服务器壳上这条路不存在。主人必须是一台真设备——自动化的授权记录要拿它的 epoch 复核，一个编出来的设备标识会让计划在第一次投递时被自己的复核拒掉；找不到设备时答 `unauthenticated`（「还没配过对」）而不是 `forbidden`。
+
+新增 `GET /api/identity/hello`，能力表与 `HostService/Hello` 是同一张。三条新路径在 `ROUTES` 里带 `beyondContract: true`（Rust Runtime 时代 GitHub 与自动化活在 Go Host 的 protobuf 面上），契约内的 163 条仍然逐条相等。
+
+### 16.3 页面：枚举从数字变成名字
+
+`apps/web/src/api/github.ts` 与 `apps/web/src/api/automations.ts` 取代 `HostGithubClient` / `HostAutomationClient`，方法名与参数逐条对得上。`panels/github/**`、`panels/automation/**`、`nodes/AutomationNode*` 里对 `@armadra/protocol` 与 `@armadra/host-client` 的引用全部消失。
+
+两处**行为对使用者可见的变化**：
+
+1. **枚举的值变了**。`GithubIssueState.OPEN` 从 `1` 变成 `"GITHUB_ISSUE_STATE_OPEN"`。读的地方仍然写 `GithubIssueState.OPEN`，但几个 `<select>` 的 `value` 因此是名字而不是序号，而两处按序号取标签的数组改成按名字索引的表——少一项现在是一个读不出来的键，而不是一个悄悄错位的标签。
+2. **计划载荷在界面层是文本**。`CreatePlanRequest.payload` 从 `Uint8Array` 变成 `string`，读回来也是原文。编辑一个计划时那段 prompt 不再经过一次编解码。
+
+`bigint` **保留**：Issue / PR 的编号、id 与时间戳都是 64 位，`number` 在 2^53 之上会悄悄改值。线上是十进制字符串，zod 在边界上转回 `bigint`。
+
+### 16.4 四处与任务措辞的偏差
+
+1. **GitHub 的 JSON 面仍然是「一个动词一条 POST」**，没有改成 `GET/PUT/DELETE` 的 REST 形状。理由写在契约 §5.1：读动词的参数是结构化过滤器，塞进查询串要么被截断要么要一层自定义编码。
+2. **`automation_payloads` 没有加 JSON 列。** 它存的是用户敲进去的 stdin / prompt 原文，不是 protobuf，而且按内容寻址——换一种表示会改掉所有已冻结计划指向的那个引用。JSON 面把它当 UTF-8 文本读出去（契约 §4.3），库里仍然是字节。它不挡 R7。
+3. **`core/identity` 多了一个读方法**（`localOwner`），超出「identity 只加 hello JSON 面」的边界。理由在 §15.2：没有它，这两面在桌面壳上一个请求都答不了。
+4. **`apps/web/src/host/{github,automation}-session.ts` 仍然 import `@armadra/host-client`** 的三个类型（`HostIdentityClient` / `HelloResponse` / `HostIdentitySession`）。它们来自 `connection.ts` 与 `native-session.ts`——那两个文件归 R7c，本批不碰。会话仍然负责「能不能打开这块面板」（能力、授权位、那次配对），但面板的每一次调用已经不走它了。
+
+### 16.5 验证
+
+- `pnpm --filter @armadra/desktop test`、`pnpm --filter @armadra/web test`、`pnpm -r typecheck`、`pnpm check` 全绿。
+- core 侧新用例：自动化 JSON 面每条路由一条（形状、错误码、匿名回环、两张面对账）、GitHub JSON 面六条（24 个动词齐、工作空间缺席、动词不存在、零值照写、两张面对账、列表不带正文）、Hello 两张面逐字段对账、迁移 0020 + 转换一条（字节行 → JSON 行 + 摘要确实变了 + 跑第二遍无操作）。
+- web 侧新用例：两个 api 模块的 zod（`int64` → `bigint`、`bytes` → `Uint8Array`、摊平的 `oneof` → `{ case, value }`、认不出来的枚举名落回 `UNSPECIFIED`）、请求形状（工作空间在查询串、`bigint` 发成字符串、载荷发原文）、错误分档各一条。既有的面板用例改到 JSON 假服务上继续绿。
