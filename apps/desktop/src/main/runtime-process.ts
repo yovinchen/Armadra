@@ -27,7 +27,24 @@ import {
   runtimeBinaryName,
   staleRuntimeRecord,
 } from "../shell-core/runtime/identity";
+import {
+  DRIVE_ADDRESS_ENV,
+  DRIVE_TOKEN_ENV,
+} from "../shell-core/browser/drive";
 import { repoRoot } from "./repo-root";
+
+/**
+ * The two variables the browser drive channel travels on (§4.2).
+ *
+ * Set by the assembly before the Runtime is spawned, and empty when the channel
+ * could not bind — in which case the Runtime simply never has a shell to drive
+ * through and answers `browser_unavailable`, which is the honest answer.
+ */
+let driveEnvironment: Record<string, string> = {};
+
+export function setDriveEnvironment(address: string, token: string): void {
+  driveEnvironment = { [DRIVE_ADDRESS_ENV]: address, [DRIVE_TOKEN_ENV]: token };
+}
 
 /**
  * The Runtime process this shell owns, and how it is asked to stop.
@@ -122,6 +139,11 @@ export class RuntimeProcess {
       // the rest is the Runtime's own log, which the Tauri shell used to throw
       // away entirely in a packaged build.
       stdio: ["pipe", "pipe", "ignore"],
+      // The browser drive channel (§4.2). The address is a kernel-assigned
+      // loopback port and the token is one random value per shell run, so both
+      // exist only here and in the environment of this one child. Nothing is
+      // written to disk, and a Runtime this shell did not start has no channel.
+      env: { ...process.env, ...driveEnvironment },
     });
     child.on("error", (error) => {
       this.exited = true;

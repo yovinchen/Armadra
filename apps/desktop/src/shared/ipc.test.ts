@@ -38,9 +38,10 @@ describe("the IPC table", () => {
   });
 
   it("implements exactly the channels the shipped batches promised", () => {
-    // W1.0/W1.1 answered the first three; W2.1 added the system integration and
-    // W2.2 the seven update commands. Everything else in the table still rejects
-    // with `not_implemented`, and this list is the record of which batch owes what.
+    // W1.0/W1.1 answered the first three; W2.1 added the system integration,
+    // W2.2 the seven update commands, and W3.3/W3.4 the four browser channels.
+    // Everything else in the table still rejects with `not_implemented`, and
+    // this list is the record of which batch owes what.
     expect([...IMPLEMENTED_CHANNELS].sort()).toEqual(
       [
         "app:locale",
@@ -58,6 +59,10 @@ describe("the IPC table", () => {
         "updates:install",
         "updates:restart-report",
         "updates:state",
+        "browser:register",
+        "browser:unregister",
+        "browser:view",
+        "browser:control",
       ].sort(),
     );
   });

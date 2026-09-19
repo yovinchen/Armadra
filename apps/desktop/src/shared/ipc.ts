@@ -127,9 +127,29 @@ export const IPC = {
    */
   appLocale: spec("app:locale", "invoke", "shared"),
 
-  /** Browser nodes (§4). Registration is renderer→main; drive is Runtime→main. */
+  /**
+   * Browser nodes (§4).
+   *
+   * `browser:register` / `browser:unregister` are renderer→main: the page's
+   * guest reached `dom-ready` and now has a `webContentsId` worth knowing.
+   * `browser:view` is the same direction and carries only geometry — where the
+   * `<webview>` sits in the window and what the canvas zoom is, which is what
+   * `inspectElement` needs and only the page can know (webview-probe §4).
+   * `browser:control` is renderer→main→Runtime: the Stop button on the lease
+   * badge, which must reach the lease machine, not merely hide a chip.
+   *
+   * `browser:drive` is the main→renderer EVENT half of the drive conversation:
+   * the two things a verb cannot do itself because they are React state — a tab
+   * switch and a popup that has to become a node. The Runtime→main half of the
+   * same conversation is not an Electron channel at all; it is the loopback
+   * WebSocket in `shell-core/browser/drive.ts`, whose address and one-time
+   * token reach the Runtime through `ARMADRA_SHELL_DRIVE_WS` and
+   * `ARMADRA_SHELL_DRIVE_TOKEN` in its spawn environment.
+   */
   browserRegister: spec("browser:register", "invoke", "window"),
   browserUnregister: spec("browser:unregister", "invoke", "window"),
+  browserView: spec("browser:view", "invoke", "window"),
+  browserControl: spec("browser:control", "invoke", "window"),
   browserDrive: spec("browser:drive", "event", "shared"),
 } as const satisfies Record<string, ChannelSpec>;
 
@@ -161,7 +181,47 @@ export const IMPLEMENTED_CHANNELS: readonly string[] = [
   IPC.dialogPickFiles.channel,
   IPC.shellOpenExternal.channel,
   IPC.shortcutsApply.channel,
+  // W3.3 / W3.4.
+  IPC.browserRegister.channel,
+  IPC.browserUnregister.channel,
+  IPC.browserView.channel,
+  IPC.browserControl.channel,
 ];
+
+/** What the renderer sends on `browser:register`, once per guest `dom-ready`. */
+export interface BrowserRegistration {
+  readonly webContentsId: number;
+  readonly nodeId: string;
+  readonly tabId: string;
+  readonly surface: "canvas" | "modal";
+  readonly active: boolean;
+  /** The `<webview>` element's host-window origin, for `inspectElement`. */
+  readonly hostX?: number;
+  readonly hostY?: number;
+}
+
+/** What `browser:view` carries: geometry only, and only the page knows it. */
+export interface BrowserView {
+  readonly webContentsId: number;
+  readonly hostX: number;
+  readonly hostY: number;
+  readonly zoom: number;
+}
+
+/** What the page can ask the lease machine for. `takeover` is the Stop button:
+ * it detaches the debugger and drops ownership, which is the whole of what
+ * Stop means. */
+export interface BrowserControl {
+  readonly nodeId: string;
+  readonly action: "status" | "takeover" | "release";
+}
+
+/** Main → renderer on `browser:drive`. Everything a verb needs the page to do. */
+export interface BrowserDriveCommand {
+  readonly kind: "tabs" | "lease" | "popup";
+  readonly nodeId: string;
+  readonly [field: string]: unknown;
+}
 
 /** The `{ code, message }` shape AGENTS.md requires of every rejection. */
 export interface IpcError {
