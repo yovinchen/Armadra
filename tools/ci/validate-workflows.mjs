@@ -16,7 +16,6 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseYaml } from "./workflow-yaml.mjs";
-import { goTarget } from "../../apps/desktop/scripts/sidecar-targets.mjs";
 import { TARGETS } from "../release/artifacts.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -122,19 +121,9 @@ export function checkWorkflow(name, document) {
       if (!RUNNERS.has(label))
         problems.push(`${where} runs on ${label}, which GitHub does not offer`);
     }
-    // A build matrix names the same two things the packaging code names: the
-    // Rust triple it compiles for and the "<os>-<arch>" a release publishes. A
+    // A build matrix names the same "<os>-<arch>" a release publishes. A
     // spelling only one side knows is discovered at tag time, in the job that
     // was supposed to produce the artifact.
-    for (const triple of matrixValues(job, "triple")) {
-      try {
-        goTarget(triple);
-      } catch {
-        problems.push(
-          `${where} builds ${triple}, which apps/desktop/scripts/sidecar-targets.mjs cannot map`,
-        );
-      }
-    }
     for (const target of matrixValues(job, "target")) {
       if (!TARGETS.includes(target))
         problems.push(

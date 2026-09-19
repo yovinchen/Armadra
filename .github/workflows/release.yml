@@ -1,8 +1,8 @@
 # 发布流水线，见 docs/design/updates-and-service-install.md §1 与
 # docs/guides/ci-release.md。
 # 五个作业：verify 拦住版本与标签不一致的发布，build 按目标矩阵打包并把打包器
-# 的产物改名成发布用的名字，web 打前端产物，assemble 汇总校验清单与签名并只创建
-# draft Release，notarize 在缺少 secret 时跳过并在说明里标注。
+# 的产物改名成发布用的名字，web 打服务器壳要托管的前端产物，assemble 汇总校验
+# 清单与签名并只创建 draft Release，notarize 在缺少 secret 时跳过并在说明里标注。
 # 发布是人的动作：本工作流永远不会把 Release 从 draft 转正。
 name: release
 
@@ -32,15 +32,7 @@ concurrency:
 env:
   PNPM_VERSION: "11.18.0"
   NODE_VERSION: "22"
-  GO_VERSION: "1.24"
   ARMADRA_RELEASE_CHANNEL: stable
-  CARGO_TERM_COLOR: always
-  # 一次 `cargo test --workspace` 要链接四十多个测试二进制；带完整调试信息时
-  # 它们在 ubuntu runner 的 14 GB 磁盘上放不下，链接器会以 Bus error 收场
-  # （2026-09-13 的第一次真实 dry-run）。测试不需要行号以外的调试信息。
-  CARGO_PROFILE_DEV_DEBUG: line-tables-only
-  CARGO_PROFILE_TEST_DEBUG: line-tables-only
-  CARGO_INCREMENTAL: "0"
 
 jobs:
   verify:
@@ -56,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag || github.sha }}
-      # Runtime 的 Git 操作（merge / cherry-pick / amend）用仓库或全局配置里的
+      # core 的 Git 操作（merge / cherry-pick / amend）用仓库或全局配置里的
       # 身份提交；runner 两者都没有，Git 会在动树之前拒绝，测试就把它记成
       # unknownOutcome。开发机上是全局配置在兜底，这里也放一份全局配置——
       # 不用环境变量，因为 GIT_AUTHOR_* 会压过测试夹具自己 `-c user.name` 写的作者。
@@ -66,15 +58,6 @@ jobs:
           set -euo pipefail
           git config --global user.name "Armadra CI"
           git config --global user.email "ci@armadra.invalid"
-      # ubuntu runner 预装的 .NET / Android / Haskell / CodeQL 占掉十几 GB；
-      # 这个作业要编译整个 workspace 的测试，先把它们腾出来。
-      - name: 腾出磁盘
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
-          sudo docker image prune --all --force >/dev/null 2>&1 || true
-          df -h / | tail -1
       - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
@@ -82,15 +65,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: apps/host/go.sum
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
-      # 版本住在仓库里（Cargo.toml 是源，另外两处与它一致），标签只是指向它的
-      # 名字。所以这里不是从标签解出版本，而是要求标签等于版本；不等就拒绝，
+      # 版本住在仓库里（根 package.json 是源，两种壳与它一致），标签只是指向它
+      # 的名字。所以这里不是从标签解出版本，而是要求标签等于版本；不等就拒绝，
       # 因为发的包会自报仓库里的那个版本，而更新检查比的正是版本。
       - name: 三处版本与标签一致，兼容范围包含本版本
         id: version
@@ -135,13 +112,6 @@ jobs:
       - run: pnpm libs:build
       - run: pnpm check
       - run: pnpm test
-      # protoc 不装：crates/protocol 的 build.rs 用 protoc-bin-vendored 自带的
-      # 一份，Go 侧的 *.pb.go 已入库，protocol:check 是拿同一份 vendored protoc
-      # 重新生成后比对字节。runner 上再装一个只会引入版本漂移。
-      - run: pnpm protocol:check
-      - run: pnpm protocol:test
-      - run: cargo test --workspace
-      - run: go -C apps/host test ./...
 
   web:
     needs: verify
@@ -183,10 +153,8 @@ jobs:
         include:
           - runner: macos-14
             target: darwin-aarch64
-            triple: aarch64-apple-darwin
           - runner: macos-15-intel
             target: darwin-x86_64
-            triple: x86_64-apple-darwin
           # glibc 的符号版本是单向的：在 24.04（glibc 2.39）上链接出来的二进制
           # 会记下 GLIBC_2.38/2.39，到 22.04 上动态链接器直接拒绝启动，而构建
           # 本身一切正常。LiveAgent 就是这样发出去过一个版本（#714），修法是把
@@ -195,18 +163,14 @@ jobs:
           # 届时换成 ubuntu:22.04 容器构建。
           - runner: ubuntu-22.04
             target: linux-x86_64
-            triple: x86_64-unknown-linux-gnu
           # arm64 的 Linux/Windows runner 只对公开仓库免费；仓库转私有时这两行
           # 要换成自托管 runner 或删掉，对应目标也就不再发布。
           - runner: ubuntu-22.04-arm
             target: linux-aarch64
-            triple: aarch64-unknown-linux-gnu
           - runner: windows-2022
             target: windows-x86_64
-            triple: x86_64-pc-windows-msvc
           - runner: windows-11-arm
             target: windows-aarch64
-            triple: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -219,14 +183,6 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: apps/host/go.sum
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
       # electron-builder 自带 Chromium，不链接 WebKitGTK；Linux 侧只差 .rpm
       # 的 rpmbuild 与 AppImage 用到的 file。缺任何一个都是打到一半才报错。
       - name: 安装 Linux 打包依赖
@@ -335,18 +291,16 @@ jobs:
             printf 'CSC_KEY_PASSWORD=%s\n' "${WINDOWS_CERT_PASSWORD:-}"
           } >> "$GITHUB_ENV"
 
-      # Windows runner 的实时扫描会把刚写出的 Go 可执行文件占住几秒到几十秒，
-      # electron-builder 复制 extraResources 时就撞上 EBUSY（stage-binaries 的
-      # 等待只能证明「此刻能打开」，挡不住之后的再次扫描）。把两处产物目录排除
-      # 出扫描范围，比在复制处重试可靠；runner 是一次性的，排除项随之作废。
+      # Windows runner 的实时扫描会把刚写出的文件占住几秒到几十秒，复制到包里
+      # 时就撞上 EBUSY。把产物目录排除出扫描范围，比只在复制处重试可靠；runner
+      # 是一次性的，排除项随之作废。
       - name: 让扫描器放过打包目录
         if: startsWith(matrix.target, 'windows-')
         shell: pwsh
         run: |
           $desktop = Join-Path $env:GITHUB_WORKSPACE 'apps\desktop'
-          Add-MpPreference -ExclusionPath (Join-Path $desktop 'resources')
+          Add-MpPreference -ExclusionPath (Join-Path $desktop 'out')
           Add-MpPreference -ExclusionPath (Join-Path $desktop 'release')
-          Add-MpPreference -ExclusionPath (Join-Path $env:GITHUB_WORKSPACE 'target')
           # 路径排除过后 EBUSY 仍然出现在另一个二进制上，所以把实时监控整个
           # 关掉；篡改保护拦下时只记一句，不让这一步失败。
           try {
@@ -356,25 +310,10 @@ jobs:
             Write-Host "::warning::无法关闭实时监控：$($_.Exception.Message)"
           }
 
-      # `dist` 只复制、不构建（stage-binaries.mjs），所以受管二进制要先在这里
-      # 产出。每个 runner 都是自己那一行目标的本机，所以两条都不带 `--target`：
-      # 带了就会落到 `target/<triple>/release`，而 stage-binaries 按本机布局
-      # 去 `target/release` 找，正好错开。session-host 只在 Windows 上存在，
-      # `rustSidecars()` 与这里的 `-p` 列表是同一条规则的两头。
-      - name: 构建受管二进制
-        shell: bash
-        run: |
-          set -euo pipefail
-          packages=(-p armadra-runtime -p armadra-hook)
-          case "${{ matrix.target }}" in
-            windows-*) packages+=(-p armadra-session-host) ;;
-          esac
-          cargo build --release "${packages[@]}"
-          pnpm --filter @armadra/desktop prepare:host --release --native
-
-      # scripts/dist.mjs 三步：先由 signing-electron.mjs 定签名计划（sign /
-      # skip / refuse）并当场报告，再 electron-vite build，最后暂存受管二进制
-      # 并调用 electron-builder。更新地址由 ARMADRA_UPDATER_ENDPOINTS 注入，
+      # scripts/dist.mjs 两步：先由 signing-electron.mjs 定签名计划（sign /
+      # skip / refuse）并当场报告，再 electron-vite build 之后调用
+      # electron-builder；包里要带的东西由 after-pack.mjs 从 out/ 与
+      # src/core/db/migrations 放进去。更新地址由 ARMADRA_UPDATER_ENDPOINTS 注入，
       # 仓库里的 publish.url 始终是占位，免得本地构建也去联系发布来源。
       # 每平台的 target 列表来自 electron-builder.yml，与
       # tools/release/artifacts.mjs 的 desktopAssets() 一一对应
@@ -392,7 +331,7 @@ jobs:
         run: bash tools/release/verify-linux-glibc-baseline.sh
 
       # 打包器的名字（Armadra-0.1.0-arm64.dmg、Armadra Setup 0.1.0.exe）里读不出
-      # Host 认得的目标，所以这里统一改名。--require-updater：发布必须产出那个
+      # 更新检查认得的目标，所以这里统一改名。--require-updater：发布必须产出那个
       # 能原地更新的包，缺了就在这里失败而不是发一个永远收不到更新的版本。
       - name: 收集并改名桌面产物
         shell: bash
@@ -404,17 +343,6 @@ jobs:
             --out artifacts \
             --version "${{ needs.verify.outputs.version }}" \
             --require-updater
-
-      - name: 打组件包
-        shell: bash
-        run: |
-          set -euo pipefail
-          node tools/release/package-components.mjs \
-            --target "${{ matrix.target }}" \
-            --triple "${{ matrix.triple }}" \
-            --from target/release \
-            --out artifacts \
-            --version "${{ needs.verify.outputs.version }}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -516,8 +444,8 @@ jobs:
           name: release-assembled
           path: artifacts
           if-no-files-found: error
-      # 只创建 draft：产物清单与说明由人审阅后再点击发布，Host 会跳过 draft，
-      # 所以未发布前任何客户端都看不到它。
+      # 只创建 draft：产物清单与说明由人审阅后再点击发布，更新检查会跳过
+      # draft，所以未发布前任何客户端都看不到它。
       - name: 创建 draft Release
         if: needs.verify.outputs.publish == 'true'
         shell: bash
