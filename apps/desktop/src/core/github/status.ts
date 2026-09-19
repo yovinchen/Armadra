@@ -3,13 +3,8 @@
  * 存储在 `store.ts`；这里只做授权、规范化和 CAS 的拼接。
  */
 
-import {
-  type GithubRepositoryRef,
-  type GithubStatusMapping,
-} from "./types";
-import {
-  GithubStatusMappingSchema,
-} from "./schema";
+import { type GithubRepositoryRef, type GithubStatusMapping } from "./types";
+import { GithubStatusMappingSchema } from "./schema";
 import { create } from "../contract/message";
 
 import { githubError } from "./errors";

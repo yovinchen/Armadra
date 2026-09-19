@@ -49,8 +49,8 @@ describe("the Git routes", () => {
   }
 
   it("answers every Git route in the table, and none on the hook surface", () => {
-    const git = ROUTES.filter((route) =>
-      route.path.includes("/git/") || route.path.endsWith("/git"),
+    const git = ROUTES.filter(
+      (route) => route.path.includes("/git/") || route.path.endsWith("/git"),
     );
     expect(git.length).toBeGreaterThan(0);
     expect(git.every((route) => route.implemented === true)).toBe(true);

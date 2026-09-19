@@ -33,9 +33,7 @@ import {
   GithubSecretStore,
   type GithubCredentialStatus,
 } from "./types";
-import {
-  GithubCredentialStatusSchema,
-} from "./schema";
+import { GithubCredentialStatusSchema } from "./schema";
 import { create } from "../contract/message";
 
 import { GithubClient, type GithubClientOptions } from "./client";

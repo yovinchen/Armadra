@@ -60,9 +60,7 @@ export function identityInstanceId(): string {
  */
 export function installIdentity(context: CoreContext): void {
   if (!context.db.unified) {
-    context.log.info(
-      "身份域未装配：统一库迁移尚未应用",
-    );
+    context.log.info("身份域未装配：统一库迁移尚未应用");
     return;
   }
   const runInstance = identityInstanceId();

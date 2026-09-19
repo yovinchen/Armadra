@@ -108,7 +108,9 @@ function requestOverSocket(
       },
     );
     request.on("timeout", () => {
-      const error: NodeJS.ErrnoException = new Error("ticket request timed out");
+      const error: NodeJS.ErrnoException = new Error(
+        "ticket request timed out",
+      );
       error.code = "ETIMEDOUT";
       request.destroy(error);
     });

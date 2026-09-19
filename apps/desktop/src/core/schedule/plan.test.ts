@@ -19,10 +19,7 @@ import {
   validId,
   validText,
 } from "./plan";
-import {
-  AutomationConcurrencyPolicy,
-  AutomationMisfirePolicy,
-} from "./types";
+import { AutomationConcurrencyPolicy, AutomationMisfirePolicy } from "./types";
 
 const MINUTE = 60_000;
 

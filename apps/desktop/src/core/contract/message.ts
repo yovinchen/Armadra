@@ -232,7 +232,9 @@ function encodeField(field: FieldDesc, value: unknown): JsonValue | undefined {
       const chosen = value as { case?: string; value?: unknown } | undefined;
       if (chosen?.case === undefined) return undefined;
       const sub = field.cases[chosen.case];
-      return sub === undefined ? undefined : toJson(sub(), chosen.value as never);
+      return sub === undefined
+        ? undefined
+        : toJson(sub(), chosen.value as never);
     }
   }
 }

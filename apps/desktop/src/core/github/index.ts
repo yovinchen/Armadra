@@ -51,9 +51,7 @@ export function githubDomain(): GithubDomain | undefined {
 
 export function install(context: CoreContext): GithubDomain | undefined {
   if (!context.db.unified) {
-    context.log.info(
-      "GitHub 域未装配：统一库迁移尚未应用",
-    );
+    context.log.info("GitHub 域未装配：统一库迁移尚未应用");
     return undefined;
   }
   const store = new GithubStore(context.db.database);

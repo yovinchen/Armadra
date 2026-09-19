@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  GithubIssueState,
-  GithubStatusSource,
-} from "./types";
+import { GithubIssueState, GithubStatusSource } from "./types";
 import {
   GithubIssueSchema,
   GithubLabelSchema,

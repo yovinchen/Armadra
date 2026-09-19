@@ -201,5 +201,4 @@ describe("fetchNativeTicket through the shell bridge", () => {
     });
     expect(mocks.bridgeTicket).not.toHaveBeenCalled();
   });
-
 });
