@@ -205,13 +205,13 @@ describe("what the core answers", () => {
 
   it("answers a route it has not written with 501 and the feature's name", async () => {
     const { core } = await start(temporary());
-    const response = await fetch(
-      `${base(core)}/api/workspaces/ws-1/git/message/providers`,
-    );
+    const response = await fetch(`${base(core)}/api/workspaces/import`, {
+      method: "POST",
+    });
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
       code: "not_implemented",
-      message: "Git 工具（R4）",
+      message: "画布导入（R4）",
     });
   });
 
