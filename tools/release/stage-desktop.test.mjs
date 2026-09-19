@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -14,6 +15,7 @@ import {
   BUNDLE_KINDS,
   findBundle,
   isReleaseAsset,
+  matchesArch,
   stageDesktop,
 } from "./stage-desktop.mjs";
 
@@ -86,6 +88,78 @@ test("the packager's own manifests and debris are never staged", () => {
     "Armadra-0.1.0.AppImage",
   ])
     assert.equal(isReleaseAsset(name), true, name);
+});
+
+/**
+ * One local `dist` produces both architectures into one directory. The names
+ * sort with arm64 first, so before this the x64 target was published with the
+ * arm64 bundle under its name.
+ */
+test("two architectures in one directory do not get crossed", () => {
+  const root = scratch();
+  try {
+    const bundle = join(root, "release");
+    // Exactly what electron-builder wrote here: x64 carries no arch token.
+    for (const name of [
+      "Armadra-0.1.0-arm64.dmg",
+      "Armadra-0.1.0-arm64-mac.zip",
+      "Armadra-0.1.0.dmg",
+      "Armadra-0.1.0-mac.zip",
+    ])
+      writeOutput(bundle, name);
+
+    const arm = join(root, "arm");
+    stageDesktop({
+      target: "darwin-aarch64",
+      bundle,
+      out: arm,
+      version: VERSION,
+      requireUpdater: true,
+    });
+    const intel = join(root, "intel");
+    stageDesktop({
+      target: "darwin-x86_64",
+      bundle,
+      out: intel,
+      version: VERSION,
+      requireUpdater: true,
+    });
+
+    assert.equal(
+      readFileSync(join(arm, `Armadra_${VERSION}_darwin-aarch64.dmg`), "utf8"),
+      "Armadra-0.1.0-arm64.dmg bytes\n",
+    );
+    assert.equal(
+      readFileSync(join(intel, `Armadra_${VERSION}_darwin-x86_64.dmg`), "utf8"),
+      "Armadra-0.1.0.dmg bytes\n",
+    );
+    assert.equal(
+      readFileSync(join(intel, `Armadra_${VERSION}_darwin-x86_64.zip`), "utf8"),
+      "Armadra-0.1.0-mac.zip bytes\n",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the architecture token is matched as a whole word", () => {
+  // `aarch64` is the rpm spelling, `arm64` everyone else's; neither may be
+  // found inside a longer run of characters.
+  for (const [name, target] of [
+    ["armadra-0.1.0.aarch64.rpm", "linux-aarch64"],
+    ["armadra_0.1.0_arm64.deb", "linux-aarch64"],
+    ["Armadra-0.1.0-arm64-win.zip", "windows-aarch64"],
+    ["armadra-0.1.0.x86_64.rpm", "linux-x86_64"],
+    ["armadra_0.1.0_amd64.deb", "linux-x86_64"],
+    ["Armadra Setup 0.1.0.exe", "windows-x86_64"],
+  ])
+    assert.equal(matchesArch(name, target), true, `${name} / ${target}`);
+  for (const [name, target] of [
+    ["armadra-0.1.0.aarch64.rpm", "linux-x86_64"],
+    ["Armadra-0.1.0-arm64.dmg", "darwin-x86_64"],
+    ["Armadra-0.1.0.dmg", "darwin-aarch64"],
+  ])
+    assert.equal(matchesArch(name, target), false, `${name} / ${target}`);
 });
 
 test("a blockmap never stands in for the bundle it indexes", () => {
