@@ -3,12 +3,12 @@ import { readFileSync, readdirSync } from "node:fs";
 import path, { dirname, join, posix, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ALLOWED_METHODS } from "../../shell-core/browser/allowlist";
+import { ALLOWED_METHODS } from "../../core/browser/cdp/allowlist";
 
 /**
  * The structural guard on the CDP boundary.
  *
- * The allowlist in `shell-core/browser/allowlist.ts` is a security boundary for
+ * The allowlist in `core/browser/cdp/allowlist.ts` is a security boundary for
  * exactly as long as every command passes through it. A second place that calls
  * `sendCommand` is not a bug in the allowlist; it is the allowlist ceasing to
  * be one, silently, in a diff that looks like plumbing. So the call site is
@@ -90,7 +90,7 @@ describe.each([
       readSource(file).includes("Runtime.evaluate"),
     );
     expect(mentions).toEqual([
-      pathModule.join("shell-core", "browser", "allowlist.ts"),
+      pathModule.join("core", "browser", "cdp", "allowlist.ts"),
     ]);
   });
 

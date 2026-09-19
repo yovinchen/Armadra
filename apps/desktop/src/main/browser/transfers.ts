@@ -20,7 +20,7 @@ import {
 import {
   jailMessage,
   jailWritePath,
-} from "../../shell-core/browser/workspace-path";
+} from "../../core/browser/cdp/workspace-path";
 import { CdpRefusal } from "./cdp";
 
 /**

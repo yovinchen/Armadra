@@ -7,21 +7,14 @@
  * guest's own `webContents`, which is where a navigation is actually decided.
  * The page-side gate is a courtesy, this one is the rule.
  *
- * `file://` is refused outright, including when the current document is a
- * local file. Armadra has no local media nodes requiring an exception, and a remote page that
- * can point a guest at a local file can read anything this user can read.
+ * The scheme gate itself is `core/browser/cdp/navigation.ts`, shared with the
+ * headless backend and re-exported here so this file still reads as the whole
+ * of the guest navigation story.
  */
 
-/** Schemes a guest may ever be on. */
-export function allowGuestNavigation(url: string): boolean {
-  if (url === "about:blank") return true;
-  try {
-    const scheme = new URL(url).protocol;
-    return scheme === "http:" || scheme === "https:";
-  } catch {
-    return false;
-  }
-}
+import { allowGuestNavigation } from "../../core/browser/cdp/navigation";
+
+export { allowGuestNavigation };
 
 /**
  * What to do with a window the page tried to open.
