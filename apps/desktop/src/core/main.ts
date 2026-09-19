@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { USAGE, parseArguments } from "./args";
 import { EventBus } from "./bus";
-import { DatabaseRefused, openDatabase } from "./db/open";
+import { DatabaseRefused, type OpenedDatabase, openDatabase } from "./db/open";
 import { resolveMigrationsDir } from "./db/migrations";
 import {
   RUNTIME_SERVICE,
@@ -14,7 +14,12 @@ import { CoreServer } from "./http/server";
 import { VERSION, announcement, instanceId } from "./instance";
 import { type ListenSpec, bind, formatListenSpec, release } from "./listen";
 import { databaseFile, endpointsFile, resolveDataDir } from "./paths";
-import { createLog, logLevel, nodePlatform } from "./platform";
+import {
+  type CorePlatform,
+  createLog,
+  logLevel,
+  nodePlatform,
+} from "./platform";
 
 /**
  * The core process.
@@ -47,15 +52,36 @@ export interface RunOptions {
   /** Where to look for `apps/runtime/migrations` when nothing else says. */
   readonly moduleDir?: string;
   readonly stdout?: (line: string) => void;
+  /**
+   * Domain wiring, run after the database and the server exist and before any
+   * listener binds — so a route registered here is reachable from the first
+   * request. Each domain exports one `install(context)`; `main` lists them.
+   */
+  readonly domains?: readonly ((context: CoreContext) => void)[];
 }
 
-export interface RunningCore {
-  readonly instanceId: string;
-  readonly bound: readonly ListenSpec[];
+/**
+ * What every domain module receives at assembly time. One object rather than
+ * a bag of parameters so that adding a shared facility (a scheduler, a cache)
+ * is one line here and none in the domains.
+ */
+export interface CoreContext {
+  readonly dataDir: string;
+  readonly db: OpenedDatabase;
   readonly server: CoreServer;
   readonly bus: EventBus;
+  readonly platform: CorePlatform;
+  readonly log: ReturnType<typeof createLog>;
+}
+
+export interface RunningCore extends CoreContext {
+  readonly instanceId: string;
+  readonly bound: readonly ListenSpec[];
   stop(): Promise<void>;
 }
+
+/** The domains assembled by default; each phase adds its `install` here. */
+export const DOMAINS: readonly ((context: CoreContext) => void)[] = [];
 
 export async function run(options: RunOptions = {}): Promise<RunningCore> {
   const env = options.env ?? process.env;
@@ -99,6 +125,15 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
 
   const bus = new EventBus();
   const server = new CoreServer({ platform, bus, version: VERSION });
+  const context: CoreContext = {
+    dataDir,
+    db: opened,
+    server,
+    bus,
+    platform,
+    log,
+  };
+  for (const install of options.domains ?? DOMAINS) install(context);
 
   // Step 3.
   const listeners: { server: Server; spec: ListenSpec }[] = [];
@@ -161,10 +196,9 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
   bus.emit("runtime.hello", { instanceId: instanceId(), version: VERSION });
 
   return {
+    ...context,
     instanceId: instanceId(),
     bound,
-    server,
-    bus,
     stop: async () => {
       process.off("SIGTERM", onSignal);
       process.off("SIGINT", onSignal);

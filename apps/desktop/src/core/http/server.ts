@@ -11,7 +11,7 @@ import type { CorePlatform } from "../platform";
 import { corsHeaders, websocketOriginAllowed } from "./cors";
 import { type ErrorResponse, badRequest, internal } from "./errors";
 import { type HookHealth, NO_HOOK_SERVICE, healthDocument } from "./health";
-import { Router } from "./router";
+import { type CoreRequest, type HandlerResult, Router } from "./router";
 
 /**
  * The core's HTTP and WebSocket face.
@@ -49,7 +49,8 @@ export class CoreServer {
   readonly router = new Router();
   private readonly websockets: WebSocketServer;
   private readonly servers: Server[] = [];
-  private readonly streams = new Map<string, StreamHandler>();
+  private readonly streams = new Map<string, StreamRegistration>();
+  private readonly rawRoutes: { prefix: string; handler: RawHandler }[] = [];
   private readonly options: CoreServerOptions;
 
   constructor(options: CoreServerOptions) {
@@ -103,8 +104,9 @@ export class CoreServer {
       response.end();
       return;
     }
-    const path = new URL(request.url ?? "/", "http://core").pathname;
-    let answer: { status: number; body: unknown } | ErrorResponse;
+    const url = new URL(request.url ?? "/", "http://core");
+    const path = url.pathname;
+    let answer: HandlerResult | ErrorResponse;
     try {
       const body = await readBody(
         request,
@@ -113,7 +115,22 @@ export class CoreServer {
       if (!body.ok) {
         answer = badRequest(body.reason);
       } else {
-        answer = await this.router.dispatch(request.method ?? "GET", path);
+        const core = coreRequest(request, url, body.body);
+        // Raw routes come before the table: they own their own encoding
+        // (protobuf compatibility faces), so the JSON envelope must not touch
+        // them. Origin and the body ceiling still apply — they ran above.
+        const raw = this.rawRoutes.find((route) =>
+          path.startsWith(route.prefix),
+        );
+        if (raw !== undefined) {
+          await raw.handler(core, response, headers);
+          return;
+        }
+        answer = await this.router.dispatch(
+          request.method ?? "GET",
+          path,
+          core,
+        );
       }
     } catch (error) {
       this.options.platform.log.error("request failed", {
@@ -122,7 +139,16 @@ export class CoreServer {
       });
       answer = internal("核心处理请求时失败");
     }
-    this.send(response, answer.status, answer.body, headers);
+    this.send(
+      response,
+      answer.status,
+      answer.body,
+      {
+        ...headers,
+        ...("headers" in answer ? answer.headers : undefined),
+      },
+      "raw" in answer ? answer.raw : undefined,
+    );
   }
 
   private send(
@@ -130,14 +156,27 @@ export class CoreServer {
     status: number,
     body: unknown,
     headers: Record<string, string> = {},
+    raw?: Buffer,
   ): void {
-    const payload = Buffer.from(`${JSON.stringify(body)}\n`, "utf8");
+    const payload =
+      raw ?? Buffer.from(`${JSON.stringify(body ?? null)}\n`, "utf8");
     response.writeHead(status, {
+      "content-type": raw ? "application/octet-stream" : "application/json",
       ...headers,
-      "content-type": "application/json",
       "content-length": String(payload.byteLength),
     });
     response.end(payload);
+  }
+
+  /**
+   * A route matched by prefix, before the table, that writes its own response.
+   * For the compatibility faces that speak something other than the JSON
+   * envelope (`/rpc/…` protobuf). Origin and the body ceiling are still
+   * enforced before the handler runs.
+   */
+  raw(prefix: string, handler: RawHandler): void {
+    this.rawRoutes.push({ prefix, handler });
+    this.rawRoutes.sort((a, b) => b.prefix.length - a.prefix.length);
   }
 
   /**
@@ -156,25 +195,43 @@ export class CoreServer {
       socket.destroy();
       return;
     }
-    const path = new URL(request.url ?? "/", "http://core").pathname;
+    const url = new URL(request.url ?? "/", "http://core");
+    const path = url.pathname;
     const found = this.router.match(path);
-    if (
-      found === undefined ||
-      this.streams.get(found.entry.path) === undefined
-    ) {
+    const registration =
+      found === undefined ? undefined : this.streams.get(found.entry.path);
+    if (found === undefined || registration === undefined) {
       socket.write("HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n");
       socket.destroy();
       return;
     }
-    const open = this.streams.get(found.entry.path) as StreamHandler;
-    this.websockets.handleUpgrade(request, socket, head, (connection) => {
-      open(connection, found.params);
-    });
+    const core = coreRequest(request, url, Buffer.alloc(0));
+    void (async () => {
+      // The guard answers BEFORE the upgrade, as the Rust runtime does: a
+      // missing workspace is an HTTP 404, not a socket that opens and closes.
+      const refusal = registration.guard
+        ? await registration.guard(found.params, core)
+        : undefined;
+      if (refusal !== undefined) {
+        socket.write(
+          `HTTP/1.1 ${refusal.status} ${refusal.reason ?? ""}\r\nConnection: close\r\n\r\n`,
+        );
+        socket.destroy();
+        return;
+      }
+      this.websockets.handleUpgrade(request, socket, head, (connection) => {
+        registration.open(connection, found.params, core);
+      });
+    })();
   }
 
-  /** R1 and later attach their streams here; the table still gates the path. */
-  stream(path: string, handler: StreamHandler): void {
-    this.streams.set(path, handler);
+  /**
+   * R1 and later attach their streams here; the table still gates the path.
+   * `guard` may refuse the upgrade with an HTTP status before any socket
+   * exists — the only way to answer 404/401/409 the way an HTTP route would.
+   */
+  stream(path: string, handler: StreamHandler, guard?: StreamGuard): void {
+    this.streams.set(path, { open: handler, guard });
   }
 
   async close(): Promise<void> {
@@ -194,7 +251,47 @@ export class CoreServer {
 export type StreamHandler = (
   connection: WebSocket,
   params: Readonly<Record<string, string>>,
+  request: CoreRequest,
 ) => void;
+
+/** Answer a status to refuse the upgrade, or `undefined` to let it through. */
+export type StreamGuard = (
+  params: Readonly<Record<string, string>>,
+  request: CoreRequest,
+) => Promise<StreamRefusal | undefined> | StreamRefusal | undefined;
+
+export interface StreamRefusal {
+  readonly status: number;
+  readonly reason?: string;
+}
+
+interface StreamRegistration {
+  readonly open: StreamHandler;
+  readonly guard?: StreamGuard;
+}
+
+/** Writes its own status, headers and body; `cors` are the headers to include. */
+export type RawHandler = (
+  request: CoreRequest,
+  response: ServerResponse,
+  cors: Record<string, string>,
+) => Promise<void> | void;
+
+function coreRequest(
+  request: IncomingMessage,
+  url: URL,
+  body: Buffer,
+): CoreRequest {
+  return {
+    method: (request.method ?? "GET").toUpperCase(),
+    path: url.pathname,
+    query: url.searchParams,
+    headers: request.headers,
+    body,
+    raw: request,
+    json: <T>() => JSON.parse(body.toString("utf8") || "null") as T,
+  };
+}
 
 type BodyResult =
   | { readonly ok: true; readonly body: Buffer }

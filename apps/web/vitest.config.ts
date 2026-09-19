@@ -10,6 +10,10 @@ export default defineConfig({
     },
   },
   test: {
+    // 只跑本包的测试：仓库根下 `.claude/worktrees/` 里其他会话的副本曾被扫进来，
+    // 用例数与结果都随之漂移。
+    include: ["src/**/*.test.{ts,tsx}"],
+    exclude: ["**/node_modules/**", "**/.claude/**", "**/dist/**"],
     environment: "jsdom",
     // import 会被提升，模块顶层就读 `matchMedia` 的依赖不止一个，所以这
     // 一类补丁必须在 setupFiles 里打，测试文件内的 `installDomPolyfills()`
