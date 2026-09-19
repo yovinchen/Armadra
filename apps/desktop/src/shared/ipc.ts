@@ -132,6 +132,18 @@ export const IPC = {
   windowKeyIntent: spec("window:key-intent", "event", "window"),
 
   /**
+   * The page's answer to one claimed chord: did it act on it?
+   *
+   * The other half of `window:key-intent`, and the reason that event is worth
+   * having at all. ⌘W means "close the selected node" to the page and "close
+   * the window" to the shell, and only the page knows whether there is a node
+   * to close. So the shell asks, waits `KEY_INTENT_REPLY_TIMEOUT_MS`, and
+   * performs its own half unless the page said it took it — a page that never
+   * answers gets a slow window close, never a key that does nothing.
+   */
+  windowKeyIntentResult: spec("window:key-intent-result", "invoke", "window"),
+
+  /**
    * A notification the MAIN process sent was clicked. The shell brings its own
    * window back to the front; the `nodeId` it forwards is the page's business,
    * because the shell has no idea what a canvas node is.
@@ -187,6 +199,7 @@ export const IMPLEMENTED_CHANNELS: readonly string[] = [
   IPC.identityTicket.channel,
   IPC.appLocale.channel,
   IPC.windowIsFocused.channel,
+  IPC.windowKeyIntentResult.channel,
   IPC.updatesState.channel,
   IPC.updatesCheck.channel,
   IPC.updatesDismiss.channel,

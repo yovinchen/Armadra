@@ -65,7 +65,11 @@ import {
 import { setDriveEnvironment } from "./runtime-process";
 import { pickDirectory, pickFiles } from "./dialogs";
 import { openExternal, showItemInFolder } from "./external";
-import { installApplicationMenu, installKeydownIntercept } from "./menu";
+import {
+  installApplicationMenu,
+  installKeydownIntercept,
+  settleKeyIntent,
+} from "./menu";
 import { applyShortcuts, releaseShortcuts } from "./shortcuts";
 import { createTray, destroyTray } from "./tray";
 import { ownsRuntime } from "../shell-core/runtime/identity";
@@ -100,6 +104,13 @@ function registerIpc(): void {
     [IPC.identityTicket.channel]: nativeTicket,
     [IPC.appLocale.channel]: () => app.getLocale(),
     [IPC.windowIsFocused.channel]: () => getMainWindow()?.isFocused() ?? false,
+    // The page answering a claimed chord. `menu.ts` owns the arbitration,
+    // because it is the module that claimed the chord in the first place.
+    [IPC.windowKeyIntentResult.channel]: (result) => {
+      const answer = result as { token?: unknown; handled?: unknown };
+      settleKeyIntent(answer?.token, answer?.handled);
+      return { ok: true };
+    },
     // W2.2: the seven update channels. The updater is assembled here because
     // it is the one place that holds both the Host's lifecycle and the
     // Runtime — it has to stop both before an installer may run (§2.3).

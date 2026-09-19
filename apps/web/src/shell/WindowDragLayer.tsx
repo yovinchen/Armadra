@@ -1,3 +1,4 @@
+import { useWindowIntents } from "../keybindings";
 import { isDesktop } from "../platform";
 import { dragRegionProps } from "./window-region";
 
@@ -15,8 +16,13 @@ import { dragRegionProps } from "./window-region";
  * 由 `Launcher` 自己抬到 `--z-dock`。
  *
  * 浏览器里没有无边框窗口这回事，直接不渲染。
+ *
+ * 壳推给页面的两条窗口事件（⌘W 的意图、主进程通知的点击）也订阅在这里：
+ * 它们和这一条同一个由来——只因为外面有个原生窗口才存在——而这个组件在
+ * App 里无条件渲染，订阅于是跟着窗口活一次，不随面板开合来回装卸。
  */
 export function WindowDragLayer() {
+  useWindowIntents();
   if (!isDesktop()) return null;
   return (
     <div

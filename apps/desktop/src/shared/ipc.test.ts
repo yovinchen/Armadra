@@ -48,6 +48,7 @@ describe("the IPC table", () => {
         "identity:ticket",
         "transport:endpoints",
         "window:is-focused",
+        "window:key-intent-result",
         "dialog:pick-directory",
         "dialog:pick-files",
         "shell:open-external",
@@ -75,6 +76,15 @@ describe("the IPC table", () => {
     expect(IPC.shellShowItemInFolder.direction).toBe("invoke");
     expect(IPC.shellShowItemInFolder.reach).toBe("window");
     expect(IMPLEMENTED_CHANNELS).toContain(IPC.shellShowItemInFolder.channel);
+  });
+
+  it("pairs the key intent event with a channel the page answers on", () => {
+    // Without the answer there is nothing to wait for, and the shell is back
+    // to closing the window before the page can close a node.
+    expect(IPC.windowKeyIntent.direction).toBe("event");
+    expect(IPC.windowKeyIntentResult.direction).toBe("invoke");
+    expect(IPC.windowKeyIntentResult.reach).toBe("window");
+    expect(IMPLEMENTED_CHANNELS).toContain(IPC.windowKeyIntentResult.channel);
   });
 
   it("keeps the two window events the shell pushes on its own", () => {

@@ -14,6 +14,7 @@
  * | `use-keybindings.ts`| 那一个捕获阶段监听器                             |
  * | `accelerator.ts`    | 和弦 → accelerator 写法（系统热键用）           |
  * | `global-shortcuts.ts`| 系统热键的注册请求、结果与触发事件              |
+ * | `window-intents.ts` | 壳抢走的和弦与通知点击，页面这一半               |
  *
  * 导入路径没变：`from "../keybindings"` 仍然解析到这里。
  */
@@ -25,3 +26,4 @@ export * from "./active";
 export * from "./use-keybindings";
 export * from "./accelerator";
 export * from "./global-shortcuts";
+export * from "./window-intents";
