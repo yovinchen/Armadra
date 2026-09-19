@@ -24,7 +24,7 @@ import {
 import { WorkspaceEventStream } from "./stream";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = resolve(here, "../db/migrations/0018_event_outbox.sql");
+const migration = resolve(here, "../db/migrations/0017_event_outbox.sql");
 
 function open(): DatabaseSync {
   const database = new DatabaseSync(":memory:");
@@ -54,7 +54,7 @@ function write(database: DatabaseSync, workspace: string, id: string): number {
 }
 
 describe("event outbox", () => {
-  it("只在 0018 之后认自己在", () => {
+  it("只在 0017 之后认自己在", () => {
     expect(outboxReady(new DatabaseSync(":memory:"))).toBe(false);
     expect(outboxReady(open())).toBe(true);
   });

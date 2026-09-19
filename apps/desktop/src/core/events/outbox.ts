@@ -69,7 +69,7 @@ export const MAX_CATCH_UP_EVENTS = 512;
 /** outbox 最多留多少条。超出的那一段在写入时随手裁掉，不另起清理任务。 */
 export const RETAINED_EVENTS = 5_000;
 
-/** 这个库有没有 outbox 表。没过 0018 的库照旧只有实时扇出。 */
+/** 这个库有没有 outbox 表。没过 0017 的库照旧只有实时扇出。 */
 export function outboxReady(database: DatabaseSync): boolean {
   try {
     const row = database

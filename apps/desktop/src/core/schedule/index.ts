@@ -18,7 +18,7 @@ import { ScheduleStore } from "./store";
  * `/rpc/armadra.v1.AutomationService/*`，以及那个**属于 core 生命周期**的调度
  * 循环——它不属于任何一次请求，页面关掉之后计划照跑。
  *
- * **只在统一库迁移已经应用时装**。没过 0018 的库里没有自动化的表，这时候装上去
+ * **只在统一库迁移已经应用时装**。没过 0017 的库里没有自动化的表，这时候装上去
  * 第一个请求会撞上一条「没有这张表」的 SQL 错误；不装，`/rpc/` 那一面由身份域
  * 的前缀接住并回 `NOT_FOUND`，页面据此退化成「这台 Host 不支持自动化」——那正是
  * 它给这种情况准备的那条路。
@@ -60,7 +60,7 @@ export function install(context: CoreContext): ScheduleDomain | undefined {
     return undefined;
   }
   if (!tablesReady(context)) {
-    context.log.info("定时与自动化域未装配：0018 迁移尚未应用");
+    context.log.info("定时与自动化域未装配：0017 迁移尚未应用");
     return undefined;
   }
   const store = new ScheduleStore(context.db.database);

@@ -129,7 +129,7 @@ export class WorkspaceEventStream {
    * 接上 outbox。
    *
    * 分成两步而不是构造参数，因为装配顺序是「事件域第一个装」——它要在任何域可
-   * 能发事件之前就位，而那时候库已经开好了。没过 0018 的库没有 `events` 表，
+   * 能发事件之前就位，而那时候库已经开好了。没过 0017 的库没有 `events` 表，
    * 这时候什么都不接：实时扇出照常，只是补发不了。
    */
   useOutbox(database: DatabaseSync): boolean {
