@@ -220,9 +220,7 @@ function isCurrentNodeSession(
       "SELECT agent_id, generation, status FROM terminal_sessions " +
         "WHERE id = ? AND owner_node_id = ?",
     )
-    .get(binding.sessionId, nodeId) as
-    | Record<string, unknown>
-    | undefined;
+    .get(binding.sessionId, nodeId) as Record<string, unknown> | undefined;
   if (row === undefined) return false;
   return (
     Number(row.generation) === binding.generation &&
@@ -296,7 +294,9 @@ export function apply(
   // Not a column: the message travels with the published copy only.
   const published: AgentStatusRow = {
     ...status,
-    ...(next.lastMessage === undefined ? {} : { lastMessage: next.lastMessage }),
+    ...(next.lastMessage === undefined
+      ? {}
+      : { lastMessage: next.lastMessage }),
   };
 
   if (approval !== undefined) {

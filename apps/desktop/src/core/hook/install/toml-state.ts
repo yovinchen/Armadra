@@ -27,7 +27,8 @@ import { readFileSync } from "node:fs";
  * from a misunderstanding. Codex writes the header form, and so do we.
  */
 
-const HEADER = /^\s*\[\s*hooks\s*\.\s*state\s*\.\s*"((?:[^"\\]|\\.)*)"\s*\]\s*$/;
+const HEADER =
+  /^\s*\[\s*hooks\s*\.\s*state\s*\.\s*"((?:[^"\\]|\\.)*)"\s*\]\s*$/;
 /** Any table header at all, which is where the current table ends. */
 const ANY_HEADER = /^\s*\[\[?[^\]]*\]\]?\s*$/;
 
@@ -98,7 +99,10 @@ export function removeTrustState(
       dropping = key.startsWith(prefix) && !surviving.includes(key);
       if (dropping) {
         // The blank line the table was separated by goes with it.
-        while (kept.length > 0 && (kept[kept.length - 1] as string).trim() === "") {
+        while (
+          kept.length > 0 &&
+          (kept[kept.length - 1] as string).trim() === ""
+        ) {
           kept.pop();
         }
         continue;
@@ -154,10 +158,7 @@ export function readDocument(path: string): string {
   }
 }
 
-function replaceTable(
-  document: string,
-  entry: TrustEntry,
-): string | undefined {
+function replaceTable(document: string, entry: TrustEntry): string | undefined {
   const lines = document.split("\n");
   let start = -1;
   for (let index = 0; index < lines.length; index += 1) {

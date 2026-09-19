@@ -51,8 +51,6 @@ export function registerCollabDispatcher(
   };
 }
 
-export function collabDispatcher(
-  family: string,
-): CollabDispatcher | undefined {
+export function collabDispatcher(family: string): CollabDispatcher | undefined {
   return dispatchers.get(family);
 }

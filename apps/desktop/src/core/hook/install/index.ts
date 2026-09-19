@@ -18,9 +18,16 @@ import {
 export * from "./events";
 export * from "./shared";
 export { modulePath, piExtensionPath, opencodePluginPath } from "./extensions";
-export { hookHash, hooksPath as codexHooksPath, configPath as codexConfigPath } from "./codex";
+export {
+  hookHash,
+  hooksPath as codexHooksPath,
+  configPath as codexConfigPath,
+} from "./codex";
 export { hooksPath as copilotHooksPath } from "./copilot";
-export { managedSettingsPath, settingsPath as claudeSettingsPath } from "./claude";
+export {
+  managedSettingsPath,
+  settingsPath as claudeSettingsPath,
+} from "./claude";
 
 /**
  * The installers, dispatched by provider.

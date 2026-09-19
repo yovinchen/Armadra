@@ -307,10 +307,7 @@ function generatedModuleFiles(agentId: string, home: string): string[] {
   }
   return entries
     .map((name) => join(directory, name))
-    .filter(
-      (path) =>
-        isFile(path) && [".js", ".ts"].includes(extname(path)),
-    );
+    .filter((path) => isFile(path) && [".js", ".ts"].includes(extname(path)));
 }
 
 function jsonFiles(directory: string): string[] {
@@ -363,7 +360,9 @@ function statusLineCommand(document: JsonObject): string | undefined {
   ) {
     return undefined;
   }
-  return typeof statusLine.command === "string" ? statusLine.command : undefined;
+  return typeof statusLine.command === "string"
+    ? statusLine.command
+    : undefined;
 }
 
 /**
@@ -373,11 +372,7 @@ function statusLineCommand(document: JsonObject): string | undefined {
 function hookCommands(document: JsonObject): string[] {
   const commands: string[] = [];
   const events = document.hooks;
-  if (
-    typeof events !== "object" ||
-    events === null ||
-    Array.isArray(events)
-  ) {
+  if (typeof events !== "object" || events === null || Array.isArray(events)) {
     return commands;
   }
   for (const groups of Object.values(events)) {
@@ -442,10 +437,7 @@ export function repairIn(
     kept: [],
     backups: [],
   };
-  const stamp = now
-    .toISOString()
-    .replace(/[-:T]/g, "")
-    .slice(0, 14);
+  const stamp = now.toISOString().replace(/[-:T]/g, "").slice(0, 14);
 
   for (const path of hookFiles(agentId, home)) {
     repairHookFile(agentId, path, stamp, report);
@@ -532,11 +524,7 @@ function repairHookFile(
     removed.push(`${path}: statusLine`);
   }
   const events = document.hooks;
-  if (
-    typeof events === "object" &&
-    events !== null &&
-    !Array.isArray(events)
-  ) {
+  if (typeof events === "object" && events !== null && !Array.isArray(events)) {
     stripLegacyEntries(events, path, removed, kept);
     if (Object.keys(events).length === 0) delete document.hooks;
   }

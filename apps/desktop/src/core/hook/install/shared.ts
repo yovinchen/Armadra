@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { CLIENT_NAME } from "./events";
 
@@ -167,9 +175,7 @@ export function resolveOnPath(
  * the configuration, because the CLIs run hooks through a shell whose PATH is
  * not the core's.
  */
-export function resolveClientBinary(
-  options: ClientEnvironment = {},
-): string {
+export function resolveClientBinary(options: ClientEnvironment = {}): string {
   const env = options.env ?? process.env;
   const override = env.ARMADRA_HOOK_BIN;
   if (override !== undefined && override !== "") {
@@ -291,10 +297,15 @@ export function configHomeWith(
     // OMP reads the same override, plus a profile that wins over it and a
     // configurable root name — `~/.omp/profiles/<name>/agent`.
     case "omp": {
-      const root = join(home, singleSegment(fromEnv("PI_CONFIG_DIR")) ?? ".omp");
-      const profile = [fromEnv("OMP_PROFILE"), fromEnv("PI_PROFILE")]
-        .find((value) => value !== undefined && isProfileName(value));
-      if (profile !== undefined) return join(root, "profiles", profile, "agent");
+      const root = join(
+        home,
+        singleSegment(fromEnv("PI_CONFIG_DIR")) ?? ".omp",
+      );
+      const profile = [fromEnv("OMP_PROFILE"), fromEnv("PI_PROFILE")].find(
+        (value) => value !== undefined && isProfileName(value),
+      );
+      if (profile !== undefined)
+        return join(root, "profiles", profile, "agent");
       return fromEnv("PI_CODING_AGENT_DIR") ?? join(root, "agent");
     }
     default:

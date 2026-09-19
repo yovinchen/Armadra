@@ -59,7 +59,8 @@ export function normalize(
       event.lastMessage = text(payload, "prompt", "prompt");
       break;
     case "PreToolUse": {
-      const asking = toolName !== undefined && QUESTION_TOOLS.includes(toolName);
+      const asking =
+        toolName !== undefined && QUESTION_TOOLS.includes(toolName);
       event = stateEvent(nodeId, agentId, asking ? WAITING : WORKING);
       if (asking) {
         event.awaitingInput = true;

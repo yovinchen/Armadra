@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { type HookFixture, hookFixture, insertSession, minutesAgo } from "./fixture";
+import {
+  type HookFixture,
+  hookFixture,
+  insertSession,
+  minutesAgo,
+} from "./fixture";
 import { sweepOnce } from "./sweep";
 
 /** The silence sweep and the dead-terminal close-out. */
@@ -197,9 +202,7 @@ describe("the stale sweeps", () => {
     });
     await one.report({ hook_event_name: "UserPromptSubmit" });
 
-    one.core.database
-      .prepare("DELETE FROM nodes WHERE id = ?")
-      .run(one.nodeId);
+    one.core.database.prepare("DELETE FROM nodes WHERE id = ?").run(one.nodeId);
     // Old enough for the silence sweep too, so both queries are exercised.
     ageTheReport(one, 30);
 

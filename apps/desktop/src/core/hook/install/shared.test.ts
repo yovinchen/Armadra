@@ -2,11 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  COPILOT_HOOK_EVENTS,
-  OMP_HOOK_EVENTS,
-  PI_HOOK_EVENTS,
-} from "./events";
+import { COPILOT_HOOK_EVENTS, OMP_HOOK_EVENTS, PI_HOOK_EVENTS } from "./events";
 import {
   type FromEnv,
   type JsonObject,
@@ -30,7 +26,11 @@ describe("the event tables", () => {
    * refuse every tool call.
    */
   it("holds what each adapter reads, with no event listed twice", () => {
-    for (const events of [PI_HOOK_EVENTS, OMP_HOOK_EVENTS, COPILOT_HOOK_EVENTS]) {
+    for (const events of [
+      PI_HOOK_EVENTS,
+      OMP_HOOK_EVENTS,
+      COPILOT_HOOK_EVENTS,
+    ]) {
       expect(events.length).toBeGreaterThan(0);
       expect(new Set(events).size, "an event is listed twice").toBe(
         events.length,

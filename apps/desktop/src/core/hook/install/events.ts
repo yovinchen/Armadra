@@ -31,7 +31,8 @@ export const SKILLS_REVISION = 7;
  * the whole. It is not a wire constant — nobody parses it apart — but a number
  * a person reading a bug report can decompose is worth the arithmetic.
  */
-export const INTEGRATION_REVISION = HOOK_CLIENT_REVISION * 100 + SKILLS_REVISION;
+export const INTEGRATION_REVISION =
+  HOOK_CLIENT_REVISION * 100 + SKILLS_REVISION;
 
 /** The substring that identifies a command as ours. */
 export const CLIENT_NAME = "armadra-hook";

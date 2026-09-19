@@ -1,4 +1,10 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -47,7 +53,9 @@ describe("the integration unit", () => {
    * either half has to move it, or a stale install reads as current.
    */
   it("carries both halves in the revision", () => {
-    expect(INTEGRATION_REVISION).toBe(HOOK_CLIENT_REVISION * 100 + SKILLS_REVISION);
+    expect(INTEGRATION_REVISION).toBe(
+      HOOK_CLIENT_REVISION * 100 + SKILLS_REVISION,
+    );
     expect(INTEGRATION_REVISION).toBeGreaterThan(SKILLS_REVISION);
   });
 
@@ -57,9 +65,7 @@ describe("the integration unit", () => {
     for (const agentId of AGENT_IDS) {
       const path = adapterPath(agentId, home, dataDir);
       expect(isAbsolute(path), `${agentId}: ${path}`).toBe(true);
-      expect(["launch", "file", "extension"]).toContain(
-        injectionMode(agentId),
-      );
+      expect(["launch", "file", "extension"]).toContain(injectionMode(agentId));
     }
     expect(() => adapterPath("nope", home, dataDir)).toThrow();
   });

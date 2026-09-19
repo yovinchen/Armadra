@@ -108,9 +108,7 @@ function claudeFixture(): [string, string] {
               ],
             },
             {
-              hooks: [
-                { type: "command", command: "/usr/local/bin/notify.sh" },
-              ],
+              hooks: [{ type: "command", command: "/usr/local/bin/notify.sh" }],
             },
           ],
           SessionStart: [

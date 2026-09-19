@@ -11,10 +11,7 @@ let open: HookFixture[] = [];
 
 function fixture(): HookFixture {
   const made = hookFixture();
-  installRoutes(
-    { ...made.core, dataDir: made.core.directory },
-    made.service,
-  );
+  installRoutes({ ...made.core, dataDir: made.core.directory }, made.service);
   open.push(made);
   return made;
 }

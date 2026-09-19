@@ -58,8 +58,9 @@ describe("the shared event shape", () => {
     expect("pendingId" in json).toBe(false);
     expect("interrupted" in json).toBe(false);
 
-    expect(serializeEvent(newEvent("node-a", "claude", "subagent-start")).kind)
-      .toBe("subagent-start");
+    expect(
+      serializeEvent(newEvent("node-a", "claude", "subagent-start")).kind,
+    ).toBe("subagent-start");
     expect(serializeEvent(newEvent("n", "claude", "subagent-end")).kind).toBe(
       "subagent-end",
     );

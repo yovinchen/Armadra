@@ -32,7 +32,10 @@ export class HookService {
   constructor(
     readonly dataDir: string,
     port?: number | undefined,
-    private readonly onWarning: (message: string, detail: unknown) => void = () => {},
+    private readonly onWarning: (
+      message: string,
+      detail: unknown,
+    ) => void = () => {},
   ) {
     this.currentPort = port;
     const existing = endpointFile.read(hookEndpointFile(dataDir));

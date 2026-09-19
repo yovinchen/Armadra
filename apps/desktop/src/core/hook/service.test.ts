@@ -37,9 +37,9 @@ describe("the hook service", () => {
     expect(restarted.bearerMatches(published.get("ARMADRA_HOOK_TOKEN"))).toBe(
       true,
     );
-    expect(
-      restarted.verdict("node-a", service.issueNodeToken("node-a")),
-    ).toBe("verified");
+    expect(restarted.verdict("node-a", service.issueNodeToken("node-a"))).toBe(
+      "verified",
+    );
 
     // The health flag follows the port that is actually published.
     expect(restarted.health().ok).toBe(false);

@@ -47,8 +47,10 @@ export interface HookDomain {
 }
 
 export function install(context: CoreContext): HookDomain {
-  const service = new HookService(context.dataDir, undefined, (message, detail) =>
-    context.log.warn(message, { error: describe(detail) }),
+  const service = new HookService(
+    context.dataDir,
+    undefined,
+    (message, detail) => context.log.warn(message, { error: describe(detail) }),
   );
   setHookService(service);
 

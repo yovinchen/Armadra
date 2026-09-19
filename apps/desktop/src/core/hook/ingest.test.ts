@@ -33,8 +33,9 @@ describe("the bearer and the per-node token", () => {
     const it_ = fixture();
 
     // No bearer at all.
-    expect((await it_.postHook("claude", { nodeId: it_.nodeId }, {})).status)
-      .toBe(403);
+    expect(
+      (await it_.postHook("claude", { nodeId: it_.nodeId }, {})).status,
+    ).toBe(403);
     // The client sends the header even when the endpoint file had no token.
     expect(
       (
@@ -55,16 +56,13 @@ describe("the bearer and the per-node token", () => {
       ).status,
     ).toBe(403);
 
-    const verify = async (
-      token: string | undefined,
-    ): Promise<number> =>
+    const verify = async (token: string | undefined): Promise<number> =>
       (
         (await it_.server.router.dispatch("GET", "/verify", {
           method: "GET",
           path: "/verify",
           query: new URLSearchParams(),
-          headers:
-            token === undefined ? {} : { "x-armadra-hook-token": token },
+          headers: token === undefined ? {} : { "x-armadra-hook-token": token },
           body: Buffer.alloc(0),
           raw: undefined as never,
           json: <T>() => null as T,
@@ -218,8 +216,10 @@ describe("what a report persists and broadcasts", () => {
     // The next turn clears the verdict rather than leaving TURN FAILED up.
     it_.published.length = 0;
     await it_.report({ hook_event_name: "UserPromptSubmit" });
-    expect(it_.status()?.errored, "the verdict belongs to the old turn")
-      .toBeUndefined();
+    expect(
+      it_.status()?.errored,
+      "the verdict belongs to the old turn",
+    ).toBeUndefined();
     expect(
       "errored" in (it_.published[0] as { status: AnyStatus }).status,
     ).toBe(false);
@@ -258,7 +258,9 @@ describe("what a report persists and broadcasts", () => {
     const approval = getApproval(it_.core.database, "pend-1");
     const request = approval?.request as Record<string, unknown>;
     expect(request.tool_name).toBe("Bash");
-    expect((request.tool_input as { command: string }).command).toBe("rm -rf .");
+    expect((request.tool_input as { command: string }).command).toBe(
+      "rm -rf .",
+    );
     expect(approval?.answer).toBeUndefined();
 
     expect(types(it_)).toContain("agent.approval");
@@ -359,9 +361,7 @@ describe("what a report persists and broadcasts", () => {
       )
       .run(it_.workspaceId, orphan, new Date().toISOString(), orphan);
     expect(
-      it_.core.database
-        .prepare("SELECT 1 FROM nodes WHERE id = ?")
-        .get(orphan),
+      it_.core.database.prepare("SELECT 1 FROM nodes WHERE id = ?").get(orphan),
       "the node row has not landed yet",
     ).toBeUndefined();
 
@@ -384,8 +384,10 @@ describe("what a report persists and broadcasts", () => {
     const row = it_.core.database
       .prepare("SELECT session_id FROM agent_status WHERE node_id = ?")
       .get(orphan) as { session_id: string } | undefined;
-    expect(row?.session_id, "a real report is never dropped for want of a node row")
-      .toBe("s-1");
+    expect(
+      row?.session_id,
+      "a real report is never dropped for want of a node row",
+    ).toBe("s-1");
   });
 
   /**
@@ -438,8 +440,7 @@ describe("what a report persists and broadcasts", () => {
           body({
             sessionId: "s-1",
             cwd: "/repo",
-            transcriptPath:
-              "/home/dev/.copilot/session-state/s-1/events.jsonl",
+            transcriptPath: "/home/dev/.copilot/session-state/s-1/events.jsonl",
             stopReason: "end_turn",
             stop_hook_active: false,
           }),

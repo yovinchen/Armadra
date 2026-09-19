@@ -12,6 +12,8 @@ import { remoteDomain } from "../remote";
 import { DirectBackend } from "./direct";
 import { agentEnvironment } from "./environment";
 import { SshBackend } from "./ssh/backend";
+import { permissionWaitEnvironment } from "../hook/approvals";
+import { issueNodeToken } from "../hook/tokens";
 import { TerminalManager } from "./manager";
 import {
   type BackendChoice,
@@ -216,11 +218,37 @@ export function install(
       throw new TerminalError(400, "bad_request", invalid);
     }
     // The agent's four address variables, when a node owns this terminal. The
-    // per-node token is issued by R3 and never travels here.
-    const env =
-      body.agent !== undefined && body.nodeId !== undefined
-        ? agentEnvironment(body.nodeId, body.agent.id, context.dataDir)
-        : [];
+    // per-node token is *minted* here and never travels here: it goes into
+    // `<data>/node-tokens/<nodeId>`, 0600, because any process of the same
+    // user can read another process' environment (contract §5 item 5).
+    const owned = body.agent !== undefined && body.nodeId !== undefined;
+    const env = owned
+      ? [
+          ...agentEnvironment(
+            body.nodeId as string,
+            (body.agent as { id: string }).id,
+            context.dataDir,
+          ),
+          // Contract §5.5: the one variable that switches the hook client from
+          // "report and exit" to "wait for the canvas' answer".
+          ...permissionWaitEnvironment(
+            (body.agent as { id: string }).id,
+            settingsDomain()?.settings.get("hooks.replyApprovals") !== false,
+          ),
+        ]
+      : [];
+    if (owned) {
+      try {
+        issueNodeToken(context.dataDir, body.nodeId as string);
+      } catch (failure) {
+        // A token we could not write downgrades every report from this
+        // terminal to `legacy`; it must not stop the terminal opening.
+        context.log.warn("could not mint the node token", {
+          nodeId: body.nodeId,
+          error: failure instanceof Error ? failure.message : String(failure),
+        });
+      }
+    }
     const session = await manager.spawn({
       workspaceId: body.workspaceId as string,
       // Resolved, so a relative `cwd` cannot mean two directories. The

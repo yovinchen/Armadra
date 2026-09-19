@@ -332,10 +332,7 @@ export function staleEvent(nodeId: string, agentId: string): AgentEvent {
  * things. The cause is carried by the `terminated=true` marker instead, which
  * a client can match on if it wants distinct wording.
  */
-export function terminalGoneEvent(
-  nodeId: string,
-  agentId: string,
-): AgentEvent {
+export function terminalGoneEvent(nodeId: string, agentId: string): AgentEvent {
   const event = stateEvent(nodeId, agentId, DONE);
   event.errored = false;
   event.interrupted = false;

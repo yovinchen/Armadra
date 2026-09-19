@@ -45,8 +45,10 @@ export class HookServer {
   private readonly servers: { server: Server; spec: ListenSpec }[] = [];
 
   constructor(private readonly options: HookServerOptions) {
-    this.router.handle("GET", "/verify", (_match, request) =>
-      this.requireBearer(request) ?? { status: 204 },
+    this.router.handle(
+      "GET",
+      "/verify",
+      (_match, request) => this.requireBearer(request) ?? { status: 204 },
     );
 
     this.router.handle("POST", "/hook/{agentId}", (match, request) => {
@@ -70,10 +72,8 @@ export class HookServer {
     });
 
     for (const family of ["context-link", "control", "browser"] as const) {
-      this.router.handle(
-        "POST",
-        `/${family}/{verb}`,
-        async (match, request) => this.collab(family, match.params.verb ?? "", request),
+      this.router.handle("POST", `/${family}/{verb}`, async (match, request) =>
+        this.collab(family, match.params.verb ?? "", request),
       );
     }
   }
@@ -113,8 +113,10 @@ export class HookServer {
     }
     let body: { nodeId?: unknown; args?: unknown };
     try {
-      body = (request.json<{ nodeId?: unknown; args?: unknown }>() ??
-        {}) as { nodeId?: unknown; args?: unknown };
+      body = (request.json<{ nodeId?: unknown; args?: unknown }>() ?? {}) as {
+        nodeId?: unknown;
+        args?: unknown;
+      };
     } catch {
       body = {};
     }
@@ -187,7 +189,8 @@ export class HookServer {
             headers: request.headers,
             body: body.body,
             raw: request,
-            json: <T>() => JSON.parse(body.body.toString("utf8") || "null") as T,
+            json: <T>() =>
+              JSON.parse(body.body.toString("utf8") || "null") as T,
           },
         )) as HandlerResult;
       }
