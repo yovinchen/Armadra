@@ -113,10 +113,20 @@ jobs:
           pnpm repo:test
           pnpm release:test
 
-      # Web、shared、protocol、host-client 与桌面脚本的测试与类型检查。
+      # Web、shared、protocol、host-client 与桌面脚本的测试与类型检查。这一步
+      # 已经跑了 @armadra/desktop 的 `test`（vitest + `node --test scripts/*.test.mjs`），
+      # 覆盖 electron-builder.yml、entitlements、signing-electron.mjs、
+      # stage-binaries.mjs 与产物矩阵一致性的全部单测；不再重复一遍。
       - run: pnpm -r --if-present test
       - run: pnpm -r --if-present typecheck
       - run: pnpm --filter @armadra/web build
+
+      # Electron 壳的 main/preload/renderer 三个 target 编译一遍，但不打包：
+      # 打包（electron-builder）要真的 sidecar 二进制与平台特定的证书/公证输入，
+      # 是发布流水线的事（同 Tauri 壳的 "桌面壳只 cargo check" 决定，见下）。
+      # 这里要的是三个平台上 electron-vite 的构建图都过得去。
+      - name: Electron 壳构建（不打包）
+        run: pnpm --filter @armadra/desktop build
 
       - name: 三端协议契约
         run: pnpm protocol:test
