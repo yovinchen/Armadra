@@ -5,7 +5,7 @@
  *     --from <release dir> --out <dir> [--version X.Y.Z] [--require-updater]
  *
  * electron-builder names files after each platform's own conventions —
- * `Armadra-0.1.0-arm64.dmg`, `Armadra Setup 0.1.0.exe`,
+ * `Armadra-0.1.0-arm64.dmg`, `Armadra Setup 0.1.0-arm64.exe`,
  * `armadra_0.1.0_amd64.deb` — and none of those spellings contains a target
  * the Host can read: `assetTarget` finds nothing in `arm64` or `amd64`, and
  * one of them has a space in it. Uploading them as they come off the packager
