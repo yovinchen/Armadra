@@ -4,6 +4,7 @@ import {
   type HostLaunchConfig,
   MAX_CLI_TIMEOUT_MS,
   STDOUT_LIMIT,
+  hostEndpoint,
   resolveBinary,
   stopArguments,
   validate,
@@ -44,12 +45,14 @@ export function configFromEnvironment(
   browserOrigin: string,
   endpointsDir: string,
   env: NodeJS.ProcessEnv = process.env,
-  executable: string = process.execPath,
+  // `extraResources` stages the four binaries here, which is the same place
+  // `runtimeExecutable` looks — one packaged layout, not two.
+  resourcesPath: string = process.resourcesPath,
   repo: string = repoRoot(),
 ): HostLaunchConfig {
   const binary = resolveBinary(
     development,
-    executable,
+    resourcesPath,
     repo,
     env.ARMADRA_HOST_BINARY,
     env.CARGO_TARGET_DIR,
@@ -61,9 +64,10 @@ export function configFromEnvironment(
     browserOrigin,
     cliTimeoutMs: MAX_CLI_TIMEOUT_MS,
     endpointsDir,
-    // The loopback endpoint is what the page's session rides on. W1.2 changes
-    // which origin is granted to it, not whether the listener exists.
-    expectedHttpEndpoint: HOST_ENDPOINT,
+    // The loopback endpoint is what the page's session rides on. A packaged
+    // shell always takes the documented port; a development one may be asked
+    // for another, because an installed Armadra may already hold that port.
+    expectedHttpEndpoint: hostEndpoint(development, env.ARMADRA_HOST_LISTEN),
   };
   const invalid = validate(config);
   if (invalid) failHost(invalid);

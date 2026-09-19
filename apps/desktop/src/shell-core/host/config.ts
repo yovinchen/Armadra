@@ -151,13 +151,45 @@ export function validate(
   return invalid ? hostError("invalidConfiguration") : undefined;
 }
 
+/**
+ * Where the Host should listen. The documented port, unless a DEVELOPMENT
+ * shell asks for another one.
+ *
+ * The override exists because one machine can have several Armadras: an
+ * installed application's Host already holds 43121, and a shell started from
+ * a checkout has to be able to stand beside it rather than fail to start. A
+ * packaged shell ignores it outright — an installed application must not be
+ * redirectable by an environment variable, the same rule `resolveBinary`
+ * applies to the binary itself.
+ *
+ * A malformed override is passed through rather than swallowed, so `validate`
+ * refuses the configuration. Falling back to the default would start a Host
+ * somewhere the developer did not ask for, and returning `undefined` would
+ * mean something else entirely: no listener at all.
+ */
+export function hostEndpoint(
+  development: boolean,
+  override: string | undefined,
+): string {
+  if (!development || override === undefined || override === "")
+    return HOST_ENDPOINT;
+  return override.startsWith("http://") ? override : `http://${override}`;
+}
+
 export function hostBinaryName(platform: string = process.platform): string {
   return platform === "win32" ? "armadra-host.exe" : "armadra-host";
 }
 
 /**
- * Where the Host binary is. A packaged shell takes the one beside itself and
- * ignores every development override — an installed application must not be
+ * Where the Host binary is.
+ *
+ * A packaged shell takes the one electron-builder's `extraResources` staged,
+ * which is `process.resourcesPath` — the SAME place the Runtime is looked for
+ * (`runtime-process.ts`). It used to be resolved beside `process.execPath`
+ * (`Contents/MacOS/`), which is where the Tauri shell's sidecars lived and
+ * where nothing is staged now: a double-clicked `.app` found no Host at all.
+ *
+ * It ignores every development override — an installed application must not be
  * redirectable by an environment variable. A development shell honours
  * `ARMADRA_HOST_BINARY`, then `CARGO_TARGET_DIR`, then the repo's `target/`.
  *
@@ -166,7 +198,7 @@ export function hostBinaryName(platform: string = process.platform): string {
  */
 export function resolveBinary(
   development: boolean,
-  executable: string,
+  resourcesPath: string,
   repo: string,
   overridePath: string | undefined,
   targetDir: string | undefined,
@@ -175,10 +207,9 @@ export function resolveBinary(
   const name = hostBinaryName(platform);
   let binary: string;
   if (!development) {
-    const parent = parentOf(executable);
-    if (parent === undefined)
+    if (!isAbsolute(resourcesPath))
       return { ok: false, error: hostError("invalidConfiguration") };
-    binary = join(parent, name);
+    binary = join(resourcesPath, name);
   } else if (overridePath !== undefined) {
     binary = overridePath;
   } else {
@@ -194,11 +225,6 @@ export function resolveBinary(
   if (!isAbsolute(binary))
     return { ok: false, error: hostError("invalidConfiguration") };
   return { ok: true, binary };
-}
-
-function parentOf(path: string): string | undefined {
-  const parent = join(path, "..");
-  return parent === path ? undefined : parent;
 }
 
 /**

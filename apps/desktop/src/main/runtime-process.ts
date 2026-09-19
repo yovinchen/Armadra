@@ -241,12 +241,36 @@ export function waitForExit(
 }
 
 /**
- * The Runtime binary. A packaged shell takes the one beside itself; in
- * development it comes out of `CARGO_TARGET_DIR` (or the repo's `target/`),
- * which is where `cargo build -p armadra-runtime` leaves it.
+ * Whether this shell is a packaged application, which is what decides where
+ * every managed binary is looked for.
+ *
+ * The answer is Electron's `app.isPackaged`, handed in by `main/index.ts` —
+ * NOT an environment variable. An installed application nobody set a variable
+ * for was resolving its Runtime against a development path
+ * (`Contents/target/debug/armadra-runtime`) and simply did not start; a
+ * double-clicked `.app` inherits nothing from anybody's shell.
+ *
+ * `ARMADRA_DESKTOP_PACKAGED=1` remains as an override for exercising the
+ * packaged layout without packaging.
+ */
+let packagedShell = false;
+
+export function setPackagedShell(packaged: boolean): void {
+  packagedShell = packaged;
+}
+
+export function isPackagedShell(env: NodeJS.ProcessEnv = process.env): boolean {
+  return packagedShell || env.ARMADRA_DESKTOP_PACKAGED === "1";
+}
+
+/**
+ * The Runtime binary. A packaged shell takes the one `extraResources` staged
+ * beside the bundle's resources; in development it comes out of
+ * `CARGO_TARGET_DIR` (or the repo's `target/`), which is where
+ * `cargo build -p armadra-runtime` leaves it.
  */
 export function runtimeExecutable(
-  packaged = !!process.env.ARMADRA_DESKTOP_PACKAGED,
+  packaged = isPackagedShell(),
   env: NodeJS.ProcessEnv = process.env,
   resourcesPath: string = process.resourcesPath,
   repoDir: string = repoRoot(),

@@ -5,6 +5,7 @@ import {
   HOST_ENDPOINT,
   type HostLaunchConfig,
   hostBinaryName,
+  hostEndpoint,
   nativeOrigin,
   resolveBinary,
   startArguments,
@@ -34,24 +35,36 @@ function config(binary: string): HostLaunchConfig {
 describe("binary resolution", () => {
   const base = join(tmpdir(), "armadra-host-path-test");
   const repo = join(base, "repo");
-  const executable = join(base, "bundle/desktop");
+  /**
+   * electron-builder's `extraResources` stages the four binaries here, which
+   * is the same place `runtimeExecutable` looks. It used to be resolved beside
+   * `process.execPath` (`Contents/MacOS/`) — where the Tauri shell's sidecars
+   * lived and where nothing is staged now, so a double-clicked application
+   * found no Host at all.
+   */
+  const resources = join(base, "bundle/Contents/Resources");
 
   it("is explicit, and release ignores development overrides", () => {
     expect(
-      resolveBinary(false, executable, repo, "wrong", "elsewhere", "darwin"),
+      resolveBinary(false, resources, repo, "wrong", "elsewhere", "darwin"),
     ).toEqual({
       ok: true,
-      binary: join(base, "bundle", name),
+      binary: join(resources, name),
     });
+    // A resources path that is not absolute is a configuration error, not a
+    // reason to fall back to something relative that `PATH` would resolve.
     expect(
-      resolveBinary(true, executable, repo, undefined, undefined, "darwin"),
+      resolveBinary(false, "Resources", repo, undefined, undefined, "darwin"),
+    ).toEqual({ ok: false, error: { kind: "invalidConfiguration" } });
+    expect(
+      resolveBinary(true, resources, repo, undefined, undefined, "darwin"),
     ).toEqual({
       ok: true,
       binary: join(repo, "target/debug", name),
     });
     // An empty CARGO_TARGET_DIR is not a target directory.
     expect(
-      resolveBinary(true, executable, repo, undefined, "", "darwin"),
+      resolveBinary(true, resources, repo, undefined, "", "darwin"),
     ).toEqual({
       ok: true,
       binary: join(repo, "target/debug", name),
@@ -59,7 +72,7 @@ describe("binary resolution", () => {
     expect(
       resolveBinary(
         true,
-        executable,
+        resources,
         repo,
         undefined,
         "custom-target",
@@ -74,7 +87,7 @@ describe("binary resolution", () => {
   it("refuses a relative override rather than searching PATH", () => {
     const found = resolveBinary(
       true,
-      executable,
+      resources,
       repo,
       "host-on-path",
       undefined,
@@ -87,7 +100,7 @@ describe("binary resolution", () => {
   it("takes an absolute override verbatim", () => {
     const explicit = join(base, "custom-host");
     expect(
-      resolveBinary(true, executable, repo, explicit, undefined, "darwin"),
+      resolveBinary(true, resources, repo, explicit, undefined, "darwin"),
     ).toEqual({
       ok: true,
       binary: explicit,
@@ -158,6 +171,49 @@ describe("the start line", () => {
         additionalOrigins: ["http://127.0.0.1:1420/app"],
       }),
     ).toEqual({ kind: "invalidConfiguration" });
+  });
+});
+
+describe("where the Host listens", () => {
+  it("is the documented port, and an installed shell cannot be redirected", () => {
+    expect(hostEndpoint(true, undefined)).toBe(HOST_ENDPOINT);
+    expect(hostEndpoint(true, "")).toBe(HOST_ENDPOINT);
+    // A packaged application must not be redirectable by an environment
+    // variable, the same rule `resolveBinary` applies to the binary.
+    expect(hostEndpoint(false, "127.0.0.1:43171")).toBe(HOST_ENDPOINT);
+  });
+
+  it("lets a development shell stand beside an installed Armadra's Host", () => {
+    expect(hostEndpoint(true, "127.0.0.1:43171")).toBe(
+      "http://127.0.0.1:43171",
+    );
+    expect(hostEndpoint(true, "http://127.0.0.1:43171")).toBe(
+      "http://127.0.0.1:43171",
+    );
+    expect(
+      validate({
+        ...config(join(tmpdir(), name)),
+        expectedHttpEndpoint: hostEndpoint(true, "127.0.0.1:43171"),
+      }),
+    ).toBeUndefined();
+  });
+
+  it("refuses a malformed override rather than quietly picking something", () => {
+    for (const override of ["not an endpoint", "0.0.0.0:43121", "127.0.0.1"]) {
+      // Not the default (that would start a Host somewhere nobody asked for)
+      // and not `undefined` (that means no listener at all) — a configuration
+      // error, which `validate` is what reports.
+      const endpoint = hostEndpoint(true, override);
+      expect(endpoint, override).not.toBe(HOST_ENDPOINT);
+      expect(endpoint, override).toBeDefined();
+      expect(
+        validate({
+          ...config(join(tmpdir(), name)),
+          expectedHttpEndpoint: endpoint,
+        }),
+        override,
+      ).toEqual({ kind: "invalidConfiguration" });
+    }
   });
 });
 

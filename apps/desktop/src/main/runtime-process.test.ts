@@ -16,7 +16,9 @@ import {
   addressIsHeld,
   externalRuntimeBase,
   processCommandLine,
+  isPackagedShell,
   runtimeExecutable,
+  setPackagedShell,
   stopStaleRuntime,
   waitForExit,
   waitUntilAddressIsFree,
@@ -235,6 +237,32 @@ describe("where the Runtime binary is", () => {
     expect(
       runtimeExecutable(true, {}, "/App/Contents/Resources", "/repo"),
     ).toBe(join("/App/Contents/Resources", "armadra-runtime"));
+  });
+
+  /**
+   * A double-clicked application inherits nobody's shell, so an environment
+   * variable cannot be what says "this is packaged": the default was
+   * `ARMADRA_DESKTOP_PACKAGED`, nothing set it, and an installed Armadra
+   * resolved its Runtime to `Contents/target/debug/armadra-runtime` and simply
+   * did not start. Electron's `app.isPackaged` is the answer; the variable
+   * survives only as an override for exercising the layout without packaging.
+   */
+  it("learns it is packaged from Electron, not from the environment", () => {
+    setPackagedShell(false);
+    expect(isPackagedShell({})).toBe(false);
+    expect(isPackagedShell({ ARMADRA_DESKTOP_PACKAGED: "1" })).toBe(true);
+    // Anything but the exact opt-in string is not an opt-in.
+    expect(isPackagedShell({ ARMADRA_DESKTOP_PACKAGED: "0" })).toBe(false);
+
+    setPackagedShell(true);
+    expect(isPackagedShell({})).toBe(true);
+    expect(
+      runtimeExecutable(undefined, {}, "/App/Contents/Resources", "/repo"),
+    ).toBe(join("/App/Contents/Resources", "armadra-runtime"));
+    setPackagedShell(false);
+    expect(
+      runtimeExecutable(undefined, {}, "/App/Contents/Resources", "/repo"),
+    ).toBe(join("/repo/target", "debug", "armadra-runtime"));
   });
 });
 
