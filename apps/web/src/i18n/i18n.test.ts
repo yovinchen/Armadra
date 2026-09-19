@@ -335,7 +335,8 @@ const UNREFERENCED: readonly string[] = [
 ];
 
 describe("消息键的引用", () => {
-  it("每个键都至少被一个非 i18n 的源文件用到", () => {
+  // 扫全量源码语料，整套并行跑时 5 秒默认预算偏紧。
+  it("每个键都至少被一个非 i18n 的源文件用到", { timeout: 60_000 }, () => {
     const corpus = Object.entries(sources)
       .filter(([path]) => !path.startsWith("/src/i18n/"))
       .map(([, source]) => source)

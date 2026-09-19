@@ -164,7 +164,7 @@ export class CoreServer {
     const empty = status === 204 || status === 304;
     const payload = empty
       ? Buffer.alloc(0)
-      : (raw ?? Buffer.from(`${JSON.stringify(body ?? null)}\n`, "utf8"));
+      : (raw ?? Buffer.from(JSON.stringify(body ?? null), "utf8"));
     response.writeHead(status, {
       ...(empty
         ? {}

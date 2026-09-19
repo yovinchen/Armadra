@@ -203,13 +203,13 @@ describe("what the core answers", () => {
 
   it("answers a route it has not written with 501 and the feature's name", async () => {
     const { core } = await start(temporary());
-    const response = await fetch(`${base(core)}/api/terminals`, {
-      method: "POST",
-    });
+    const response = await fetch(
+      `${base(core)}/api/workspaces/ws-1/git/message/providers`,
+    );
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
       code: "not_implemented",
-      message: "终端会话（R2）",
+      message: "Git 工具（R4）",
     });
   });
 
@@ -220,11 +220,13 @@ describe("what the core answers", () => {
     expect((await response.json()).code).toBe("not_found");
   });
 
-  it("answers JSON with a content type and a trailing newline", async () => {
+  it("answers JSON with a content type and no trailing newline", async () => {
+    // Byte parity with the Rust Runtime: its axum responses end at the
+    // closing brace, and a Content-Length assertion on either side must agree.
     const { core } = await start(temporary());
     const response = await fetch(`${base(core)}/health`);
     expect(response.headers.get("content-type")).toBe("application/json");
-    expect(await response.text()).toMatch(/\n$/);
+    expect(await response.text()).toMatch(/\}$/);
   });
 
   it("answers a loopback origin and refuses any other", async () => {
@@ -267,7 +269,7 @@ describe("what the core answers", () => {
     expect(
       await upgrade(
         core,
-        "/api/terminals/session-1/ws",
+        "/api/workspaces/ws-1/language/sessions/session-1/stream",
         "http://127.0.0.1:1420",
       ),
     ).toMatch(/^HTTP\/1\.1 501/);
