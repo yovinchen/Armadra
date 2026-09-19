@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
 import type { ServerResponse } from "node:http";
-import type {
-  AutomationPlanConfig,
-  CommandLaunchSpec,
-} from "@armadra/protocol";
+import {
+  AutomationCommandSessionSchema,
+  AutomationCommandSessionState,
+  create,
+  type AutomationCommandSession,
+  type AutomationPlanConfig,
+  type CommandLaunchSpec,
+} from "./types";
 
 import type { CoreRequest } from "../http/router";
 import type { IdentityService } from "../identity/service";
@@ -20,22 +24,19 @@ import {
   planToJson,
   runToJson,
 } from "./json";
-import { ScheduleError, num } from "./plan";
-import { sessionMessage } from "./rpc";
+import { ScheduleError, big, num } from "./plan";
 import type { PlanSnapshot, RunSnapshot } from "./engine";
 import { type Caller, ScheduleService } from "./service";
+import { COMMAND_SESSION_READY, type CommandSessionRecord } from "./store";
 
 /**
  * 自动化的 JSON 面：`/api/automations/*`，错误信封 `{ code, message }`。
  *
- * 这是页面今天打的那一面（R7a）。隔壁 `rpc.ts` 的 protobuf 兼容面还在，R7 收尾
- * 删；在那之前两张面对同一条记录说的必须是同一句话，`api.test.ts` 有一条用例就
- * 是逐字段比对它们。
+ * 这是页面打的那一面，也是唯一一面：`/rpc/armadra.v1.AutomationService/*` 的
+ * protobuf 兼容面在 R7 删掉了。
  *
- * 形状由 `json.ts` 决定：**库里存的和线上发的是同一份 JSON**。写入那一侧因此收
- * 的是一份普通的 JSON 配置，而不再是一段 base64 的 protobuf——0020 之前它收
- * `configBase64` / `launchBase64` / `payloadBase64`，因为那时候库里存的就是字节。
- * 逐字段的说明在 `docs/contracts/core-json-api.md` §4。
+ * 形状由 `json.ts` 决定：**库里存的和线上发的是同一份 JSON**。写入那一侧收的是
+ * 一份普通的 JSON 配置。逐字段的说明在 `docs/contracts/core-json-api.md` §4。
  *
  * 载荷（stdin / prompt）在线上是 **UTF-8 文本**：它是用户自己敲进去的东西，
  * base64 只会让一个人读不懂自己的计划。库里仍然是字节（§4.3）。
@@ -406,3 +407,31 @@ function runJson(snapshot: RunSnapshot): unknown {
 }
 
 export { num };
+
+/**
+ * 一条命令会话记录在线上的样子。
+ *
+ * `rootPath` 从外面给：记录里存的是根标识，而页面要看的是那个根的路径。
+ */
+export function sessionMessage(
+  record: CommandSessionRecord,
+  rootPath: string,
+): AutomationCommandSession {
+  return create(AutomationCommandSessionSchema, {
+    sessionId: record.sessionId,
+    workspaceId: record.workspaceId,
+    executionHostId: record.executionHostId,
+    rootPath,
+    launch: record.launch,
+    generation: big(record.generation),
+    launchSha256: record.launchSha256,
+    state:
+      record.state === COMMAND_SESSION_READY
+        ? AutomationCommandSessionState.READY
+        : AutomationCommandSessionState.UNREBUILDABLE,
+    reasonCode: record.reasonCode,
+    revision: big(record.revision),
+    createdAtUnixMs: big(record.createdAtMs),
+    updatedAtUnixMs: big(record.updatedAtMs),
+  });
+}

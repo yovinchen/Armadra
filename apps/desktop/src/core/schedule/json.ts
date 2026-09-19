@@ -1,26 +1,21 @@
 /**
  * 自动化域的 JSON 编解码：**库里存的**和**线上发的**是同一份形状。
  *
- * 0017 把计划、激活、运行、收据、命令会话都按 Go Host 的样子存成一个 protobuf
- * BLOB，`/rpc/` 面也发同一份字节。R7 要删 `proto/` 与两份生成码，所以两处都得
- * 换成一份谁都读得懂的表示；换成两份不同的表示则等于给同一条记录留两种说法。
- *
- * 形状是 **protobuf 的 JSON 映射**，逐字段的说明在
- * `docs/contracts/core-json-api.md` §4：
+ * 形状逐字段的说明在 `docs/contracts/core-json-api.md` §4：
  *
  *   * 字段名 camelCase；
  *   * `int64` / `uint64` 是十进制**字符串**（`number` 在 2^53 之上会悄悄改值）；
  *   * `bytes` 是 base64；
  *   * 枚举是枚举值名（`AUTOMATION_PLAN_STATE_ACTIVE`）；
  *   * `oneof` 摊平成那一个被设置的字段；
- *   * 零值**照写**（`alwaysEmitImplicit`）——一份缺字段的 JSON 和一份字段为零的
- *     JSON 对读者是两句话，而存进库里的那一份必须只有一句。
+ *   * 零值**照写**——一份缺字段的 JSON 和一份字段为零的 JSON 对读者是两句话，而
+ *     存进库里的那一份必须只有一句。**例外**是消息字段：它有显式的「在不在」。
  *
- * 选这套映射不是因为还想留着 protobuf，而是因为它是一份已经写死的规范：R7 手写
- * 编码器的时候有一份逐字段的参照，而不是一个「当初大概是这么转的」。
+ * 这套映射原本由 protobuf 的 JSON 规范给定，R7 之后它由 `types.ts` 的字段表加上
+ * 本文件的两个函数给定——形状一个字节没变，但读懂它不再需要任何 `.proto`。
  *
- * **R7 删除本文件对 `@armadra/protocol` 的依赖**：那一批把 `toJson` / `fromJson`
- * 换成手写的编解码，形状不变。
+ * 「不认识的字段不是拒绝的理由」：一个更新过的 core 写下的行要读得回来，所以
+ * `fromJson` 只挑字段表里有的键，多出来的一律忽略。
  */
 
 import {
@@ -38,18 +33,9 @@ import {
   type AutomationReceipt,
   type AutomationRun,
   type CommandLaunchSpec,
-} from "@armadra/protocol";
-import {
-  fromJson,
-  toJson,
-  type DescMessage,
-  type MessageShape,
-} from "@bufbuild/protobuf";
-
-/** 零值照写。缺席与为零在一份存下来的记录里不能是同一件事。 */
-const WRITE = { alwaysEmitImplicit: true } as const;
-/** 不认识的字段不是拒绝的理由：一个更新过的 core 写的行要读得回来。 */
-const READ = { ignoreUnknownFields: true } as const;
+  type FieldDesc,
+  type MessageDesc,
+} from "./types";
 
 export type JsonValue =
   | null
@@ -59,55 +45,149 @@ export type JsonValue =
   | JsonValue[]
   | { [key: string]: JsonValue };
 
-function encode<T extends DescMessage>(
-  schema: T,
-  message: MessageShape<T>,
-): JsonValue {
-  return toJson(schema, message, WRITE) as JsonValue;
+/* ---------------------------------- 编码 ---------------------------------- */
+
+function encodeField(field: FieldDesc, value: unknown): JsonValue | undefined {
+  switch (field.kind) {
+    case "string":
+    case "bool":
+      return value as string | boolean;
+    case "uint32":
+      return Number(value);
+    case "int64":
+    case "uint64":
+      // 十进制字符串。这不是为了好看，是为了 2^53 之上的那些数还是它自己。
+      return String(value as bigint);
+    case "bytes":
+      return Buffer.from(value as Uint8Array).toString("base64");
+    case "enum":
+      return value as string;
+    case "strings":
+      return [...(value as readonly string[])];
+    case "message":
+      return value === undefined
+        ? undefined
+        : toJson(field.of(), value as never);
+    case "oneof": {
+      const chosen = value as { case?: string; value?: unknown } | undefined;
+      if (chosen?.case === undefined) return undefined;
+      const sub = field.cases[chosen.case];
+      if (sub === undefined) return undefined;
+      return toJson(sub(), chosen.value as never);
+    }
+  }
 }
 
-function decode<T extends DescMessage>(
-  schema: T,
-  value: unknown,
-): MessageShape<T> {
-  return fromJson(schema, value as never, READ);
+export function toJson<T>(schema: MessageDesc<T>, message: T): JsonValue {
+  const out: Record<string, JsonValue> = {};
+  const record = message as Record<string, unknown>;
+  for (const [name, field] of Object.entries(schema.fields)) {
+    if (field.kind === "oneof") {
+      const chosen = record[name] as { case?: string } | undefined;
+      const encoded = encodeField(field, record[name]);
+      // `oneof` 摊平：写的是那一个被设置的字段的名字，而不是 `kind`。
+      if (chosen?.case !== undefined && encoded !== undefined) {
+        out[chosen.case] = encoded;
+      }
+      continue;
+    }
+    const encoded = encodeField(field, record[name]);
+    if (encoded !== undefined) out[name] = encoded;
+  }
+  return out;
 }
 
-/* ------------------------------ 计划与配置 -------------------------------- */
+/* ---------------------------------- 解码 ---------------------------------- */
+
+function decodeField(field: FieldDesc, value: unknown): unknown {
+  switch (field.kind) {
+    case "string":
+      return typeof value === "string" ? value : "";
+    case "bool":
+      return value === true;
+    case "uint32":
+      return Number(value ?? 0);
+    case "int64":
+    case "uint64":
+      return BigInt((value ?? 0) as string | number);
+    case "bytes":
+      return typeof value === "string"
+        ? new Uint8Array(Buffer.from(value, "base64"))
+        : new Uint8Array(0);
+    case "enum":
+      // 认不出来的名字落回 UNSPECIFIED：一个更新过的 core 写下的状态不该让整行
+      // 读不出来，但也不该被当成某个碰巧相近的已知状态。
+      return typeof value === "string" ? value : field.unspecified;
+    case "strings":
+      return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [];
+    case "message":
+      return value === undefined || value === null
+        ? undefined
+        : fromJson(field.of(), value);
+    default:
+      return undefined;
+  }
+}
+
+export function fromJson<T>(schema: MessageDesc<T>, value: unknown): T {
+  const source = (
+    typeof value === "object" && value !== null ? value : {}
+  ) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [name, field] of Object.entries(schema.fields)) {
+    if (field.kind === "oneof") {
+      let picked: unknown = { case: undefined };
+      for (const [caseName, sub] of Object.entries(field.cases)) {
+        const branch = source[caseName];
+        if (branch === undefined || branch === null) continue;
+        picked = { case: caseName, value: fromJson(sub(), branch) };
+        break;
+      }
+      out[name] = picked;
+      continue;
+    }
+    out[name] = decodeField(field, source[name]);
+  }
+  return out as T;
+}
+
+/* ------------------------------ 域里的那几种 ------------------------------ */
 
 export const planToJson = (plan: AutomationPlan): JsonValue =>
-  encode(AutomationPlanSchema, plan);
+  toJson(AutomationPlanSchema, plan);
 export const planFromJson = (value: unknown): AutomationPlan =>
-  decode(AutomationPlanSchema, value);
+  fromJson(AutomationPlanSchema, value);
 
 export const planConfigToJson = (config: AutomationPlanConfig): JsonValue =>
-  encode(AutomationPlanConfigSchema, config);
+  toJson(AutomationPlanConfigSchema, config);
 export const planConfigFromJson = (value: unknown): AutomationPlanConfig =>
-  decode(AutomationPlanConfigSchema, value);
+  fromJson(AutomationPlanConfigSchema, value);
 
 export const activationToJson = (activation: AutomationActivation): JsonValue =>
-  encode(AutomationActivationSchema, activation);
+  toJson(AutomationActivationSchema, activation);
 export const activationFromJson = (value: unknown): AutomationActivation =>
-  decode(AutomationActivationSchema, value);
+  fromJson(AutomationActivationSchema, value);
 
 export const runToJson = (run: AutomationRun): JsonValue =>
-  encode(AutomationRunSchema, run);
+  toJson(AutomationRunSchema, run);
 export const runFromJson = (value: unknown): AutomationRun =>
-  decode(AutomationRunSchema, value);
+  fromJson(AutomationRunSchema, value);
 
 export const receiptToJson = (receipt: AutomationReceipt): JsonValue =>
-  encode(AutomationReceiptSchema, receipt);
+  toJson(AutomationReceiptSchema, receipt);
 export const receiptFromJson = (value: unknown): AutomationReceipt =>
-  decode(AutomationReceiptSchema, value);
+  fromJson(AutomationReceiptSchema, value);
 
 export const launchSpecToJson = (launch: CommandLaunchSpec): JsonValue =>
-  encode(CommandLaunchSpecSchema, launch);
+  toJson(CommandLaunchSpecSchema, launch);
 export const launchSpecFromJson = (value: unknown): CommandLaunchSpec =>
-  decode(CommandLaunchSpecSchema, value);
+  fromJson(CommandLaunchSpecSchema, value);
 
 export const commandSessionToJson = (
   session: AutomationCommandSession,
-): JsonValue => encode(AutomationCommandSessionSchema, session);
+): JsonValue => toJson(AutomationCommandSessionSchema, session);
 
 /* ------------------------------- 规范 JSON -------------------------------- */
 

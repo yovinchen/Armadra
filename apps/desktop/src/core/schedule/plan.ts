@@ -10,9 +10,7 @@ import {
   type AutomationPlanConfig,
   type AutomationTarget,
   create,
-  fromBinary,
-  toBinary,
-} from "@armadra/protocol";
+} from "./types";
 import { createHash } from "node:crypto";
 
 import { MAX_TIMESTAMP_MS, nextCron, parseCron } from "./cron";
@@ -21,10 +19,8 @@ import { canonicalJson, planConfigFromJson, planConfigToJson } from "./json";
 /**
  * 计划配置的归一化、首次到期、以及一次 tick 该物化哪个槽位。
  *
- * 移植自 `apps/host/internal/automation/schedule.go` 与 `plans.go` 的校验部分。
- * 载荷仍然是 protobuf 的 `AutomationPlanConfig`：配置摘要因此和 Go 算出来的逐
- * 字节相同，旧 `host.db` 里已经激活的计划搬过来之后不用重新授权，
- * `packages/host-client` 发的字节也不用翻译。
+ * 配置是本域自己的 `AutomationPlanConfig`（`types.ts`），摘要按它的**规范
+ * JSON** 算（`docs/contracts/core-json-api.md` §4.2）。
  *
  * 归一化是**幂等**的：存进去的配置会被再归一化一次来算摘要，所以「把未指定填成
  * 默认值」这件事做两遍必须得到同一份字节。

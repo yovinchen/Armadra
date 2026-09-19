@@ -4,32 +4,28 @@ import { identityInstanceId } from "../identity";
 import { IdentityService } from "../identity/service";
 import { IdentityStore } from "../identity/store";
 import { AutomationApi, API_PREFIX } from "./api";
-import { convertLegacyPayloads } from "./convert-legacy";
 import { AUTOMATION_CAPABILITY, registerCapability } from "./capabilities";
 import { TerminalDispatcher, type DispatchContext } from "./dispatch";
 import { ScheduleEngine } from "./engine";
-import { AutomationRpc, RPC_PREFIX } from "./rpc";
 import { ScheduleService } from "./service";
 import { ScheduleStore } from "./store";
 
 /**
  * 定时与自动化域的装配。
  *
- * 挂三样东西：新面 `/api/automations/*`、兼容面
- * `/rpc/armadra.v1.AutomationService/*`，以及那个**属于 core 生命周期**的调度
+ * 挂两样东西：`/api/automations/*`，以及那个**属于 core 生命周期**的调度
  * 循环——它不属于任何一次请求，页面关掉之后计划照跑。
  *
  * **只在统一库迁移已经应用时装**。没过 0017 的库里没有自动化的表，这时候装上去
- * 第一个请求会撞上一条「没有这张表」的 SQL 错误；不装，`/rpc/` 那一面由身份域
- * 的前缀接住并回 `NOT_FOUND`，页面据此退化成「这台 Host 不支持自动化」——那正是
- * 它给这种情况准备的那条路。
+ * 第一个请求会撞上一条「没有这张表」的 SQL 错误；不装，这一面根本不在，而
+ * `Hello` 的能力表里也没有 `automation.plans.v1`，页面据此退化成「这台 core 不
+ * 支持自动化」——那正是它给这种情况准备的那条路。
  *
  * 装配顺序上它必须排在终端域**之后**：投递要往 pane 里写，而那个桥是终端域装好
  * 之后才有的。
  */
 
 export { API_PREFIX } from "./api";
-export { RPC_PREFIX, RPC_METHODS } from "./rpc";
 export { ScheduleEngine } from "./engine";
 export { ScheduleService } from "./service";
 export { ScheduleStore } from "./store";
@@ -55,28 +51,12 @@ export function scheduleDomain(): ScheduleDomain | undefined {
 
 export function install(context: CoreContext): ScheduleDomain | undefined {
   if (!context.db.unified) {
-    context.log.info(
-      "定时与自动化域未装配：统一库迁移尚未应用（ARMADRA_CORE=ts 才应用）",
-    );
+    context.log.info("定时与自动化域未装配：统一库迁移尚未应用");
     return undefined;
   }
   if (!tablesReady(context)) {
     context.log.info("定时与自动化域未装配：0017 迁移尚未应用");
     return undefined;
-  }
-  // 0020 之前写下的行只有 protobuf 字节。先补成 JSON，再让任何读它们的东西起
-  // 来——半转的库读得动，但一个在转换中途开始调度的内核会把旧字节又写回去。
-  // **R7 删掉这一段**，连同 `convert-legacy.ts` 一起。
-  const converted = convertLegacyPayloads(context.db.database);
-  if (
-    converted.plans +
-      converted.activations +
-      converted.runs +
-      converted.receipts +
-      converted.commandSessions >
-    0
-  ) {
-    context.log.info("自动化载荷已从 protobuf 转成 JSON", { ...converted });
   }
   const store = new ScheduleStore(context.db.database);
   const identityStore = new IdentityStore(context.db.database);
@@ -118,11 +98,7 @@ export function install(context: CoreContext): ScheduleDomain | undefined {
 
   authority.service = service;
 
-  const rpc = new AutomationRpc({ service, identity });
   const api = new AutomationApi({ service, identity });
-  context.server.raw(RPC_PREFIX, (request, response, cors) =>
-    rpc.handle(request, response, cors),
-  );
   context.server.raw(API_PREFIX, (request, response, cors) =>
     api.handle(request, response, cors),
   );

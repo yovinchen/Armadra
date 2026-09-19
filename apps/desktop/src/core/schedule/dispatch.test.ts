@@ -18,7 +18,7 @@ import {
   type AutomationRun,
   type AutomationTarget,
   create,
-} from "@armadra/protocol";
+} from "./types";
 import { describe, expect, it } from "vitest";
 
 import type { TerminalBridge } from "../collab/service";
@@ -203,7 +203,7 @@ describe("命令目标", () => {
   it("没冻结过的会话不支持", async () => {
     const { dispatcher } = setUp();
     const target = create(
-      (await import("@armadra/protocol")).AutomationTargetSchema,
+      (await import("./types")).AutomationTargetSchema,
       {
         executionHostId: HOST_ID,
         kind: AutomationTargetKind.NON_INTERACTIVE_COMMAND,
@@ -232,7 +232,7 @@ describe("命令目标", () => {
       updatedAtMs: 1,
     });
     const target = create(
-      (await import("@armadra/protocol")).AutomationTargetSchema,
+      (await import("./types")).AutomationTargetSchema,
       {
         executionHostId: HOST_ID,
         kind: AutomationTargetKind.NON_INTERACTIVE_COMMAND,

@@ -7,7 +7,7 @@ import {
   type AutomationRun,
   type AutomationTarget,
   create,
-} from "@armadra/protocol";
+} from "./types";
 
 import { getAgentStatus } from "../agent/status";
 import { loadNode, loadSession } from "../collab/nodes";

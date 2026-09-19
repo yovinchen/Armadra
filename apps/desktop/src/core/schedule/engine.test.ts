@@ -15,7 +15,7 @@ import {
   AutomationRunState,
   AutomationTargetKind,
   type AutomationPlanConfig,
-} from "@armadra/protocol";
+} from "./types";
 import { describe, expect, it } from "vitest";
 
 import { AUTH, activated, config, harness } from "./fixture";
@@ -28,7 +28,6 @@ function interval(anchorMs: number, periodMs: number) {
     kind: {
       case: "interval" as const,
       value: {
-        $typeName: "armadra.v1.AutomationInterval" as const,
         anchorUnixMs: BigInt(anchorMs),
         intervalMs: BigInt(periodMs),
       },
@@ -41,7 +40,6 @@ function loop(delayMs: number) {
     kind: {
       case: "loopAfterCompletion" as const,
       value: {
-        $typeName: "armadra.v1.AutomationLoopAfterCompletion" as const,
         delayMs: BigInt(delayMs),
       },
     },
@@ -336,7 +334,6 @@ describe("收据", () => {
     await h.engine.tick();
     expect(() =>
       h.engine.observe({
-        $typeName: "armadra.v1.AutomationReceipt",
         operationId: "别人的操作",
         requestSha256: new Uint8Array(32),
         outcome: AutomationOutcome.SUCCEEDED,

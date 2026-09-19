@@ -6,7 +6,6 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ABSORBED_TABLES,
-  PROJECTED_TABLES,
   absorbHostDatabase,
   absorbedName,
   hostDatabaseFile,
@@ -154,11 +153,6 @@ describe("absorbing the old host database", () => {
       automation_payloads: 0,
       automation_grants: 0,
       command_roots: 0,
-      command_sessions: 0,
-      automation_plans: 0,
-      automation_activations: 0,
-      automation_runs: 0,
-      automation_gates: 0,
       // 原库没有 GitHub 表；「没有这张表」和「有表但空着」在结果里长得一样。
       github_config: 0,
       github_status_mappings: 0,
@@ -251,19 +245,12 @@ describe("absorbing the old host database", () => {
       "automation_payloads",
       "automation_grants",
       "command_roots",
-      "command_sessions",
       "github_config",
       "github_status_mappings",
       "github_references",
     ]);
-    // 这四张不在逐列照搬的名单里，因为 Host 那边它们根本不是表——它们由
-    // `legacy.entities` 投影出来。空判断仍然把它们算上。
-    expect([...PROJECTED_TABLES]).toEqual([
-      "automation_plans",
-      "automation_activations",
-      "automation_runs",
-      "automation_gates",
-    ]);
+    // 计划、激活、运行、目标闸门与命令会话不在名单里：旧库里它们是 protobuf
+    // 字节，而 core 已经没有读那种字节的东西了。
   });
 
   it("carries the write-ahead log along with the file it belongs to", () => {

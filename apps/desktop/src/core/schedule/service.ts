@@ -4,7 +4,7 @@ import {
   type AutomationPlanConfig,
   type AutomationTarget,
   type CommandLaunchSpec,
-} from "@armadra/protocol";
+} from "./types";
 
 import { decodeScopes, encodeScopes, permits, scope } from "../identity/scopes";
 import type { Scope } from "../identity/scopes";
