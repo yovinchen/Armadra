@@ -6,7 +6,9 @@ import {
   distArch,
   electronViteEntry,
   mergeConfig,
+  platformKey,
   resolveConfig,
+  targetNames,
 } from "./dist.mjs";
 import { CERT_ENV, CERT_PASSWORD_ENV } from "./signing-electron.mjs";
 
@@ -72,4 +74,14 @@ test("every target is restricted to the one architecture this run packages", () 
   }
   assert.equal(distArch({}), process.arch);
   assert.throws(() => distArch({ ARMADRA_DIST_ARCH: "ia32" }), /x64 or arm64/);
+});
+
+test("the target types handed to the packager are the config's, per platform", () => {
+  const { config } = resolveConfig({ env: {} });
+  assert.deepEqual(targetNames(config, "linux"), ["AppImage", "deb", "rpm"]);
+  assert.deepEqual(targetNames(config, "win"), ["nsis", "zip"]);
+  assert.deepEqual(targetNames(config, "mac"), ["dmg", "zip"]);
+  assert.equal(platformKey({ name: "mac" }), "mac");
+  assert.equal(platformKey({ name: "windows" }), "win");
+  assert.equal(platformKey({ name: "linux" }), "linux");
 });

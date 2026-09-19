@@ -90,6 +90,27 @@ export function distArch(env = process.env) {
   return wanted;
 }
 
+/** `mac` / `win` / `linux` — the config section a platform packages from. */
+export function platformKey(platform) {
+  switch (platform.name) {
+    case "mac":
+      return "mac";
+    case "windows":
+      return "win";
+    default:
+      return "linux";
+  }
+}
+
+/** The target types a config section lists, in its order. */
+export function targetNames(config, key) {
+  const section = config[key];
+  if (!section || !Array.isArray(section.target)) return [];
+  return section.target.map((entry) =>
+    typeof entry === "string" ? entry : entry.target,
+  );
+}
+
 function restrictArch(config, arch) {
   const result = { ...config };
   for (const platform of ["mac", "win", "linux"]) {
@@ -151,16 +172,23 @@ export async function dist({ env = process.env, local = true } = {}) {
   // every other script in this file (and its tests) should be importable
   // without paying for that.
   const {
+    Arch,
     Platform,
     build: packageApp,
-    createTargets,
   } = await import("electron-builder");
+  const platform = Platform.current();
+  const arch = distArch(env);
   const artifacts = await packageApp({
-    // No explicit target type: electron-builder falls back to the platform's
-    // `target` list in electron-builder.yml, which is the one whose
-    // correspondence with tools/release/artifacts.mjs is tested. Host arch
-    // only — a local build packages what it can run.
-    targets: createTargets([Platform.current()], null, distArch(env)),
+    // The target *types* come from electron-builder.yml (the list whose
+    // correspondence with tools/release/artifacts.mjs is tested); the
+    // architecture is this run's alone. Named explicitly rather than left to
+    // the config: a target map with no type names makes electron-builder walk
+    // the config's own `arch` lists again, and on CI that walk still produced
+    // an x64 build on an arm64 runner (see `distArch`).
+    targets: platform.createTarget(
+      targetNames(config, platformKey(platform)),
+      Arch[arch],
+    ),
     config,
   });
   for (const artifact of artifacts) console.log(`Built: ${artifact}`);
