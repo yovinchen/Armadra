@@ -30,6 +30,7 @@ import {
   type CanvasFlowNode,
 } from "../sync/project";
 import { clearDrafts, setDraft, useDrafts } from "./drafts";
+import { applyWebviewPool } from "@/nodes/browser/pool";
 
 /**
  * 投影 + 回调翻译（React Flow 计划 §2.1，归属 canvas）。
@@ -146,8 +147,20 @@ export function useFlowNodes(): FlowBindings {
     [documentNodes, documentEdges],
   );
 
+  /**
+   * 投影之后加一条顺序规则：**webview 宿主节点的相对顺序永不变化**（W3.2）。
+   *
+   * 探针实测（`docs/research/nodeterm/webview-probe.md` 第 6 条）：让 React 对
+   * 一个已挂载的 `<webview>` 宿主元素调 `insertBefore`，guest 进程当场被杀、
+   * 整页重载、`webContentsId` 换号。插入与删除是安全的，**只有移动不是**。
+   * 上游的投影按「分组 → 节点 → 白板对象」排，一次换父或一次删除都可能改变
+   * 浏览器节点之间的先后，所以在这里把它们摘进一个只追加的尾部区段
+   * （`nodes/browser/pool.ts`）。规则归浏览器节点所有：画布这一侧只有这一行。
+   *
+   * 非 Electron 壳里 `applyWebviewPool` 原样返回，投影一个字节都不变。
+   */
   const nodes = React.useMemo(
-    () => projectNodes(tables, whiteboard, drafts, selected),
+    () => applyWebviewPool(projectNodes(tables, whiteboard, drafts, selected)),
     [tables, whiteboard, drafts, selected],
   );
   const edges = React.useMemo(

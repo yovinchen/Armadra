@@ -11,6 +11,7 @@ import { useKeybindings } from "@/keybindings";
 import { NodeShell } from "../NodeShell";
 import type { NodeBodyProps } from "../registry";
 import { browserPartition } from "./desktop";
+import { useIsGhost } from "./pool";
 import { WebviewGuest } from "./WebviewGuest";
 import { WebviewTabs } from "./WebviewTabs";
 import { searchOrUrl } from "./webview";
@@ -18,7 +19,7 @@ import type { WebviewElement } from "./webview";
 import { useWebviewTabs } from "./webview-tabs";
 
 /**
- * Electron 壳里的浏览器节点（W3.1）。
+ * Electron 壳里的浏览器节点（W3.1 / W3.2）。
  *
  * 和 screencast 那条路的区别不只是「画面从哪来」：这里没有会话、没有租约、
  * 没有 Runtime 里的那个 Chromium 进程，页面就在本窗口的一个 OOPIF 里。因此
@@ -32,11 +33,12 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
   const t = useT();
   const workspaceId = useCanvasStore((state) => state.workspace?.id);
   const url = node.data.kind === "browser" ? node.data.url : "";
+  const ghost = useIsGhost(id);
 
   /**
    * **创建时定一次、永不变更**（探针 C：attach 之后改 partition 被静默忽略）。
    * `useState` 的惰性初值就是「一次」的最短写法；`workspaceId` 后来变了也不
-   * 重算——那时候这个节点已经不属于原来那个工作空间了。
+   * 重算——那时候这个节点已经属于另一个工作空间的 pool ghost 了。
    *
    * `driver` 现在恒为 `"user"`。Agent 开的节点走另一个 jar，那条路是 W3.3。
    */
@@ -67,13 +69,13 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
    */
   const persist = React.useCallback(
     (next: string) => {
-      if (!next || next === "about:blank") return;
+      if (ghost || !next || next === "about:blank") return;
       const store = useCanvasStore.getState();
       const current = store.document?.nodes.find((each) => each.id === id);
       if (current?.data.kind === "browser" && current.data.url === next) return;
       store.updateNodeData(id, { url: next });
     },
-    [id],
+    [id, ghost],
   );
 
   /* -------------------------------- 导航 --------------------------------- */
@@ -187,7 +189,9 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
               <WebviewGuest
                 tab={tab}
                 partition={partition}
-                hidden={tab.id !== tabs.activeId}
+                hidden={ghost || tab.id !== tabs.activeId}
+                ghost={ghost}
+                driven={false}
                 onPatch={(change) => tabs.patch(tab.id, change)}
                 onNavigate={(next) => {
                   if (tab.id === tabs.activeId) persist(next);

@@ -1,11 +1,14 @@
 import * as React from "react";
 
+import { useT } from "@/app/preferences-store";
+
+import { BROWSER_DISCARD_MS, DISCARD_TICK_MS, shouldDiscard } from "./discard";
 import type { WebviewElement, WebviewNavigationEvent } from "./webview";
 import { allowGuestNavigation } from "./webview";
 import type { WebviewTab } from "./webview-tabs";
 
 /**
- * 一个标签 = 一个 guest（W3.1）。
+ * 一个标签 = 一个 guest（W3.1 / W3.2）。
  *
  * 这个组件**只渲染一个裸 `<webview>`**，没有遮罩、没有 hover-guard、没有缩
  * 放补偿。三样都不是遗漏：
@@ -28,10 +31,14 @@ export interface WebviewGuestProps {
   partition: string;
   /** 不可见的 guest 留在 DOM 里，只是 `display:none`——卸载等于杀进程。 */
   hidden: boolean;
+  /** ghost：属于另一个工作空间／被折叠掉的节点。不回写任何事实。 */
+  ghost: boolean;
+  /** Agent 正在驱动。W3.3 之前恒为 false；留着是为了让回收规则不必改。 */
+  driven: boolean;
   /** 元素句柄回传：工具栏的后退/前进/刷新直接调 guest 的方法。 */
   onElement(element: WebviewElement | null): void;
   onPatch(change: Partial<Omit<WebviewTab, "id">>): void;
-  /** 活动标签导航到了新地址：节点据此把 URL 持久化。 */
+  /** 活动标签导航到了新地址：节点据此把 URL 持久化。ghost 不会调。 */
   onNavigate(url: string): void;
   /** 页面要开新窗口。W3.1 只把 http(s) 变成本节点的新标签。 */
   onOpenTab(url: string): void;
@@ -41,14 +48,24 @@ export function WebviewGuest({
   tab,
   partition,
   hidden,
+  ghost,
+  driven,
   onElement,
   onPatch,
   onNavigate,
   onOpenTab,
 }: WebviewGuestProps) {
+  const t = useT();
   const ref = React.useRef<WebviewElement | null>(null);
-  /** guest 真正停在的那一页。 */
+  /** 回收后重放用的地址。永远是 guest 真正停在的那一页。 */
   const locationRef = React.useRef(tab.src);
+  /**
+   * 重放那一次导航的回声。没有它，「看一眼被回收的节点」就会触发一次
+   * `did-navigate` → 回写 → 文档变脏 → rev 自增 → 同步给别的设备，而页面其
+   * 实一个字都没变。
+   */
+  const restoringRef = React.useRef(false);
+  const [discarded, setDiscarded] = React.useState(false);
 
   const patchRef = React.useRef(onPatch);
   patchRef.current = onPatch;
@@ -56,11 +73,13 @@ export function WebviewGuest({
   navigateRef.current = onNavigate;
   const openTabRef = React.useRef(onOpenTab);
   openTabRef.current = onOpenTab;
+  const ghostRef = React.useRef(ghost);
+  ghostRef.current = ghost;
 
   /* ------------------------------ guest 事件 ----------------------------- */
   React.useEffect(() => {
     const guest = ref.current;
-    if (!guest) return;
+    if (!guest || discarded) return;
 
     const refreshNavState = () => {
       const current = ref.current;
@@ -78,7 +97,11 @@ export function WebviewGuest({
       if (!url) return;
       locationRef.current = url;
       patchRef.current({ address: url });
-      navigateRef.current(url);
+      if (restoringRef.current) {
+        restoringRef.current = false;
+        return;
+      }
+      if (!ghostRef.current) navigateRef.current(url);
     };
 
     const onStartLoading = () => patchRef.current({ loading: true });
@@ -107,7 +130,9 @@ export function WebviewGuest({
     const onNewWindow = (event: Event) => {
       event.preventDefault();
       const url = (event as WebviewNavigationEvent).url ?? "";
-      if (allowGuestNavigation(url)) openTabRef.current(url);
+      if (!ghostRef.current && allowGuestNavigation(url)) {
+        openTabRef.current(url);
+      }
     };
 
     guest.addEventListener("did-navigate", onDidNavigate);
@@ -134,7 +159,54 @@ export function WebviewGuest({
       guest.removeEventListener("will-navigate", onWillNavigate);
       guest.removeEventListener("new-window", onNewWindow);
     };
-  }, []);
+  }, [discarded]);
+
+  /* -------------------------------- 回收 --------------------------------- */
+  const hiddenSinceRef = React.useRef<number | null>(
+    hidden ? Date.now() : null,
+  );
+  React.useEffect(() => {
+    hiddenSinceRef.current = hidden ? Date.now() : null;
+    if (!hidden && discarded) {
+      // 恢复：重新挂元素并重放地址。`restoringRef` 让随之而来的那次
+      // `did-navigate` 被认作回声（见上面的注释）。
+      restoringRef.current = true;
+      setDiscarded(false);
+    }
+  }, [hidden, discarded]);
+
+  const loadingRef = React.useRef(tab.loading);
+  loadingRef.current = tab.loading;
+  const audibleRef = React.useRef(tab.audible);
+  audibleRef.current = tab.audible;
+  const drivenRef = React.useRef(driven);
+  drivenRef.current = driven;
+
+  React.useEffect(() => {
+    if (discarded) return;
+    const timer = setInterval(() => {
+      const since = hiddenSinceRef.current;
+      if (since === null) return;
+      if (
+        !shouldDiscard({
+          // 设置在**定时器触发时重读**。W3.1 没有这个开关，先恒为开；接上
+          // 设置面板时改的是这一行，不是 `shouldDiscard`。
+          enabled: true,
+          loading: loadingRef.current,
+          audible: audibleRef.current,
+          driven: drivenRef.current,
+          hiddenMs: Date.now() - since,
+        })
+      ) {
+        return;
+      }
+      // 回收 = 卸载元素并**记住 URL**。把 `src` 置空没用（Electron 忽略它），
+      // 所以地址存在标签的 `src` 上：恢复时那一行就是要重放的地址。
+      patchRef.current({ src: locationRef.current });
+      setDiscarded(true);
+    }, DISCARD_TICK_MS);
+    return () => clearInterval(timer);
+  }, [discarded]);
 
   /* -------------------------------- 渲染 --------------------------------- */
   const style: React.CSSProperties = {
@@ -144,6 +216,20 @@ export function WebviewGuest({
     // viewport 与滚动位置保留、重新显示逐像素一致（browser-node §1.2）。
     ...(hidden ? { display: "none" } : {}),
   };
+
+  if (discarded) {
+    return (
+      <div
+        className="grid h-full w-full place-items-center px-6 text-center text-[11px] text-muted-foreground"
+        data-slot="browser-discarded"
+        style={hidden ? { display: "none" } : undefined}
+      >
+        {t("browser.discarded", {
+          minutes: Math.round(BROWSER_DISCARD_MS / 60000),
+        })}
+      </div>
+    );
+  }
 
   return (
     <webview

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { browserPartition, isDesktopShell } from "./desktop";
 import { allowGuestNavigation, searchOrUrl } from "./webview";
+import { BROWSER_DISCARD_MS, shouldDiscard } from "./discard";
 
 describe("isDesktopShell", () => {
   it("是 false，除非 preload 把 window.armadra 装上去了", () => {
@@ -91,5 +92,36 @@ describe("allowGuestNavigation", () => {
     ]) {
       expect(allowGuestNavigation(url)).toBe(false);
     }
+  });
+});
+
+describe("shouldDiscard", () => {
+  const base = {
+    enabled: true,
+    loading: false,
+    audible: false,
+    driven: false,
+    hiddenMs: BROWSER_DISCARD_MS + 1,
+  };
+
+  it("四条都过且超时才回收", () => {
+    expect(shouldDiscard(base)).toBe(true);
+  });
+
+  it("阈值是严格大于，刚好到点不回收", () => {
+    expect(shouldDiscard({ ...base, hiddenMs: BROWSER_DISCARD_MS })).toBe(
+      false,
+    );
+    expect(BROWSER_DISCARD_MS).toBe(5 * 60 * 1000);
+  });
+
+  it("四条否决各自单独成立", () => {
+    expect(shouldDiscard({ ...base, enabled: false })).toBe(false);
+    // 加载中回收会丢掉 POST 的结果与中间页。
+    expect(shouldDiscard({ ...base, loading: true })).toBe(false);
+    // 出声的页面不回收，和 Chrome 同理。
+    expect(shouldDiscard({ ...base, audible: true })).toBe(false);
+    // Agent 正在驱动：回收会让上一次 read 拿到的 ref 全部静默失效。
+    expect(shouldDiscard({ ...base, driven: true })).toBe(false);
   });
 });
