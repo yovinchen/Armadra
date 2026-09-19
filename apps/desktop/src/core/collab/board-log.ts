@@ -34,10 +34,7 @@ export class BoardLog {
   private readonly ring: Record<string, unknown>[] = [];
 
   /** Appends one entry and reports where it landed. */
-  record(
-    workspaceRoot: string | undefined,
-    trace: Trace,
-  ): TraceDestination {
+  record(workspaceRoot: string | undefined, trace: Trace): TraceDestination {
     const entry: Record<string, unknown> = {
       traceId: trace.traceId,
       ts: rfc3339(),
@@ -51,7 +48,10 @@ export class BoardLog {
       workspaceRoot === undefined ? undefined : logPath(workspaceRoot);
     if (path !== undefined) {
       try {
-        appendFileSync(path, `${JSON.stringify({ ...entry, traced: "file" })}\n`);
+        appendFileSync(
+          path,
+          `${JSON.stringify({ ...entry, traced: "file" })}\n`,
+        );
         return "file";
       } catch {
         // Fall through to the ring.

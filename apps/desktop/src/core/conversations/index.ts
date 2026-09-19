@@ -230,7 +230,9 @@ function forgetMissing(
   for (const row of stored) {
     if (alive.has(row.path)) continue;
     database
-      .prepare("DELETE FROM conversations WHERE provider = ? AND session_id = ?")
+      .prepare(
+        "DELETE FROM conversations WHERE provider = ? AND session_id = ?",
+      )
       .run(provider, row.session_id);
     removed += 1;
   }
@@ -361,10 +363,7 @@ export function commandFromCapture(capture: string): string | undefined {
 }
 
 function escapeLike(value: string): string {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/%/g, "\\%")
-    .replace(/_/g, "\\_");
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
 export { claude, codex };

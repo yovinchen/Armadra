@@ -175,7 +175,8 @@ export function placement(
   for (let attempt = 0; attempt < 64; attempt += 1) {
     const taken = document.nodes.some(
       (node) =>
-        Math.abs(node.position.x - x) < 24 && Math.abs(node.position.y - y) < 24,
+        Math.abs(node.position.x - x) < 24 &&
+        Math.abs(node.position.y - y) < 24,
     );
     if (!taken) break;
     y += height + 40;

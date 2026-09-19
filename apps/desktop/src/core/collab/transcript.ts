@@ -45,7 +45,13 @@ export function readTail(path: string, maxBytes: number): string {
     const buffer = Buffer.alloc(size);
     let filled = 0;
     while (filled < size) {
-      const read = readSync(handle, buffer, filled, size - filled, start + filled);
+      const read = readSync(
+        handle,
+        buffer,
+        filled,
+        size - filled,
+        start + filled,
+      );
       if (read === 0) break;
       filled += read;
     }
@@ -119,7 +125,11 @@ export function renderEntry(value: unknown): string | undefined {
   const record = value as Record<string, unknown>;
   // Codex wraps everything in `{type, payload}`; unwrap once.
   const payload = record.payload;
-  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+  if (
+    payload !== null &&
+    typeof payload === "object" &&
+    !Array.isArray(payload)
+  ) {
     return renderEntry(payload);
   }
   const kind = record.type;
@@ -179,8 +189,7 @@ function renderBlock(block: unknown): string | undefined {
     }
     case "tool_use":
     case "function_call": {
-      const name =
-        typeof record.name === "string" ? record.name : "未命名工具";
+      const name = typeof record.name === "string" ? record.name : "未命名工具";
       const input = record.input ?? record.arguments;
       const detail = input === undefined ? "" : summarizeInput(input);
       return detail === "" ? `[工具 ${name}]` : `[工具 ${name} ${detail}]`;
@@ -219,7 +228,8 @@ function summarizeInput(input: unknown): string {
     }
     if (Object.keys(record).length === 0) return "";
   }
-  if (typeof input === "string") return shorten(collapse(input), MAX_TOOL_DETAIL);
+  if (typeof input === "string")
+    return shorten(collapse(input), MAX_TOOL_DETAIL);
   return shorten(collapse(JSON.stringify(input) ?? ""), MAX_TOOL_DETAIL);
 }
 

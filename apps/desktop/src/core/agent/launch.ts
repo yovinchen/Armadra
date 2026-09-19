@@ -344,10 +344,8 @@ export function paneRunsAgent(
  * `node /usr/lib/claude/cli.js`, but not `claude-code-notifier`.
  */
 function lineNamesProgram(line: string, name: string): boolean {
-  return line
-    .split(/[\s/\\]+/)
-    .some((raw) => {
-      const token = raw.endsWith(".exe") ? raw.slice(0, -4) : raw;
-      return token === name || token === `${name}.js`;
-    });
+  return line.split(/[\s/\\]+/).some((raw) => {
+    const token = raw.endsWith(".exe") ? raw.slice(0, -4) : raw;
+    return token === name || token === `${name}.js`;
+  });
 }

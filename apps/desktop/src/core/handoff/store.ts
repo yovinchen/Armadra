@@ -1,7 +1,11 @@
 import { hasCapability, baseAgent } from "../agent/registry";
 import { getAgentStatus } from "../agent/status";
 import { getContextLinks } from "../canvas/context-links";
-import { insertHandoffNotice, MAX_PENDING as MAILBOX_MAX_PENDING, pendingCount } from "../collab/mailbox";
+import {
+  insertHandoffNotice,
+  MAX_PENDING as MAILBOX_MAX_PENDING,
+  pendingCount,
+} from "../collab/mailbox";
 import { type Caller, loadNode } from "../collab/nodes";
 import { locate, readTail, render } from "../collab/transcript";
 import { type CollabContext, nowDate, nowSeconds } from "../collab/service";
@@ -276,7 +280,14 @@ export function prepare(
       "Create a context link to the target before preparing a handoff",
     );
   }
-  let bundle = build(context, space.rootPath, workspaceId, source, target, request);
+  let bundle = build(
+    context,
+    space.rootPath,
+    workspaceId,
+    source,
+    target,
+    request,
+  );
   // A recycle during snapshot collection must not silently relabel old data.
   identity(
     context,
@@ -729,7 +740,9 @@ export function cancel(
       throw conflict("This notification can no longer be cancelled safely");
     }
     context.database
-      .prepare("UPDATE agent_handoffs SET state = 'cancelled', updated_at = ? WHERE id = ?")
+      .prepare(
+        "UPDATE agent_handoffs SET state = 'cancelled', updated_at = ? WHERE id = ?",
+      )
       .run(rfc3339(), id);
     // Withdrawing is deleting the inbox entry. There is no pane to un-write
     // and no queue to drain: once the row is gone the target's next `inbox`

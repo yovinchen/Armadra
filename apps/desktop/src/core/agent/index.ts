@@ -107,8 +107,7 @@ export function install(context: CoreContext): CollabContext {
     },
     // `close` is the only verb that needs an audience count, and it needs the
     // real one: a dialog nobody can see is a two-minute wait for nothing.
-    audience: (workspaceId) =>
-      eventStream()?.subscriberCount(workspaceId) ?? 0,
+    audience: (workspaceId) => eventStream()?.subscriberCount(workspaceId) ?? 0,
     terminals,
     dataDir: context.dataDir,
   });
@@ -123,8 +122,7 @@ export function install(context: CoreContext): CollabContext {
           sessionId,
           generation,
         ),
-      noteAcknowledged: (mailboxId) =>
-        noteAcknowledged(withHandoff, mailboxId),
+      noteAcknowledged: (mailboxId) => noteAcknowledged(withHandoff, mailboxId),
     },
     handoffReader: (caller, handoffId, sessionId, generation) =>
       readForCaller(withHandoff, caller, handoffId, sessionId, generation),
