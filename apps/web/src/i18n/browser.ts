@@ -79,6 +79,11 @@ const zh = {
   /* 帧流（§2.9） */
   "browser.stream.reconnecting": "画面重连中",
 
+  /* 隐藏回收（electron-migration.md §4.1）。说的是「为省内存释放了」，
+     不是权限错误——人看到的应当是一个可以直接恢复的状态，而不是被挡住。 */
+  "browser.discarded":
+    "页面隐藏超过 {minutes} 分钟，已为省内存释放；回到这里会重新加载。",
+
   /* 受管浏览器（§2.1） */
   "browser.managed.install": "安装受管浏览器 {version}（{megabytes} MB）",
   "browser.managed.installing": "正在安装…",
@@ -157,6 +162,9 @@ const en: Record<keyof typeof zh, string> = {
   "browser.chooser.failed": "Sending the files failed",
 
   "browser.stream.reconnecting": "Reconnecting the picture",
+
+  "browser.discarded":
+    "Hidden for over {minutes} minutes, so the page was freed to save memory; coming back reloads it.",
 
   "browser.managed.install":
     "Install managed browser {version} ({megabytes} MB)",
