@@ -10,10 +10,14 @@ import type { CanvasNodeType } from "@armadra/shared";
 const FOCUSABLE: ReadonlySet<CanvasNodeType> = new Set<CanvasNodeType>([
   "terminal",
   "editor",
-  "browser",
 ]);
 
-/** 便签、分组与那两张只读卡片在画布上就够看，不进焦点页。 */
+/**
+ * 便签、分组与那两张只读卡片在画布上就够看，不进焦点页。
+ *
+ * 浏览器节点也不在：它要的是壳里的 `<webview>`，而手机上打开画布的永远是
+ * 一个浏览器标签页，整屏打开只会得到一张「只在桌面应用里可用」的空卡片。
+ */
 export function canFocusOnPhone(type: CanvasNodeType): boolean {
   return FOCUSABLE.has(type);
 }

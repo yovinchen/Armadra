@@ -73,6 +73,9 @@ vi.mock("../whiteboard/store", () => ({
 vi.mock("../dnd/external-content", () => ({ pickFilesForCanvas }));
 vi.mock("../../panels/automation/open", () => ({ openAutomationPanel }));
 vi.mock("../commands", () => ({ runCanvasCommand }));
+// 浏览器节点那一项按壳在不在门禁；测试里默认没有壳。
+let desktop = false;
+vi.mock("../../platform", () => ({ isDesktop: () => desktop }));
 
 const { buildAddMenu, sshMenuItems } = await import("./add-menu");
 
@@ -125,6 +128,7 @@ function itemById(
 
 describe("buildAddMenu", () => {
   beforeEach(() => {
+    desktop = false;
     for (const fn of [
       addNode,
       setPanel,
@@ -253,8 +257,16 @@ describe("buildAddMenu", () => {
   });
 
   it("浏览器走 `addNode`", () => {
+    desktop = true;
     itemById("add.browser").run(ctx);
     expect(addNode).toHaveBeenCalledWith("browser", { position: centered });
+  });
+
+  it("非桌面上整项不出现，而不是列一项点不动的", () => {
+    desktop = false;
+    expect(
+      buildAddMenu([claude], t).some((item) => item.id === "add.browser"),
+    ).toBe(false);
   });
 
   it("定时计划开的是自动化页，不建空卡片", () => {

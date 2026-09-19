@@ -190,7 +190,7 @@ describe("the phone focus page", () => {
 
 describe("what a phone opens full screen", () => {
   it("covers the nodes worth a whole screen and nothing else", () => {
-    for (const type of ["terminal", "editor", "browser"] as const)
+    for (const type of ["terminal", "editor"] as const)
       expect(canFocusOnPhone(type)).toBe(true);
     for (const type of [
       "sticky",
@@ -199,6 +199,8 @@ describe("what a phone opens full screen", () => {
       "files",
       "automation",
       "agentActivity",
+      // 浏览器节点要壳里的 `<webview>`；手机上整屏打开只有一张空卡片。
+      "browser",
     ] as const)
       expect(canFocusOnPhone(type)).toBe(false);
   });
