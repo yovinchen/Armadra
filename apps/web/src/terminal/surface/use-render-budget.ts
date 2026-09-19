@@ -8,22 +8,22 @@ import {
   resolveRenderState,
   type TerminalRenderState,
 } from "../render-state";
-import {
-  RENDER_PRIORITY_FOCUSED,
-  RENDER_PRIORITY_VISIBLE,
-  claimRenderSlot,
-} from "../render-budget";
+import { registerRenderClient, type RenderClient } from "../render-budget";
 import type { SurfaceRefs } from "./refs";
 import type { TerminalConnection } from "./types";
 
 export interface RenderBudget {
   render: TerminalRenderState;
   active: boolean;
+  /** 持有一个渲染名额：WebGL addon 的挂载条件（`render-budget.ts`）。 */
+  budgeted: boolean;
   focused: boolean;
   setFocused: (value: boolean) => void;
   onScreen: boolean;
   pageVisible: boolean;
   flushOutput: () => void;
+  /** 上报 `webglcontextlost`，由协调器决定要不要延迟重授。 */
+  reportContextLoss: () => void;
 }
 
 /**
@@ -65,24 +65,49 @@ export function useRenderBudget(
   /*
    * 渲染名额（设计 §7.1「WebGL context 设设备预算」）。
    *
-   * 优先级变了就重登记一次——`claimRenderSlot` 没有改优先级的接口，重新申请
-   * 拿到更大的序号，正好表达「刚被聚焦的这个最该拿名额」。清理里补一次
-   * `setBudgeted(false)`：释放不会回调已经删掉的那条登记，不补的话新的一次
-   * 申请如果没抢到名额，状态就停在上一轮的 `true` 上。
+   * 这里**只上报**，不决策：登记一次活到节点卸载，可见性与焦点变了就告诉协调
+   * 器，授予、去抖、LRU 回收、丢上下文后的重授全在 `render-budget.ts` 里算。
+   * 各节点各自「可见就取」会在快速平移时集体越过浏览器的上下文上限，触发强制
+   * 驱逐——那正是 "lost context" 白框的来源。
+   *
+   * 登记与上报分成三个 effect，顺序即声明顺序：挂载那一帧先登记（初始状态不
+   * 去抖），随后两个上报 effect 拿到的是同一个值，被去重挡掉。
    */
   const wantsSlot = !collapsed && onScreen && pageVisible && !detached;
-  const priority = focused ? RENDER_PRIORITY_FOCUSED : RENDER_PRIORITY_VISIBLE;
+  const clientRef = React.useRef<RenderClient | null>(null);
+  /*
+   * 挂载那一帧的状态，只在首渲染求值（`useRef` 的初值）。登记要当下的值，但值
+   * 变了**不该**重新登记——那是 `setVisible` / `setFocused` 的事。之后哪怕
+   * `nodeId` 真的换了，紧随其后的上报 effect 也会在同一个 commit 里纠正。
+   */
+  const initialRef = React.useRef({ visible: wantsSlot, focused });
+
   React.useEffect(() => {
-    if (!wantsSlot) {
-      setBudgeted(false);
-      return;
-    }
-    const release = claimRenderSlot(nodeId, priority, setBudgeted);
+    const client = registerRenderClient(
+      nodeId,
+      initialRef.current,
+      setBudgeted,
+    );
+    clientRef.current = client;
     return () => {
-      release();
+      clientRef.current = null;
+      client.dispose();
+      // 销登记不会回调已经删掉的那条，不补的话状态会停在上一轮的 `true` 上。
       setBudgeted(false);
     };
-  }, [nodeId, wantsSlot, priority]);
+  }, [nodeId]);
+
+  React.useEffect(() => {
+    clientRef.current?.setVisible(wantsSlot);
+  }, [wantsSlot]);
+
+  React.useEffect(() => {
+    clientRef.current?.setFocused(focused);
+  }, [focused]);
+
+  const reportContextLoss = React.useCallback(() => {
+    clientRef.current?.contextLost();
+  }, []);
 
   /** 把攒下的输出灌进 xterm。顺序即到达顺序，一个字节都不重排。 */
   const flushOutput = React.useCallback(() => {
@@ -108,10 +133,12 @@ export function useRenderBudget(
   return {
     render,
     active,
+    budgeted,
     focused,
     setFocused,
     onScreen,
     pageVisible,
     flushOutput,
+    reportContextLoss,
   };
 }
