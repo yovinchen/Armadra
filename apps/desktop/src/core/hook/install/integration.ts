@@ -150,7 +150,11 @@ export function state(
       : undefined;
   let clientBin: string | undefined;
   try {
-    clientBin = resolveClientBinary({ env: options.env, ...options.client });
+    clientBin = resolveClientBinary({
+      env: options.env,
+      launcher: { dataDir: options.dataDir },
+      ...options.client,
+    });
   } catch {
     clientBin = undefined;
   }
@@ -194,6 +198,7 @@ export function install(
   const home = options.home ?? configHome(agentId, options.env);
   const clientBin = resolveClientBinary({
     env: options.env,
+    launcher: { dataDir: options.dataDir },
     ...options.client,
   });
   const report: InstallReport = installHook(

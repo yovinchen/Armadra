@@ -23,6 +23,7 @@ import {
 import { ContextUsageCache } from "../usage/context-usage";
 import { ORPHAN_MINUTES, pendingDir, sweepOrphans } from "./approvals";
 import { installRoutes } from "./routes";
+import { installHookBridge } from "./hook-bridge";
 
 /**
  * The agent domain's assembly point — agent status, approvals, collaboration,
@@ -130,6 +131,8 @@ export function install(context: CoreContext): CollabContext {
   assembled = withHandoff;
   setControlDispatcher(createControlDispatcher(withHandoff));
   installRoutes({ server: context.server, collab: withHandoff, usage });
+  // The hook surface authenticates; these two families answer.
+  installHookBridge(context.db.database, contextLinkReader);
 
   // The index is a convenience, so a provider directory that cannot be read is
   // a warning and an empty palette group, not a startup failure. One pass now;
