@@ -31,8 +31,13 @@ import type { WorkspaceEvent } from "../bus";
  *
  * 帧的形状是契约：21 个 `type` 字符串，字段和 `type` 平铺，`workspaceEventSchema`
  * 逐字段解析。加一个 `seq` 是破坏性改动——`packages/shared` 要跟着改，而
- * `apps/web/src/api/events.ts` 这一批不许动。所以游标走带外：升级响应头。
- * 细节见 {@link import("./stream").WorkspaceEventStream.attachSocket}。
+ * `apps/web/src/api/events.ts` 这一批不许动。
+ *
+ * 所以游标走带外，而且**只发给要它的人**：带了 `?cursor=` 的订阅在每一帧之后多
+ * 收一条控制帧（`{"type":"cursor",…}`，见
+ * {@link import("./stream").cursorFrame}）；页面不带游标，于是页面收到的仍然只
+ * 有那 21 个契约事件，一帧不多一帧不少。拒绝续订的两个状态没有 socket 可说话，
+ * 写在升级的状态行上：`409 SNAPSHOT_REQUIRED` / `409 CURSOR_AHEAD`。
  */
 
 /** 一条 outbox 记录，读出来就是当初发出去的那一帧。 */

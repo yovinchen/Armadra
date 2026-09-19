@@ -1,5 +1,6 @@
 import type { CoreContext } from "../main";
 import { instanceId } from "../instance";
+import { coreCapabilities } from "../schedule/capabilities";
 import { startControlChannel } from "./control";
 import { API_PREFIX, IdentityHttp, RPC_PREFIX } from "./http";
 import { IdentityService } from "./service";
@@ -49,7 +50,14 @@ export function installIdentity(context: CoreContext): void {
   const runInstance = identityInstanceId();
   const store = new IdentityStore(context.db.database);
   const service = new IdentityService(store, runInstance);
-  const http = new IdentityHttp({ service, instanceId: runInstance });
+  // Hello 报的能力名里多出的那些来自各域自己的注册表（`core/schedule/capabilities`）。
+  // 身份域不该知道有哪些域存在，所以这里只转发；自动化面板认的
+  // `automation.plans.v1` 就是这样传到页面的。
+  const http = new IdentityHttp({
+    service,
+    instanceId: runInstance,
+    capabilities: coreCapabilities,
+  });
 
   context.server.raw(RPC_PREFIX, (request, response, cors) =>
     http.rpc(request, response, cors),
