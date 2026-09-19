@@ -19,8 +19,15 @@ const zh = {
   "browser.openExternal": "外部打开",
   "browser.preview": "预览",
   "browser.state.unsupported": "不可用",
-  "browser.unavailable.desktopOnly":
-    "浏览器节点只在桌面应用里可用；在浏览器里打开画布时它没有可以嵌入的页面。",
+
+  /* 远程画面流（R6c）：服务器壳上没有窗口，画的是 headless 浏览器的帧。 */
+  "browser.stream.live": "远程画面",
+  "browser.stream.connecting": "正在连接",
+  "browser.stream.occupied": "已有人在看",
+  "browser.stream.occupiedHint":
+    "这个浏览器节点同时只接受一个观看者，关掉另一处再回来。",
+  "browser.stream.unavailableHint":
+    "服务端没有找到可用的 Chromium。装一个，或用 ARMADRA_BROWSER_PATH 指定路径。",
 
   /* 控制租约（§2.6）与活动徽标（§2.8） */
   "browser.lease.free": "无人控制",
@@ -75,8 +82,14 @@ const en: Record<keyof typeof zh, string> = {
   "browser.openExternal": "Open externally",
   "browser.preview": "Preview",
   "browser.state.unsupported": "Unavailable",
-  "browser.unavailable.desktopOnly":
-    "Browser nodes only work in the desktop app; opened in a browser tab there is no page for one to embed.",
+
+  "browser.stream.live": "Remote view",
+  "browser.stream.connecting": "Connecting",
+  "browser.stream.occupied": "Somebody is watching",
+  "browser.stream.occupiedHint":
+    "A browser node takes one viewer at a time; close the other one and come back.",
+  "browser.stream.unavailableHint":
+    "The server found no Chromium to run. Install one, or point ARMADRA_BROWSER_PATH at it.",
 
   "browser.lease.free": "Nobody is driving",
   "browser.lease.you": "You are driving",

@@ -114,16 +114,14 @@ describe("浏览器节点的分流", () => {
     expect(guests()[0]!.getAttribute("src")).toBe("https://example.test/");
   });
 
-  it("壳不在时不渲染 guest，只说明节点为什么用不了（W3.5）", () => {
+  it("壳不在时不渲染 guest，改画远程画面流（R6c）", () => {
     delete (window as unknown as Record<string, unknown>).armadra;
     const view = paint();
     expect(guests()).toHaveLength(0);
-    // 既不是空白，也不是一个按不动的工具栏：一条说清楚原因的提示。
-    expect(
-      view.container.textContent?.includes("browser.unavailable.desktopOnly") ||
-        view.container.textContent?.includes("桌面应用") ||
-        view.container.textContent?.includes("desktop app"),
-    ).toBe(true);
+    // 服务器壳上页面在 core 起的 headless 浏览器里，这边是一块 canvas 和一
+    // 条说明当前状态的提示；不再是「只有桌面能用」的死路。
+    expect(view.container.querySelector("canvas")).not.toBeNull();
+    expect(view.container.textContent ?? "").not.toBe("");
   });
 });
 
