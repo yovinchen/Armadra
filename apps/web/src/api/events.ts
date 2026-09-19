@@ -5,7 +5,16 @@
  * 其余模块通过 `onWorkspaceEvent(type, handler)` 订阅，不各自开连接。
  *
  * 每一帧都先 `workspaceEventSchema` 解析；解析失败只丢这一帧并告警，
- * 不断开连接（Runtime 可能比前端新，多出来的事件类型不该让侧栏失效）。
+ * 不断开连接（core 可能比前端新，多出来的事件类型不该让侧栏失效）。
+ *
+ * **断线续订**（R4c）。core 的事件与业务写入同事务，编号是一条单调的
+ * durable sequence，所以「我看到哪儿了」就是一个数。收到的每一条业务帧后面
+ * 跟着一条 `{"type":"cursor",…}` 控制帧——它不是第 22 个 `WorkspaceEvent`，
+ * 只发给带了 `?cursor=` 的订阅——这里记下那个数，重连时从它之后续，于是断开
+ * 的那一段会被补发，而不是被当成「什么都没发生」。
+ *
+ * 第一次连接不带游标：那时还没有可续的位置，从 0 订会把整段历史当成刚发生的
+ * 改动重放一遍。
  */
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -76,11 +85,33 @@ interface Connection {
   delay: number | null;
   refs: number;
   stopped: boolean;
+  /** 最后一条控制帧报的位置；`null` 表示还没读到过任何位置。 */
+  cursor: number | null;
+  /**
+   * 还要不要带游标订阅。
+   *
+   * core 在升级**之前**就拒绝一个掉出保留下限或超出水位的游标（409），
+   * 那条连接根本不会打开。继续拿同一个数重连只会撞上同一堵墙，而重连是
+   * 按秒退避的——所以拒绝一次就回到实时订阅，那一段缺口由调用方照常重读
+   * 补上，而不是把一次拒绝变成一个重连风暴。
+   */
+  resuming: boolean;
+  /** 这一次连接有没有真的打开过。用来分辨「被拒绝」和「断开了」。 */
+  opened: boolean;
 }
 
 let current: Connection | null = null;
 
-function parseFrame(raw: unknown): WorkspaceEvent | null {
+/** core 的游标控制帧。只有带 `?cursor=` 的订阅才会收到。 */
+interface CursorFrame {
+  cursor: number;
+  floor: number;
+  watermark: number;
+}
+
+function parseFrame(
+  raw: unknown,
+): { event: WorkspaceEvent } | { cursor: CursorFrame } | null {
   if (typeof raw !== "string") return null;
   let payload: unknown;
   try {
@@ -88,19 +119,40 @@ function parseFrame(raw: unknown): WorkspaceEvent | null {
   } catch {
     return null;
   }
+  const control = payload as Partial<CursorFrame> & { type?: unknown };
+  if (
+    control?.type === "cursor" &&
+    typeof control.cursor === "number" &&
+    typeof control.floor === "number" &&
+    typeof control.watermark === "number"
+  ) {
+    return {
+      cursor: {
+        cursor: control.cursor,
+        floor: control.floor,
+        watermark: control.watermark,
+      },
+    };
+  }
   const parsed = workspaceEventSchema.safeParse(payload);
   if (!parsed.success) return null;
-  return parsed.data;
+  return { event: parsed.data };
 }
 
 function open(connection: Connection): void {
   if (connection.stopped) return;
+  connection.opened = false;
   const Socket = globalThis.WebSocket;
   if (!Socket) return;
 
   let socket: WebSocket;
   try {
-    socket = new Socket(workspaceEventsUrl(connection.workspaceId));
+    socket = new Socket(
+      workspaceEventsUrl(
+        connection.workspaceId,
+        connection.resuming ? (connection.cursor ?? "now") : undefined,
+      ),
+    );
   } catch {
     schedule(connection);
     return;
@@ -109,16 +161,30 @@ function open(connection: Connection): void {
 
   socket.onopen = () => {
     if (connection.socket !== socket || connection.stopped) return;
+    connection.opened = true;
     connection.delay = null;
     for (const handler of connectionHandlers)
       handler(connection.workspaceId, true);
   };
   socket.onmessage = (event: MessageEvent) => {
     const parsed = parseFrame(event.data);
-    if (parsed) dispatchWorkspaceEvent(parsed);
+    if (!parsed) return;
+    if ("event" in parsed) {
+      dispatchWorkspaceEvent(parsed.event);
+      return;
+    }
+    // 游标只准前进：往回退等于把已经应用过的改动当成没发生。
+    const { cursor } = parsed;
+    if (connection.cursor === null || cursor.cursor > connection.cursor)
+      connection.cursor = cursor.cursor;
   };
   socket.onclose = () => {
     if (connection.socket !== socket || connection.stopped) return;
+    // 没打开过就关了 = core 在升级之前拒绝了这个游标。放弃续订，回到实时。
+    if (!connection.opened && connection.resuming) {
+      connection.resuming = false;
+      connection.cursor = null;
+    }
     for (const handler of connectionHandlers)
       handler(connection.workspaceId, false);
     connection.socket = null;
@@ -169,6 +235,9 @@ export function connectWorkspaceEvents(workspaceId: string): () => void {
     delay: null,
     refs: 0,
     stopped: false,
+    cursor: null,
+    resuming: true,
+    opened: false,
   };
   if (!current) {
     current = connection;

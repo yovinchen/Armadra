@@ -285,10 +285,12 @@ export class WorkspaceEventStream {
   attachSocket(
     workspaceId: string,
     socket: WebSocket,
-    options: { readonly cursor?: number } = {},
+    options: { readonly cursor?: number | "now" } = {},
   ): () => void {
     const cursored = options.cursor !== undefined;
-    if (cursored) this.replay(workspaceId, socket, options.cursor as number);
+    if (options.cursor === "now") this.seed(socket);
+    else if (cursored)
+      this.replay(workspaceId, socket, options.cursor as number);
     return this.subscribe(
       workspaceId,
       {
@@ -303,6 +305,19 @@ export class WorkspaceEventStream {
       },
       { cursored },
     );
+  }
+
+  /**
+   * 只报一次当前水位，不补发任何历史（`?cursor=now`）。
+   *
+   * 给还没有位置的客户端用：它要的是「从现在起别漏」。补发历史是另一个问题的
+   * 答案，而那个问题只有已经看过一段的客户端才问得出来。
+   */
+  private seed(socket: WebSocket): void {
+    const database = this.database;
+    if (database === undefined) return;
+    const bounds = watermark(database);
+    socket.send(cursorFrame(bounds.watermark, bounds.floor, bounds.watermark));
   }
 
   /**

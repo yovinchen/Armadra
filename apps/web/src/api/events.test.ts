@@ -163,3 +163,77 @@ describe("workspace events", () => {
     expect(nextReconnectDelay(10_000)).toBe(10_000);
   });
 });
+
+describe("断线续订（R4c）", () => {
+  /**
+   * 第一次连上时页面还没有位置，所以问的是 `now`：它要的是「从现在起别漏」，
+   * 而 `cursor=0` 是「把这个 core 发过的一切重放一遍」——两个不同的问题。
+   */
+  it("第一次带 cursor=now，重连带记下的那个数", () => {
+    const release = connectWorkspaceEvents(WORKSPACE);
+    const first = FakeSocket.instances[0] as FakeSocket;
+    expect(first.url).toContain("?cursor=now");
+    first.onopen?.();
+    first.receive(
+      JSON.stringify({ type: "cursor", cursor: 42, floor: 1, watermark: 42 }),
+    );
+    first.drop();
+    vi.advanceTimersByTime(2_000);
+    const second = FakeSocket.instances[1] as FakeSocket;
+    expect(second.url).toContain("?cursor=42");
+    release();
+  });
+
+  /** 游标只准前进：退回去等于把已经应用过的改动当成没发生。 */
+  it("控制帧只让游标前进", () => {
+    const release = connectWorkspaceEvents(WORKSPACE);
+    const first = FakeSocket.instances[0] as FakeSocket;
+    first.onopen?.();
+    first.receive(
+      JSON.stringify({ type: "cursor", cursor: 42, floor: 1, watermark: 42 }),
+    );
+    first.receive(
+      JSON.stringify({ type: "cursor", cursor: 7, floor: 1, watermark: 42 }),
+    );
+    first.drop();
+    vi.advanceTimersByTime(2_000);
+    expect((FakeSocket.instances[1] as FakeSocket).url).toContain("?cursor=42");
+    release();
+  });
+
+  /**
+   * core 在升级之前就拒绝一个掉出保留下限的游标，那条连接根本没打开。
+   * 拿同一个数重连只会撞上同一堵墙，而重连是按秒退避的。
+   */
+  it("升级被拒之后回到实时订阅，不再拿同一个数重连", () => {
+    const release = connectWorkspaceEvents(WORKSPACE);
+    const first = FakeSocket.instances[0] as FakeSocket;
+    first.onopen?.();
+    first.receive(
+      JSON.stringify({ type: "cursor", cursor: 9, floor: 1, watermark: 9 }),
+    );
+    first.drop();
+    vi.advanceTimersByTime(2_000);
+    // 第二条没 open 就被关掉 = 409。
+    (FakeSocket.instances[1] as FakeSocket).drop();
+    vi.advanceTimersByTime(5_000);
+    const third = FakeSocket.instances[2] as FakeSocket;
+    expect(third.url).not.toContain("cursor=");
+    release();
+  });
+
+  /** 控制帧不是第 22 个事件：它不该被派发给任何订阅者。 */
+  it("控制帧不派发给事件订阅者", () => {
+    const seen = vi.fn();
+    const off = onWorkspaceEvent("board.changed", seen);
+    const release = connectWorkspaceEvents(WORKSPACE);
+    const socket = FakeSocket.instances[0] as FakeSocket;
+    socket.onopen?.();
+    socket.receive(
+      JSON.stringify({ type: "cursor", cursor: 3, floor: 0, watermark: 3 }),
+    );
+    expect(seen).not.toHaveBeenCalled();
+    off();
+    release();
+  });
+});

@@ -32,9 +32,22 @@ export function terminalWebSocketUrl(
   return writerId ? `${base}?writer=${query(writerId)}` : base;
 }
 
-/** 工作空间事件流：agent.status / agent.approval / terminal.exit / board.changed。 */
-export function workspaceEventsUrl(workspaceId: string): string {
-  return socketUrl(`/api/workspaces/${workspaceId}/events`);
+/**
+ * 工作空间事件流：agent.status / agent.approval / terminal.exit / board.changed。
+ *
+ * 带 `cursor` 时 core 先把那个序号之后的那一段补发出来，再接上实时扇出
+ * （R4c）。补发的帧之后各跟一条 `{"type":"cursor",…}` 控制帧——它只发给带
+ * 游标的订阅，所以不带游标的那条路上一个字节都没变。
+ *
+ * `"now"` 是「我还没有位置」：不补发任何历史，只报一次当前水位。页面第一次
+ * 连上时用它，断线重连时用记下的那个数。
+ */
+export function workspaceEventsUrl(
+  workspaceId: string,
+  cursor?: number | "now",
+): string {
+  const base = socketUrl(`/api/workspaces/${workspaceId}/events`);
+  return cursor === undefined ? base : `${base}?cursor=${cursor}`;
 }
 
 /**
