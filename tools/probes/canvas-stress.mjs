@@ -11,7 +11,7 @@
 // 的 hook 垫片（React 只有在 hook 在它之前就位时才给 fiber 打开 ProfileMode），
 // 用 DevTools Profiler 自己那条 `didFiberRender` 判据数 fiber。
 //
-// 跑的是一整条真链路：临时数据目录里的 Rust Runtime、一个临时工作空间、Vite
+// 跑的是一整条真链路：临时数据目录里的 core、一个临时工作空间、Vite
 // 开发服务器、新 profile 的无头 Chrome，页面是应用自己的首页（`?workspace=…&board=…`
 // 深链，见 `apps/web/src/app/use-board-sync.ts`）。端口随机（不用 1420 / 1421 /
 // 43120 / 43121），数据目录与浏览器 profile 都是 mktemp 出来的，跑完删除；不读写
@@ -19,7 +19,7 @@
 //
 // 用法（仓库根目录）：
 //   export CARGO_TARGET_DIR=$PWD/target
-//   cargo build -p armadra-runtime
+//   pnpm --filter @armadra/desktop build
 //   node tools/probes/canvas-stress.mjs [输出目录] [节点数]
 //
 // 产物：<输出目录>/result.json 与 canvas.png。
@@ -286,14 +286,10 @@ async function main() {
 
   /* -------------------------------- Runtime ------------------------------ */
 
-  const binary = join(
-    process.env.CARGO_TARGET_DIR ?? join(root, "target"),
-    "debug",
-    process.platform === "win32" ? "armadra-runtime.exe" : "armadra-runtime",
-  );
+  const binary = join(root, "apps/desktop/out/core/main.js");
   if (!existsSync(binary)) {
     throw new Error(
-      `Runtime 未构建：${binary}。先跑 CARGO_TARGET_DIR=$PWD/target cargo build -p armadra-runtime`,
+      `core 未构建：${binary}。先跑 pnpm --filter @armadra/desktop build`,
     );
   }
   const data = join(workspace, "runtime");
@@ -301,14 +297,17 @@ async function main() {
   const environment = {
     ...process.env,
     ARMADRA_DATA_DIR: data,
-    ARMADRA_DATABASE_URL: `sqlite://${join(data, "canvas.db")}?mode=rwc`,
-    RUST_LOG: process.env.RUST_LOG ?? "warn",
+    ARMADRA_LOG: process.env.ARMADRA_LOG ?? "warn",
   };
-  const runtime = spawn(binary, ["--listen", "tcp:127.0.0.1:0"], {
-    cwd: root,
-    stdio: ["ignore", "ignore", "pipe"],
-    env: environment,
-  });
+  const runtime = spawn(
+    process.execPath,
+    [binary, "--listen", "tcp:127.0.0.1:0", "--data-dir", data],
+    {
+      cwd: root,
+      stdio: ["ignore", "ignore", "pipe"],
+      env: environment,
+    },
+  );
   cleanups.push(() => runtime.kill("SIGKILL"));
   let diagnostics = "";
   runtime.stderr.on("data", (chunk) => {
@@ -318,7 +317,7 @@ async function main() {
   let origin = "";
   for (let attempt = 0; attempt < 300 && !origin; attempt += 1) {
     if (runtime.exitCode !== null) {
-      throw new Error(`Runtime 退出：${diagnostics}`);
+      throw new Error(`core 退出：${diagnostics}`);
     }
     try {
       origin = JSON.parse(readFileSync(endpoints, "utf8")).runtime.http;
@@ -327,9 +326,9 @@ async function main() {
     }
   }
   if (!(await fetch(new URL("/api/health", origin))).ok) {
-    throw new Error("Runtime 健康检查失败");
+    throw new Error("core 健康检查失败");
   }
-  step("Runtime 已启动", origin);
+  step("core 已启动", origin);
 
   const api = async (path, init) => {
     const answer = await fetch(new URL(path, origin), {
