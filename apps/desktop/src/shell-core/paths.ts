@@ -3,11 +3,11 @@ import { join } from "node:path";
 
 /**
  * The Runtime's data directory, resolved the way the Runtime resolves it
- * itself (`apps/runtime/src/paths.rs`, `data_dir`) and the way the Tauri shell
- * did (`src-tauri/src/lib.rs:26-48`).
+ * itself (`apps/runtime/src/paths.rs`, `data_dir`) and the way the Rust shell
+ * this one replaced did.
  *
  * Electron offers `app.getPath('userData')`, and on macOS it even lands in the
- * same place. It is still not used here, for the reason the Tauri shell gave:
+ * same place. It is still not used here, for the reason the Rust shell gave:
  * the Runtime socket and `endpoints.json` live in this directory, and the two
  * processes have to agree on where that is *before* either can talk to the
  * other. A path that comes from Electron's own conventions is a path the

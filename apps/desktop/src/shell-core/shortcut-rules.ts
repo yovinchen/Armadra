@@ -1,6 +1,6 @@
 /**
  * 系统级全局热键（快捷键页的 `global` 作用域），ported from
- * `src-tauri/src/shortcuts.rs`.
+ * the Rust shell this one replaced.
  *
  * A global hotkey is the only kind of shortcut that fires while another
  * application is in front, which makes it the only kind that can take a
@@ -36,7 +36,7 @@ export const KNOWN_IDS: readonly string[] = [
 /** One requested hotkey, as the settings page sends it. */
 export interface Binding {
   readonly id: string;
-  /** Tauri accelerator syntax (`CmdOrCtrl+Shift+K`); the page converts from
+  /** Accelerator syntax (`CmdOrCtrl+Shift+K`); the page converts from
    * the chord syntax the rest of the keymap uses, and `accelerator.ts`
    * converts the rest of the way. */
   readonly accelerator?: string;

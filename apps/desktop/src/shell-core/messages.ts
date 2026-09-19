@@ -3,7 +3,7 @@ import { desktop } from "../../../web/src/i18n/desktop";
 /**
  * The shell's wording, taken from the front end's catalogue.
  *
- * Migration design §2.3, last bullet: the strings the Tauri shell hardcoded
+ * Migration design §2.3, last bullet: the strings the Rust shell hardcoded
  * (`usage.rs`, `updates/notify.rs`) move into `apps/web/src/i18n/`, and the
  * main process only ever decides WHICH language to read. `apps/desktop` is not
  * allowed a second message catalogue — two catalogues drift, and the one the

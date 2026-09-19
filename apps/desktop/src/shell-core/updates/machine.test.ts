@@ -1,6 +1,6 @@
 /**
  * The transition table of docs/design/updates-and-service-install.md §2.1,
- * ported from `src-tauri/src/updates/tests/updates_machine.rs` (12 test
+ * ported from the Rust shell's state-machine suite (12 test
  * functions) with one addition: the table is also written out cell by cell —
  * every one of the thirteen states against every one of the fifteen events,
  * 195 entries — so a transition cannot quietly change without a test changing

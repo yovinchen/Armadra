@@ -51,7 +51,7 @@ export function setDriveEnvironment(address: string, token: string): void {
  *
  * A packaged shell starts the Runtime itself; a development Runtime is
  * somebody else's process on a loopback port, and this module never signals
- * one it did not start. Ported from `src-tauri/src/runtime_process.rs`.
+ * one it did not start. Ported from the Rust shell this one replaced.
  *
  * The owned Runtime listens twice: on a Unix socket in the data directory,
  * which is what `/health` and the stale-Runtime takeover use because they need
@@ -136,7 +136,7 @@ export class RuntimeProcess {
     );
     const child = spawn(executable, args, {
       // stdout is piped, not discarded: the first line identifies this run and
-      // the rest is the Runtime's own log, which the Tauri shell used to throw
+      // the rest is the Runtime's own log, which the Rust shell used to throw
       // away entirely in a packaged build.
       stdio: ["pipe", "pipe", "ignore"],
       // The browser drive channel (§4.2). The address is a kernel-assigned

@@ -16,8 +16,8 @@ import type { RuntimeProcess } from "./runtime-process";
 
 /**
  * The quit orchestration: Host first, then the Runtime, and no exit unless
- * both confirmed. Ported from `src-tauri/src/lifecycle.rs:247-302` and the
- * `request_quit` sequence in `src-tauri/src/main.rs:89-120`.
+ * both confirmed. Ported from the Rust shell's lifecycle suite and its
+ * `request_quit` sequence.
  */
 
 const unix = process.platform !== "win32";
@@ -41,7 +41,7 @@ function config(binary: string): HostLaunchConfig {
   return {
     binary,
     dataDir: undefined,
-    browserOrigin: "tauri://localhost",
+    browserOrigin: "http://127.0.0.1:54321",
     // The production budget. macOS scans each freshly written executable
     // before it first runs, which costs up to ~2s here; only the "will not
     // stop" case below is about the timeout, and a tight budget for the rest

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { contentSecurityPolicy, isPageUrl } from "./csp";
 
 /**
- * The policy the Tauri shell had in `tauri.conf.json:31-32` does not come
+ * The policy the Rust shell had in its packaged configuration does not come
  * across by itself — Electron gives a page none — so what it granted, and what
  * it refused, is asserted here rather than remembered.
  */
@@ -25,7 +25,7 @@ describe("the page's policy", () => {
   });
 
   it("no longer grants the custom scheme the forwarding path needed", () => {
-    // `armadra:` existed only because `tauri://localhost` was not an HTTP
+    // `armadra:` existed only because the old page origin was not an HTTP
     // origin. There is no protocol handler left to reach.
     expect(contentSecurityPolicy()).not.toContain("armadra:");
   });

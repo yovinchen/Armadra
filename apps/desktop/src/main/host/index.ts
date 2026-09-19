@@ -26,7 +26,7 @@ import { verifyOrigin } from "./verify";
  *
  * The launch line and the CLI child live in `./launch`; the checks that decide
  * whether an answer may be trusted live in `../../shell-core/host/` (pure) and
- * `./verify` (the HTTP round trips). Ported from `src-tauri/src/host/mod.rs`.
+ * `./verify` (the HTTP round trips), ported from the Rust shell this one replaced.
  */
 
 export { HOST_ENDPOINT };

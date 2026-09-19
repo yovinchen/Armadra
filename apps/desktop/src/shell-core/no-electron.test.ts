@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
  * resolution, Runtime identity, Host answer validation, the update state
  * machine later — and may not reach for Electron or for the main process.
  *
- * The rule exists for the same reason `src-tauri/src/lib.rs:1-7` gave: the
+ * The rule exists for the same reason the Rust shell gave: the
  * process-specific file is only plumbing, and anything with a rule worth
  * stating should be testable without starting a window. A boundary nobody
  * checks drifts within a release, so this scan is the check.

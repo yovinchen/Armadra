@@ -133,21 +133,49 @@ test("exactly one desktop bundle per target takes part in updates", () => {
 // would promise an update nothing can apply.
 test("Windows publishes a portable zip and never offers it as an update", () => {
   for (const target of ["windows-x86_64", "windows-aarch64"]) {
-    const portable = desktopAssets("0.2.0", target).find(
-      (asset) => asset.kind === "portable",
-    );
+    const assets = desktopAssets("0.2.0", target);
+    const portable = assets.find((asset) => asset.name.endsWith("-portable.zip"));
     assert.ok(portable, `${target} publishes no portable bundle`);
     assert.equal(portable.updater, false);
     assert.equal(portable.name, `Armadra_0.2.0_${target}-portable.zip`);
     assert.equal(assetTarget(portable.name), target);
     assert.equal(assetComponent(portable.name), "desktop");
+    // The installer is what updates in place; the zip records no location to
+    // replace, so it is a first install only.
+    assert.equal(
+      assets.find((asset) => asset.updater).kind,
+      "nsis",
+      target,
+    );
   }
   for (const target of TARGETS.filter((name) => !name.startsWith("windows-"))) {
     assert.equal(
-      desktopAssets("0.2.0", target).some((asset) => asset.kind === "portable"),
+      desktopAssets("0.2.0", target).some((asset) =>
+        asset.name.endsWith("-portable.zip"),
+      ),
       false,
       target,
     );
+  }
+});
+
+// macOS is the one platform whose updater artifact and whose portable-looking
+// artifact are both zips, and only one of them is a bundle at all: the `.dmg`
+// is a disk image a person mounts, and electron-updater replaces an app
+// bundle, so it is the zip that updates in place.
+test("macOS updates from the zip and installs from the dmg", () => {
+  for (const target of ["darwin-aarch64", "darwin-x86_64"]) {
+    const assets = desktopAssets("0.2.0", target);
+    assert.equal(assets.find((asset) => asset.updater).kind, "zip", target);
+    assert.equal(
+      assets.find((asset) => asset.kind === "dmg").updater,
+      false,
+      target,
+    );
+    for (const asset of assets) {
+      assert.equal(assetTarget(asset.name), target, asset.name);
+      assert.equal(assetComponent(asset.name), "desktop", asset.name);
+    }
   }
 });
 

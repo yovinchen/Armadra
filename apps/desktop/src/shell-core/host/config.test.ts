@@ -15,7 +15,7 @@ import {
 } from "./config";
 
 /**
- * The assertion list of `src-tauri/src/host/tests.rs` that concerns the launch
+ * The Rust shell's own assertions about the launch
  * line and its validation — the half that needs no process.
  */
 
@@ -25,7 +25,7 @@ function config(binary: string): HostLaunchConfig {
   return {
     binary,
     dataDir: undefined,
-    browserOrigin: "tauri://localhost",
+    browserOrigin: "http://127.0.0.1:54321",
     cliTimeoutMs: 15_000,
     endpointsDir: undefined,
     expectedHttpEndpoint: HOST_ENDPOINT,
@@ -38,7 +38,7 @@ describe("binary resolution", () => {
   /**
    * electron-builder's `extraResources` stages the four binaries here, which
    * is the same place `runtimeExecutable` looks. It used to be resolved beside
-   * `process.execPath` (`Contents/MacOS/`) — where the Tauri shell's sidecars
+   * `process.execPath` (`Contents/MacOS/`) — where the Rust shell's sidecars
    * lived and where nothing is staged now, so a double-clicked application
    * found no Host at all.
    */
@@ -129,15 +129,25 @@ describe("the start line", () => {
       "--listen",
       "127.0.0.1:43121",
     ]);
-    // Three native origins plus the page's own, which is not one of them.
-    expect(args.filter((arg) => arg === "--allow-origin")).toHaveLength(4);
+    // Exactly the page's own origin: nothing is granted that this shell did
+    // not decide to serve from.
+    expect(args.filter((arg) => arg === "--allow-origin")).toHaveLength(1);
+    expect(args[args.indexOf("--allow-origin") + 1]).toBe(
+      "http://127.0.0.1:1420",
+    );
     // A directory with spaces is one argument, not two.
     expect(args.at(-1)).toBe(directory);
   });
 
-  it("grants only the three native origins when the page is already one", () => {
-    const args = startArguments(config(join(tmpdir(), name)));
-    expect(args.filter((arg) => arg === "--allow-origin")).toHaveLength(3);
+  it("grants the page's origin once, not twice, when it is also an extra", () => {
+    // `startArguments` de-duplicates through a Set: the Host refuses a
+    // repeated --allow-origin, and a line that differs between two starts of
+    // the same shell is one nobody can diff.
+    const args = startArguments({
+      ...config(join(tmpdir(), name)),
+      additionalOrigins: ["http://127.0.0.1:54321"],
+    });
+    expect(args.filter((arg) => arg === "--allow-origin")).toHaveLength(1);
   });
 
   it("grants the shell's own kernel-assigned origin, once", () => {
@@ -155,10 +165,10 @@ describe("the start line", () => {
         all[index - 1] === "--allow-origin" ? arg : null,
       )
       .filter((arg): arg is string => arg !== null);
+    // The page's own origin first, then each additional one in the order it
+    // was given. No constant is prepended any more, so what the Host is told
+    // is exactly what this shell decided to serve from.
     expect(granted).toEqual([
-      "tauri://localhost",
-      "http://tauri.localhost",
-      "https://tauri.localhost",
       "http://127.0.0.1:54321",
       "http://127.0.0.1:1420",
     ]);
@@ -218,15 +228,12 @@ describe("where the Host listens", () => {
 });
 
 describe("which origins a shell can present", () => {
-  it("accepts the Tauri spellings and any loopback HTTP origin", () => {
+  it("accepts any loopback HTTP origin", () => {
     // The same rule the Host applies in `native.go:loopbackHTTPOrigin` and the
     // page in `packages/host-client/src/native.ts`. All three have to agree on
     // the same string, or a ticket is minted for an origin that cannot spend
     // it; each side pins the table.
     for (const origin of [
-      "tauri://localhost",
-      "http://tauri.localhost",
-      "https://tauri.localhost",
       "http://127.0.0.1:54321",
       "http://127.0.0.1:1420",
       "http://127.5.5.5:8080",
@@ -326,15 +333,29 @@ describe("configuration validation", () => {
 });
 
 describe("origin and endpoint shapes", () => {
-  it("accepts the native origins and well-formed http(s) origins", () => {
+  it("accepts well-formed http(s) origins", () => {
     for (const origin of [
-      "tauri://localhost",
-      "http://tauri.localhost",
-      "https://tauri.localhost",
+      "http://127.0.0.1:54321",
       "http://127.0.0.1:1420",
+      "http://localhost:3000",
       "https://example.test",
     ]) {
       expect(validOrigin(origin), origin).toBe(true);
+    }
+  });
+
+  it("refuses a custom scheme, however local it looks", () => {
+    // Nothing presents one any more, and the Host's own `--allow-origin`
+    // parser rejects them too (`apps/host/internal/server/origin.go`). An
+    // origin this shell cannot serve from is one a ticket could never be
+    // spent on.
+    for (const origin of [
+      "tauri://localhost",
+      "app://localhost",
+      "armadra://localhost",
+    ]) {
+      expect(validOrigin(origin), origin).toBe(false);
+      expect(nativeOrigin(origin), origin).toBe(false);
     }
   });
 

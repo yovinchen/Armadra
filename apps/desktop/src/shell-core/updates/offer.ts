@@ -1,6 +1,6 @@
 /**
  * Turning the Host's answer plus the release manifest into one offer
- * (design §2.2). A port of `src-tauri/src/updates/offer.rs`.
+ * (design §2.2), ported from the Rust shell this one replaced.
  *
  * The two checks are asked in that order on purpose. The Host is the only side
  * that understands release channels and the `armadra-compatibility` fence, so
@@ -18,11 +18,12 @@
  * - a manifest entry signed by a key this build does not carry is refused
  *   before anything is fetched.
  *
- * What changed with electron-updater, and what did not: the manifest may now
- * be either Tauri's `latest.json` or electron-updater's `latest*.yml`, and the
- * minisign key-id comparison only has something to compare when a minisign
- * public key is configured — which an Electron build never has, because its
- * trust comes from the platform code signature instead. Every other rule above
+ * What changed with electron-updater, and what did not: the manifest may be
+ * either this release pipeline's own `latest.json` (written by
+ * `tools/release/updater-manifest.mjs`, minisign-signed) or electron-updater's
+ * `latest*.yml`, and the minisign key-id comparison only has something to
+ * compare when a minisign public key is configured — which a build whose trust
+ * comes from the platform code signature does not have. Every other rule above
  * is unchanged, including the one that matters most: the digest comes from the
  * Host's artifact list or there is no offer.
  */
@@ -90,9 +91,10 @@ interface ParsedManifest {
 export const MANIFEST_LIMIT_BYTES = 64 * 1024;
 
 /**
- * The manifest file names a release may publish: Tauri's, and the three
- * electron-updater writes. The list is closed on purpose — the name is what
- * tells `manifestUrl` which artifact in the Host's list is the manifest.
+ * The manifest file names a release may publish: this pipeline's own
+ * `latest.json`, and the three electron-updater writes. The list is closed on
+ * purpose — the name is what tells `manifestUrl` which artifact in the Host's
+ * list is the manifest.
  */
 export const MANIFEST_NAMES = [
   "latest.json",
@@ -274,9 +276,9 @@ export function resolve(
       allowInsecureLoopback,
     );
     if (attempt.ok) return attempt;
-    // A manifest that names one bundle reports that bundle's own failure, as
-    // the Tauri shell did. A `latest*.yml` naming several reports the first,
-    // which is the one the updater would have reached for.
+    // A manifest that names one bundle reports that bundle's own failure.
+    // A `latest*.yml` naming several reports the first, which is the one the
+    // updater would have reached for.
     first ??= attempt;
   }
   return first ?? fail("noArtifactForTarget");
@@ -325,12 +327,12 @@ function parseManifest(
   target: ManifestPointer,
 ): Resolved<ParsedManifest> {
   return text.trimStart().startsWith("{")
-    ? parseTauriManifest(text, target)
+    ? parseJsonManifest(text, target)
     : parseElectronManifest(text, target);
 }
 
-/** Tauri's `latest.json`: one entry per platform key, minisign-signed. */
-function parseTauriManifest(
+/** `latest.json`: one entry per platform key, minisign-signed. */
+function parseJsonManifest(
   text: string,
   target: ManifestPointer,
 ): Resolved<ParsedManifest> {
@@ -512,15 +514,13 @@ function httpsNotes(value: string): string {
 const KEY_ID_BYTES = 8;
 
 /**
- * The key id inside a minisign public key, as configured for the Tauri
- * updater. Kept because the cross-check it guards is still the right one for a
- * release that publishes `latest.json`, and because deleting a check is a
- * decision that should be made when the last such release is gone, not while
- * porting.
+ * The key id inside a minisign public key. The cross-check it guards is the
+ * right one for a release that publishes `latest.json`, which
+ * `tools/release/assemble.mjs` still signs with this repository's own key.
  *
- * Tauri stored the public key file base64-encoded in `tauri.conf.json`; a
- * plain two-line key file is accepted too, so a hand-edited configuration
- * fails loudly at the comparison rather than silently skipping it.
+ * A base64-wrapped key file and a plain two-line one are both accepted, so a
+ * hand-edited configuration fails loudly at the comparison rather than
+ * silently skipping it.
  *
  * Returned as lowercase hex rather than bytes so `===` is the comparison.
  */
@@ -532,8 +532,8 @@ export function keyIdOfPublicKey(pubkey: string): string | null {
 
 /**
  * The key id inside a minisign detached signature, as carried by a manifest
- * entry. Both the raw signature file and Tauri's base64 wrapping of it are
- * read, because a release pipeline may write either.
+ * entry. Both the raw signature file and a base64 wrapping of it are read,
+ * because a release pipeline may write either.
  */
 export function keyIdOfSignature(signature: string): string | null {
   const body = minisignBody(signature);

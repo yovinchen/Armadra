@@ -1,9 +1,9 @@
 /**
  * Cancelling a transfer that is already running (design §2.1, §4.1 "下载中 →
- * 取消"). Ported from `src-tauri/tests/updates_cancel.rs`, all 10 test
+ * 取消"). Ported from the Rust shell's cancel suite, all 10 test
  * functions.
  *
- * The interesting cases are all races. Neither Tauri's updater nor
+ * The interesting cases are all races. Neither the Rust shell's updater nor
  * electron-updater gives an abort handle, so the shell stops *awaiting* the
  * transfer instead — which means a cancel and a completion can both be true at
  * nearly the same instant, and the rules for who wins have to be stated rather

@@ -1,5 +1,5 @@
 /**
- * The three-phase quit state of `src-tauri/src/lifecycle.rs:17-66`, as pure
+ * The three-phase quit state of the Rust shell this one replaced, as pure
  * logic so the ordering rules can be tested without an `app` object.
  *
  * Closing the foreground is not quitting: it keeps the document, the terminals

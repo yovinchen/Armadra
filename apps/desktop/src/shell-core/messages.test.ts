@@ -4,7 +4,7 @@ import { desktop } from "../../../web/src/i18n/desktop";
 
 describe("the shell's wording", () => {
   it("reads Chinese only for a Chinese tag", () => {
-    // `src-tauri/src/usage.rs`'s `the_locale_is_chinese_only_for_a_chinese_tag`.
+    // 旧壳 `usage.rs` 的 `the_locale_is_chinese_only_for_a_chinese_tag`。
     expect(localeFromTag("zh_CN.UTF-8")).toBe("zh-CN");
     expect(localeFromTag("ZH-Hant")).toBe("zh-CN");
     expect(localeFromTag("en_US.UTF-8")).toBe("en");

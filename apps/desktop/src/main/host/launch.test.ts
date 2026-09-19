@@ -25,7 +25,7 @@ import { readLimited, runStart } from "./launch";
 import { startRunning, stopHost } from "./index";
 
 /**
- * The assertion list of `src-tauri/src/host/tests.rs` that runs a real CLI:
+ * The Rust shell's own assertions for a real CLI run:
  * bounded readers, stderr that is never echoed, the timeout that reaps only
  * the CLI parent, and the portless-Host replacement.
  */
@@ -53,7 +53,7 @@ function config(binary: string): HostLaunchConfig {
   return {
     binary,
     dataDir: undefined,
-    browserOrigin: "tauri://localhost",
+    browserOrigin: "http://127.0.0.1:54321",
     cliTimeoutMs: 15_000,
     endpointsDir: undefined,
     expectedHttpEndpoint: HOST_ENDPOINT,

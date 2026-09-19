@@ -1,6 +1,6 @@
 /**
  * What the page learned from the Host, handed over verbatim
- * (`src-tauri/src/updates/mod.rs:170-204`).
+ * (ported from the Rust shell this one replaced).
  *
  * The shell does not speak the Host protocol; the settings page already holds
  * an authenticated session, so it asks and passes the answer along. Everything

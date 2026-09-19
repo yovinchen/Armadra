@@ -2,7 +2,7 @@
  * The page's accelerator syntax → Electron's.
  *
  * `apps/web/src/keybindings/accelerator.ts` translates a chord from the keymap
- * into TAURI accelerator syntax, and that is what `shortcuts:apply` carries —
+ * into the accelerator syntax of the shell that came before, and that is what `shortcuts:apply` carries —
  * the page half of the feature is explicitly not being changed in this batch
  * (migration design §5, W2.1), so the shell is the side that adapts.
  *
@@ -10,7 +10,7 @@
  * `Shift`, `Alt` are all Electron spellings too) and on letters, digits and
  * function keys. They disagree about everything else the page can emit:
  *
- * | page (Tauri)    | Electron |
+ * | page            | Electron |
  * | --------------- | -------- |
  * | `ArrowUp`       | `Up`     |
  * | `Comma`         | `,`      |

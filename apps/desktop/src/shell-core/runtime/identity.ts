@@ -14,7 +14,7 @@
  * Identity is therefore explicit. The child announces an instance id on its
  * stdout before it binds anything; `/health` reports the same id; the shell
  * accepts the Runtime only when the two agree. Ported from
- * `src-tauri/src/runtime_process.rs:10-25, :41-56, :330-340`.
+ * the Rust shell this one replaced.
  */
 
 /**

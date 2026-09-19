@@ -18,7 +18,7 @@ import { runCli } from "./launch";
  *
  * The rules are in `shell-core/host/ticket.ts`; this file is only the CLI call
  * that feeds them, the same division the rest of `host/` uses. Ported from
- * `src-tauri/src/host/native.rs:152-170`.
+ * the Rust shell this one replaced.
  */
 
 /** The device label the Host records for this machine's shell. */

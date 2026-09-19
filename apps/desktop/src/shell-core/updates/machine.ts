@@ -1,7 +1,7 @@
 /**
  * The desktop update state machine (design §2.1).
  *
- * A line-by-line port of `src-tauri/src/updates/machine.rs`. It is deliberately
+ * A line-by-line port of the Rust shell's state machine. It is deliberately
  * free of Electron, of the network and of the clock: every transition is a pure
  * function of the current state and one event, so the table below is the whole
  * contract and a test can walk all of it.
@@ -69,7 +69,7 @@ export type Reason = (typeof REASONS)[number];
 /**
  * Which half of the updater configuration is still missing. Both are needed
  * before a check means anything: an endpoint says where releases are
- * published, and — under Tauri — a public key is what made one trustworthy.
+ * published, and — under the Rust shell — a public key is what made one trustworthy.
  *
  * Under electron-updater the `pubkey` half carries the same meaning one step
  * over: it is true when this build carries nothing that could make an update

@@ -1,7 +1,7 @@
 /**
  * Deriving one offer from the Host's answer and the release manifest
  * (docs/design/updates-and-service-install.md §2.2). Ported from
- * `src-tauri/tests/updates_offer.rs` — all 12 test functions, every matrix
+ * the Rust shell's offer suite — all 12 test functions, every matrix
  * case inside them — plus the cases the electron-updater dialect adds.
  *
  * The asset names below are the ones `tools/release/artifacts.mjs` produces,
@@ -101,7 +101,7 @@ function inline(text: string): string {
   return text.replace(/\n/g, "\\n");
 }
 
-/** electron-builder stores the public key base64-encoded, as Tauri did. */
+/** electron-builder stores the public key base64-encoded, as the Rust shell did. */
 function wrapped(text: string): string {
   return Buffer.from(text, "utf8").toString("base64");
 }

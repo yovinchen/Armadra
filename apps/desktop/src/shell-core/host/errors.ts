@@ -1,6 +1,6 @@
 /**
  * Why the Host could not be launched or trusted — the variants of
- * `src-tauri/src/host/mod.rs:38-58`, carried across as a TypeScript union.
+ * the Rust shell this one replaced, carried across as a TypeScript union.
  *
  * Every value is a stable token. None of them carries subprocess stderr, an
  * environment, a raw HTTP error or a path: the shell reports *that* startup

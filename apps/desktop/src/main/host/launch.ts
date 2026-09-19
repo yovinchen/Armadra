@@ -22,7 +22,7 @@ import {
  * held, signalled, or identified by the PID its result reports — the launcher
  * record (`--launcher desktop`) is what decides whose Host may be stopped.
  *
- * Ported from `src-tauri/src/host/launch.rs`.
+ * Ported from the Rust shell this one replaced.
  */
 
 /** Reads a stream to its end, refusing more than `limit` bytes. */

@@ -14,7 +14,7 @@ import {
 import { desktop } from "../../../web/src/i18n/desktop";
 
 /**
- * The assertions are `src-tauri/src/usage.rs`'s own, ported one for one — the
+ * The assertions are the Rust shell's own, ported one for one — the
  * strip is the same readout whichever shell draws it, so the port is only
  * honest if it keeps being checked against the same payloads and the same
  * rendered strings.

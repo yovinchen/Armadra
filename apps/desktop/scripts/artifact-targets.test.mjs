@@ -5,21 +5,22 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { load } from "js-yaml";
 
-import { TARGETS } from "../../../tools/release/artifacts.mjs";
+import { TARGETS, desktopAssets } from "../../../tools/release/artifacts.mjs";
 
 /**
- * `electron-builder.yml`'s per-platform `target` arch lists have to cover the
- * same `<os>-<arch>` matrix as `tools/release/artifacts.mjs`'s `TARGETS` —
- * six entries, one archive format ecosystem per OS. A release built for a
- * target `artifacts.mjs` does not know electron-builder can produce is a
- * release whose component names (`stage-desktop.mjs`, W2.2) nothing can
- * assemble; a target electron-builder builds that is not in `TARGETS` is a
- * bundle no release job ever uploads.
+ * `electron-builder.yml` and `tools/release/artifacts.mjs` describe the same
+ * thing from two ends, and they have to agree on both halves of it:
  *
- * This checks the matrix, not individual bundle *kinds* — whether the mac
- * updater artifact ends up `.zip` (electron-updater) or something else is
- * `tools/release/artifacts.mjs`'s `desktopAssets()` to decide once W2.2 wires
- * electron-updater, and belongs to that batch, not this one.
+ * - the `<os>-<arch>` **matrix** — six entries, one archive-format ecosystem
+ *   per OS. A release built for a target `artifacts.mjs` does not know about
+ *   is a bundle no release job uploads; a target it declares that
+ *   electron-builder never builds is an asset `stage-desktop.mjs` will fail
+ *   looking for.
+ * - the **bundle kinds**, and therefore the published file names.
+ *   `desktopAssets()`'s `kind` is the electron-builder `target` value, and
+ *   `stage-desktop.mjs` looks the built file up by it. A kind nobody builds
+ *   is a release that stops at staging; a kind built and not published is a
+ *   bundle that quietly never ships.
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const CONFIG = load(
@@ -93,4 +94,60 @@ test("every platform ships at least one updater-eligible and one plain-installer
       `${platformKey}: expected at least two bundle kinds, got ${kinds.join(", ")}`,
     );
   }
+});
+
+/** The `target` values electron-builder is configured to build for one OS. */
+function kindsBuilt(platformKey) {
+  return new Set((CONFIG[platformKey].target ?? []).map((t) => t.target));
+}
+
+test("desktopAssets names one file per electron-builder target, and no other", () => {
+  for (const target of TARGETS) {
+    const platformKey = OS_FROM_TARGET_PREFIX[target.split("-")[0]];
+    const built = kindsBuilt(platformKey);
+    const published = desktopAssets("9.9.9", target);
+    assert.deepEqual(
+      new Set(published.map((asset) => asset.kind)),
+      built,
+      `${target}: desktopAssets() kinds and electron-builder.yml "${platformKey}.target" disagree`,
+    );
+    // Exactly one bundle per platform updates in place. Two would mean the
+    // manifest has to choose; none would mean the platform silently never
+    // receives an update.
+    assert.equal(
+      published.filter((asset) => asset.updater).length,
+      1,
+      `${target}: expected exactly one updater-eligible bundle`,
+    );
+  }
+});
+
+/**
+ * The published names, pinned literally. These strings are the contract the
+ * Host reads a component and a target back out of (`assetComponent` /
+ * `assetTarget`), so a change here is a change a released client sees.
+ */
+test("the published desktop file names are the ones the Host can place", () => {
+  const names = (target) =>
+    desktopAssets("1.2.3", target).map((asset) => asset.name);
+  assert.deepEqual(names("darwin-aarch64"), [
+    "Armadra_1.2.3_darwin-aarch64.zip",
+    "Armadra_1.2.3_darwin-aarch64.dmg",
+  ]);
+  assert.deepEqual(names("windows-x86_64"), [
+    "Armadra_1.2.3_windows-x86_64-setup.exe",
+    "Armadra_1.2.3_windows-x86_64-portable.zip",
+  ]);
+  assert.deepEqual(names("linux-aarch64"), [
+    "Armadra_1.2.3_linux-aarch64.AppImage",
+    "Armadra_1.2.3_linux-aarch64.deb",
+    "Armadra_1.2.3_linux-aarch64.rpm",
+  ]);
+  // The two Windows bundles are both zip-family names; only the installer is
+  // the updater's, and the suffix is what tells them apart.
+  const windows = desktopAssets("1.2.3", "windows-aarch64");
+  assert.equal(
+    windows.find((asset) => asset.updater).name,
+    "Armadra_1.2.3_windows-aarch64-setup.exe",
+  );
 });

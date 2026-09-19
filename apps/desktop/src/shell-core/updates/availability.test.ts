@@ -2,11 +2,11 @@
  * What a shipped build is allowed to claim about updates
  * (docs/design/updates-and-service-install.md §2.5).
  *
- * Ported from `src-tauri/tests/updates_config.rs`. Three of its six tests
+ * Ported from the Rust shell's updater-config suite. Three of its six tests
  * carried over as rules: an unusable configuration is not configured, a
  * complete one is, and the trustworthy half — not the endpoint half — is what
  * makes a build unable to update. The other three asserted the contents of
- * `tauri.conf.json` itself (no committed endpoint, `active: false`,
+ * the packaged configuration itself (no committed endpoint, updater off,
  * `createUpdaterArtifacts: true`); their electron-builder equivalents live in
  * the packaging configuration W2.3 owns, and are noted at the end of this file
  * so the handover is written down rather than remembered.
@@ -87,7 +87,7 @@ it("an unsigned build reports not configured, never up to date", () => {
     missing: { pubkey: true, endpoints: false },
   });
   // Even with no endpoint either: the signature is the thing a person can do
-  // something about, so it is what they are told, exactly as the Tauri shell
+  // something about, so it is what they are told, exactly as the Rust shell
   // told them about the missing key.
   expect(
     initialState(

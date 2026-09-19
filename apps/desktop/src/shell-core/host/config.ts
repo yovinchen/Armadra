@@ -5,8 +5,7 @@ import { type HostLaunchError, hostError } from "./errors";
  * How the Host is launched: the binary, the flags, and the rules a
  * configuration has to satisfy before any of it reaches a process.
  *
- * Ported from `src-tauri/src/host/mod.rs:71-194` and
- * `src-tauri/src/host/launch.rs:18-58`. Nothing here runs anything; the
+ * Ported from the Rust shell this one replaced. Nothing here runs anything; the
  * argument vector is built as data so the exact line can be asserted without
  * a Host on the machine.
  */
@@ -173,7 +172,7 @@ export function hostBinaryName(platform: string = process.platform): string {
  * A packaged shell takes the one electron-builder's `extraResources` staged,
  * which is `process.resourcesPath` — the SAME place the Runtime is looked for
  * (`runtime-process.ts`). It used to be resolved beside `process.execPath`
- * (`Contents/MacOS/`), which is where the Tauri shell's sidecars lived and
+ * (`Contents/MacOS/`), which is where the Rust shell's sidecars lived and
  * where nothing is staged now: a double-clicked `.app` found no Host at all.
  *
  * It ignores every development override — an installed application must not be

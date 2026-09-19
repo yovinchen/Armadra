@@ -14,8 +14,8 @@
 # pulling in a newer glibc symbol would otherwise re-break it silently.
 #
 # Usage: verify-linux-glibc-baseline.sh [binary ...]
-# Without arguments it inspects the release binaries `tauri build` and
-# `prepare-sidecar` leave in target/release (and target/<triple>/release).
+# Without arguments it inspects the release binaries `cargo build --release` and
+# `prepare:host` leave in target/release (and target/<triple>/release).
 # Override the baseline with ARMADRA_GLIBC_BASELINE (default 2.35, the glibc of
 # Ubuntu 22.04 LTS and Debian 12).
 set -euo pipefail

@@ -5,7 +5,7 @@ import { getMainWindow } from "./window";
 /**
  * The two system pickers.
  *
- * Both return ABSOLUTE PATHS rather than bytes, which is the rule the Tauri
+ * Both return ABSOLUTE PATHS rather than bytes, which is the rule the Rust
  * shell also kept (`platform/index.ts:46-56`): the page hands a path to the
  * Runtime, and the Runtime is the process allowed to read it. Handing the page
  * bytes would mean copying every picked file through the renderer, and for the
@@ -38,7 +38,7 @@ async function show(
  * The folder picker. `createDirectory` is macOS-only and on by default, but it
  * is spelled out because the New folder flow leans on it: the panel's own "New
  * Folder" button is how the user creates the directory they are about to open.
- * It is Electron's spelling of Tauri's `canCreateDirectories`.
+ * It is Electron's spelling of the Rust shell's `canCreateDirectories`.
  */
 export function pickDirectory(options?: PickOptions): Promise<string[]> {
   return show(["openDirectory", "createDirectory"], options);

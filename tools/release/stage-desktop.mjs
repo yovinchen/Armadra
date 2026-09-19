@@ -1,149 +1,99 @@
 /**
- * Rename Tauri's bundler output to the names a release publishes.
+ * Rename electron-builder's output to the names a release publishes.
  *
- *   node tools/release/stage-desktop.mjs --target <os>-<arch> --triple <triple> \
+ *   node tools/release/stage-desktop.mjs --target <os>-<arch> \
  *     --from <release dir> --out <dir> [--version X.Y.Z] [--require-updater]
  *
- * The bundler names files after the platform's own conventions —
- * `Armadra_0.1.0_x64_en-US.msi`, `armadra_0.1.0_amd64.deb`,
- * `Armadra_0.1.0_aarch64.dmg` — and none of those spellings contain a target
- * the Host can read: `assetTarget` finds nothing in `x64`, `amd64` or a bare
- * `aarch64`. Uploading them as they come off the bundler produces a release
- * whose desktop assets the Host will never offer, which is a failure that only
- * shows up in a client weeks later. So every bundle is looked up by kind and
- * copied to the one name `artifacts.mjs` declares, and anything expected but
- * absent stops the job here instead.
+ * electron-builder names files after each platform's own conventions —
+ * `Armadra-0.1.0-arm64.dmg`, `Armadra Setup 0.1.0.exe`,
+ * `armadra_0.1.0_amd64.deb` — and none of those spellings contains a target
+ * the Host can read: `assetTarget` finds nothing in `arm64` or `amd64`, and
+ * one of them has a space in it. Uploading them as they come off the packager
+ * produces a release whose desktop assets the Host will never offer, which is
+ * a failure that only shows up in a client weeks later. So every bundle is
+ * looked up by kind and copied to the one name `artifacts.mjs` declares, and
+ * anything expected but absent stops the job here instead.
  *
- * The Windows portable zip has no bundler output behind it. It is the plain
- * `release/` executable plus its sidecars, because the shell resolves
- * `armadra-host` (and the Worker, the hook and the session host) *next to its
- * own executable* in a production build — a zip holding only `Armadra.exe`
- * would start and then fail to find anything it needs.
+ * Unlike the packager this replaced, everything lands in ONE flat directory
+ * (`electron-builder.yml`'s `directories.output`), beside files that are not
+ * release assets at all: `latest*.yml`, `*.blockmap`, `builder-*.yml` and the
+ * `*-unpacked` directories. Matching is therefore by extension AND an explicit
+ * ignore list, not by "the only file in its own folder".
+ *
+ * Nothing here handles signatures. electron-builder signs the bundle itself
+ * with the platform's own code signature; the detached minisign signature the
+ * updater manifest carries is produced later, over the whole staged directory,
+ * by `assemble.mjs` (`sign.mjs`) — one key system for the release rather than
+ * two.
  */
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  rmSync,
-} from "node:fs";
-import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { rustSidecars } from "../../apps/desktop/scripts/sidecar-targets.mjs";
 import { desktopAssets } from "./artifacts.mjs";
-import { zipCommand } from "./package-components.mjs";
 import { workspaceVersion } from "./version.mjs";
 
 /**
- * Where the bundler writes each kind, and how its file is recognised there.
+ * How each electron-builder target's file is recognised in the output
+ * directory. The keys are the `kind` values `desktopAssets()` declares, which
+ * are themselves the `target` values in `electron-builder.yml`.
  *
- * Matching on a suffix rather than a full name is deliberate: the bundler's
- * names carry a locale (`_en-US.msi`), a lower-cased product name (`.deb`) and
- * an architecture spelling of its own, and pinning any of those would make the
- * release break the next time Tauri changes one.
+ * Matching on an extension rather than a full name is deliberate: the
+ * packager's names carry a product name cased its own way, an architecture
+ * spelling of its own and sometimes a space, and pinning any of those would
+ * break the release the next time electron-builder changes one.
+ *
+ * `zip` is ambiguous by extension alone only across platforms, and a release
+ * job builds one platform, so the target being staged settles it.
  */
 export const BUNDLE_KINDS = {
-  "app.tar.gz": { directory: "macos", suffix: ".app.tar.gz" },
-  dmg: { directory: "dmg", suffix: ".dmg" },
-  nsis: { directory: "nsis", suffix: "-setup.exe" },
-  msi: { directory: "msi", suffix: ".msi" },
-  appimage: { directory: "appimage", suffix: ".AppImage" },
-  deb: { directory: "deb", suffix: ".deb" },
-  rpm: { directory: "rpm", suffix: ".rpm" },
+  zip: { suffix: ".zip" },
+  dmg: { suffix: ".dmg" },
+  nsis: { suffix: ".exe" },
+  AppImage: { suffix: ".AppImage" },
+  deb: { suffix: ".deb" },
+  rpm: { suffix: ".rpm" },
 };
 
-/** The one file of this kind under `bundle/`, or null when nothing matched. */
+/**
+ * Files in the output directory that are not release assets.
+ *
+ * `latest*.yml` is electron-updater's own manifest, which this release does
+ * not publish (it publishes `latest.json`, written by `updater-manifest.mjs`);
+ * `.blockmap` is its differential-download index, useless without that
+ * manifest; `builder-*.yml` and `builder-debug.yml` are packaging debris.
+ * Staging any of them would put a file in the release the Host cannot place.
+ */
+export function isReleaseAsset(name) {
+  if (name.endsWith(".blockmap")) return false;
+  if (name.endsWith(".yml") || name.endsWith(".yaml")) return false;
+  if (name.endsWith(".unpacked") || name.includes("-unpacked")) return false;
+  return true;
+}
+
+/** The one file of this kind in the output directory, or null. */
 export function findBundle({ bundle, kind }) {
   const spec = BUNDLE_KINDS[kind];
-  if (!spec) return null;
-  const directory = join(bundle, spec.directory);
-  if (!existsSync(directory)) return null;
-  const matches = readdirSync(directory)
-    .filter((name) => name.endsWith(spec.suffix))
+  if (!spec || !existsSync(bundle)) return null;
+  const matches = readdirSync(bundle)
+    .filter((name) => isReleaseAsset(name) && name.endsWith(spec.suffix))
     .sort();
-  return matches.length === 0 ? null : join(directory, matches[0]);
-}
-
-/**
- * The binaries a Windows portable zip carries beside the main executable.
- *
- * The same list the installer bundles, from the same place: `rustSidecars`
- * decides which Rust sidecars a triple ships, and the Go Host is always one.
- */
-export function portableBinaries(triple) {
-  return [...rustSidecars(triple).map((entry) => entry.binary), "armadra-host"];
-}
-
-/**
- * Build the portable zip. `from` is the cargo release directory, where the
- * sidecars are staged with their triple suffix and the shell without one.
- */
-export function stagePortable({ from, triple, out, assetName }) {
-  const staging = mkdtempSync(join(tmpdir(), "armadra-portable-"));
-  try {
-    const missing = [];
-    const names = [];
-    const main = join(from, "Armadra.exe");
-    if (existsSync(main)) {
-      copyFileSync(main, join(staging, "Armadra.exe"));
-      names.push("Armadra.exe");
-    } else missing.push("Armadra.exe");
-    for (const binary of portableBinaries(triple)) {
-      // Tauri's externalBin staging writes `<binary>-<triple>.exe`; next to the
-      // installed shell the same file is named without the triple, and that is
-      // the name the shell looks for.
-      const source = join(from, `${binary}-${triple}.exe`);
-      const fallback = join(from, `${binary}.exe`);
-      const found = existsSync(source)
-        ? source
-        : existsSync(fallback)
-          ? fallback
-          : null;
-      if (!found) {
-        missing.push(`${binary}.exe`);
-        continue;
-      }
-      copyFileSync(found, join(staging, `${binary}.exe`));
-      names.push(`${binary}.exe`);
-    }
-    if (missing.length > 0)
-      throw new Error(
-        `portable zip is missing ${missing.join(", ")} in ${from}; build the desktop bundle first`,
-      );
-    mkdirSync(out, { recursive: true });
-    const output = resolve(out, assetName);
-    rmSync(output, { force: true });
-    const zip = zipCommand();
-    // Relative names from the staging directory keep the archive flat: every
-    // entry sits at the top level, which is where the shell expects to find
-    // its neighbours.
-    execFileSync(zip.command, zip.argv(output, ...names.sort()), {
-      stdio: "inherit",
-      cwd: staging,
-    });
-    return output;
-  } finally {
-    rmSync(staging, { recursive: true, force: true });
-  }
+  return matches.length === 0 ? null : join(bundle, matches[0]);
 }
 
 /**
  * Copy every desktop bundle this target publishes into `out` under its
- * published name, with the detached Tauri signature beside it when there is one.
+ * published name.
  *
- * `requireUpdater` is false for an unsigned build: `signing.mjs` turns
- * `createUpdaterArtifacts` off when there is no key, so the macOS
- * `.app.tar.gz` is not produced at all and its absence is expected rather than
- * a failure.
+ * `requireUpdater` is false for an unsigned build. It no longer changes which
+ * bundles the packager produces — electron-builder writes the zip, the
+ * installer and the AppImage whether or not a certificate was available — so
+ * it only decides whether a MISSING updater bundle is tolerated, which is the
+ * case where packaging half-finished rather than the case where signing was
+ * skipped.
  */
 export function stageDesktop({
   target,
-  triple,
   bundle,
-  from,
   out,
   version,
   requireUpdater = false,
@@ -152,15 +102,6 @@ export function stageDesktop({
   const staged = [];
   const missing = [];
   for (const asset of desktopAssets(version, target)) {
-    if (asset.kind === "portable") {
-      staged.push({
-        kind: asset.kind,
-        name: asset.name,
-        path: stagePortable({ from, triple, out, assetName: asset.name }),
-        signature: false,
-      });
-      continue;
-    }
     const source = findBundle({ bundle, kind: asset.kind });
     if (!source) {
       if (asset.updater && !requireUpdater) continue;
@@ -169,19 +110,7 @@ export function stageDesktop({
     }
     const destination = join(out, asset.name);
     copyFileSync(source, destination);
-    // Tauri writes the updater signature next to the bundle. It is a release
-    // asset in its own right: `updater-manifest.mjs` reads it back to build
-    // latest.json, and a bundle whose signature did not travel with it is one
-    // the updater will refuse.
-    const signature = existsSync(`${source}.sig`);
-    if (signature) copyFileSync(`${source}.sig`, `${destination}.sig`);
-    else if (asset.updater && requireUpdater) missing.push(`${asset.name}.sig`);
-    staged.push({
-      kind: asset.kind,
-      name: asset.name,
-      path: destination,
-      signature,
-    });
+    staged.push({ kind: asset.kind, name: asset.name, path: destination });
   }
   return { staged, missing };
 }
@@ -193,28 +122,22 @@ function flag(argv, name, fallback = "") {
 
 function main(argv) {
   const target = flag(argv, "target");
-  const triple = flag(argv, "triple");
-  const from = flag(argv, "from") || "target/release";
+  const from = flag(argv, "from") || "apps/desktop/release";
   const out = flag(argv, "out");
-  if (!target || !triple || !out) {
+  if (!target || !out) {
     console.error(
-      "usage: node tools/release/stage-desktop.mjs --target <os>-<arch> --triple <triple> --out <dir> [--from <release dir>] [--bundle <dir>] [--version X.Y.Z] [--require-updater]",
+      "usage: node tools/release/stage-desktop.mjs --target <os>-<arch> --out <dir> [--from <output dir>] [--version X.Y.Z] [--require-updater]",
     );
     return 2;
   }
   const { staged, missing } = stageDesktop({
     target,
-    triple,
-    bundle: resolve(flag(argv, "bundle") || join(from, "bundle")),
-    from: resolve(from),
+    bundle: resolve(from),
     out: resolve(out),
     version: flag(argv, "version") || workspaceVersion(),
     requireUpdater: argv.includes("--require-updater"),
   });
-  for (const item of staged)
-    console.log(
-      `Staged ${item.kind}: ${item.name}${item.signature ? " (+ .sig)" : ""}`,
-    );
+  for (const item of staged) console.log(`Staged ${item.kind}: ${item.name}`);
   if (missing.length > 0) {
     console.error(`✗ not produced for ${target}: ${missing.join(", ")}`);
     return 1;

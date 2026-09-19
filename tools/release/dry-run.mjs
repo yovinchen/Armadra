@@ -59,14 +59,9 @@ export function stageAssets({ directory, version }) {
     for (const bundle of desktopAssets(version, target)) {
       writeFileSync(join(directory, bundle.name), placeholder(bundle.name));
       staged.push(bundle.name);
-      // Tauri writes the updater bundle's signature itself; the dry run stands
-      // in for it so the manifest has something to carry.
-      if (bundle.updater) {
-        writeFileSync(
-          join(directory, `${bundle.name}.sig`),
-          "placeholder tauri signature\n",
-        );
-      }
+      // No `.sig` is staged beside a bundle any more: the packager writes none
+      // and `assemble.mjs` signs the directory itself before it builds the
+      // manifest. Staging one here would hide whether that ordering holds.
     }
     for (const entry of COMPONENTS) {
       if (!entry.targets.includes(target)) continue;

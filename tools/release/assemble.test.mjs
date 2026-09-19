@@ -41,6 +41,16 @@ function scratch() {
   return mkdtempSync(join(tmpdir(), "armadra-assemble-"));
 }
 
+/**
+ * Sign a staged directory the way `assemble()` does before it writes the
+ * manifest. Nothing produces a bundle signature earlier than this any more —
+ * the packager writes only a platform code signature — so a test that needs
+ * `latest.json` to carry one has to sign first.
+ */
+function signStaged(directory, version = "0.2.0") {
+  signDirectory({ directory, key: generateKey(), version });
+}
+
 test("the checksum list covers every publishable file and nothing else", async () => {
   const directory = scratch();
   try {
@@ -138,6 +148,7 @@ test("latest.json holds one signed entry per platform and nothing a package mana
   const directory = scratch();
   try {
     stageAssets({ directory, version: "0.2.0" });
+    signStaged(directory);
     const { manifest, skipped } = writeManifest({
       directory,
       version: "0.2.0",
@@ -170,6 +181,7 @@ test("a bundle with no signature is left out of latest.json", () => {
   const directory = scratch();
   try {
     stageAssets({ directory, version: "0.2.0" });
+    signStaged(directory);
     rmSync(join(directory, "Armadra_0.2.0_linux-x86_64.AppImage.sig"));
     const { manifest, skipped } = buildManifest({
       directory,
@@ -195,6 +207,11 @@ test("the audit catches a hole the individual steps would each pass", async () =
   const directory = scratch();
   try {
     stageAssets({ directory, version: "0.2.0" });
+    // The order `assemble()` runs in: sign the bundles, write the manifest
+    // from those signatures, write the list, then sign what the first pass
+    // could not have covered.
+    const key = generateKey();
+    signDirectory({ directory, key, version: "0.2.0" });
     writeManifest({
       directory,
       version: "0.2.0",
@@ -203,8 +220,7 @@ test("the audit catches a hole the individual steps would each pass", async () =
       downloadUrl: (name) => `https://example.invalid/${name}`,
     });
     await writeChecksums(directory);
-    const key = generateKey();
-    signDirectory({ directory, key, version: "0.2.0" });
+    signDirectory({ directory, key, version: "0.2.0", onlyMissing: true });
     assert.deepEqual(
       await auditRelease({
         directory,
@@ -443,7 +459,7 @@ test("no signing key produces a release that admits it is unsigned", async () =>
   }
 });
 
-// A build without a Tauri signing key writes no .sig at all. That release
+// A build without the release signing key writes no .sig at all. That release
 // cannot update itself, and says so; it is not a failed assembly. The bundles
 // are still there for a manual install, and latest.json offers nothing.
 test("no updater signature anywhere is an admitted unsigned release, not a hole", async () => {
@@ -465,7 +481,7 @@ test("no updater signature anywhere is an admitted unsigned release, not a hole"
     assert.deepEqual(result.missing, TARGETS);
     assert.match(
       result.note,
-      /desktop updater packages \(no Tauri signing key\)/,
+      /desktop updater packages \(no release signing key\)/,
     );
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -476,7 +492,10 @@ test("a target with no updater bundle is a reported hole, not a silent one", asy
   const directory = scratch();
   try {
     stageAssets({ directory, version: "0.2.0" });
-    rmSync(join(directory, "Armadra_0.2.0_windows-aarch64-setup.exe.sig"));
+    // Packaging produced everything else for this target but not the file the
+    // updater would apply. Signing cannot paper over that: there is nothing to
+    // sign, so the manifest has no entry and says which target it is missing.
+    rmSync(join(directory, "Armadra_0.2.0_windows-aarch64-setup.exe"));
     const result = await assemble({
       directory,
       version: "0.2.0",

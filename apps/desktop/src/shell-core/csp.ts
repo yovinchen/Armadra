@@ -1,7 +1,7 @@
 /**
  * The page's Content-Security-Policy.
  *
- * The Tauri shell got one from `tauri.conf.json:31-32` and Electron gives the
+ * The Rust shell got one from its packaged configuration and Electron gives the
  * page none at all, so it has to be stated here or the new shell would be a
  * quiet loosening of a rule nobody removed on purpose.
  *

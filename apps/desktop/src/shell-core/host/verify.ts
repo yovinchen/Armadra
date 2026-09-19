@@ -13,7 +13,7 @@ import { type HostLaunchError, hostError } from "./errors";
 /**
  * What a reported Host has to prove before the desktop shell trusts it.
  *
- * Ported from `src-tauri/src/host/verify.rs`. The decoding is the generated
+ * Ported from the Rust shell this one replaced. The decoding is the generated
  * `@armadra/protocol` reader, never a hand-written parser: `proto/` is the one
  * source of truth for the wire (AGENTS.md), and a second parser here would be
  * a second definition of the message that nobody regenerates.
