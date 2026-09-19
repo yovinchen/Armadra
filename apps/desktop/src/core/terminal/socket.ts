@@ -179,6 +179,13 @@ export async function serveTerminalSocket(
   } catch (error) {
     // Nothing live behind the row: the socket still gets a `hello` and the
     // final `status`, so the page can show the exit instead of a blank pane.
+    //
+    // Reported before it is answered. `alive: false` is a legitimate reply for
+    // a session that really has ended, which is exactly why a *failure* to
+    // attach must not arrive at the operator wearing the same clothes: without
+    // this line the only symptom of a broken backend is a terminal that opens
+    // grey, and nothing anywhere says why.
+    options.onError?.(error);
     const row = manager.session(sessionId);
     send({
       type: "hello",
