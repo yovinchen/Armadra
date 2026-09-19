@@ -203,11 +203,13 @@ describe("what the core answers", () => {
 
   it("answers a route it has not written with 501 and the feature's name", async () => {
     const { core } = await start(temporary());
-    const response = await fetch(`${base(core)}/api/workspaces`);
+    const response = await fetch(`${base(core)}/api/terminals`, {
+      method: "POST",
+    });
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
       code: "not_implemented",
-      message: "工作空间（R1）",
+      message: "终端会话（R2）",
     });
   });
 

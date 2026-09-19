@@ -231,6 +231,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "工作空间",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/remote",
@@ -238,6 +239,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "工作空间",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/execution-host",
@@ -245,6 +247,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "工作空间",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/import",
@@ -280,6 +283,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "工作空间",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}",
@@ -287,6 +291,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "工作空间",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/open",
@@ -294,6 +299,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "工作空间",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/boards",
@@ -301,6 +307,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/boards/{boardId}",
@@ -308,6 +315,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/boards/{boardId}/document",
@@ -315,6 +323,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/files",
@@ -651,6 +660,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "协作上下文链接",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/exports/{exportId}/png",
@@ -665,6 +675,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布资产",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/assets/import",
@@ -672,6 +683,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布资产",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/assets/{assetId}",
@@ -679,6 +691,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "画布资产",
     phase: 1,
+    implemented: true,
   },
   {
     path: "/api/git/clone",
