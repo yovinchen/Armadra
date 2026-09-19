@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 import {
-  AutomationActivationSchema,
   AutomationOutcome,
   AutomationPlanState,
-  AutomationReceiptSchema,
   AutomationRunSchema,
   AutomationRunState,
   type AutomationActivation,
@@ -11,9 +9,13 @@ import {
   type AutomationReceipt,
   type AutomationRun,
   create,
-  fromBinary,
-  toBinary,
-} from "@armadra/protocol";
+} from "./types";
+import {
+  activationToJson,
+  canonicalJson,
+  receiptToJson,
+  runToJson,
+} from "./json";
 
 /**
  * 摘要与判定，全是纯函数。
@@ -37,17 +39,31 @@ export function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   return true;
 }
 
+/**
+ * 三个摘要都按**规范 JSON 的 UTF-8 字节**算。
+ *
+ * R7 之前它们是 protobuf 序列化的 SHA-256。换掉的理由和配置摘要那次一样
+ * （`docs/contracts/core-json-api.md` §4.2）：一个只有 protobuf 序列化器才算得
+ * 出来的数不能是「这条记录」的身份。规范 JSON 由 `json.ts` 的 `canonicalJson`
+ * 定义——键排序、无空白，所以同一份记录只有一种文本。
+ */
+function digest(text: string): Uint8Array {
+  return createHash("sha256").update(text, "utf8").digest();
+}
+
 /** 激活摘要：授权时刻与摘要本身不参与，这样同一次批准算出同一个数。 */
 export function activationDigest(activation: AutomationActivation): Uint8Array {
-  const hashed = fromBinary(
-    AutomationActivationSchema,
-    toBinary(AutomationActivationSchema, activation),
-  );
-  hashed.authorizedAtUnixMs = 0n;
-  hashed.activationSha256 = new Uint8Array(0);
-  return createHash("sha256")
-    .update(toBinary(AutomationActivationSchema, hashed))
-    .digest();
+  const hashed: AutomationActivation = {
+    ...activation,
+    authorizedAtUnixMs: 0n,
+    activationSha256: new Uint8Array(0),
+  };
+  return digest(canonicalJson(activationToJson(hashed)));
+}
+
+/** 收据摘要：一张收据的身份，用来确认拿回来的是同一张。 */
+export function receiptDigest(receipt: AutomationReceipt): Uint8Array {
+  return digest(canonicalJson(receiptToJson(receipt)));
 }
 
 /**
@@ -73,9 +89,7 @@ export function dispatchHash(run: AutomationRun): Uint8Array {
     missedSlots: run.missedSlots,
     missedSlotsTruncated: run.missedSlotsTruncated,
   });
-  return createHash("sha256")
-    .update(toBinary(AutomationRunSchema, frozen))
-    .digest();
+  return digest(canonicalJson(runToJson(frozen)));
 }
 
 export function outcomeState(

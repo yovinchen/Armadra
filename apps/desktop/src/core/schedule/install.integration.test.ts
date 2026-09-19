@@ -1,14 +1,12 @@
 /**
- * 装配级验收：`ARMADRA_CORE=ts` 起一个真的 core，页面那条路走得通。
+ * 装配级验收：起一个真的 core，页面那条路走得通。
  *
- * 三件事，每一件都是页面在打开自动化面板之前会做的：
+ * 两件事，每一件都是页面在打开自动化面板之前会做的：
  *
- *   1. `HostService/Hello` 的能力名里有 `automation.plans.v1`。没有它，
+ *   1. `GET /api/identity/hello` 的能力名里有 `automation.plans.v1`。没有它，
  *      `apps/web/src/host/automation-session.ts` 直接停在 `unsupported`，一次
- *      RPC 都不会发。
- *   2. `/rpc/armadra.v1.AutomationService/ListPlans` 由这个域接住——答的是
- *      「没有凭据」，不是身份域那条 `NOT_FOUND`。前缀最长优先就是靠这一条证明的。
- *   3. 新面 `/api/automations/plans` 在同一个 core 上答 JSON 信封。
+ *      请求都不会发。
+ *   2. `/api/automations/plans` 由这个域接住，答的是这一面自己的 JSON 信封。
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -16,14 +14,6 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  ErrorResponseSchema,
-  HelloRequestSchema,
-  HelloResponseSchema,
-  create,
-  fromBinary,
-  toBinary,
-} from "@armadra/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { type RunningCore, run } from "../main";
@@ -50,7 +40,6 @@ async function start(): Promise<{ core: RunningCore; base: string }> {
   const core = await run({
     argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", dataDir],
     env: {
-      ARMADRA_CORE: "ts",
       ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir,
       ARMADRA_LOG: "error",
     },
@@ -62,48 +51,18 @@ async function start(): Promise<{ core: RunningCore; base: string }> {
   return { core, base: `http://${tcp.host}:${tcp.port}` };
 }
 
-describe("ARMADRA_CORE=ts 下的自动化装配", () => {
+describe("自动化域的装配", () => {
   it("Hello 报出自动化能力，页面据此打开面板", async () => {
     const { base } = await start();
-    const response = await fetch(`${base}/rpc/armadra.v1.HostService/Hello`, {
-      method: "POST",
-      headers: {
-        origin: base,
-        "content-type": "application/x-protobuf",
-      },
-      body: Buffer.from(
-        toBinary(HelloRequestSchema, create(HelloRequestSchema, {})),
-      ),
+    const response = await fetch(`${base}/api/identity/hello`, {
+      headers: { origin: base },
     });
     expect(response.status).toBe(200);
-    const hello = fromBinary(
-      HelloResponseSchema,
-      new Uint8Array(await response.arrayBuffer()),
-    );
+    const hello = (await response.json()) as { capabilities?: string[] };
     expect(hello.capabilities).toContain(AUTOMATION_CAPABILITY);
   });
 
-  it("兼容面由这个域接住，不是身份域那条 NOT_FOUND", async () => {
-    const { base } = await start();
-    const response = await fetch(
-      `${base}/rpc/armadra.v1.AutomationService/ListPlans`,
-      {
-        method: "POST",
-        headers: { origin: base, "content-type": "application/x-protobuf" },
-        body: Buffer.alloc(0),
-      },
-    );
-    // 没有凭据，所以是拒绝——但它是**这一面**的拒绝：方法名认得出来，而且用的
-    // 是身份域自己的分档（401 触发一次轮转重试，不是一句笼统的「失败」）。
-    expect(response.status).toBe(401);
-    const failure = fromBinary(
-      ErrorResponseSchema,
-      new Uint8Array(await response.arrayBuffer()),
-    );
-    expect(failure.code).toBe("UNAUTHENTICATED");
-  });
-
-  it("新面在同一个 core 上答 JSON 信封", async () => {
+  it("这一面在同一个 core 上答 JSON 信封", async () => {
     const { base } = await start();
     const response = await fetch(`${base}/api/automations/plans`, {
       headers: { origin: base },

@@ -14,11 +14,8 @@ import {
   type AutomationReceipt,
   type AutomationRun,
   type AutomationTarget,
-  AutomationReceiptSchema,
   create,
-  fromBinary,
-  toBinary,
-} from "@armadra/protocol";
+} from "./types";
 
 import {
   ScheduleError,
@@ -44,6 +41,7 @@ import {
   equalBytes,
   noteAttention,
   outcomeState,
+  receiptDigest,
 } from "./digest";
 import type {
   Authorization,
@@ -787,7 +785,6 @@ export class ScheduleEngine {
     }
     return this.store.transact(() => {
       gate.value.active = {
-        $typeName: "armadra.v1.AutomationRunRef",
         runId: run.run.id,
         planId: plan.id,
         workspaceId,
@@ -1086,9 +1083,7 @@ export class ScheduleEngine {
     ) {
       throw new ScheduleError("receipt", "这张收据不属于这次投递");
     }
-    const digest = createHash("sha256")
-      .update(toBinary(AutomationReceiptSchema, receipt))
-      .digest();
+    const digest = receiptDigest(receipt);
     if (num(receipt.sequence) < num(run.receiptSequence)) return;
     if (num(receipt.sequence) === num(run.receiptSequence)) {
       if (equalBytes(digest, run.receiptSha256)) return;
@@ -1225,9 +1220,7 @@ export class ScheduleEngine {
       run.leaseUntilUnixMs = 0n;
       if (receipt !== undefined) {
         run.receiptSequence = receipt.sequence;
-        run.receiptSha256 = createHash("sha256")
-          .update(toBinary(AutomationReceiptSchema, receipt))
-          .digest();
+        run.receiptSha256 = receiptDigest(receipt);
       }
       if (num(run.configVersion) === num(plan.configVersion)) {
         noteAttention(plan, run, state, reason);

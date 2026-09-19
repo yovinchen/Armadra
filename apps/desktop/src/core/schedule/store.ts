@@ -1,11 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
   AutomationActivationSchema,
-  AutomationPlanSchema,
-  AutomationReceiptSchema,
-  AutomationRunSchema,
   AutomationTargetGateSchema,
-  CommandLaunchSpecSchema,
   type AutomationActivation,
   type AutomationPlan,
   type AutomationReceipt,
@@ -13,9 +9,7 @@ import {
   type AutomationTargetGate,
   type CommandLaunchSpec,
   create,
-  fromBinary,
-  toBinary,
-} from "@armadra/protocol";
+} from "./types";
 
 import { ScheduleError, gateId, gateIdentity, num } from "./plan";
 import {
@@ -32,25 +26,23 @@ import {
   runToJson,
   storedJson,
 } from "./json";
-import type { AutomationTarget } from "@armadra/protocol";
+import type { AutomationTarget } from "./types";
 
 /**
- * 一行的载荷：优先读 JSON 列，只有还没转过的行才回落到 protobuf BLOB。
+ * 一行的载荷：JSON 列，一种读法。
  *
- * 迁移 0020 只加列，不解码字节（SQL 里没有 protobuf 解码器），转换由
- * `convert-legacy.ts` 在启动时做一遍。所以在那一遍跑完之前两种行并存，而**读
- * 不能挑食**。**R7 删掉 `legacy` 这一支**，连同它的参数一起。
+ * 0020 之前这些行是 protobuf BLOB，读的时候要两种都认。R7 删掉了那一支：只剩
+ * 一个写者，也只剩一种表示。那两个 BLOB 列还在表上（已发布的迁移不改），但没有
+ * 任何一条路径再去读它们。
  */
 function payloadOf<T>(
-  row: { payload_json?: string | null; payload?: Uint8Array | null },
+  row: { payload_json?: string | null },
   fromJson: (value: unknown) => T,
-  legacy: (bytes: Uint8Array) => T,
 ): T {
   if (typeof row.payload_json === "string") {
     return fromJson(parseStored(row.payload_json));
   }
-  if (row.payload instanceof Uint8Array) return legacy(row.payload);
-  throw new ScheduleError("invalid", "这一行既没有 JSON 也没有字节");
+  throw new ScheduleError("invalid", "这一行没有 JSON 载荷");
 }
 
 /**
@@ -125,11 +117,7 @@ interface CommandSessionRow extends Omit<CommandSessionRecord, "launch"> {
 function commandSessionRecord(row: CommandSessionRow): CommandSessionRecord {
   return {
     ...row,
-    launch: payloadOf(
-      { payload: row.launch, payload_json: row.launchJson },
-      launchSpecFromJson,
-      (bytes) => fromBinary(CommandLaunchSpecSchema, bytes),
-    ),
+    launch: payloadOf({ payload_json: row.launchJson }, launchSpecFromJson),
     generation: Number(row.generation),
     state: Number(row.state),
     revision: Number(row.revision),
@@ -182,9 +170,7 @@ export class ScheduleStore {
       | undefined;
     if (row === undefined) throw notFound("没有这个计划");
     return {
-      value: payloadOf(row, planFromJson, (bytes) =>
-        fromBinary(AutomationPlanSchema, bytes),
-      ),
+      value: payloadOf(row, planFromJson),
       revision: Number(row.revision),
     };
   }
@@ -263,9 +249,7 @@ export class ScheduleStore {
     }[];
     const hasMore = rows.length > page;
     const plans = rows.slice(0, page).map((row) => ({
-      value: payloadOf(row, planFromJson, (bytes) =>
-        fromBinary(AutomationPlanSchema, bytes),
-      ),
+      value: payloadOf(row, planFromJson),
       revision: Number(row.revision),
     }));
     return {
@@ -308,9 +292,7 @@ export class ScheduleStore {
       return { value: create(AutomationActivationSchema, {}), revision: 0 };
     }
     return {
-      value: payloadOf(row, activationFromJson, (bytes) =>
-        fromBinary(AutomationActivationSchema, bytes),
-      ),
+      value: payloadOf(row, activationFromJson),
       revision: Number(row.revision),
     };
   }
@@ -372,9 +354,7 @@ export class ScheduleStore {
       | undefined;
     if (row === undefined) return undefined;
     return {
-      value: payloadOf(row, runFromJson, (bytes) =>
-        fromBinary(AutomationRunSchema, bytes),
-      ),
+      value: payloadOf(row, runFromJson),
       revision: Number(row.revision),
     };
   }
@@ -454,9 +434,7 @@ export class ScheduleStore {
     const ordered = rows.map((row) => ({
       cursor: historyCursor(planId, Number(row.scheduledAtMs), row.runId),
       snapshot: {
-        value: payloadOf(row, runFromJson, (bytes) =>
-          fromBinary(AutomationRunSchema, bytes),
-        ),
+        value: payloadOf(row, runFromJson),
         revision: Number(row.revision),
       },
     }));
@@ -787,8 +765,6 @@ export class ScheduleStore {
       | undefined;
     return row === undefined
       ? undefined
-      : payloadOf(row, receiptFromJson, (bytes) =>
-          fromBinary(AutomationReceiptSchema, bytes),
-        );
+      : payloadOf(row, receiptFromJson);
   }
 }

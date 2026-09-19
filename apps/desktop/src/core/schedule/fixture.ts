@@ -3,6 +3,8 @@ import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import {
+  type AutomationConcurrencyPolicy,
+  type AutomationMisfirePolicy,
   AutomationOutcome,
   AutomationPlanConfigSchema,
   AutomationReceiptSchema,
@@ -12,7 +14,7 @@ import {
   type AutomationRun,
   type AutomationTarget,
   create,
-} from "@armadra/protocol";
+} from "./types";
 
 import {
   type Authorization,
@@ -157,8 +159,8 @@ export function config(
     misfireGraceMs?: number;
     busyTtlMs?: number;
     safeRetryLimit?: number;
-    concurrencyPolicy?: number;
-    misfirePolicy?: number;
+    concurrencyPolicy?: AutomationConcurrencyPolicy;
+    misfirePolicy?: AutomationMisfirePolicy;
   } = {},
 ): AutomationPlanConfig {
   return create(AutomationPlanConfigSchema, {

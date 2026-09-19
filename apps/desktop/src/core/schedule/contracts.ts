@@ -4,7 +4,7 @@ import type {
   AutomationReceipt,
   AutomationRun,
   AutomationTarget,
-} from "@armadra/protocol";
+} from "./types";
 
 import type { ScheduleStore } from "./store";
 

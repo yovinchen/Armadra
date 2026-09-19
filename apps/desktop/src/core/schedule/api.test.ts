@@ -2,8 +2,7 @@
  * 自动化的 JSON 面：`apps/web/src/api/automations.ts` 今天打的就是它。
  *
  * 测的不是调度逻辑（那在 `engine.test.ts` 里），而是**这一面说得对**：每条路由
- * 的形状、错误码、写入侧收的是普通 JSON 而不是 base64 protobuf，以及两张面对同
- * 一条记录说的是同一句话。
+ * 的形状、错误码，以及写入侧收的是普通 JSON。
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
@@ -11,14 +10,6 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  AutomationPlanSnapshotSchema,
-  ListAutomationPlansRequestSchema,
-  ListAutomationPlansResponseSchema,
-  create,
-  fromBinary,
-  toBinary,
-} from "@armadra/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { type OpenedDatabase, openDatabase } from "../db/open";
@@ -28,7 +19,6 @@ import { IdentityStore } from "../identity/store";
 import { AutomationApi } from "./api";
 import { ScheduleEngine } from "./engine";
 import { FakeDispatcher } from "./fixture";
-import { AutomationRpc } from "./rpc";
 import { ScheduleService } from "./service";
 import { ScheduleStore } from "./store";
 
@@ -61,8 +51,6 @@ interface Fixture {
     body?: unknown,
     options?: { anonymous?: boolean },
   ): Promise<Answer>;
-  /** 同一批数据在兼容面上的样子。 */
-  rpc(action: string, body: Uint8Array): Promise<Buffer>;
 }
 
 function setUp(): Fixture {
@@ -112,7 +100,6 @@ function setUp(): Fixture {
   });
   authority.service = service;
   const api = new AutomationApi({ service, identity });
-  const rpc = new AutomationRpc({ service, identity });
 
   async function drive(
     handler: {
@@ -173,23 +160,6 @@ function setUp(): Fixture {
                 unknown
               >),
       };
-    },
-    async rpc(action, body) {
-      const result = await drive(rpc, {
-        method: "POST",
-        path: `/rpc/armadra.v1.AutomationService/${action}`,
-        query: new URLSearchParams(),
-        headers: {
-          origin: ORIGIN,
-          "content-type": "application/x-protobuf",
-          authorization: `Bearer ${credentials.accessToken}`,
-          "x-armadra-csrf": credentials.csrfToken,
-        },
-        body: Buffer.from(body),
-        raw: { socket: {} },
-        json: () => null,
-      });
-      return result.wire;
     },
   };
 }
@@ -350,43 +320,4 @@ describe("自动化的 JSON 面", () => {
     expect(anonymous.body).toMatchObject({ plans: [], hasMore: false });
   });
 
-  it("两张面对同一个计划说同一句话", async () => {
-    const fixture = setUp();
-    const defined = await definePlan(fixture);
-    const viaJson = defined.body as { plan: Record<string, unknown> };
-
-    const listed = fromBinary(
-      ListAutomationPlansResponseSchema,
-      await fixture.rpc(
-        "ListPlans",
-        toBinary(
-          ListAutomationPlansRequestSchema,
-          create(ListAutomationPlansRequestSchema, {
-            meta: {
-              requestId: "r1",
-              scope: {
-                hostId: fixture.hostId,
-                workspaceId: "ws",
-                executionHostId: fixture.hostId,
-              },
-            },
-            limit: 10,
-          }),
-        ),
-      ),
-    );
-    const viaRpc = listed.plans[0];
-    expect(viaRpc?.plan?.id).toBe(viaJson.plan.id);
-    expect(String(viaRpc?.plan?.createdAtUnixMs)).toBe(
-      viaJson.plan.createdAtUnixMs,
-    );
-    expect(viaRpc?.plan?.config?.title).toBe(
-      (viaJson.plan.config as Record<string, unknown>).title,
-    );
-    // 摘要也是同一个数：两张面读的是同一份规范 JSON。
-    expect(
-      Buffer.from(viaRpc?.configSha256 ?? new Uint8Array()).toString("base64"),
-    ).toBe((defined.body as { configSha256: string }).configSha256);
-    void AutomationPlanSnapshotSchema;
-  });
 });

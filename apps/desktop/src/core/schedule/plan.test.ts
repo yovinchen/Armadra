@@ -5,7 +5,7 @@
  * 字节。不然一个刚刚被批准的计划，在第一次 tick 时就会因为「摘要对不上」而作废。
  */
 
-import { AutomationPlanConfigSchema, toBinary } from "@armadra/protocol";
+import { canonicalJson, planConfigToJson } from "./json";
 import { describe, expect, it } from "vitest";
 
 import { config } from "./fixture";
@@ -19,6 +19,10 @@ import {
   validId,
   validText,
 } from "./plan";
+import {
+  AutomationConcurrencyPolicy,
+  AutomationMisfirePolicy,
+} from "./types";
 
 const MINUTE = 60_000;
 
@@ -26,8 +30,8 @@ describe("归一化", () => {
   it("是幂等的——摘要靠这一条才算得准", () => {
     const once = normalize(config());
     const twice = normalize(once);
-    expect(toBinary(AutomationPlanConfigSchema, twice)).toEqual(
-      toBinary(AutomationPlanConfigSchema, once),
+    expect(canonicalJson(planConfigToJson(twice))).toEqual(
+      canonicalJson(planConfigToJson(once)),
     );
     expect(configHash(twice)).toEqual(configHash(once));
   });
@@ -37,8 +41,10 @@ describe("归一化", () => {
     expect(num(normalized.misfireGraceMs)).toBe(60_000);
     expect(num(normalized.busyTtlMs)).toBe(300_000);
     expect(num(normalized.retryBackoffMs)).toBe(1_000);
-    expect(normalized.misfirePolicy).toBe(1);
-    expect(normalized.concurrencyPolicy).toBe(1);
+    expect(normalized.misfirePolicy).toBe(AutomationMisfirePolicy.SKIP);
+    expect(normalized.concurrencyPolicy).toBe(
+      AutomationConcurrencyPolicy.FORBID,
+    );
   });
 
   it("超出界限的时限被拒，而不是被夹回范围内", () => {
@@ -51,11 +57,9 @@ describe("归一化", () => {
   it("循环计划必须有终点", () => {
     const looping = config();
     looping.schedule = {
-      $typeName: "armadra.v1.AutomationSchedule",
       kind: {
         case: "loopAfterCompletion",
         value: {
-          $typeName: "armadra.v1.AutomationLoopAfterCompletion",
           delayMs: BigInt(MINUTE),
         },
       },
@@ -68,11 +72,9 @@ describe("归一化", () => {
   it("坏时区与坏表达式在定义时就被拒", () => {
     const cron = config();
     cron.schedule = {
-      $typeName: "armadra.v1.AutomationSchedule",
       kind: {
         case: "cron",
         value: {
-          $typeName: "armadra.v1.AutomationCron",
           expression: "不是 cron",
           timezone: "UTC",
         },
@@ -101,11 +103,9 @@ describe("预览", () => {
   it("只算不动，给出接下来的几个时刻", () => {
     const cron = config();
     cron.schedule = {
-      $typeName: "armadra.v1.AutomationSchedule",
       kind: {
         case: "cron",
         value: {
-          $typeName: "armadra.v1.AutomationCron",
           expression: "0 9 * * *",
           timezone: "UTC",
         },
@@ -122,11 +122,9 @@ describe("预览", () => {
   it("间隔计划从锚点往后数", () => {
     const every = config();
     every.schedule = {
-      $typeName: "armadra.v1.AutomationSchedule",
       kind: {
         case: "interval",
         value: {
-          $typeName: "armadra.v1.AutomationInterval",
           anchorUnixMs: BigInt(Date.parse("2026-09-20T00:00:00Z")),
           intervalMs: BigInt(MINUTE),
         },
@@ -142,11 +140,9 @@ describe("预览", () => {
   it("循环计划没有可预览的日程，老实说不支持", () => {
     const looping = config({ maxRuns: 3 });
     looping.schedule = {
-      $typeName: "armadra.v1.AutomationSchedule",
       kind: {
         case: "loopAfterCompletion",
         value: {
-          $typeName: "armadra.v1.AutomationLoopAfterCompletion",
           delayMs: BigInt(MINUTE),
         },
       },

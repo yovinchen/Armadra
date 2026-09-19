@@ -1,24 +1,6 @@
 import { existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { createHash } from "node:crypto";
-import {
-  AutomationActivationSchema,
-  AutomationPlanSchema,
-  AutomationRunSchema,
-  AutomationTargetGateSchema,
-  CommandLaunchSpecSchema,
-  fromBinary,
-} from "@armadra/protocol";
-
-import {
-  activationToJson,
-  canonicalJson,
-  launchSpecToJson,
-  planToJson,
-  runToJson,
-  storedJson,
-} from "../schedule/json";
 
 /**
  * 把旧 `host.db` 的身份记录搬进统一库，一次，不删原库。
@@ -37,8 +19,8 @@ import {
  *   * **不删原库**。搬完把 `host.db` 改名 `host.db.absorbed-<ts>`，Go Host 下次
  *     就找不到它、也不会变成第二个写者，而人还能把它拿回去。
  *
- * 搬的是 R1 的五张身份表，加上 R4 的自动化域与 R5 的三张 `github_*`；其余域的
- * 表由各自的迁移和搬运处理。
+ * 搬的是 R1 的五张身份表，加上自动化域里那几张同名同列的表与 R5 的三张
+ * `github_*`；其余域的表由各自的迁移和搬运处理。
  *
  * GitHub 那三张跟着同一趟走，理由和 `host_id` 一样：`github_config` 记的是这台
  * 机器选了哪个凭据来源、密钥存在哪个引用名下，而令牌本身在 OS 钥匙串里，还在
@@ -46,23 +28,10 @@ import {
  * 配置」，然后被要求重新粘一次已经存在的令牌。`github_references` 同理：那些
  * 连接是人手工连出来的，重建不了。
  *
- * ## 自动化的两半
- *
- * 一半是**同名同列的表**（载荷、授权记录、命令根与命令会话），和身份表一样逐列
- * 照搬。
- *
- * 另一半在 Host 那边**根本不是表**：计划、激活记录、运行、目标闸门躺在通用
- * `entities` 里，一行一个 protobuf BLOB。统一库里它们各有各的表（设计 §4.1：
- * 「通用实体投影改为各域自己的表」），所以这一半是一次**投影**而不是一次拷贝。
- *
- * 投影只动形状，不动载荷：BLOB 原样进新表的 `payload` 列，修订号原样带过来。
- * 配置摘要因此和 Host 算出来的逐字节相同——已经激活的计划搬过来之后不用重新
- * 授权，这正是「不翻译载荷」换来的东西。
- *
- * 三种实体不搬，因为统一库里没有对应物、也不需要：`automation.plan-index`
- * （计划表自己就是索引）、`automation.operation-index`（运行表上的
- * `operation_id` 唯一索引就是它）、`automation.run-history*`（一条 SQL 索引就是
- * 那张按时间倒排的索引实体，所以也没有 Host 那次一次性回填）。
+ * 自动化域只搬**同名同列的表**（载荷、授权记录与命令根）。计划、激活、运行、
+ * 目标闸门与命令会话在旧库里是一行一个 protobuf BLOB，读它们需要一份已经不存在
+ * 的生成码；R7 之后 core 只有一种表示，所以这四种记录不再搬——代价是升级上来的
+ * 机器要重新定义一次计划，而换来的是库里没有第二种说法。
  */
 
 /** 逐列照搬的表，顺序即插入顺序——外键要求被引用的行先进。 */
@@ -75,19 +44,10 @@ export const ABSORBED_TABLES = [
   "automation_payloads",
   "automation_grants",
   "command_roots",
-  "command_sessions",
   // GitHub 三张之间没有外键，排在最后；`store_meta` 的 `host_id` 已经先到位。
   "github_config",
   "github_status_mappings",
   "github_references",
-] as const;
-
-/** 由 `legacy.entities` 投影出来的表。空判断把它们也算上。 */
-export const PROJECTED_TABLES = [
-  "automation_plans",
-  "automation_activations",
-  "automation_runs",
-  "automation_gates",
 ] as const;
 
 /**
@@ -100,14 +60,6 @@ export const PROJECTED_TABLES = [
 const LEGACY_SOURCE: Readonly<Record<string, string>> = {
   identity_principals: "identity_owner",
 };
-
-/** Host 的实体 kind → 统一库里的表。投影只认这四种。 */
-const PROJECTIONS = [
-  { kind: "automation.plan", table: "automation_plans" },
-  { kind: "automation.activation", table: "automation_activations" },
-  { kind: "automation.run", table: "automation_runs" },
-  { kind: "automation.target-gate", table: "automation_gates" },
-] as const;
 
 export interface AbsorbResult {
   /** 这次有没有真的搬。 */
@@ -144,7 +96,7 @@ export function absorbHostDatabase(options: {
     return { absorbed: false, skipped: "noHostDatabase", rows: empty };
   }
   const database = options.database;
-  for (const table of [...ABSORBED_TABLES, ...PROJECTED_TABLES]) {
+  for (const table of ABSORBED_TABLES) {
     // 目标表还不存在（这个库还没过对应那条迁移）就当它是空的：一张没有的表
     // 里没有任何东西需要被保护。
     if (!tableExists(database, table)) continue;
@@ -186,13 +138,6 @@ export function absorbHostDatabase(options: {
           rows[table] = count(database, table);
           continue;
         }
-        if (table === "command_sessions") {
-          // 这一张的 `launch` 在旧库里是 protobuf 字节，在 0020 之后是 JSON，
-          // 所以它是一次**投影**而不是一次逐列拷贝。R7 删掉本分支的解码。
-          copyCommandSessions(database);
-          rows[table] = count(database, table);
-          continue;
-        }
         // 列名逐条列出来，而不是 `INSERT INTO t SELECT * FROM legacy.t`：两边
         // 列序一致是今天的事实，靠事实而不是靠约束搬数据，有一天列序变了就会
         // 悄悄把 `origin` 写进 `scopes`。
@@ -204,9 +149,6 @@ export function absorbHostDatabase(options: {
         );
         rows[table] = count(database, table);
       }
-      // 自动化的另一半：从通用实体投影出来。它在同一个事务里，所以「身份进了
-      // 而计划没进」这种半搬状态不存在。
-      Object.assign(rows, projectAutomation(database, present));
       // 搬完逐张核对行数：目标行数必须等于原库行数，差一行就整体回滚。
       for (const table of ABSORBED_TABLES) {
         const source = LEGACY_SOURCE[table] ?? table;
@@ -236,137 +178,6 @@ export function absorbHostDatabase(options: {
     }
   }
   return { absorbed: true, rows, renamedTo };
-}
-
-/**
- * 把 `legacy.entities` 里的自动化实体投影进各自的表。
- *
- * 逐行核对：删除墓碑跳过（它们在统一库里没有对应物，一行被删掉的计划就是不在
- * 那张表里），修订号原样带过来，BLOB 原样写进 `payload`。运行那张表多三列
- * （`plan_id` / `operation_id` / `scheduled_at_ms`），它们是索引用的投影列，从
- * 载荷里解出来——解不开就整体回滚，因为一条读不出计划标识的运行记录排不进任何
- * 一页历史。
- */
-function projectAutomation(
-  database: DatabaseSync,
-  present: ReadonlySet<string>,
-): Record<string, number> {
-  const rows: Record<string, number> = {};
-  for (const projection of PROJECTIONS) rows[projection.table] = 0;
-  if (!present.has("entities")) return rows;
-  for (const projection of PROJECTIONS) {
-    if (!tableExists(database, projection.table)) continue;
-    const entities = database
-      .prepare(
-        "SELECT workspace_id AS workspaceId, entity_id AS entityId, revision, payload " +
-          "FROM legacy.entities WHERE kind = ? AND deleted = 0",
-      )
-      .all(projection.kind) as {
-      workspaceId: string;
-      entityId: string;
-      revision: number;
-      payload: Uint8Array;
-    }[];
-    for (const entity of entities) {
-      insertProjected(database, projection.table, entity);
-      rows[projection.table] = (rows[projection.table] ?? 0) + 1;
-    }
-  }
-  return rows;
-}
-
-function insertProjected(
-  database: DatabaseSync,
-  table: string,
-  entity: {
-    workspaceId: string;
-    entityId: string;
-    revision: number;
-    payload: Uint8Array;
-  },
-): void {
-  const revision = Math.max(1, Number(entity.revision));
-  switch (table) {
-    case "automation_plans": {
-      const plan = fromBinary(AutomationPlanSchema, entity.payload);
-      database
-        .prepare(
-          "INSERT INTO automation_plans (workspace_id, plan_id, revision, payload, payload_json, state, " +
-            "next_due_at_ms, updated_at_ms) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)",
-        )
-        .run(
-          entity.workspaceId,
-          entity.entityId,
-          revision,
-          storedJson(planToJson(plan)),
-          plan.state,
-          Number(plan.nextDueUnixMs),
-          Number(plan.updatedAtUnixMs),
-        );
-      return;
-    }
-    case "automation_activations":
-      database
-        .prepare(
-          "INSERT INTO automation_activations (workspace_id, plan_id, revision, payload, payload_json) " +
-            "VALUES (?, ?, ?, NULL, ?)",
-        )
-        .run(
-          entity.workspaceId,
-          entity.entityId,
-          revision,
-          storedJson(
-            activationToJson(
-              fromBinary(AutomationActivationSchema, entity.payload),
-            ),
-          ),
-        );
-      return;
-    case "automation_runs": {
-      const run = fromBinary(AutomationRunSchema, entity.payload);
-      if (run.planId === "") {
-        throw new Error(`运行 ${entity.entityId} 的记录里没有计划标识`);
-      }
-      database
-        .prepare(
-          "INSERT INTO automation_runs (workspace_id, run_id, plan_id, operation_id, " +
-            "scheduled_at_ms, revision, payload, payload_json) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
-        )
-        .run(
-          entity.workspaceId,
-          entity.entityId,
-          run.planId,
-          run.operationId,
-          Number(run.scheduledAtUnixMs),
-          revision,
-          storedJson(runToJson(run)),
-        );
-      return;
-    }
-    case "automation_gates": {
-      // 闸门的实体标识就是 `hashText(执行主机, 会话, 节点)`，统一库的 `gate_id`
-      // 用的是同一个拼法，所以这一列原样搬。
-      const gate = fromBinary(AutomationTargetGateSchema, entity.payload);
-      database
-        .prepare(
-          "INSERT INTO automation_gates (gate_id, execution_host_id, session_id, node_id, " +
-            "active_run_id, active_plan_id, active_workspace_id, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .run(
-          entity.entityId,
-          gate.executionHostId,
-          gate.sessionId,
-          gate.nodeId,
-          gate.active?.runId ?? "",
-          gate.active?.planId ?? "",
-          gate.active?.workspaceId ?? "",
-          revision,
-        );
-      return;
-    }
-    default:
-      throw new Error(`没有 ${table} 的投影规则`);
-  }
 }
 
 function tableExists(database: DatabaseSync, table: string): boolean {
@@ -400,60 +211,4 @@ function quote(value: string): string {
 
 function quoteIdentifier(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
-}
-
-/**
- * 冻结的命令会话：`launch` 从 protobuf 字节解成 JSON，身份摘要跟着按**规范
- * JSON** 重算（迁移 0020）。
- *
- * 摘要重算的后果和计划的 `configSha256` 一样：搬过来的会话身份换了一个数。它只
- * 被这个 core 自己用来核对「这还是当初冻结的那份定义」，所以重算之后仍然自洽。
- *
- * **R7 删除本函数**：那时候旧 `host.db` 已经不存在了。
- */
-function copyCommandSessions(database: DatabaseSync): void {
-  const rows = database
-    .prepare(
-      "SELECT session_id AS sessionId, root_id AS rootId, workspace_id AS workspaceId, " +
-        "execution_host_id AS executionHostId, launch, generation, state, " +
-        "reason_code AS reasonCode, revision, created_at_ms AS createdAtMs, " +
-        "updated_at_ms AS updatedAtMs FROM legacy.command_sessions",
-    )
-    .all() as {
-    sessionId: string;
-    rootId: string;
-    workspaceId: string;
-    executionHostId: string;
-    launch: Uint8Array;
-    generation: number;
-    state: number;
-    reasonCode: string;
-    revision: number;
-    createdAtMs: number;
-    updatedAtMs: number;
-  }[];
-  const insert = database.prepare(
-    "INSERT INTO main.command_sessions (session_id, root_id, workspace_id, execution_host_id, " +
-      "launch, launch_json, launch_sha256, generation, state, reason_code, revision, " +
-      "created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
-  );
-  for (const row of rows) {
-    const json = canonicalJson(
-      launchSpecToJson(fromBinary(CommandLaunchSpecSchema, row.launch)),
-    );
-    insert.run(
-      row.sessionId,
-      row.rootId,
-      row.workspaceId,
-      row.executionHostId,
-      json,
-      createHash("sha256").update(json, "utf8").digest(),
-      row.generation,
-      row.state,
-      row.reasonCode,
-      row.revision,
-      row.createdAtMs,
-      row.updatedAtMs,
-    );
-  }
 }
