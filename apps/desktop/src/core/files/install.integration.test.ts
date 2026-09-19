@@ -15,7 +15,7 @@ import { MAX_IMPORT_BODY_BYTES } from "../imports/routes";
 
 /**
  * The filesystem and import domains, assembled by the real `run()` under
- * `ARMADRA_CORE=ts` and driven over a real socket.
+ * driven over a real socket.
  *
  * The route tests beside each module dispatch through the router directly,
  * which is the right level for the behaviour. What only this level can show is
@@ -39,7 +39,7 @@ beforeAll(async () => {
   mkdirSync(join(root, "src"), { recursive: true });
   core = await run({
     argv: ["--listen", "tcp:127.0.0.1:0", "--data-dir", directory],
-    env: { ...process.env, ARMADRA_CORE: "ts", ARMADRA_LOG: "error" },
+    env: { ...process.env, ARMADRA_LOG: "error" },
     stdout: () => {},
   });
   const spec = core.bound[0];

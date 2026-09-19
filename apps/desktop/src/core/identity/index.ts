@@ -6,7 +6,7 @@ import { installAuditSink } from "./audit";
 import { Authorizer } from "./authorize";
 import { startControlChannel } from "./control";
 import { installAccessGate } from "./gate";
-import { API_PREFIX, IdentityHttp, RPC_PREFIX } from "./http";
+import { API_PREFIX, IdentityHttp } from "./http";
 import { allScopes } from "./scopes";
 import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
@@ -33,8 +33,6 @@ export {
   API_PREFIX,
   BROWSER_SESSION_CAPABILITY,
   NATIVE_SESSION_CAPABILITY,
-  RPC_METHODS,
-  RPC_PREFIX,
 } from "./http";
 export { CONTROL_SOCKET, TICKET_PATH, controlSocketPath } from "./control";
 
@@ -63,7 +61,7 @@ export function identityInstanceId(): string {
 export function installIdentity(context: CoreContext): void {
   if (!context.db.unified) {
     context.log.info(
-      "身份域未装配：统一库迁移尚未应用（ARMADRA_CORE=ts 才应用）",
+      "身份域未装配：统一库迁移尚未应用",
     );
     return;
   }
@@ -107,11 +105,8 @@ export function installIdentity(context: CoreContext): void {
     });
   });
 
-  context.server.raw(RPC_PREFIX, (request, response, cors) =>
-    http.rpc(request, response, cors),
-  );
   context.server.raw(API_PREFIX, (request, response, cors) =>
-    http.api(request, response, cors),
+    http.handle(request, response, cors),
   );
 
   // 私有通道是异步绑的，但装配是同步的：起不来不该拖住 core，壳会在取票时拿到

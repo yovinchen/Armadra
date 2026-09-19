@@ -23,7 +23,7 @@ import { validName } from "./tokens";
  *
  * TODO(R6)：Windows 上换成命名管道，并带上受保护的 DACL 与逐连接的客户端 SID
  * 核对；`node:net` 建出来的普通管道实例达不到这条通道要求的隔离，所以在
- * Windows 上这条通道不开，壳退回 `ARMADRA_CORE=rust`。
+ * Windows 上这条通道不开；壳在那里走另一条取票路径。
  */
 
 export const CONTROL_SOCKET = "core-control.sock";
