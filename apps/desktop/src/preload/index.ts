@@ -50,7 +50,7 @@ const onShortcutTriggered = subscribe<[string]>(IPC.shortcutsTriggered.channel);
 const onBrowserDrive = subscribe<[BrowserDriveCommand]>(
   IPC.browserDrive.channel,
 );
-const onKeyIntent = subscribe<[string]>(IPC.windowKeyIntent.channel);
+const onKeyIntent = subscribe<[string, string]>(IPC.windowKeyIntent.channel);
 const onNotificationClick = subscribe<[{ nodeId: string }]>(
   IPC.windowNotificationClick.channel,
 );
@@ -77,9 +77,15 @@ export interface ArmadraDesktopApi {
   };
   readonly window: {
     isFocused(): Promise<boolean>;
-    /** A chord the main process claimed back from the application menu
-     * (`shell-core/keydown-intercept.ts`). */
-    onKeyIntent(listener: (intent: string) => void): () => void;
+    /**
+     * A chord the main process claimed back from the application menu
+     * (`shell-core/keydown-intercept.ts`), with the token its answer must
+     * carry. The page is expected to call `resolveKeyIntent`; if it does not,
+     * the shell performs its own half after a short wait.
+     */
+    onKeyIntent(listener: (intent: string, token: string) => void): () => void;
+    /** Whether the page acted on a claimed chord. */
+    resolveKeyIntent(token: string, handled: boolean): Promise<{ ok: boolean }>;
     /** A main-process notification was clicked; the page selects the node. */
     onNotificationClick(
       listener: (event: { nodeId: string }) => void,
@@ -158,6 +164,8 @@ const api: ArmadraDesktopApi = {
   window: {
     isFocused: () => ipcRenderer.invoke(IPC.windowIsFocused.channel),
     onKeyIntent: (listener) => onKeyIntent(listener),
+    resolveKeyIntent: (token, handled) =>
+      ipcRenderer.invoke(IPC.windowKeyIntentResult.channel, { token, handled }),
     onNotificationClick: (listener) => onNotificationClick(listener),
   },
   dialog: {

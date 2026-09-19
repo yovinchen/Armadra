@@ -192,6 +192,18 @@ export async function notify(
   body: string,
   options: NotifyOptions = {},
 ): Promise<void> {
+  // 窗口就在眼前时不弹系统通知：该看的东西已经在屏幕上了。壳里问壳
+  // （`window:is-focused`），因为无边框窗口里 `document.hasFocus()` 在
+  // webview 抢走焦点时会说谎；浏览器里这一步不存在，照旧由调用处的
+  // `document.hidden` 判断。
+  const shell = bridge();
+  if (shell) {
+    try {
+      if (await shell.window.isFocused()) return;
+    } catch {
+      // 问不到就当没问过：通知是锦上添花，不能因为它失败就不发。
+    }
+  }
   if (!(await ensureWebPermission())) return;
   try {
     const notification = new Notification(title, { body });

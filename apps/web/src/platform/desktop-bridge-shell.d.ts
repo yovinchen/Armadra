@@ -46,8 +46,17 @@ interface ArmadraBridge {
   };
   readonly window: {
     isFocused(): Promise<boolean>;
-    /** 主进程从应用菜单手里抢回来的和弦（封闭清单）。 */
-    onKeyIntent(listener: (intent: string) => void): () => void;
+    /**
+     * 主进程从应用菜单手里抢回来的和弦（封闭清单），连同答复要带的 token。
+     * 页面**必须**回一次 `resolveKeyIntent`：没接住也要说没接住，那正是壳
+     * 去做自己那一半（关窗）的信号。不回也行，壳等一小会儿照样做。
+     */
+    onKeyIntent(listener: (intent: string, token: string) => void): () => void;
+    /** 页面有没有接住那条意图。 */
+    resolveKeyIntent(
+      token: string,
+      handled: boolean,
+    ): Promise<{ ok: boolean }>;
     /** 主进程发的通知被点了，页面自己决定选中哪个节点。 */
     onNotificationClick(
       listener: (event: { nodeId: string }) => void,

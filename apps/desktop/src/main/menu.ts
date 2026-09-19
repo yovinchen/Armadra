@@ -5,6 +5,10 @@ import {
   type MenuItemConstructorOptions,
 } from "electron";
 import { IPC } from "../shared/ipc";
+import {
+  KEY_INTENT_REPLY_TIMEOUT_MS,
+  KeyIntentArbiter,
+} from "../shell-core/key-intent";
 import { keydownIntercept } from "../shell-core/keydown-intercept";
 import {
   localeFromTag,
@@ -23,6 +27,22 @@ import { closeWindow, revealWindow, sendToWindow } from "./window";
  * `shell-core/keydown-intercept.ts` names the one it has to take back.
  */
 
+/** The chords still waiting for the page to say whether it took them. */
+const intents = new KeyIntentArbiter();
+
+/**
+ * `window:key-intent-result`. The page answering one claimed chord.
+ *
+ * The same function is what the timeout calls with `handled: false`, so the
+ * two paths cannot drift: exactly one of them settles each token, and the
+ * shell's own half runs exactly when the page did not take it.
+ */
+export function settleKeyIntent(token: unknown, handled: unknown): void {
+  const outcome = intents.settle(token, handled);
+  if (outcome.verdict !== "shell") return;
+  if (outcome.intent === "close-window") closeWindow();
+}
+
 /** Installed per window, because `before-input-event` is a webContents event. */
 export function installKeydownIntercept(window: BrowserWindow): void {
   window.webContents.on("before-input-event", (event, input) => {
@@ -40,11 +60,19 @@ export function installKeydownIntercept(window: BrowserWindow): void {
     if (intent === null) return;
     // Claimed means claimed: neither the menu nor the page may also act on it.
     event.preventDefault();
-    // The page is told what was asked for even though the shell performs the
-    // window half itself — the canvas may want to close a node first, and only
-    // the page knows whether there is one.
-    sendToWindow(IPC.windowKeyIntent.channel, intent);
-    if (intent === "close-window") closeWindow();
+    // ASK, do not act. The canvas may want to close a node first and only the
+    // page knows whether there is one; the shell used to send the intent and
+    // close the window in the same breath, which made the page's half
+    // unreachable. The timer below is what keeps ⌘W from ever doing nothing:
+    // a page that does not answer gets its window closed anyway.
+    const token = intents.open(intent);
+    sendToWindow(IPC.windowKeyIntent.channel, intent, token);
+    const timer = setTimeout(
+      () => settleKeyIntent(token, false),
+      KEY_INTENT_REPLY_TIMEOUT_MS,
+    );
+    // A pending chord must never be the reason the process stays alive at quit.
+    timer.unref?.();
   });
 }
 
