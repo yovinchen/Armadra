@@ -25,7 +25,7 @@ vi.mock("./workspace-actions", () => ({
   useOpenWorkspace: () => openWorkspace,
 }));
 vi.mock("../platform", () => ({
-  isTauri: () => false,
+  isDesktop: () => false,
   pickDirectory: vi.fn(),
   onFileDrop: (callback: FileDropHandler) => {
     nativeDrop = callback;

@@ -1,7 +1,8 @@
 /**
  * 系统全局热键的页面这一半。
  *
- * 壳负责向操作系统注册（`src-tauri/src/shortcuts.rs`），页面负责三件事：
+ * 壳负责向操作系统注册（Electron 是 `apps/desktop/src/main/shortcuts.ts`，
+ * Tauri 是 `src-tauri/src/shortcuts.rs`），页面负责三件事：
  * 把当前键位里 `global` 作用域的那几条翻成 accelerator 交过去、把壳报回来的
  * 结果留给设置页显示、以及在热键触发时派发那条命令。
  *
@@ -11,7 +12,7 @@
  */
 import { create } from "zustand";
 
-import { isTauri } from "../platform";
+import { isDesktop } from "../platform";
 import { acceleratorFor } from "./accelerator";
 import { commandKeys } from "./active";
 import { commandsInScope, type CommandId, type PlatformKeys } from "./commands";
@@ -40,6 +41,23 @@ export function globalBindings(
   }));
 }
 
+/**
+ * 把这张表交给壳。Electron 走 `window.armadra.shortcuts`，Tauri 仍走
+ * `invoke`——两个壳答复的形状是同一个（`{ id, state }[]`），所以分叉只到这里
+ * 为止，上面的状态机一个字都不用改。
+ */
+async function applyInShell(
+  bindings: GlobalBinding[],
+): Promise<GlobalShortcutOutcome[]> {
+  const shell = typeof window === "undefined" ? undefined : window.armadra;
+  if (shell)
+    return (await shell.shortcuts.apply(bindings)) as GlobalShortcutOutcome[];
+  const { invoke } = await import("@tauri-apps/api/core");
+  return (await invoke("global_shortcuts_apply", {
+    bindings,
+  })) as GlobalShortcutOutcome[];
+}
+
 interface GlobalShortcutStore {
   /** 每条命令最后一次注册的结果；没试过的不在里面。 */
   outcomes: Record<string, GlobalShortcutState>;
@@ -49,12 +67,9 @@ interface GlobalShortcutStore {
 export const useGlobalShortcuts = create<GlobalShortcutStore>((set) => ({
   outcomes: {},
   async apply(bindings) {
-    if (!isTauri()) return;
+    if (!isDesktop()) return;
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const outcomes = (await invoke("global_shortcuts_apply", {
-        bindings,
-      })) as GlobalShortcutOutcome[];
+      const outcomes = await applyInShell(bindings);
       set({
         outcomes: Object.fromEntries(
           outcomes.map((outcome) => [outcome.id, outcome.state]),
@@ -75,7 +90,10 @@ export const useGlobalShortcuts = create<GlobalShortcutStore>((set) => ({
 export function onGlobalShortcut(
   callback: (id: CommandId) => void,
 ): () => void {
-  if (!isTauri()) return () => undefined;
+  const shell = typeof window === "undefined" ? undefined : window.armadra;
+  if (shell)
+    return shell.shortcuts.onTriggered((id) => callback(id as CommandId));
+  if (!isDesktop()) return () => undefined;
   let unlisten: (() => void) | null = null;
   let cancelled = false;
   void (async () => {

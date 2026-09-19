@@ -9,7 +9,7 @@ import type { FileEntry } from "@armadra/shared";
 import { toast } from "sonner";
 import { RUNTIME_URL } from "../api/client";
 import { t } from "../app/preferences-store";
-import { isTauri } from "../platform";
+import { isDesktop } from "../platform";
 import { useCanvasStore } from "../store/canvas-store";
 import { getFlow } from "../canvas/flow/flow-context";
 import {
@@ -21,7 +21,7 @@ import {
 } from "./workspace-drag";
 
 export function needsPointerFileDrag(): boolean {
-  return isTauri() && /Win/i.test(navigator.platform || navigator.userAgent);
+  return isDesktop() && /Win/i.test(navigator.platform || navigator.userAgent);
 }
 
 /** Windows Tauri's native OS drop handler disables HTML5 DND. Internal files

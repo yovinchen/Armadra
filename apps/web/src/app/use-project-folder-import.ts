@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { WorkspaceSummary } from "@armadra/shared";
 import { toast } from "sonner";
 import { runtimeApi } from "../api/client";
-import { isTauri, onFileDrop, pickDirectory } from "../platform";
+import { isDesktop, onFileDrop, pickDirectory } from "../platform";
 import {
   chooseBrowserFolder,
   droppedFolders,
@@ -107,7 +107,7 @@ export function useProjectFolderImport() {
   const choose = useCallback(async () => {
     if (working.current) return;
     try {
-      if (isTauri()) {
+      if (isDesktop()) {
         const path = await pickDirectory();
         if (path) await run([path]);
       } else await run(await chooseBrowserFolder());

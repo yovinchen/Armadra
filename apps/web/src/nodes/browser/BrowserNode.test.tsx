@@ -69,13 +69,13 @@ vi.mock("sonner", () => ({
 }));
 
 const platform = vi.hoisted(() => ({
-  isTauri: vi.fn(() => false),
+  isDesktop: vi.fn(() => false),
   pickFiles: vi.fn(async () => [] as string[]),
 }));
 
 vi.mock("@/platform", () => ({
   openExternal: vi.fn(),
-  isTauri: platform.isTauri,
+  isDesktop: platform.isDesktop,
   pickFiles: platform.pickFiles,
 }));
 
@@ -237,7 +237,7 @@ beforeEach(() => {
     tabId: "t1",
     answeredChooser: true,
   });
-  platform.isTauri.mockReturnValue(false);
+  platform.isDesktop.mockReturnValue(false);
   platform.pickFiles.mockResolvedValue([]);
   api.browserInput.mockResolvedValue({ accepted: 1, navigationEpoch: 7 });
   api.browserCapture.mockResolvedValue({
@@ -682,7 +682,7 @@ describe("BrowserNode 文件选择器", () => {
   });
 
   it("uses the native picker on the desktop and refuses a file outside the workspace", async () => {
-    platform.isTauri.mockReturnValue(true);
+    platform.isDesktop.mockReturnValue(true);
     platform.pickFiles.mockResolvedValue(["/etc/passwd"]);
     renderBrowser();
     // 会话真的落到状态里之后再推事件：`createBrowserSession` 被调用只说明

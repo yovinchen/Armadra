@@ -338,26 +338,49 @@
 }
 
 /*
- * Tauri 窗口（§24.2「一致的窗口 chrome」）。
+ * 桌面窗口（§24.2「一致的窗口 chrome」）。
  *
- * `index.html` 里的内联脚本在 Tauri 下给 <html> 打上 `data-tauri`。
- * 窗口本身是 `transparent: true` 且贴了 `NSVisualEffectMaterial::Sidebar`，
- * 所以这里把文档链上的底色一路让开——只有侧栏那一片是半透明的，
- * 画布仍然由 `--canvas-bg` 铺满，节点/浮层各自有自己的实底。
- * 浏览器里没有 `data-tauri`，这一整段不生效，侧栏就是纯色 `--panel`。
+ * 两个壳各自给 <html> 打一个标记：Tauri 是 `index.html` 里的内联脚本打的
+ * `data-tauri`，Electron 是 preload 在页面脚本之前打的 `data-desktop`。
+ * 窗口本身贴了 `NSVisualEffectMaterial::Sidebar`（Electron 是
+ * `vibrancy: "sidebar"`），所以这里把文档链上的底色一路让开——只有侧栏那
+ * 一片是半透明的，画布仍然由 `--canvas-bg` 铺满，节点/浮层各自有自己的实底。
+ * 浏览器里两个标记都没有，这一整段不生效，侧栏就是纯色 `--panel`。
  */
 html[data-tauri],
 html[data-tauri] body,
-html[data-tauri] #root {
+html[data-tauri] #root,
+html[data-desktop],
+html[data-desktop] body,
+html[data-desktop] #root {
   background: transparent;
 }
 
-html[data-tauri] #root > .bg-background {
+html[data-tauri] #root > .bg-background,
+html[data-desktop] #root > .bg-background {
   background-color: transparent;
 }
 
-html[data-tauri] {
+html[data-tauri],
+html[data-desktop] {
   --sidebar-material: color-mix(in srgb, var(--panel) 62%, transparent);
+}
+
+/*
+ * Electron 的窗口拖拽区（`shell/window-region.ts`）。
+ *
+ * `-webkit-app-region` 只有 Electron 那一份 Chromium 认得，而且 CSSOM 不一定
+ * 暴露它，所以声明写在这里、由 `data-app-region` 挂上，而不是写成内联 style。
+ * 这个属性是**继承**的：拖拽区里的按钮、输入框必须显式写回 `no-drag`，
+ * 否则按下去是拖窗口而不是点按钮。Tauri 不认这条规则，那边走
+ * `data-tauri-drag-region`。
+ */
+[data-app-region="drag"] {
+  -webkit-app-region: drag;
+}
+
+[data-app-region="no-drag"] {
+  -webkit-app-region: no-drag;
 }
 
 /*

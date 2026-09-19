@@ -80,6 +80,9 @@ vi.mock("../../../platform", () => ({
   openExternal: async (url: string) => {
     opened.urls.push(url);
   },
+  isDesktop: () => true,
+  // `updates/shell-updater.ts` 还在用旧名字（W5 之前不动它），而它是
+  // `isDesktop()` 的别名，所以这里两个名字都给。
   isTauri: () => true,
 }));
 
