@@ -232,6 +232,13 @@ fn drive_with(
         .env("ARMADRA_ENDPOINT_FILE", &endpoint.file)
         .env("ARMADRA_SESSION_ID", SESSION_ID)
         .env("ARMADRA_SESSION_GENERATION", GENERATION.to_string())
+        // The default 1.5s covers a socket round trip. The spawn fallback has
+        // to start a whole process inside the same budget, and a full parallel
+        // `cargo test` run is exactly the machine where that does not fit: the
+        // child was killed mid-write and the assertion blamed the file for
+        // never appearing. The production default is untouched; this raises it
+        // only for the driver these tests run.
+        .env("ARMADRA_HOOK_TIMEOUT_MS", "20000")
         .output()
         .unwrap();
     assert!(

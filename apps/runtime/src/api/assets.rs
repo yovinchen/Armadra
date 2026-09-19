@@ -251,7 +251,7 @@ pub struct ImportAssetRequest {
 /// `POST /api/workspaces/{id}/assets/import` — old canvas contract §8, Phase 3.
 ///
 /// The desktop shell only ever learns a real *path* for an OS drag: the webview
-/// hands Tauri the drop and keeps the bytes to itself, and the shell has no
+/// hands the shell the drop and keeps the bytes to itself, and the shell has no
 /// filesystem plugin. So the runtime does the reading, and the picture ends up
 /// in the same content-addressed store as an upload — identical response, same
 /// dedupe, same `.armadra/assets/` file.

@@ -63,8 +63,6 @@ pub fn loopback_origin(origin: &str) -> bool {
         || origin.starts_with("http://localhost:")
         || origin == "http://127.0.0.1"
         || origin == "http://localhost"
-        || origin == "tauri://localhost"
-        || origin == "https://tauri.localhost"
 }
 
 pub(super) fn default_path() -> String {

@@ -152,7 +152,7 @@ async fn websocket_upgrades_complete_over_a_unix_socket() {
             fixture.workspace_id
         ))
         .header("Host", "armadra.invalid")
-        .header("Origin", "tauri://localhost")
+        .header("Origin", "http://localhost")
         .header("Connection", "Upgrade")
         .header("Upgrade", "websocket")
         .header("Sec-WebSocket-Version", "13")

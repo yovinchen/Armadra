@@ -39,7 +39,7 @@ pnpm --filter @armadra/desktop build   # 桌面打包
 | ------------------------------------------------------ | -------------------------------------- |
 | [apps/web](apps/web/README.md)                         | React / Vite / React Flow 前端         |
 | [apps/runtime](apps/runtime/README.md)                 | Rust / Axum / SQLite，当前业务执行服务 |
-| [apps/desktop](apps/desktop/README.md)                 | Tauri 2 薄壳与 sidecar                 |
+| [apps/desktop](apps/desktop/README.md)                 | Electron 薄壳与受管二进制             |
 | [apps/host](apps/host/README.md)                       | Go 后台服务，分阶段承接 Runtime 能力   |
 | [packages/shared](packages/shared/README.md)           | 领域模型、CLI 注册表与 JSON schema     |
 | [proto](proto/README.md)                               | Go / Rust / TS 共用的 Protobuf 契约    |

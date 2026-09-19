@@ -1,24 +1,26 @@
 /**
- * latest.json — the static manifest Tauri's updater reads.
+ * latest.json — the static manifest the desktop updater reads.
  *
  * Only the desktop bundles that can actually be applied in place appear in it:
- * the macOS `.app.tar.gz`, the Windows NSIS installer and the Linux AppImage.
- * A `.deb`, `.rpm` or `.msi` is installed and updated by a package manager, and
- * listing one here would offer an update the updater cannot perform.
+ * the macOS zip, the Windows NSIS installer and the Linux AppImage
+ * (`artifacts.mjs`'s `desktopAssets()` marks exactly one per platform). A
+ * `.deb` or `.rpm` is installed and updated by a package manager, a `.dmg` is
+ * a disk image and the Windows zip records no install location — listing any
+ * of them would offer an update the updater cannot perform.
  *
- * Every platform entry needs a signature. An unsigned bundle is left out with
- * a stated reason rather than published without one: the updater's only
- * protection is that signature, and a manifest entry without it is an offer to
- * install whatever the endpoint happens to serve.
+ * Every platform entry needs a signature, which `assemble.mjs` produces over
+ * the staged directory before it calls this. An unsigned bundle is left out
+ * with a stated reason rather than published without one: a manifest entry
+ * without a signature is an offer to install whatever the endpoint serves.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { desktopAssets } from "./artifacts.mjs";
 
-/** Tauri names platforms "<os>-<arch>" with its own spelling of the OS. */
+/** Platforms are named "<os>-<arch>", the same spelling the Host uses. */
 const PLATFORM_OS = { darwin: "darwin", linux: "linux", windows: "windows" };
 
-/** The platform key Tauri's updater looks up, derived from a release target. */
+/** The platform key the updater looks up, derived from a release target. */
 export function platformKey(target) {
   const [system, arch] = target.split("-");
   const os = PLATFORM_OS[system];
@@ -50,8 +52,9 @@ export function buildManifest({
     const bundle = join(directory, updater.name);
     let signature;
     try {
-      // Tauri stores the whole detached signature file, base64-encoded, in the
-      // manifest rather than a path to it.
+      // The whole detached signature file goes into the manifest, not a path
+      // to it: a client that has the manifest has everything it needs to
+      // verify, without a second fetch that could be answered differently.
       signature = readFileSync(
         join(directory, `${updater.name}.sig`),
         "utf8",

@@ -397,15 +397,23 @@ async fn shutdown_reports_unconfirmed_child_cleanup_and_guard_deadlines() {
         .unwrap();
 }
 
+/// Waits for a fixture hook to announce that its child is running.
+///
+/// This budget is the test harness's, not the behaviour's: what these tests
+/// assert is that `shutdown` reaps the child within ITS deadline, and that
+/// deadline is passed to `shutdown` separately. Starting `/bin/sh` and having
+/// it write one file is the only thing being waited on here, and on a machine
+/// running the whole suite in parallel that can take seconds — a short budget
+/// here fails the test for a reason it does not test.
 #[cfg(unix)]
 async fn wait_for_marker(marker: &Path) {
-    tokio::time::timeout(Duration::from_secs(3), async {
+    tokio::time::timeout(Duration::from_secs(30), async {
         while !marker.exists() {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
     })
     .await
-    .unwrap();
+    .expect("the fixture hook never reported that its child was running");
 }
 
 #[cfg(unix)]

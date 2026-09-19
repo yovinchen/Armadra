@@ -446,7 +446,7 @@ impl TerminalManager {
 
 /* --------------------------------- helpers -------------------------------- */
 
-/// Guarantees the child sees a UTF-8 locale. GUI-launched runtimes (Tauri on
+/// Guarantees the child sees a UTF-8 locale. GUI-launched runtimes (the shell on
 /// macOS, in particular) frequently start with no `LANG` at all; shells and
 /// tmux then fall back to the C locale and mangle every multi-byte character.
 pub fn with_utf8_locale(mut env: Vec<(String, String)>) -> Vec<(String, String)> {

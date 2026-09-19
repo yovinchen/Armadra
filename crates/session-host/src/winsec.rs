@@ -4,7 +4,7 @@
 //! The pattern follows `apps/runtime/src/command/platform_windows.rs`, which
 //! already runs this shape in production for the command worker. What is
 //! different here is *who holds the Job*: it must be this process, never the
-//! Worker and never the Tauri shell, because the whole point of the session
+//! Worker and never the desktop shell, because the whole point of the session
 //! host is that those two can exit while the terminals keep running
 //! (terminal host design §3, rule 4).
 

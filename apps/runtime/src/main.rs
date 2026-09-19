@@ -225,6 +225,27 @@ async fn main() -> anyhow::Result<()> {
         _ => {}
     }
     tracing::info!(backend = ?terminals.backend_info().effective, "terminal backend selected");
+    // Arm the signal handlers BEFORE anything about this process is published.
+    // Until tokio installs them SIGTERM is fatal where it lands, and the two
+    // things published just below — `endpoints.json` and, a few lines later,
+    // `hook-endpoint.env` plus the hook socket — are files that survive such a
+    // death pointing at a pid that no longer exists.
+    //
+    // One shutdown signal reaches every listener; the reason travels
+    // separately, because the caller needs it after the drain, not during it.
+    let signals = ShutdownSignals::install();
+    let (stop, _) = tokio::sync::broadcast::channel::<()>(1);
+    let (requested, reason) = tokio::sync::oneshot::channel();
+    {
+        let gate = terminals.clone();
+        let signalled = stop.clone();
+        tokio::spawn(async move {
+            let reason = shutdown_signal(desktop, signals).await;
+            gate.begin_shutdown();
+            let _ = signalled.send(());
+            let _ = requested.send(reason);
+        });
+    }
     // Bind first, then publish: the endpoint files must never advertise an
     // address nothing is listening on.
     let bound: Vec<listen::ListenSpec> = listeners
@@ -294,18 +315,6 @@ async fn main() -> anyhow::Result<()> {
         terminals.clone(),
         desktop_control::reject_during_shutdown,
     ));
-    // One shutdown signal, every listener. The reason travels separately
-    // because the caller needs it after the drain, not during it.
-    let (stop, _) = tokio::sync::broadcast::channel::<()>(1);
-    let (requested, reason) = tokio::sync::oneshot::channel();
-    let gate = terminals.clone();
-    let signalled = stop.clone();
-    tokio::spawn(async move {
-        let reason = shutdown_signal(desktop).await;
-        gate.begin_shutdown();
-        let _ = signalled.send(());
-        let _ = requested.send(reason);
-    });
     let servers: Vec<_> = listeners
         .into_iter()
         .map(|listener| {
@@ -569,22 +578,75 @@ enum ShutdownReason {
     RestartSignal,
 }
 
+/// The signal handlers, installed and owned by the caller.
+///
+/// Registration is deliberately NOT inside `shutdown_signal`: tokio installs a
+/// handler on the first `signal()` / `ctrl_c()` call, and until it does, the
+/// disposition is the default one — SIGTERM kills the process where it stands.
+/// Everything this Runtime publishes about itself (`endpoints.json`,
+/// `hook-endpoint.env`, the hook socket) is a file that outlives such a death,
+/// so a Runtime that announced itself before installing these leaves records
+/// pointing at a pid that no longer exists, and the next `armadra-hook` run
+/// has to discover that the hard way.
+///
+/// So `install()` runs before the first announcement and this value is carried
+/// to the shutdown task, which only awaits what is already armed.
+#[derive(Default)]
+struct ShutdownSignals {
+    /// `None` only when the kernel refused a handler, which is not a reason to
+    /// refuse to serve — that arm then simply never fires.
+    #[cfg(unix)]
+    terminate: Option<tokio::signal::unix::Signal>,
+    #[cfg(unix)]
+    interrupt: Option<tokio::signal::unix::Signal>,
+}
+
+impl ShutdownSignals {
+    /// Arms every handler. Call before publishing anything about this process.
+    fn install() -> Self {
+        #[cfg(unix)]
+        {
+            use tokio::signal::unix::{SignalKind, signal};
+            let arm = |kind: SignalKind, name: &str| match signal(kind) {
+                Ok(stream) => Some(stream),
+                Err(error) => {
+                    tracing::warn!(%error, signal = name, "handler could not be installed");
+                    None
+                }
+            };
+            Self {
+                terminate: arm(SignalKind::terminate(), "SIGTERM"),
+                interrupt: arm(SignalKind::interrupt(), "SIGINT"),
+            }
+        }
+        #[cfg(not(unix))]
+        Self::default()
+    }
+}
+
+/// Waits on one armed stream, or forever when that handler was refused.
+#[cfg(unix)]
+async fn armed(stream: Option<tokio::signal::unix::Signal>) {
+    match stream {
+        Some(mut stream) => {
+            stream.recv().await;
+        }
+        None => std::future::pending().await,
+    }
+}
+
 async fn shutdown_signal(
     desktop: Option<tokio::sync::oneshot::Receiver<desktop_control::ParentSignal>>,
+    #[cfg_attr(not(unix), allow(unused_variables))] signals: ShutdownSignals,
 ) -> ShutdownReason {
+    #[cfg(unix)]
+    let ctrl_c = armed(signals.interrupt);
+    #[cfg(not(unix))]
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;
     };
     #[cfg(unix)]
-    let terminate = async {
-        if let Ok(mut signal) =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        {
-            signal.recv().await;
-        } else {
-            std::future::pending::<()>().await;
-        }
-    };
+    let terminate = armed(signals.terminate);
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
     let desktop = async move {

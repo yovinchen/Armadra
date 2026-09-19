@@ -342,7 +342,11 @@ async fn shutdown_cancels_and_reaps_the_isolated_runner_without_holding_a_reposi
         .await;
         (result, cleanup)
     });
-    let audit = tokio::time::timeout(Duration::from_secs(4), async {
+    // The harness's budget, not the behaviour's: what is asserted below is
+    // that `shutdown` reaps the child inside the 3s IT is given. This only
+    // waits for the fake CLI to start and write one file, which on a machine
+    // running the whole suite in parallel can take seconds.
+    let audit = tokio::time::timeout(Duration::from_secs(30), async {
         loop {
             if let Ok(bytes) = fs::read(dir.path().join("audit.json"))
                 && let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes)
@@ -353,7 +357,7 @@ async fn shutdown_cancels_and_reaps_the_isolated_runner_without_holding_a_reposi
         }
     })
     .await
-    .unwrap();
+    .expect("the fake CLI never wrote its audit record");
     service.shutdown(Duration::from_secs(3)).await.unwrap();
     let (result, cleanup) = task.await.unwrap();
     assert!(result.is_err());
