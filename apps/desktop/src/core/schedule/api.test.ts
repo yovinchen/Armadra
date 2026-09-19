@@ -319,5 +319,4 @@ describe("自动化的 JSON 面", () => {
     expect(anonymous.status).toBe(200);
     expect(anonymous.body).toMatchObject({ plans: [], hasMore: false });
   });
-
 });

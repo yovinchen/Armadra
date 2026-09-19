@@ -202,15 +202,12 @@ describe("Agent 目标的探测", () => {
 describe("命令目标", () => {
   it("没冻结过的会话不支持", async () => {
     const { dispatcher } = setUp();
-    const target = create(
-      (await import("./types")).AutomationTargetSchema,
-      {
-        executionHostId: HOST_ID,
-        kind: AutomationTargetKind.NON_INTERACTIVE_COMMAND,
-        sessionId: "session-1",
-        generation: 7n,
-      },
-    );
+    const target = create((await import("./types")).AutomationTargetSchema, {
+      executionHostId: HOST_ID,
+      kind: AutomationTargetKind.NON_INTERACTIVE_COMMAND,
+      sessionId: "session-1",
+      generation: 7n,
+    });
     expect((await dispatcher.supports(target)).state).toBe("unsupported");
   });
 
@@ -231,15 +228,12 @@ describe("命令目标", () => {
       createdAtMs: 1,
       updatedAtMs: 1,
     });
-    const target = create(
-      (await import("./types")).AutomationTargetSchema,
-      {
-        executionHostId: HOST_ID,
-        kind: AutomationTargetKind.NON_INTERACTIVE_COMMAND,
-        sessionId: "session-1",
-        generation: 7n,
-      },
-    );
+    const target = create((await import("./types")).AutomationTargetSchema, {
+      executionHostId: HOST_ID,
+      kind: AutomationTargetKind.NON_INTERACTIVE_COMMAND,
+      sessionId: "session-1",
+      generation: 7n,
+    });
     expect((await dispatcher.supports(target)).state).toBe("unsupported");
   });
 });

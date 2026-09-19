@@ -207,10 +207,16 @@ describe("身份域的 JSON 面", () => {
     const fixture = await harness();
     const { session } = await pair(fixture);
     const rotate = () =>
-      call(fixture, "POST", "session/refresh", {}, {
-        authorization: `Bearer ${session.native.refreshToken}`,
-        "x-armadra-csrf": session.csrfToken,
-      });
+      call(
+        fixture,
+        "POST",
+        "session/refresh",
+        {},
+        {
+          authorization: `Bearer ${session.native.refreshToken}`,
+          "x-armadra-csrf": session.csrfToken,
+        },
+      );
     expect((await rotate()).status).toBe(200);
     expect((await rotate()).status).toBe(401);
   });
@@ -218,22 +224,34 @@ describe("身份域的 JSON 面", () => {
   it("丢了的 CSRF 可以从刷新密钥上补一张", async () => {
     const fixture = await harness();
     const { session } = await pair(fixture);
-    const response = await call(fixture, "POST", "session/csrf", {}, {
-      authorization: `Bearer ${session.native.refreshToken}`,
-    });
-    expect(response.status).toBe(200);
-    expect(((await response.json()) as { csrfToken: string }).csrfToken).toMatch(
-      /^[A-Za-z0-9_-]{43}$/,
+    const response = await call(
+      fixture,
+      "POST",
+      "session/csrf",
+      {},
+      {
+        authorization: `Bearer ${session.native.refreshToken}`,
+      },
     );
+    expect(response.status).toBe(200);
+    expect(
+      ((await response.json()) as { csrfToken: string }).csrfToken,
+    ).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
   it("登出之后访问密钥被拒", async () => {
     const fixture = await harness();
     const { session } = await pair(fixture);
-    const logout = await call(fixture, "POST", "session/logout", {}, {
-      authorization: `Bearer ${session.native.refreshToken}`,
-      "x-armadra-csrf": session.csrfToken,
-    });
+    const logout = await call(
+      fixture,
+      "POST",
+      "session/logout",
+      {},
+      {
+        authorization: `Bearer ${session.native.refreshToken}`,
+        "x-armadra-csrf": session.csrfToken,
+      },
+    );
     expect(logout.status).toBe(200);
     const current = await call(fixture, "GET", "session", undefined, {
       authorization: `Bearer ${session.native.accessToken}`,
@@ -358,7 +376,6 @@ describe("配对到撤销的一整条路", () => {
     });
     expect(revoked.status).toBe(200);
   });
-
 });
 
 describe("reading a credential off a request", () => {

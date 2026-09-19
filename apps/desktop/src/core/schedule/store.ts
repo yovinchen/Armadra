@@ -763,8 +763,6 @@ export class ScheduleStore {
       .get(operationId) as
       | { payload: Uint8Array | null; payload_json: string | null }
       | undefined;
-    return row === undefined
-      ? undefined
-      : payloadOf(row, receiptFromJson);
+    return row === undefined ? undefined : payloadOf(row, receiptFromJson);
   }
 }

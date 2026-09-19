@@ -346,12 +346,7 @@ export class GithubHttp {
       );
       // 零值照写：一份缺字段的 JSON 和一份字段为零的 JSON 对页面是两句话，而
       // 同一条记录只该有一句。`apps/web/src/api/github.ts` 的 zod 按这个形状解。
-      this.json(
-        response,
-        cors,
-        200,
-        toJson(schema.response, result),
-      );
+      this.json(response, cors, 200, toJson(schema.response, result));
     } catch (error) {
       const failure = githubFailure(error);
       this.json(response, cors, failure.status, {

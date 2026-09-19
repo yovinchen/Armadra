@@ -23,9 +23,7 @@ import {
   type GithubReview,
   type GithubReviewComment,
 } from "./types";
-import {
-  GithubRepositorySchema,
-} from "./schema";
+import { GithubRepositorySchema } from "./schema";
 import { create } from "../contract/message";
 
 import { type GithubClient, type GithubResponse, perPage } from "./client";

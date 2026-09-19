@@ -13,7 +13,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 
-
 import { GithubCredentialSource } from "./types";
 import { EventBus } from "../bus";
 import { openDatabase, type OpenedDatabase } from "../db/open";
@@ -329,5 +328,4 @@ describe("GitHub 的 HTTP 面", () => {
     ).json()) as Record<string, unknown>;
     expect(closed.state).toBe("GITHUB_ISSUE_STATE_CLOSED");
   });
-
 });

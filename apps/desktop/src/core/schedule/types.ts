@@ -331,14 +331,17 @@ export const AutomationScheduleSchema = describe<AutomationSchedule>(
   },
 );
 
-export const AgentLaunchSpecSchema = describe<AgentLaunchSpec>("AgentLaunchSpec", {
-  agentId: str,
-  workingDirectory: str,
-  args: strings,
-  permissionMode: str,
-  modelId: str,
-  accountId: str,
-});
+export const AgentLaunchSpecSchema = describe<AgentLaunchSpec>(
+  "AgentLaunchSpec",
+  {
+    agentId: str,
+    workingDirectory: str,
+    args: strings,
+    permissionMode: str,
+    modelId: str,
+    accountId: str,
+  },
+);
 
 export const AutomationTargetSchema = describe<AutomationTarget>(
   "AutomationTarget",
@@ -473,9 +476,8 @@ export const CommandLaunchSpecSchema = describe<CommandLaunchSpec>(
   },
 );
 
-export const AutomationCommandSessionSchema = describe<AutomationCommandSession>(
-  "AutomationCommandSession",
-  {
+export const AutomationCommandSessionSchema =
+  describe<AutomationCommandSession>("AutomationCommandSession", {
     sessionId: str,
     workspaceId: str,
     executionHostId: str,
@@ -488,5 +490,4 @@ export const AutomationCommandSessionSchema = describe<AutomationCommandSession>
     revision: u64,
     createdAtUnixMs: i64,
     updatedAtUnixMs: i64,
-  },
-);
+  });

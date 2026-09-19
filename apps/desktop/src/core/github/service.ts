@@ -16,16 +16,8 @@ import {
   type GithubRepositoryRef,
   type GithubStatusMapping,
 } from "./types";
-import {
-  GithubRepositoryRefSchema,
-  GithubStatusMappingSchema,
-} from "./schema";
-import {
-  canonicalJson,
-  create,
-  fromJson,
-  toJson,
-} from "../contract/message";
+import { GithubRepositoryRefSchema, GithubStatusMappingSchema } from "./schema";
+import { canonicalJson, create, fromJson, toJson } from "../contract/message";
 
 import type { Scope } from "../identity/scopes";
 import { permits, scope } from "../identity/scopes";
