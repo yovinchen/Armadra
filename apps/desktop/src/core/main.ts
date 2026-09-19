@@ -31,6 +31,7 @@ import {
 } from "./platform";
 import { install as installRemote } from "./remote";
 import { install as installTerminals } from "./terminal/install";
+import { install as installAgents } from "./agent";
 
 /**
  * The core process.
@@ -104,6 +105,10 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installSettings,
   installUsage,
   installIdentity,
+  // Agents before terminals: the collaboration verbs and the context-usage
+  // cache have to exist before a PTY can report into them, and the terminal
+  // domain hands its bridge back through `agent/setTerminalBridge`.
+  installAgents,
   installTerminals,
   // Last: it reads the settings store `installSettings` assembled, and it
   // starts nothing until a route is called.

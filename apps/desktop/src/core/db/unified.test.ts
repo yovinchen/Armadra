@@ -61,11 +61,16 @@ describe("the one-way gate", () => {
     expect(unifiedEnabled({ ARMADRA_CORE: "ts" })).toBe(true);
   });
 
-  it("carries exactly one migration, numbered after the shared directory", () => {
+  it("starts at the gate and is numbered after the shared directory", () => {
     const shared = loadMigrations(migrationsDir);
     const overlay = loadMigrations(unifiedDir);
-    expect(overlay).toHaveLength(1);
+    // 这个目录会继续长：每一批把自己的表加进统一库时都在这里新增一条。门本身
+    // 是 0015，所以断言的是「第一条就是门，其余严格在门之后」，而不是条数。
+    expect(overlay.length).toBeGreaterThanOrEqual(1);
     expect(overlay[0]?.version).toBe(UNIFIED_VERSION);
+    for (const migration of overlay.slice(1)) {
+      expect(migration.version).toBeGreaterThan(UNIFIED_VERSION);
+    }
     expect(Math.max(...shared.map((m) => m.version))).toBeLessThan(
       UNIFIED_VERSION,
     );
@@ -104,7 +109,9 @@ describe("applying the unified migration", () => {
   it("adds the identity tables and records version 15", () => {
     const path = file();
     const opened = open(path, true);
-    expect(opened.migrations).toHaveLength(15);
+    expect(opened.migrations).toHaveLength(
+      14 + loadMigrations(unifiedDir).length,
+    );
     expect(opened.unified).toBe(true);
     const tables = (
       opened.database
@@ -172,7 +179,7 @@ describe("applying the unified migration", () => {
       opened.database
         .prepare("SELECT count(*) AS total FROM _sqlx_migrations")
         .get(),
-    ).toEqual({ total: 15 });
+    ).toEqual({ total: 14 + loadMigrations(unifiedDir).length });
   });
 
   it("does not back up a second time once the gate is behind it", () => {
