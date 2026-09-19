@@ -268,7 +268,9 @@ LSP 发现与 mux（多客户端复用一个 server）、会话流 WS；主机�
 
 线协议不换：24 字节头 + JSON 控制帧 + 裸输出帧，`hello` 增加一个可选的 `auth` 字段（Rust 侧 serde 忽略未知字段，因此两个宿主共用同一个 major）。`ARMADRA_SESSION_HOST=rust|ts` 选宿主，默认 `ts`；Rust crate 留到 R7 一起删。
 
-**远程浏览器节点（2026-09-20 追加，用户决定）**：服务器壳上没有 `<webview>`，浏览器节点按壳分两套后端——桌面壳 `<webview>`（已做）；服务器壳 `core/browser/headless/`：headless Chromium（系统 Chromium 或按需下载）+ CDP `Page.startScreencast`（WebP/JPEG，单观看者、无扇出）+ `Input.*` 回传，租约/授权/17 个动词面复用 `core/browser` 已有的裁决，前端 `WebviewSurface` 之外恢复一个只服务远程的 `StreamSurface`（画到 `<canvas>`，输入映射）。体验预期是远程桌面级（100–200 ms、无原生选字与输入法精细行为），只在服务器壳启用。规模 +L、+1 Agent。
+**远程浏览器节点（2026-09-20 追加，用户决定；R6c 已实现，见 [进度 §10](../status/typescript-core-status.md)）**：服务器壳上没有 `<webview>`，浏览器节点按壳分两套后端——桌面壳 `<webview>`（已做）；服务器壳 `core/browser/headless/`：headless Chromium + CDP `Page.startScreencast`（JPEG，单观看者、无扇出）+ `Input.*` 回传，租约/授权/17 个动词面复用 `core/browser` 已有的裁决（为此把与 Electron 无关的 CDP 动词执行下沉到 `core/browser/cdp/`），前端 `WebviewSurface` 之外恢复一个只服务远程的 `StreamSurface`（画到 `<canvas>`，输入映射）。体验预期是远程桌面级（100–200 ms、无原生选字与输入法精细行为），只在服务器壳启用。规模 +L、+1 Agent。
+
+实现时定下的三处与上面措辞不同，理由写在进度 §10：**不做按需下载**（找不到浏览器就 `browser_unavailable` 并报出找过的路径）；协议走 `--remote-debugging-pipe` 而**不开调试端口**；第二个观看者在升级之前回 **409**，不接管、不扇出。
 
 **账号与共享的预留**：本阶段的认证按 [服务器账号、中转与共享](server-accounts-and-sharing.md) 的模型实现（多 principal、口令 + passkey、邀请、组与授予编译成 scope）；其中 §4 的五处预留在 R6 之前落地。
 
