@@ -3,9 +3,12 @@
  * execution host registry read out of it.
  *
  * Nine routes, all of them phase 1. `POST /api/execution-hosts/{id}/validate`
- * is the tenth in the table and is deliberately left at 501: it reaches a
- * machine over `ssh` and runs the Worker's version handshake, which is the
- * terminal and remote domains' half.
+ * is the tenth in the table and is **not** here: it reaches a machine over
+ * `ssh` and runs the Worker's version handshake, so it is registered by
+ * `core/remote`, which owns the host-key file, the askpass helper and the
+ * Worker connections it needs. The registry itself stays this domain's — the
+ * remote domain reads it through {@link settingsDomain} rather than keeping a
+ * second copy.
  */
 
 import type { CoreContext } from "../main";
