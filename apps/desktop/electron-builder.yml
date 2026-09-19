@@ -124,6 +124,11 @@ win:
     - target: zip
       arch: [x64, arm64]
 nsis:
+  # electron-builder names the installer `Armadra Setup 0.1.0.exe` for every
+  # architecture; tools/release/stage-desktop.mjs tells the two Windows
+  # builds apart by an architecture token in the name, so the arm64 installer
+  # was "not produced" as far as it could see. `${arch}` is `x64` / `arm64`.
+  artifactName: ${productName} Setup ${version}-${arch}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

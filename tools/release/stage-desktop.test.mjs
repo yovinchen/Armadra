@@ -151,7 +151,8 @@ test("the architecture token is matched as a whole word", () => {
     ["Armadra-0.1.0-arm64-win.zip", "windows-aarch64"],
     ["armadra-0.1.0.x86_64.rpm", "linux-x86_64"],
     ["armadra_0.1.0_amd64.deb", "linux-x86_64"],
-    ["Armadra Setup 0.1.0.exe", "windows-x86_64"],
+    ["Armadra Setup 0.1.0-x64.exe", "windows-x86_64"],
+    ["Armadra Setup 0.1.0-arm64.exe", "windows-aarch64"],
   ])
     assert.equal(matchesArch(name, target), true, `${name} / ${target}`);
   for (const [name, target] of [
