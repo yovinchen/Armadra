@@ -13,9 +13,7 @@
  * Local `dist` always injects `extraMetadata.armadraUpdates = "disabled"`
  * (W2.2's read side keys off this field): a local build is indistinguishable
  * from a published one to `app.isPackaged`, so without this marker it would
- * poll a production update feed that never published its version — the same
- * problem nodeterm's `nodeTermUpdates` marker exists to avoid
- * (docs/research/nodeterm/process-model-and-platform.md §4).
+ * poll a production update feed that never published its version.
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";

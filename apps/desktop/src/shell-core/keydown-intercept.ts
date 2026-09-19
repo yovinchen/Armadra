@@ -1,6 +1,5 @@
 /**
- * The chords the MAIN process claims out of `before-input-event`, ported in
- * spirit from nodeterm's `src/main/keydown-intercept.ts`.
+ * The chords Armadra's MAIN process claims out of `before-input-event`.
  *
  * **This module is the closed list.** A chord only appears here because the
  * application menu would otherwise eat it above the page: an accelerator on a
@@ -46,7 +45,7 @@ export interface KeydownInput {
  * The modifier test is EXACT on all four flags. ⌘⇧W is the menu's "Close All
  * Windows" and ⌘⌥W is nothing, so neither may be swallowed by a loose match;
  * and `w` is a character people type, so a branch without a primary-modifier
- * requirement would eat ordinary typing (nodeterm #193 was exactly that).
+ * requirement would eat ordinary typing.
  */
 export function keydownIntercept(
   input: KeydownInput,

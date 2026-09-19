@@ -7,7 +7,7 @@ import type { CanvasNode } from "@armadra/shared";
  * Electron 分支的渲染面（W3.1）。
  *
  * 这里**不测**点击命中、缩放清晰度、guest 存活——那三样只有真 Electron 能
- * 回答，而且探针已经逐条答过了（`docs/research/nodeterm/webview-probe.md`）。
+ * 回答，而且探针已经逐条验证过了。
  * jsdom 里的 `<webview>` 只是一个未知元素，所以这份用例钉的是渲染侧自己能
  * 决定的几件事：分流判定、partition 只定一次、后台标签是隐藏不是卸载、以及
  * 导航由 `src` 属性驱动。

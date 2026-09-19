@@ -60,11 +60,10 @@ import { updaterEnvironment } from "./environment";
  *   1. **The window is resolved at send time** (`sendToWindow`), never
  *      captured in a closure. A download can finish long after a
  *      close→dock-reopen, and a captured reference is a destroyed window.
- *      nodeterm shipped that crash (`updater.ts:52-63`).
+ *      Sending through that reference can crash the updater.
  *   2. **Only what this shell started is stopped** before an install, and a
  *      Host that will not stop means the install never starts. That is
- *      `hostStopFailed`, and it is Armadra's own constraint — nodeterm's
- *      149-line updater has nothing like it.
+ *      `hostStopFailed`, which blocks installation in Armadra.
  */
 
 /** What the updater needs from the rest of the shell. */

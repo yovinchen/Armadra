@@ -124,7 +124,7 @@ export const IPC = {
    * the page as an intent.
    *
    * Not in the design's §2.2 table, because the table predates the decision to
-   * port nodeterm's keydown intercept: an accelerator on an application menu
+   * intercept keydown in main: an accelerator on an application menu
    * item is handled ABOVE the web contents, so a chord the menu owns can only
    * reach the page if main claims it and hands it over. The closed list of
    * claimed chords is `shell-core/keydown-intercept.ts`.

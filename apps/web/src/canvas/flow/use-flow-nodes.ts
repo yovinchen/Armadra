@@ -150,7 +150,7 @@ export function useFlowNodes(): FlowBindings {
   /**
    * 投影之后加一条顺序规则：**webview 宿主节点的相对顺序永不变化**（W3.2）。
    *
-   * 探针实测（`docs/research/nodeterm/webview-probe.md` 第 6 条）：让 React 对
+   * 探针实测：让 React 对
    * 一个已挂载的 `<webview>` 宿主元素调 `insertBefore`，guest 进程当场被杀、
    * 整页重载、`webContentsId` 换号。插入与删除是安全的，**只有移动不是**。
    * 上游的投影按「分组 → 节点 → 白板对象」排，一次换父或一次删除都可能改变

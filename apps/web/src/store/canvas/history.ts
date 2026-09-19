@@ -113,8 +113,7 @@ function diffTable<T extends { id: string }>(
 ): void {
   // 没动过的表连索引都不用建。`commit()` 每次都比四张表，而一次编辑通常只
   // 碰一张——白板的两张在绝大多数节点操作里是原样传进来的同一个数组，给它们
-  // 各建一份 Map 是纯开销，且随画布大小线性增长
-  // （[画布调研](../../../../docs/research/nodeterm/canvas-nodes-and-state.md) §7.2-2）。
+  // 各建一份 Map 是纯开销，且随画布大小线性增长。
   if (before === after) return;
   const from = indexOf(before);
   const to = indexOf(after);

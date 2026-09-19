@@ -7,9 +7,8 @@
  * guest's own `webContents`, which is where a navigation is actually decided.
  * The page-side gate is a courtesy, this one is the rule.
  *
- * `file://` is refused outright — stricter than nodeterm, which allows it when
- * the current document is already a file. That allowance only pays for itself
- * when there are local media nodes; Armadra has none, and a remote page that
+ * `file://` is refused outright, including when the current document is a
+ * local file. Armadra has no local media nodes requiring an exception, and a remote page that
  * can point a guest at a local file can read anything this user can read.
  */
 

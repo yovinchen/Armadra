@@ -64,7 +64,7 @@ export function useBoardSync() {
    * 订阅整份的代价是整个应用壳跟着重渲：实测一次会话状态跳动里，`AppShell`
    * 为根的重渲有四次、每次约 1,045 个组件（`docs/status/canvas-performance-baseline.md`）。
    * 下面那个合并 effect 真正要的只有「手里这份是不是同一块板」，剩下的用
-   * `getState()` 当场读——照 nodeterm `Canvas.tsx:1575-1579` 的纪律。
+   * `getState()` 当场读，避免订阅无关变化。
    */
   const documentBoardId = useCanvasStore((state) => state.document?.board.id);
   const saveState = useCanvasStore((state) => state.saveState);

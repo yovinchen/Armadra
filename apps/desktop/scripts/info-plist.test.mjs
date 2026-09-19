@@ -8,17 +8,12 @@ import { load } from "js-yaml";
 /**
  * Release guard for the macOS Info.plist usage descriptions the production
  * build ships (`electron-builder.yml`'s `mac.extendInfo`, merged into
- * Info.plist by electron-builder). Ported from nodeterm's
- * `src/main/info-plist.test.ts` (same allowlist shape, same reasoning), with
- * one structural difference: Armadra's bundle config lives in
- * `electron-builder.yml` rather than `package.json`'s `build` block, and this
- * package's script tests run under `node:test` (see `scripts/*.test.mjs`)
- * rather than vitest, so this one is a `node --test` file instead of the
- * `describe`/`it` vitest shape the nodeterm original uses.
+ * Info.plist by electron-builder). Armadra's bundle config lives in
+ * `electron-builder.yml`; this allowlist is checked under `node:test`,
+ * following the package's script-test convention (`scripts/*.test.mjs`).
  *
  * WHY NSLocalNetworkUsageDescription EXISTS
- * (docs/research/nodeterm/process-model-and-platform.md §4, nodeterm issue
- * #589): on macOS 15+ a connection to an address on the user's own subnet is
+ * On macOS 15+ a connection to an address on the user's own subnet is
  * gated by Local Network privacy, and access is attributed to the
  * RESPONSIBLE PROCESS — which for everything Armadra spawns (the Rust
  * Runtime, the Go Host, an agent CLI) is Armadra.app, not the child.
@@ -49,7 +44,7 @@ const CONFIG = join(here, "..", "electron-builder.yml");
 const REVIEWED_USAGE_DESCRIPTIONS = {
   NSLocalNetworkUsageDescription:
     "the Runtime and connected agent CLIs reach hosts on the local subnet; " +
-    "macOS attributes that to Armadra.app as the responsible process (nodeterm issue #589)",
+    "macOS attributes that to Armadra.app as the responsible process",
 };
 
 /**
@@ -79,7 +74,7 @@ test("declares a local-network usage description", () => {
     typeof text === "string" && text.trim().length > 0,
     "NSLocalNetworkUsageDescription is missing or empty. Without it macOS 15+ denies " +
       "local-subnet access to everything Armadra spawns SILENTLY — no prompt, and no row " +
-      "in System Settings → Privacy & Security → Local Network for the user to grant (#589).",
+      "in System Settings → Privacy & Security → Local Network for the user to grant.",
   );
 });
 

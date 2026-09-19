@@ -541,7 +541,7 @@ fn runtime_endpoint(instance_id: &str, bound: &[listen::ListenSpec]) -> endpoint
 /// Withdraws our record, removes the socket files we created, and deletes the
 /// hook endpoint file (W0.3): a clean shutdown must not leave a dead
 /// advertisement for the next terminal's hook to find and silently fail
-/// against (docs/research/nodeterm/agent-integration.md §2.5 / §8 批 0).
+/// against.
 fn release_endpoints(
     endpoints_file: &std::path::Path,
     bound: &[listen::ListenSpec],

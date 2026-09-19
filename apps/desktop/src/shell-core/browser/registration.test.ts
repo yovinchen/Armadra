@@ -117,7 +117,7 @@ describe("the navigation gate", () => {
     expect(allowGuestNavigation("about:blank")).toBe(true);
   });
 
-  it("refuses file:// outright, which is stricter than nodeterm on purpose", () => {
+  it("refuses file:// navigation outright", () => {
     expect(allowGuestNavigation("file:///etc/passwd")).toBe(false);
     expect(allowGuestNavigation("file:///")).toBe(false);
   });

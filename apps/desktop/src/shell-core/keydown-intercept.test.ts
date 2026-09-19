@@ -52,7 +52,7 @@ describe("the main-process keydown intercept", () => {
 
   it("never swallows ordinary typing", () => {
     // `w` is a character people type. Without a primary-modifier requirement
-    // this branch would eat every one of them (nodeterm #193).
+    // this branch would eat every one of them.
     expect(keydownIntercept(input(), "darwin")).toBeNull();
     expect(keydownIntercept(input({ shift: true }), "darwin")).toBeNull();
     for (const key of ["a", "q", "m", "0", "Enter"])

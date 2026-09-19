@@ -44,10 +44,7 @@ use control::{TmuxClient, TmuxSession};
 
 /// `#{window_activity}`, not `#{session_activity}`: tmux bumps
 /// `session_activity` to `now` on every client **attach**, regardless of
-/// whether the pane has produced any output (nodeterm research,
-/// `docs/research/nodeterm/terminal-and-tmux.md` §2.3 — one 67-session
-/// server had a newest `session_activity` of 33 minutes and a newest
-/// `window_activity` of 37 hours). Using `session_activity` as an idle
+/// whether the pane has produced any output. Using `session_activity` as an idle
 /// judgement would call a long-attached, silent session "just active" every
 /// time something reattaches to it. `window_activity` only moves when the
 /// active window's pane actually emits output.
@@ -58,7 +55,7 @@ const LIST_ALIVE_FORMAT: &str = "#{session_name} #{session_attached} #{window_ac
 /// tmux server.
 ///
 /// Two guards beyond the plain `load-buffer` / `paste-buffer` / `send-keys
-/// Enter` sequence (nodeterm research §2.6):
+/// Enter` sequence:
 /// - `-r` on `paste-buffer` keeps `\n` as `\n` instead of rewriting it to
 ///   `\r`.
 /// - the copy-mode exit (`send-keys -X cancel`) is gated by `if-shell

@@ -14,7 +14,7 @@ import {
 /**
  * pool region 的不变量（W3.2）。
  *
- * 判据直接来自探针（`docs/research/nodeterm/webview-probe.md` 第 6 条）：让
+ * 探针实测的判据：让
  * React 对一个已挂载的 `<webview>` 宿主元素做 `insertBefore` 移动，guest 当场
  * 被杀。插入与删除实测安全，**只有移动不是**——所以这里断言的不是「数组没
  * 变」，而是「webview 节点之间的相对顺序是上一帧的延续」。

@@ -188,7 +188,7 @@ impl HookService {
     /// back to the TCP port this run still has, if any.
     ///
     /// A hook client only ever moves to its next candidate on a *transport*
-    /// failure (docs/research/nodeterm/agent-integration.md §2.5), so leaving
+    /// failure, so leaving
     /// a dead socket in the file would not just be slower — every attempt
     /// against this Runtime would burn its socket-connect budget first.
     pub fn withdraw_socket(&self) {
@@ -215,8 +215,7 @@ impl HookService {
     /// Removes the endpoint file, so a stale terminal's next hook invocation
     /// reads "no endpoint here" instead of an address this process no longer
     /// answers on. Called on a clean shutdown and when start-up itself could
-    /// not publish (W0.3 — nodeterm's `stop()`/failed-listen half of the same
-    /// fix, agent-integration.md §2.5 / §8 批 0).
+    /// not publish (W0.3).
     pub fn withdraw(&self) {
         let path = self.endpoint_file();
         if let Err(error) = std::fs::remove_file(&path)

@@ -15,7 +15,7 @@ import { isDesktop } from "@/platform";
  *
  * ## 为什么必须有
  *
- * 探针（`docs/research/nodeterm/webview-probe.md` 第 6 条）在 Electron 42.10.1
+ * 探针在 Electron 42.10.1
  * 上实测过一遍：拖拽、缩放、平移、在 `nodes` 数组**最前面插入**、**删除兄弟
  * 节点**全部零重载；唯一杀掉 guest 的是**把两个 webview 节点在数组里对调**
  * ——React 对旧索引小于 `lastPlacedIndex` 的那一个调用 `insertBefore`，而

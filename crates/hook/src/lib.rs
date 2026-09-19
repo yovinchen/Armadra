@@ -125,9 +125,8 @@ pub struct Session {
 impl Session {
     /// Loads the node id and discovers the candidate endpoints. Distinct from
     /// [`Session::send`] finding every candidate unreachable: this is the
-    /// "nowhere advertises an endpoint at all" case (docs/research/nodeterm/
-    /// agent-integration.md §2.5 / §8 批 0), diagnosed before any network call
-    /// is attempted.
+    /// "nowhere advertises an endpoint at all" case, diagnosed before any
+    /// network call is attempted.
     pub fn load() -> Result<Session, String> {
         let node_id = endpoint::env_var("ARMADRA_NODE_ID").ok_or_else(|| {
             "ARMADRA_NODE_ID is not set (not running inside a canvas node)".to_string()

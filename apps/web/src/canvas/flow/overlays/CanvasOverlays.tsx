@@ -48,8 +48,7 @@ export function CanvasOverlays() {
    *
    * 派生边通常是个位数，而这张表以前给**每一个**节点都算一次包围盒——一块
    * 三十节点的板子上，一次节点数据更新就是三十次 `nodeBox`（它还要沿 parent
-   * 链往上找），产出的三十个格子里有二十几个从没被读过
-   * （[画布调研](../../../../docs/research/nodeterm/canvas-nodes-and-state.md) §7.3-7）。
+   * 链往上找），产出的三十个格子里有二十几个从没被读过。
    * 现在只算真正连着派生边的那几个，外加子代理卡片的落位。
    */
   const boxes = React.useMemo(() => {

@@ -8,9 +8,7 @@
  * caller wants past the key list, a `DOM.getDocument` with `pierce: true` that
  * hands back every frame's tree in one call.
  *
- * What is EXCLUDED, and why (the same reasons nodeterm's
- * `browser-cdp-allowlist.ts:16-23` recorded, because they are still the
- * reasons):
+ * What Armadra excludes, and why:
  *
  *   * arbitrary page-side evaluation — `Runtime.evaluate`, `compileScript`,
  *     `runScript`, `addBinding` — and the whole `Debugger` domain, which is a
