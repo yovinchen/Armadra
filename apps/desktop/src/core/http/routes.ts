@@ -941,6 +941,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     feature: "Agent 节点凭据",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/api/settings",
@@ -1104,6 +1105,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "hook",
     feature: "Hook 凭据校验",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/hook/{agentId}",
@@ -1111,6 +1113,7 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "hook",
     feature: "Hook 事件接收",
     phase: 3,
+    implemented: true,
   },
   {
     path: "/context-link/{verb}",
