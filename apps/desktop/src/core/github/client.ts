@@ -13,6 +13,13 @@
 import { apiFailure, type GithubCode } from "./errors";
 import { PUBLIC_API_BASE, normalizeApiBase } from "./remote";
 
+/**
+ * The body type of whichever `fetch` is compiled against: the core is built by
+ * the desktop (DOM lib) and by the server shell (Node types only), and the two
+ * spell `BodyInit` differently.
+ */
+type FetchBody = NonNullable<Parameters<typeof fetch>[1]>["body"];
+
 /** 这些端点上 GitHub 自己的上限。 */
 export const MAX_PER_PAGE = 100;
 /**
@@ -302,7 +309,7 @@ export class GithubClient {
         headers,
         ...(payload === undefined
           ? {}
-          : { body: new Uint8Array(payload) as BodyInit }),
+          : { body: new Uint8Array(payload) as FetchBody }),
         // 跟随重定向会让远端把一个带着 bearer 令牌的请求搬到另一个 authority。
         redirect: "manual",
       });
