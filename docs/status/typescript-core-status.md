@@ -563,16 +563,35 @@ R7d 分两条线：源码层（`apps/desktop/src/**`、`apps/web/**`、删 `pack
 
 `guides/{architecture,development,ci-release,agent-collaboration}.md` 与 `AGENTS.md` 按现状重写，不是加注释：三层结构的中间一层现在写的是 `apps/desktop/src/core`，端口表少了 Host 的 43121、多了迁移目录那一行，检查表里没有 cargo 与 go。`contracts/v3-agent-terminal-plan.md` 只在抬头多一行说明执行服务已经换成 core，§N 编号与正文不动。
 
-### 17.7 验证
+### 17.7 四处对账测试换了对面
 
-在本线的 worktree 里跑，源码层尚未合入：
+`core/http/{routes,cors,health}.test.ts` 与 `core/instance.test.ts` 里各有一条断言，对面是 `apps/runtime/` 的源码本身（解析 `.route(...)`、比对 CORS 字面量、health 的字段名、公告前缀的常量声明）。那份源码已删，所以：
 
-| 门                                                                                   | 结果                                                          |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| `pnpm repo:check`                                                                    | 通过（7 条规则）                                              |
-| `pnpm ci:workflows`                                                                  | 通过（两份工作流）                                            |
-| `pnpm release:check`                                                                 | 通过（三处版本一致）                                          |
-| `node --test tools/release/*.test.mjs tools/ci/*.test.mjs tools/repo-check.test.mjs` | 通过                                                          |
-| `node --test apps/desktop/scripts/*.test.mjs`                                        | 通过                                                          |
-| `pnpm --filter @armadra/desktop dist`（macOS arm64）                                 | 见 §17.8                                                      |
-| `pnpm check` 里的 `typecheck`                                                        | **预期失败**：源码里还有 `@armadra/protocol` 的引用，归源码层 |
+- 路由表改成直接钉住契约的 161 条（146 主面 + 15 hook 面）与四条 `beyondContract`，退休的两条 ownership 路径按名字排除。**数字现在就是契约**，不再有第二处可比。
+- CORS、health、公告前缀三处保留断言本身，去掉「再去读一遍对面源码」那一半。`ANNOUNCE_PREFIX = "armadra-runtime instance "` 现在只写在 `instance.ts` 一处：它是线上字面量，已装的壳按字节匹配，名字里那个词只是历史。
+
+### 17.8 验证
+
+在本线的 worktree 里跑（源码层的 R7d-core 尚未合入，所以 `packages/protocol` 与 `packages/host-client` 此刻还在）：
+
+| 门                                                                                   | 结果                                          |
+| ------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `pnpm check`                                                                         | 全绿（format / typecheck / repo / CI / 版本） |
+| `pnpm repo:check`                                                                    | 通过，7 条规则                                |
+| `pnpm ci:workflows`                                                                  | 通过，两份工作流                              |
+| `pnpm release:check`                                                                 | 通过，三处版本一致                            |
+| `node --test apps/desktop/scripts/*.test.mjs`                                        | 38 条通过                                     |
+| `node --test tools/release/*.test.mjs tools/ci/*.test.mjs tools/repo-check.test.mjs` | 70 条通过                                     |
+| `pnpm --filter @armadra/desktop test`                                                | 2560 通过 / 18 跳过                           |
+| `pnpm --filter @armadra/server test`                                                 | 68 条通过                                     |
+
+`pnpm --filter @armadra/desktop dist`（macOS arm64，无签名证书，打包器按计划跳过签名）产出 `Armadra-0.1.0-arm64.dmg` 与 `-mac.zip`。包内 `Armadra.app/Contents/Resources/` 里属于我们的东西只有四样：
+
+```
+app.asar                       壳 + core + 渲染进程
+app.asar.unpacked/…/node-pty/  pty.node 与 spawn-helper（唯一的原生模块）
+cli/armadra-hook.js            hook 客户端
+migrations/                    0001–0020，20 个 .sql
+```
+
+没有任何 sidecar 二进制——这正是 R7d 要的形状。`after-pack` 逐个打印了它放进去的 21 个文件。
