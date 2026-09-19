@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "node:path";
+import path, { isAbsolute } from "node:path";
 import { type HostLaunchError, hostError } from "./errors";
 
 /**
@@ -189,26 +189,27 @@ export function resolveBinary(
   overridePath: string | undefined,
   targetDir: string | undefined,
   platform: string = process.platform,
+  pathModule: typeof path = path,
 ): { ok: true; binary: string } | { ok: false; error: HostLaunchError } {
   const name = hostBinaryName(platform);
   let binary: string;
   if (!development) {
-    if (!isAbsolute(resourcesPath))
+    if (!pathModule.isAbsolute(resourcesPath))
       return { ok: false, error: hostError("invalidConfiguration") };
-    binary = join(resourcesPath, name);
+    binary = pathModule.join(resourcesPath, name);
   } else if (overridePath !== undefined) {
     binary = overridePath;
   } else {
     const chosen = targetDir && targetDir.length > 0 ? targetDir : undefined;
     const target =
       chosen === undefined
-        ? join(repo, "target")
-        : isAbsolute(chosen)
+        ? pathModule.join(repo, "target")
+        : pathModule.isAbsolute(chosen)
           ? chosen
-          : join(repo, chosen);
-    binary = join(target, "debug", name);
+          : pathModule.join(repo, chosen);
+    binary = pathModule.join(target, "debug", name);
   }
-  if (!isAbsolute(binary))
+  if (!pathModule.isAbsolute(binary))
     return { ok: false, error: hostError("invalidConfiguration") };
   return { ok: true, binary };
 }

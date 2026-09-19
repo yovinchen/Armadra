@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join, posix, win32 } from "node:path";
 import type { RuntimeRecord } from "../shell-core/runtime/identity";
 import {
   RuntimeProcess,
@@ -214,55 +214,85 @@ describe.runIf(unix)("taking the address back", () => {
   });
 });
 
-describe("where the Runtime binary is", () => {
+describe.each([
+  {
+    label: "native",
+    platform: process.platform,
+    pathModule: path,
+    repo: path.resolve("/repo"),
+  },
+  { label: "POSIX", platform: "darwin", pathModule: posix, repo: "/repo" },
+  {
+    label: "Windows",
+    platform: "win32",
+    pathModule: win32,
+    repo: String.raw`D:\repo`,
+  },
+])("where the Runtime binary is ($label)", ({ platform, pathModule, repo }) => {
+  const resources = pathModule.resolve(
+    repo,
+    "..",
+    "App",
+    "Contents",
+    "Resources",
+  );
+  const name = platform === "win32" ? "armadra-runtime.exe" : "armadra-runtime";
+  const executable = (packaged: boolean | undefined, env: NodeJS.ProcessEnv) =>
+    runtimeExecutable(packaged, env, resources, repo, platform, pathModule);
+
   it("comes out of the cargo target directory in development", () => {
-    expect(
-      runtimeExecutable(
-        false,
-        { CARGO_TARGET_DIR: "/build/target" },
-        "/res",
-        "/repo",
-      ),
-    ).toBe(join("/build/target", "debug", "armadra-runtime"));
-    expect(runtimeExecutable(false, {}, "/res", "/repo")).toBe(
-      join("/repo/target", "debug", "armadra-runtime"),
+    const target = pathModule.resolve(repo, "..", "build", "target");
+    expect(executable(false, { CARGO_TARGET_DIR: target })).toBe(
+      pathModule.join(target, "debug", name),
+    );
+    expect(executable(false, {})).toBe(
+      pathModule.join(repo, "target", "debug", name),
     );
     // A relative CARGO_TARGET_DIR resolves against the repo, as cargo does.
     expect(
-      runtimeExecutable(false, { CARGO_TARGET_DIR: "target" }, "/res", "/repo"),
-    ).toBe(join("/repo/target", "debug", "armadra-runtime"));
+      executable(false, {
+        CARGO_TARGET_DIR: pathModule.join("build", "..", "target"),
+      }),
+    ).toBe(pathModule.join(repo, "target", "debug", name));
+    if (platform === "win32") {
+      // A root-relative target keeps the repository's drive, not the process cwd's.
+      expect(
+        executable(false, { CARGO_TARGET_DIR: String.raw`\build\target` }),
+      ).toBe(
+        pathModule.join(
+          pathModule.parse(repo).root,
+          "build",
+          "target",
+          "debug",
+          name,
+        ),
+      );
+      expect(
+        executable(false, { CARGO_TARGET_DIR: String.raw`E:\build\target` }),
+      ).toBe(String.raw`E:\build\target\debug\armadra-runtime.exe`);
+    }
   });
 
   it("comes out of the bundle's resources when packaged", () => {
-    expect(
-      runtimeExecutable(true, {}, "/App/Contents/Resources", "/repo"),
-    ).toBe(join("/App/Contents/Resources", "armadra-runtime"));
+    expect(executable(true, {})).toBe(pathModule.join(resources, name));
   });
 
-  /**
-   * A double-clicked application inherits nobody's shell, so an environment
-   * variable cannot be what says "this is packaged": the default was
-   * `ARMADRA_DESKTOP_PACKAGED`, nothing set it, and an installed Armadra
-   * resolved its Runtime to `Contents/target/debug/armadra-runtime` and simply
-   * did not start. Electron's `app.isPackaged` is the answer; the variable
-   * survives only as an override for exercising the layout without packaging.
-   */
   it("learns it is packaged from Electron, not from the environment", () => {
     setPackagedShell(false);
-    expect(isPackagedShell({})).toBe(false);
-    expect(isPackagedShell({ ARMADRA_DESKTOP_PACKAGED: "1" })).toBe(true);
-    // Anything but the exact opt-in string is not an opt-in.
-    expect(isPackagedShell({ ARMADRA_DESKTOP_PACKAGED: "0" })).toBe(false);
-
-    setPackagedShell(true);
-    expect(isPackagedShell({})).toBe(true);
-    expect(
-      runtimeExecutable(undefined, {}, "/App/Contents/Resources", "/repo"),
-    ).toBe(join("/App/Contents/Resources", "armadra-runtime"));
-    setPackagedShell(false);
-    expect(
-      runtimeExecutable(undefined, {}, "/App/Contents/Resources", "/repo"),
-    ).toBe(join("/repo/target", "debug", "armadra-runtime"));
+    try {
+      expect(isPackagedShell({})).toBe(false);
+      expect(isPackagedShell({ ARMADRA_DESKTOP_PACKAGED: "1" })).toBe(true);
+      expect(isPackagedShell({ ARMADRA_DESKTOP_PACKAGED: "0" })).toBe(false);
+      setPackagedShell(true);
+      expect(isPackagedShell({})).toBe(true);
+      expect(executable(undefined, {})).toBe(pathModule.join(resources, name));
+      setPackagedShell(false);
+      expect(executable(undefined, {})).toBe(
+        pathModule.join(repo, "target", "debug", name),
+      );
+    } finally {
+      setPackagedShell(false);
+    }
   });
 });
 

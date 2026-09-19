@@ -1,5 +1,5 @@
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
 
 /**
  * The Runtime's data directory, resolved the way the Runtime resolves it
@@ -30,6 +30,7 @@ export interface PathEnvironment {
 export function dataDir(
   platform: PlatformName = process.platform,
   env: PathEnvironment = process.env,
+  pathModule: typeof path = path,
 ): string {
   // The override wins on every platform: it is how `armadra.sh`, the tests and
   // an isolated second instance all point a whole stack at one directory.
@@ -37,23 +38,29 @@ export function dataDir(
   // Each platform branch is conditional on its own variable and falls through
   // when that variable is absent, exactly as the Rust `cfg!` chain does.
   if (platform === "darwin" && env.HOME) {
-    return join(env.HOME, "Library/Application Support/Armadra");
+    return pathModule.join(
+      env.HOME,
+      "Library",
+      "Application Support",
+      "Armadra",
+    );
   }
   if (platform === "win32" && env.LOCALAPPDATA) {
-    return join(env.LOCALAPPDATA, "Armadra");
+    return pathModule.join(env.LOCALAPPDATA, "Armadra");
   }
   // Linux and everything else: XDG, then its documented default, and only if
   // there is no home at all a temporary directory — matching `lib.rs:41-47`.
   const base =
     env.XDG_DATA_HOME ??
-    (env.HOME ? join(env.HOME, ".local/share") : undefined);
-  return join(base ?? tmpdir(), "armadra");
+    (env.HOME ? pathModule.join(env.HOME, ".local", "share") : undefined);
+  return pathModule.join(base ?? tmpdir(), "armadra");
 }
 
 /** The shared endpoints document both services describe themselves in. */
 export function endpointsFile(
   platform: PlatformName = process.platform,
   env: PathEnvironment = process.env,
+  pathModule: typeof path = path,
 ): string {
-  return join(dataDir(platform, env), "endpoints.json");
+  return pathModule.join(dataDir(platform, env, pathModule), "endpoints.json");
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { dataDir, endpointsFile } from "./paths";
 
 /**
@@ -10,16 +10,16 @@ import { dataDir, endpointsFile } from "./paths";
  */
 describe("data directory", () => {
   it("matches the Runtime on each platform", () => {
-    expect(dataDir("darwin", { HOME: "/Users/x" })).toBe(
+    expect(dataDir("darwin", { HOME: "/Users/x" }, posix)).toBe(
       "/Users/x/Library/Application Support/Armadra",
     );
     expect(
-      dataDir("win32", { LOCALAPPDATA: "C:\\Users\\x\\AppData\\Local" }),
-    ).toBe(join("C:\\Users\\x\\AppData\\Local", "Armadra"));
-    expect(dataDir("linux", { XDG_DATA_HOME: "/home/x/.data" })).toBe(
+      dataDir("win32", { LOCALAPPDATA: "C:\\Users\\x\\AppData\\Local" }, win32),
+    ).toBe(String.raw`C:\Users\x\AppData\Local\Armadra`);
+    expect(dataDir("linux", { XDG_DATA_HOME: "/home/x/.data" }, posix)).toBe(
       "/home/x/.data/armadra",
     );
-    expect(dataDir("linux", { HOME: "/home/x" })).toBe(
+    expect(dataDir("linux", { HOME: "/home/x" }, posix)).toBe(
       "/home/x/.local/share/armadra",
     );
   });
@@ -46,8 +46,19 @@ describe("data directory", () => {
   });
 
   it("puts endpoints.json inside it", () => {
-    expect(endpointsFile("darwin", { HOME: "/Users/x" })).toBe(
+    expect(endpointsFile("darwin", { HOME: "/Users/x" }, posix)).toBe(
       "/Users/x/Library/Application Support/Armadra/endpoints.json",
     );
+    expect(
+      endpointsFile(
+        "win32",
+        { LOCALAPPDATA: String.raw`C:\Users\x\AppData\Local` },
+        win32,
+      ),
+    ).toBe(String.raw`C:\Users\x\AppData\Local\Armadra\endpoints.json`);
+    const nativeDirectory = join(tmpdir(), "Armadra");
+    expect(
+      endpointsFile(undefined, { ARMADRA_DATA_DIR: nativeDirectory }),
+    ).toBe(join(nativeDirectory, "endpoints.json"));
   });
 });

@@ -6,7 +6,7 @@
 import { afterEach, expect, it } from "vitest";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, posix, win32 } from "node:path";
 
 import {
   clearPending,
@@ -105,8 +105,11 @@ it("the pending record survives a round trip and clears once", () => {
   expect(readPending(directory)).toBeNull();
   expect(writePending(directory, pending())).toEqual({ ok: true });
   expect(readPending(directory)).toEqual(pending());
-  expect(pendingPath(directory).endsWith("updates/pending-restart.json")).toBe(
-    true,
+  expect(pendingPath(directory)).toBe(
+    join(directory, "updates", "pending-restart.json"),
+  );
+  expect(pendingPath(String.raw`C:\Users\x\AppData\Local\Armadra`, win32)).toBe(
+    String.raw`C:\Users\x\AppData\Local\Armadra\updates\pending-restart.json`,
   );
   clearPending(directory);
   expect(readPending(directory)).toBeNull();
@@ -172,23 +175,41 @@ it("the host data directory falls back to the hosts own default", () => {
   const configured = join(tmpdir(), "armadra-host-data");
   expect(hostDataDir(configured)).toBe(configured);
   const fallback = hostDataDir(undefined);
-  expect(fallback.startsWith("/") || fallback.startsWith(tmpdir())).toBe(true);
+  expect(isAbsolute(fallback)).toBe(true);
   expect(fallback.endsWith(join("Armadra", "host"))).toBe(true);
   // The three platform branches, checked on whichever one is running.
-  expect(hostDataDir(undefined, "darwin", { HOME: "/tmp/home" })).toBe(
+  expect(hostDataDir(undefined, "darwin", { HOME: "/tmp/home" }, posix)).toBe(
     "/tmp/home/Library/Application Support/Armadra/host",
   );
   expect(
-    hostDataDir(undefined, "win32", { LOCALAPPDATA: "C:\\Users\\a\\AppData" }),
-  ).toContain("Armadra");
-  expect(hostDataDir(undefined, "linux", { HOME: "/tmp/home" })).toBe(
+    hostDataDir(
+      undefined,
+      "win32",
+      { LOCALAPPDATA: "C:\\Users\\a\\AppData" },
+      win32,
+    ),
+  ).toBe(String.raw`C:\Users\a\AppData\Armadra\host`);
+  expect(
+    hostDataDir(
+      undefined,
+      "win32",
+      { APPDATA: String.raw`C:\Users\a\AppData\Roaming` },
+      win32,
+    ),
+  ).toBe(String.raw`C:\Users\a\AppData\Roaming\Armadra\host`);
+  expect(hostDataDir(undefined, "linux", { HOME: "/tmp/home" }, posix)).toBe(
     "/tmp/home/.config/Armadra/host",
   );
   expect(
-    hostDataDir(undefined, "linux", {
-      XDG_CONFIG_HOME: "/tmp/xdg",
-      HOME: "/tmp/home",
-    }),
+    hostDataDir(
+      undefined,
+      "linux",
+      {
+        XDG_CONFIG_HOME: "/tmp/xdg",
+        HOME: "/tmp/home",
+      },
+      posix,
+    ),
   ).toBe("/tmp/xdg/Armadra/host");
 });
 

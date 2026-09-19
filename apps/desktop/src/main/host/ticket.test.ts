@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join, posix, win32 } from "node:path";
 import {
   BootstrapTicketResponseSchema,
   type HostStatus,
@@ -113,19 +113,53 @@ async function reasonOf(work: Promise<unknown>): Promise<string | undefined> {
 }
 
 describe("where a packaged shell looks for its Host", () => {
-  it("is the one directory `extraResources` actually stages into", () => {
-    const resources = "/Applications/Armadra.app/Contents/Resources";
-    // The Host and the Runtime must agree: electron-builder stages all four
-    // binaries into `process.resourcesPath`, and resolving one of them beside
-    // `process.execPath` is how a double-clicked application ends up with a
-    // Runtime but no Host.
-    expect(
-      resolveBinary(false, resources, "/repo", undefined, undefined, "darwin"),
-    ).toEqual({ ok: true, binary: join(resources, "armadra-host") });
-    expect(runtimeExecutable(true, {}, resources, "/repo")).toBe(
-      join(resources, "armadra-runtime"),
-    );
-  });
+  it.each([
+    {
+      label: "native",
+      platform: process.platform,
+      pathModule: path,
+      resources: path.resolve("/Applications/Armadra.app/Contents/Resources"),
+    },
+    {
+      label: "macOS",
+      platform: "darwin",
+      pathModule: posix,
+      resources: "/Applications/Armadra.app/Contents/Resources",
+    },
+    {
+      label: "Windows",
+      platform: "win32",
+      pathModule: win32,
+      resources: String.raw`C:\Program Files\Armadra\resources`,
+    },
+  ])(
+    "is the one directory `extraResources` actually stages into ($label)",
+    ({ platform, pathModule, resources }) => {
+      const repo = pathModule.resolve(resources, "repo");
+      const suffix = platform === "win32" ? ".exe" : "";
+      // The Host and the Runtime must agree: electron-builder stages all four
+      // binaries into `process.resourcesPath`, and resolving one of them beside
+      // `process.execPath` is how a double-clicked application ends up with a
+      // Runtime but no Host.
+      expect(
+        resolveBinary(
+          false,
+          resources,
+          repo,
+          undefined,
+          undefined,
+          platform,
+          pathModule,
+        ),
+      ).toEqual({
+        ok: true,
+        binary: pathModule.join(resources, `armadra-host${suffix}`),
+      });
+      expect(
+        runtimeExecutable(true, {}, resources, repo, platform, pathModule),
+      ).toBe(pathModule.join(resources, `armadra-runtime${suffix}`));
+    },
+  );
 });
 
 describe("the pair line", () => {

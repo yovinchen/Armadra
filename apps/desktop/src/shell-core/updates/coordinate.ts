@@ -26,7 +26,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path, { join } from "node:path";
 
 import type { Reason } from "./machine";
 
@@ -60,12 +60,21 @@ export function hostDataDir(
   configured?: string,
   platform: string = process.platform,
   env: CoordinateEnvironment = process.env,
+  pathModule: typeof path = path,
 ): string {
   if (configured) return configured;
-  return join(defaultHostBase(platform, env), "Armadra", "host");
+  return pathModule.join(
+    defaultHostBase(platform, env, pathModule),
+    "Armadra",
+    "host",
+  );
 }
 
-function defaultHostBase(platform: string, env: CoordinateEnvironment): string {
+function defaultHostBase(
+  platform: string,
+  env: CoordinateEnvironment,
+  pathModule: typeof path,
+): string {
   if (platform === "win32") {
     if (env.LOCALAPPDATA) return env.LOCALAPPDATA;
     if (env.APPDATA) return env.APPDATA;
@@ -73,10 +82,12 @@ function defaultHostBase(platform: string, env: CoordinateEnvironment): string {
   }
   // Go's os.UserConfigDir, which is what the Host calls.
   if (platform === "darwin") {
-    return env.HOME ? join(env.HOME, "Library/Application Support") : tmpdir();
+    return env.HOME
+      ? pathModule.join(env.HOME, "Library", "Application Support")
+      : tmpdir();
   }
   if (env.XDG_CONFIG_HOME?.startsWith("/")) return env.XDG_CONFIG_HOME;
-  return env.HOME ? join(env.HOME, ".config") : tmpdir();
+  return env.HOME ? pathModule.join(env.HOME, ".config") : tmpdir();
 }
 
 /**
@@ -205,8 +216,11 @@ export interface PendingRestart {
 }
 
 /** `<data dir>/updates/pending-restart.json`. */
-export function pendingPath(dataDir: string): string {
-  return join(dataDir, "updates", "pending-restart.json");
+export function pendingPath(
+  dataDir: string,
+  pathModule: typeof path = path,
+): string {
+  return pathModule.join(dataDir, "updates", "pending-restart.json");
 }
 
 export type Written = { ok: true } | { ok: false; reason: Reason };
