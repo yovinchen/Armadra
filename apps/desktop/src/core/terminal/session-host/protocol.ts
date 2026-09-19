@@ -252,8 +252,28 @@ export type HostErrorCode =
   | "internal"
   | "draining";
 
+/**
+ * The one-time proof a `hello` carries.
+ *
+ * Structural rather than imported from `auth.ts` so the dependency runs one
+ * way only — `auth.ts` needs {@link PROTOCOL_MAJOR} from here, and a cycle
+ * between two modules a CJS bundle loads at startup is the kind of thing that
+ * works until the bundler reorders it.
+ *
+ * Optional on the wire: the Rust host of `crates/session-host` ignores
+ * unknown fields and has no notion of this proof, so a build talking to it
+ * sends the field and is not refused for it. The TypeScript host of
+ * `src/session-host/` **requires** it. That asymmetry is what lets the two
+ * hosts share one protocol major through R6.
+ */
+export interface HelloAuth {
+  readonly nonce: string;
+  readonly issuedAt: number;
+  readonly proof: string;
+}
+
 export type ClientMessage =
-  | { type: "hello"; protocol: number; client: string }
+  | { type: "hello"; protocol: number; client: string; auth?: HelloAuth }
   | ({ type: "create"; id: number } & CreateSpec)
   | {
       type: "attach";

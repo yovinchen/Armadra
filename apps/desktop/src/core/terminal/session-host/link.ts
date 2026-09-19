@@ -7,6 +7,7 @@ import {
   FrameDecoder,
   type Frame,
   type Greeting,
+  type HelloAuth,
   type HostMessage,
   HOST_BINARY,
   OutputTracker,
@@ -29,18 +30,25 @@ import {
  * ## What is verified, and what is not
  *
  * The pipe name is derived and therefore predictable, so being connected
- * proves nothing on its own. The Rust client answers that with
+ * proves nothing on its own. The Rust client answered that with
  * `verify_server`: `GetNamedPipeServerProcessId` on the handle, then the
  * server process' SID compared against this user's.
  *
- * **`node:net` cannot do that.** It hands back a `Socket`, not a
- * `HANDLE`, and there is no Node API that reaches the pipe's server identity.
- * So this build checks what it can — the pipe name carries this user's SID and
- * a digest of the data directory, and the host's own DACL admits only this
- * user and LocalSystem — and records the gap rather than pretending it is
- * closed: **TODO(R6)** — the TypeScript session host of R6 owns both ends of
- * this pipe, and the identity check moves into the native layer it will have.
- * Until then Windows is expected to run `ARMADRA_CORE=rust`.
+ * **`node:net` cannot do that.** It hands back a `Socket`, not a `HANDLE`,
+ * and there is no Node API that reaches the pipe's server identity. Since
+ * R6d the check is mutual instead of native: the client proves it can read
+ * the `0600` key file under the data directory (`auth.ts`), and the host
+ * refuses a connection that cannot. That authenticates the *conversation*
+ * rather than the peer process, which against the threat that matters — a
+ * different account on a shared machine — is the same thing the DACL bought.
+ * The residual risk is enumerated in `auth.ts` rather than left implicit.
+ *
+ * This direction — client verifying server — is still the weaker one: a
+ * process that got there first could serve a pipe of this name without
+ * holding the key, and this client would connect to it before the handshake
+ * refused *it*. What that attacker gets is the client's own `hello`, which
+ * carries a proof bound to this endpoint and expiring in a minute, and
+ * nothing else: the core sends no session data until `welcome` is accepted.
  */
 
 export type LinkEvent =
@@ -111,7 +119,15 @@ export class Link {
     this.socket.destroy();
   }
 
-  async handshake(client: string): Promise<Greeting> {
+  /**
+   * `hello`, and the proof that goes with it.
+   *
+   * `auth` is optional because the Rust host does not ask for one and would
+   * ignore it; the TypeScript host refuses a connection without it. The caller
+   * passes whatever the host it is talking to needs, and both are the same
+   * protocol major — see {@link HelloAuth}.
+   */
+  async handshake(client: string, auth?: HelloAuth): Promise<Greeting> {
     const greeted = new Promise<HostMessage>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error("the session host did not answer hello"));
@@ -122,7 +138,12 @@ export class Link {
         resolve(message);
       };
     });
-    await this.notify({ type: "hello", protocol: PROTOCOL_MAJOR, client });
+    await this.notify({
+      type: "hello",
+      protocol: PROTOCOL_MAJOR,
+      client,
+      ...(auth === undefined ? {} : { auth }),
+    });
     return acceptWelcome(await greeted, PROTOCOL_MAJOR);
   }
 
@@ -240,6 +261,21 @@ export class Link {
       }
       case "ok":
       case "error": {
+        // A refusal of the handshake itself carries `id: 0` — no request had
+        // been issued yet, so there is nothing to match it to by id, and the
+        // one thing owed an answer is the outstanding `hello`. Without this,
+        // "the host said no" arrives as "the host never answered", which is a
+        // different problem with a different fix.
+        if (
+          message.type === "error" &&
+          message.id === 0 &&
+          this.welcome !== undefined
+        ) {
+          const greeter = this.welcome;
+          this.welcome = undefined;
+          greeter(message);
+          return;
+        }
         const waiter = this.pending.get(message.id);
         if (waiter === undefined) return;
         clearTimeout(waiter.timer);
@@ -323,7 +359,30 @@ export function endpointFor(dataDir: string): string {
 }
 
 /**
- * The host binary, beside this executable — or wherever
+ * Which host this core starts.
+ *
+ * `ts` is the default from R6d: the TypeScript daemon under
+ * `apps/desktop/src/session-host/`, bundled to `out/session-host/host.cjs`.
+ * `rust` is the `armadra-session-host.exe` of `crates/session-host`, kept
+ * reachable until R7 deletes the crate so that a Windows machine which hits a
+ * problem with the new one has somewhere to stand.
+ *
+ * Both speak the same wire (`protocol.ts`); the only difference at this level
+ * is what gets executed and whether a handshake proof is required.
+ */
+export type HostFlavour = "ts" | "rust";
+
+export function hostFlavour(
+  ambient: NodeJS.ProcessEnv = process.env,
+): HostFlavour {
+  return ambient.ARMADRA_SESSION_HOST === "rust" ? "rust" : "ts";
+}
+
+/** The file name of the TypeScript host's bundle. */
+export const HOST_BUNDLE = "host.cjs";
+
+/**
+ * The Rust host binary, beside this executable — or wherever
  * `ARMADRA_SESSION_HOST_BIN` points, which is how a development run and the
  * probe reach one that is not next to Electron.
  */
@@ -343,18 +402,90 @@ export function resolveHostBinary(
 }
 
 /**
+ * The places a built `host.cjs` can be, in the order they are tried.
+ *
+ * The same three the hook client's bundle uses, for the same reasons: the
+ * packaged app's `resources/`, a sibling of the executable, and the built
+ * tree (`out/core/main.js` → `out/session-host/host.cjs`) that a development
+ * run works out of.
+ */
+export function hostBundleCandidates(
+  ambient: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const named = ambient.ARMADRA_SESSION_HOST_BUNDLE;
+  if (named !== undefined && named !== "") return [named];
+  const candidates: string[] = [];
+  if (process.resourcesPath !== undefined) {
+    candidates.push(join(process.resourcesPath, "session-host", HOST_BUNDLE));
+  }
+  candidates.push(join(dirname(process.execPath), "session-host", HOST_BUNDLE));
+  candidates.push(join(__dirname, "..", "session-host", HOST_BUNDLE));
+  return candidates;
+}
+
+export function resolveHostBundle(
+  ambient: NodeJS.ProcessEnv = process.env,
+): string {
+  const candidates = hostBundleCandidates(ambient);
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (found !== undefined) return found;
+  throw new Error(
+    `could not find ${HOST_BUNDLE}; looked in:\n${candidates.map((c) => `  - ${c}`).join("\n")}`,
+  );
+}
+
+export interface HostLaunch {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly env: NodeJS.ProcessEnv;
+}
+
+/**
+ * What to execute to bring a host up, for the flavour in effect.
+ *
+ * The TypeScript host is JavaScript, and a packaged machine is not guaranteed
+ * to have a system `node` — so it is run by **this process' own executable**
+ * with `ELECTRON_RUN_AS_NODE=1`, exactly as `armadra-hook`'s launcher does.
+ * `ARMADRA_SESSION_HOST_RUNNER` overrides the interpreter, which is how a
+ * plain-Node server shell and the integration tests reach it.
+ *
+ * Only the data directory is on the command line. Everything else the host
+ * needs — the pipe name, the key, the lock — it derives from that one path,
+ * because a command line is world-readable.
+ */
+export function hostLaunch(
+  dataDir: string,
+  ambient: NodeJS.ProcessEnv = process.env,
+): HostLaunch {
+  if (hostFlavour(ambient) === "rust") {
+    return {
+      command: resolveHostBinary(ambient),
+      args: [dataDir],
+      env: { ...ambient },
+    };
+  }
+  const runner = ambient.ARMADRA_SESSION_HOST_RUNNER;
+  return {
+    command: runner !== undefined && runner !== "" ? runner : process.execPath,
+    args: [resolveHostBundle(ambient), dataDir],
+    env: { ...ambient, ELECTRON_RUN_AS_NODE: "1" },
+  };
+}
+
+/**
  * Starts the host detached.
  *
  * Detached matters: a host started as an ordinary child would share this
  * process' console and process group, and the design is explicit that the
  * process owning the consoles must not be tied to one that exits.
  */
-export function startHost(executable: string, dataDir: string): void {
+export function startHost(launch: HostLaunch): void {
   // CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS | CREATE_NO_WINDOW
-  const child = spawn(executable, [dataDir], {
+  const child = spawn(launch.command, [...launch.args], {
     detached: true,
     stdio: "ignore",
     windowsHide: true,
+    env: launch.env,
   });
   child.unref();
 }
