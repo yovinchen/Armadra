@@ -1,108 +1,316 @@
 import { resolve } from "node:path";
 import { VERSION } from "../instance";
 import type { CoreContext } from "../main";
-import { TerminalError, type TerminateMode } from "./backend";
+import { settingsDomain } from "../settings";
+import {
+  type BackendKind,
+  TerminalError,
+  type TerminalBackend,
+  type TerminateMode,
+} from "./backend";
+import { DirectBackend } from "./direct";
 import { agentEnvironment } from "./environment";
 import { TerminalManager } from "./manager";
+import {
+  type BackendChoice,
+  type BackendInfo,
+  parseChoice,
+  selectBackend,
+} from "./select";
+import { SessionHostBackend } from "./session-host/backend";
 import { serveTerminalSocket, validWriter } from "./socket";
 import { TmuxBackend } from "./tmux/backend";
+import { detect } from "./tmux/config";
 
 /**
- * The terminal domain's one assembly point.
+ * The terminal domain's one assembly point: the backends, the manager, the
+ * nine routes and the socket.
  *
- * Three routes are claimed here — and only three, which is what keeps the rest
- * of R2 (capture, paste, scroll, recycle, `GET /api/terminals/backend`,
- * `GET /api/terminals/{id}`) answering 501 with their feature named rather
- * than half-answering:
+ * ## Which backends exist, and which one is used
  *
- *   * `POST /api/terminals` — create and start in one step;
- *   * `POST /api/terminals/{sessionId}/terminate` — end it;
- *   * `GET  /api/terminals/{sessionId}/ws` — attach.
+ * All the ones this platform can reach are **built**, and exactly one is the
+ * `effective` kind new sessions are created with (`select.ts`, contract
+ * §15.1). Building the others is not waste: a database row created by an
+ * earlier run under a different setting still names its own backend, and
+ * `GET /api/terminals/{id}` and the reconciliation have to be able to reach
+ * it. Serving such a row from whichever backend happens to be effective would
+ * start a second process behind a key that already has one.
+ *
+ * ## The routes
+ *
+ * Nine of the ten terminal paths in the table are claimed here. The tenth,
+ * `/api/terminals/{sessionId}/node-token/refresh`, belongs to R3: the token it
+ * refreshes is issued by the hook service, which does not exist yet.
  *
  * `DELETE` on `/api/terminals/{sessionId}` is **not** claimed: the route table
  * lists that path as `GET` only, because the Rust Runtime has no DELETE there
- * — closing a terminal node posts `terminate` with `mode: "session"`. Claiming
- * a method the Rust face does not have would fail `tools/route-parity.mjs`,
- * which is exactly what that guard is for.
+ * — closing a terminal node posts `terminate` with `mode: "session"`.
  */
 
 export interface TerminalDomain {
   readonly manager: TerminalManager;
-  readonly backend: TmuxBackend;
+  readonly backends: ReadonlyMap<BackendKind, TerminalBackend>;
   stop(): Promise<void>;
 }
 
-export function install(context: CoreContext): TerminalDomain {
-  const backend = new TmuxBackend({
-    dataDir: context.dataDir,
-    version: VERSION,
-  });
+/** Lines a capture may return, and the ceiling a request may ask for. */
+const DEFAULT_CAPTURE_LINES = 200;
+const MAX_CAPTURE_LINES = 10_000;
+/** A paste larger than this is a bug or an attempt to stall the core. */
+const MAX_PASTE_CHARACTERS = 200_000;
+/** One screenful per notch is already generous. */
+const MAX_SCROLL_LINES = 10_000;
+
+export interface TerminalInstallOptions {
+  /**
+   * Overrides `terminal.backend`.
+   *
+   * For the tests, and for them only: which backend is in effect changes what
+   * every route does, and a suite whose answer depended on whether the machine
+   * running it has tmux would be a suite that proves nothing.
+   */
+  readonly configured?: BackendChoice;
+}
+
+export function install(
+  context: CoreContext,
+  options: TerminalInstallOptions = {},
+): TerminalDomain {
+  const settings = settingsDomain()?.settings;
+  const configured =
+    options.configured ??
+    parseChoice(
+      typeof settings?.terminal().backend === "string"
+        ? (settings?.terminal().backend as string)
+        : "auto",
+    );
+  const detection = detect();
+  const selection = selectBackend({ configured, detection });
+
+  const backends = new Map<BackendKind, TerminalBackend>();
+  const direct = new DirectBackend();
+  backends.set("direct", direct);
+  let tmux: TmuxBackend | undefined;
+  if (process.platform !== "win32") {
+    tmux = new TmuxBackend({ dataDir: context.dataDir, version: VERSION });
+    backends.set("tmux", tmux);
+  }
+  if (process.platform === "win32") {
+    backends.set(
+      "sessionHost",
+      new SessionHostBackend({ dataDir: context.dataDir, version: VERSION }),
+    );
+  }
+  // A selection this build cannot honour falls back rather than throwing at
+  // assembly time: an unusable effective backend would take the whole core
+  // down over a preference.
+  const effective: BackendKind = backends.has(selection.effective)
+    ? selection.effective
+    : "direct";
+
   const manager = new TerminalManager({
     database: context.db.database,
-    backend,
+    backends,
+    effective,
+    ...(settings === undefined
+      ? {}
+      : {
+          policy: () => {
+            const terminal = settings.terminal();
+            return {
+              detachedGraceMinutes: terminal.detachedGraceMinutes,
+              dormantAfterSeconds: terminal.dormantAfterSeconds,
+            };
+          },
+        }),
+    log: (message, fields) => context.log.info(message, fields),
+    onExit: (event) => {
+      context.bus.emit("workspace.event", {
+        workspaceId: event.workspaceId,
+        event: {
+          type: "terminal.exit",
+          sessionId: event.sessionId,
+          ...(event.nodeId === null ? {} : { nodeId: event.nodeId }),
+          ...(event.exitCode === null ? {} : { exitCode: event.exitCode }),
+        },
+      });
+    },
   });
 
-  context.server.router.handle(
-    "POST",
-    "/api/terminals",
-    async (_match, request) => {
-      let body: CreateTerminalRequest;
+  // Start-up recovery runs before the listeners bind (`install` is called from
+  // step 2 of `main`), so no request can observe a row that still claims a
+  // session this core lost. A failure here must not stop the core: the rows
+  // are left as they are and the log says why, which is the same outcome as a
+  // backend that cannot be reached.
+  void manager
+    .start()
+    .then((report) => {
+      context.log.info("终端启动对账完成", {
+        detached: report.detached,
+        exited: report.exited,
+        orphansDestroyed: report.orphansDestroyed,
+      });
+    })
+    .catch((error: unknown) => {
+      context.log.warn("终端启动对账失败", { error: describe(error) });
+    });
+  if (tmux !== undefined) {
+    void tmux
+      .adoptServer()
+      .then((note) => {
+        if (note !== undefined) context.log.info(note);
+      })
+      .catch(() => {
+        // A server that cannot be interrogated is left alone; the next
+        // `new-session` stamps whatever is there.
+      });
+  }
+
+  const route = (
+    method: string,
+    path: string,
+    handler: (
+      params: Readonly<Record<string, string>>,
+      request: import("../http/router").CoreRequest,
+    ) => Promise<Answer> | Answer,
+  ): void => {
+    context.server.router.handle(method, path, async (match, request) => {
       try {
-        body = request.json<CreateTerminalRequest>();
-      } catch {
-        return error(new TerminalError(400, "bad_request", "请求体不是 JSON"));
-      }
-      const invalid = validateCreate(body);
-      if (invalid !== undefined) {
-        return error(new TerminalError(400, "bad_request", invalid));
-      }
-      try {
-        // The agent's four address variables, when a node owns this terminal.
-        // The per-node token is issued by R3 and never travels here.
-        const env =
-          body.agent !== undefined && body.nodeId !== undefined
-            ? agentEnvironment(body.nodeId, body.agent.id, context.dataDir)
-            : [];
-        const session = await manager.spawn({
-          workspaceId: body.workspaceId as string,
-          // Resolved, so a relative `cwd` cannot mean two directories. The
-          // root-confinement check `resolve_in_root` does on the Rust side
-          // needs the workspace row, which is R1's; until then a cwd outside
-          // the workspace is refused by the filesystem, not by us.
-          cwd: resolve(body.cwd as string),
-          ...(body.shell === undefined ? {} : { shell: body.shell }),
-          ...(body.command === undefined ? {} : { command: body.command }),
-          args: body.args ?? [],
-          kind: "terminal",
-          ...(body.nodeId === undefined ? {} : { ownerNodeId: body.nodeId }),
-          ...(body.agent === undefined ? {} : { agentId: body.agent.id }),
-          env,
-        });
-        return { status: 200, body: session };
+        return await handler(match.params, request);
       } catch (failure) {
         return error(failure);
       }
+    });
+  };
+
+  /* --------------------------------- create -------------------------------- */
+
+  route("POST", "/api/terminals", async (_params, request) => {
+    const body = json<CreateTerminalRequest>(request);
+    const invalid = validateCreate(body);
+    if (invalid !== undefined) {
+      throw new TerminalError(400, "bad_request", invalid);
+    }
+    // The agent's four address variables, when a node owns this terminal. The
+    // per-node token is issued by R3 and never travels here.
+    const env =
+      body.agent !== undefined && body.nodeId !== undefined
+        ? agentEnvironment(body.nodeId, body.agent.id, context.dataDir)
+        : [];
+    const session = await manager.spawn({
+      workspaceId: body.workspaceId as string,
+      // Resolved, so a relative `cwd` cannot mean two directories. The
+      // root-confinement check needs the workspace row, which is R1's; until
+      // then a cwd outside the workspace is refused by the filesystem.
+      cwd: resolve(body.cwd as string),
+      ...(body.shell === undefined ? {} : { shell: body.shell }),
+      ...(body.command === undefined ? {} : { command: body.command }),
+      args: body.args ?? [],
+      kind: "terminal",
+      ...(body.nodeId === undefined ? {} : { ownerNodeId: body.nodeId }),
+      ...(body.agent === undefined ? {} : { agentId: body.agent.id }),
+      env,
+    });
+    return { status: 200, body: session };
+  });
+
+  /* ---------------------------------- reads -------------------------------- */
+
+  route("GET", "/api/terminals/backend", () => {
+    const info: BackendInfo = {
+      effective,
+      configured,
+      tmuxVersion: detection.version ?? null,
+      tmuxSocket: tmux?.socket ?? null,
+      reason: selection.reason ?? null,
+      platform: process.platform === "win32" ? "windows" : "unix",
+    };
+    return { status: 200, body: info };
+  });
+
+  route("GET", "/api/terminals/{sessionId}", (params) => ({
+    status: 200,
+    body: manager.session(params.sessionId as string),
+  }));
+
+  route(
+    "GET",
+    "/api/terminals/{sessionId}/capture",
+    async (params, request) => {
+      const sessionId = params.sessionId as string;
+      // The row is read first so an unknown session is a 404 rather than
+      // "nothing is running", which is what a session that ended looks like.
+      manager.session(sessionId);
+      const lines = Math.min(
+        positive(request.query.get("lines")) ?? DEFAULT_CAPTURE_LINES,
+        MAX_CAPTURE_LINES,
+      );
+      const escapes = request.query.get("escapes") === "true";
+      return {
+        status: 200,
+        body: await manager.capture(sessionId, lines, escapes),
+      };
     },
   );
 
-  context.server.router.handle(
+  route("GET", "/api/workspaces/{workspaceId}/sessions", (params) => ({
+    status: 200,
+    body: listSessions(
+      context.db.database,
+      params.workspaceId as string,
+      (id) => manager.isAlive(id),
+    ),
+  }));
+
+  /* ---------------------------------- writes ------------------------------- */
+
+  route("POST", "/api/terminals/{sessionId}/paste", async (params, request) => {
+    const sessionId = params.sessionId as string;
+    const body = json<{ text?: unknown; enter?: unknown }>(request);
+    if (typeof body?.text !== "string") {
+      throw new TerminalError(400, "bad_request", "缺少 text");
+    }
+    if ([...body.text].length > MAX_PASTE_CHARACTERS) {
+      throw new TerminalError(400, "bad_request", "Pasted text is too large");
+    }
+    await manager.paste(sessionId, body.text, body.enter === true);
+    return { status: 200, body: manager.session(sessionId) };
+  });
+
+  route(
+    "POST",
+    "/api/terminals/{sessionId}/scroll",
+    async (params, request) => {
+      const body = json<{ lines?: unknown }>(request);
+      const lines =
+        typeof body?.lines === "number" ? Math.trunc(body.lines) : NaN;
+      if (!Number.isFinite(lines)) {
+        throw new TerminalError(400, "bad_request", "缺少 lines");
+      }
+      if (Math.abs(lines) > MAX_SCROLL_LINES) {
+        throw new TerminalError(
+          400,
+          "bad_request",
+          "Scroll distance is too large",
+        );
+      }
+      await manager.scroll(params.sessionId as string, lines);
+      return { status: 204 };
+    },
+  );
+
+  route(
     "POST",
     "/api/terminals/{sessionId}/terminate",
-    async (match, request) => {
-      const sessionId = match.params.sessionId as string;
+    async (params, request) => {
+      const sessionId = params.sessionId as string;
       if (!manager.exists(sessionId)) {
-        return error(new TerminalError(404, "not_found", "没有这个终端会话"));
+        throw new TerminalError(404, "not_found", "没有这个终端会话");
       }
       let mode: TerminateMode = "process";
       if (request.body.byteLength > 0) {
-        try {
-          const parsed = request.json<{ mode?: TerminateMode }>();
-          if (parsed?.mode !== undefined) mode = parsed.mode;
-        } catch {
-          return error(
-            new TerminalError(400, "bad_request", "请求体不是 JSON"),
-          );
-        }
+        const parsed = json<{ mode?: TerminateMode }>(request);
+        if (parsed?.mode !== undefined) mode = parsed.mode;
       }
       try {
         await manager.terminate(sessionId, mode);
@@ -112,11 +320,21 @@ export function install(context: CoreContext): TerminalDomain {
           failure instanceof TerminalError &&
           failure.status === 404 &&
           manager.session(sessionId).status !== "running";
-        if (!alreadyOver) return error(failure);
+        if (!alreadyOver) throw failure;
       }
       return { status: 200, body: manager.session(sessionId) };
     },
   );
+
+  route("POST", "/api/terminals/{sessionId}/recycle", async (params) => {
+    const sessionId = params.sessionId as string;
+    // The row, not the record: recycling a session this core never attached to
+    // is a 404 about the session, not about the process behind it.
+    manager.session(sessionId);
+    return { status: 200, body: await manager.recycle(sessionId) };
+  });
+
+  /* ---------------------------------- socket ------------------------------- */
 
   context.server.stream(
     "/api/terminals/{sessionId}/ws",
@@ -129,7 +347,7 @@ export function install(context: CoreContext): TerminalDomain {
         onError: (failure) =>
           context.log.warn("terminal socket", {
             sessionId,
-            error: failure instanceof Error ? failure.message : String(failure),
+            error: describe(failure),
           }),
       });
     },
@@ -147,11 +365,91 @@ export function install(context: CoreContext): TerminalDomain {
     },
   );
 
-  return {
-    manager,
-    backend,
-    stop: () => manager.shutdown(),
-  };
+  return { manager, backends, stop: () => manager.shutdown() };
+}
+
+/* --------------------------------- sessions -------------------------------- */
+
+export interface SessionSummary {
+  readonly nodeId: string;
+  readonly boardId: string;
+  readonly sessionId: string;
+  readonly kind: string;
+  readonly title: string;
+  readonly cwd: string;
+  readonly agentId?: string;
+  readonly state?: string;
+  readonly stateSource?: string;
+  readonly unread: boolean;
+  readonly pendingId?: string;
+  readonly updatedAt: string;
+  readonly alive: boolean;
+}
+
+/**
+ * `GET /api/workspaces/{id}/sessions` — the Sessions panel's whole feed.
+ *
+ * Only node-owned sessions appear: the list is a list of *cards on a board*,
+ * and a terminal with no node has none. `alive` is the one field that does not
+ * come from the database — a row can say `running` while the process behind it
+ * belongs to a core that is no longer here, and only the manager knows which.
+ *
+ * `agent_status` is R3's table but exists in the schema from migration 0001
+ * onwards, so the join is written now and simply finds nothing until then.
+ */
+export function listSessions(
+  database: import("node:sqlite").DatabaseSync,
+  workspaceId: string,
+  alive: (sessionId: string) => boolean,
+): SessionSummary[] {
+  const rows = database
+    .prepare(
+      `SELECT s.id AS session_id, s.cwd AS cwd, s.owner_node_id AS node_id,
+              s.agent_id AS session_agent_id, s.created_at AS created_at,
+              n.board_id AS board_id, n.title AS title,
+              st.agent_id AS status_agent_id, st.state AS state,
+              st.state_source AS state_source, st.unread AS unread,
+              st.pending_id AS pending_id, st.updated_at AS status_updated_at
+         FROM terminal_sessions s
+         JOIN nodes n ON n.id = s.owner_node_id
+         LEFT JOIN agent_status st ON st.node_id = s.owner_node_id
+        WHERE s.workspace_id = ? AND s.owner_node_id IS NOT NULL
+        ORDER BY s.created_at DESC LIMIT 500`,
+    )
+    .all(workspaceId) as Record<string, unknown>[];
+  return rows.map((row) => {
+    const sessionId = String(row.session_id);
+    const agentId =
+      (row.status_agent_id as string | null) ??
+      (row.session_agent_id as string | null);
+    const state = row.state as string | null;
+    const stateSource = row.state_source as string | null;
+    const pendingId = row.pending_id as string | null;
+    return {
+      nodeId: String(row.node_id),
+      boardId: String(row.board_id),
+      sessionId,
+      kind: "terminal",
+      title: String(row.title ?? ""),
+      cwd: String(row.cwd),
+      ...(agentId === null || agentId === undefined ? {} : { agentId }),
+      ...(state === null ? {} : { state }),
+      ...(stateSource === null ? {} : { stateSource }),
+      unread: Number(row.unread ?? 0) !== 0,
+      ...(pendingId === null ? {} : { pendingId }),
+      updatedAt: String(
+        (row.status_updated_at as string | null) ?? row.created_at,
+      ),
+      alive: alive(sessionId),
+    };
+  });
+}
+
+/* ---------------------------------- helpers -------------------------------- */
+
+interface Answer {
+  readonly status: number;
+  readonly body?: unknown;
 }
 
 interface CreateTerminalRequest {
@@ -182,6 +480,24 @@ function validateCreate(body: CreateTerminalRequest): string | undefined {
   return undefined;
 }
 
+function json<T>(request: import("../http/router").CoreRequest): T {
+  try {
+    return request.json<T>();
+  } catch {
+    throw new TerminalError(400, "bad_request", "请求体不是 JSON");
+  }
+}
+
+function positive(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function describe(failure: unknown): string {
+  return failure instanceof Error ? failure.message : String(failure);
+}
+
 /** A backend failure, in the one error shape the core has (contract §5.1). */
 function error(failure: unknown): {
   status: number;
@@ -195,10 +511,7 @@ function error(failure: unknown): {
   }
   return {
     status: 500,
-    body: {
-      code: "internal",
-      message: failure instanceof Error ? failure.message : String(failure),
-    },
+    body: { code: "internal", message: describe(failure) },
   };
 }
 
