@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { browserVerbs } from "../browser";
 import { controlDispatcher } from "../collab/control";
 import { type Caller, loadNode } from "../collab/nodes";
 import {
@@ -18,9 +19,10 @@ import {
  * refused at the door and never reaches here, which is why the verdict only
  * has two values on this side.
  *
- * Two families are registered: `context-link` answers prose (the client prints
- * it verbatim), `control` answers JSON (the client renders it). `browser` is
- * registered by the browser domain with the same helper.
+ * Three families are registered: `context-link` and `browser` answer prose
+ * (the client prints it verbatim), `control` answers JSON (the client renders
+ * it). The browser verbs themselves live in the browser domain; this only hands
+ * them the `Caller` and the raw `args`, as it does for the other two.
  */
 export function installHookBridge(
   database: DatabaseSync,
@@ -69,9 +71,31 @@ export function installHookBridge(
           };
     },
   );
+  const releaseBrowser = registerCollabDispatcher(
+    "browser",
+    async (request) => {
+      const verbs = browserVerbs();
+      if (verbs === undefined) {
+        return { kind: "text", status: 503, body: "浏览器动词尚未装配\n" };
+      }
+      const caller = resolveCaller(database, request.caller);
+      if (caller === undefined) return unknownCaller(request);
+      const outcome = await verbs.dispatch(caller, request.verb, request.args);
+      // Prose either way: a refusal is a sentence the agent reads, and the hook
+      // client prints whatever comes back without looking at the status.
+      return outcome.ok
+        ? { kind: "text", status: 200, body: outcome.body }
+        : {
+            kind: "text",
+            status: outcome.status,
+            body: `${outcome.message}\n`,
+          };
+    },
+  );
   return () => {
     releaseContext();
     releaseControl();
+    releaseBrowser();
   };
 }
 

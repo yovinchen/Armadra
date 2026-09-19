@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
+import { setBrowserVerbs } from "../browser";
 import { setControlDispatcher } from "../collab/control";
 import { collabDispatcher } from "../hook/collab";
 import { installHookBridge, resolveCaller } from "./hook-bridge";
@@ -20,6 +21,7 @@ afterEach(() => {
   release?.();
   release = undefined;
   setControlDispatcher(undefined);
+  setBrowserVerbs(undefined);
 });
 
 describe("the caller the verbs see", () => {
@@ -102,5 +104,47 @@ describe("the two families on the hook surface", () => {
       status: 403,
       body: { code: "forbidden", message: "需要 verified" },
     });
+  });
+});
+
+describe("the browser family on the hook surface", () => {
+  it("answers prose through the browser verbs, or 503 before they exist", async () => {
+    const db = database();
+    release = installHookBridge(db, async () => "");
+    const browser = collabDispatcher("browser")!;
+    const request = {
+      verb: "read",
+      caller: { nodeId: "n1", verified: true },
+      args: { ref: "e3" },
+      wantsText: true,
+    };
+    expect(await browser(request)).toMatchObject({ kind: "text", status: 503 });
+    const seen: unknown[] = [];
+    setBrowserVerbs({
+      verbs: ["read"],
+      dispatch: async (caller, verb, args) => {
+        seen.push([caller.node.id, caller.verdict, verb, args]);
+        return verb === "read"
+          ? { ok: true, body: "Heading\n" }
+          : { ok: false, status: 409, code: "no_lease", message: "没有租约" };
+      },
+    });
+    expect(await browser(request)).toEqual({
+      kind: "text",
+      status: 200,
+      body: "Heading\n",
+    });
+    expect(seen).toEqual([["n1", "verified", "read", { ref: "e3" }]]);
+    expect(await browser({ ...request, verb: "click" })).toEqual({
+      kind: "text",
+      status: 409,
+      body: "没有租约\n",
+    });
+    expect(
+      await browser({
+        ...request,
+        caller: { nodeId: "ghost", verified: true },
+      }),
+    ).toMatchObject({ kind: "text", status: 404 });
   });
 });
