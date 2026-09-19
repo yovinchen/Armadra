@@ -203,11 +203,13 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
         data-keybinding-scope="browser"
         className="flex h-full w-full flex-col"
       >
-        <div className="flex shrink-0 items-center gap-1.5 p-1.5">
+        {/* 工具栏 28px：地址栏 20px + 上下 4px。页面本身才是内容，这条边不该
+            比一个真浏览器的还厚（契约 §3.4，2026-09-19）。 */}
+        <div className="flex h-[28px] shrink-0 items-center gap-1 px-1">
           <Input
             ref={addressRef}
             aria-label={t("browser.address")}
-            className="h-6 min-w-0 flex-1 font-mono text-[11px]"
+            className="h-5 min-w-0 flex-1 font-mono text-[12px]"
             value={address}
             onChange={(event) => setAddress(event.target.value)}
             onKeyDown={(event) => {
@@ -224,6 +226,7 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
         */}
         <div
           className="nodrag nowheel relative min-h-0 flex-1 bg-[var(--browser-bg)]"
+          data-slot="browser-stage"
           data-no-drag="true"
         >
           {tabs.tabs.map((tab) => (

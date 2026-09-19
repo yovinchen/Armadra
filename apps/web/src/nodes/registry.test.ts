@@ -84,7 +84,8 @@ describe("node registry", () => {
   });
 
   it("collapses to the header height from §3.4", () => {
-    expect(COLLAPSED_HEIGHT).toBe(40);
+    expect(COLLAPSED_HEIGHT).toBe(32);
+    expect(HEADER_HEIGHT).toBe(30);
     expect(COLLAPSED_HEIGHT).toBe(HEADER_HEIGHT + NODE_BORDER_WIDTH * 2);
     expect(STORED_COLLAPSED_HEIGHT).toBe(COLLAPSED_HEIGHT);
   });

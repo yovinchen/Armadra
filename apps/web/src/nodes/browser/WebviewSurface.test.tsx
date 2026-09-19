@@ -115,6 +115,27 @@ describe("浏览器节点的分流", () => {
   });
 });
 
+/**
+ * 密度（契约 §3.4，2026-09-19）：工具栏 28px、地址栏 12px，页面本身拿走
+ * 剩下的全部高度——guest 是 `100%`，所以节点一 resize 网页就按比例跟上。
+ */
+describe("工具栏密度", () => {
+  it("工具栏收到 28px，地址栏 12px，页面吃掉剩下的高度", () => {
+    const view = paint();
+    const address = screen.getByLabelText("网址");
+    expect(address.className).toContain("text-[12px]");
+
+    const toolbar = address.closest("div") as HTMLElement;
+    expect(toolbar.className).toContain("h-[28px]");
+
+    const stage = view.container.querySelector(
+      '[data-slot="browser-stage"]',
+    ) as HTMLElement;
+    expect(stage.className).toContain("flex-1");
+    expect(stage.className).toContain("min-h-0");
+  });
+});
+
 describe("partition", () => {
   it("按工作空间共享一个 jar，且创建时定一次", () => {
     const view = paint();

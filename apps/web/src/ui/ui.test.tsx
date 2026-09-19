@@ -123,7 +123,7 @@ describe("IconButton", () => {
     const { rerender } = render(<IconButton label="设置" size="cluster" />);
     expect(screen.getByRole("button").className).toContain("size-[28px]");
     rerender(<IconButton label="关闭" size="inline" />);
-    expect(screen.getByRole("button").className).toContain("size-[26px]");
+    expect(screen.getByRole("button").className).toContain("size-[24px]");
   });
 
   it("active 同时反映在 data-active 和 aria-pressed 上", () => {

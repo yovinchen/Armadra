@@ -85,6 +85,26 @@ afterEach(() => {
 });
 
 describe("FilesNode", () => {
+  /**
+   * 「按比例展示」（契约 §3.4，2026-09-19）：列表拿走面包屑与过滤框之外的
+   * 全部高度并自己滚，所以节点越高看见的条目越多，不靠固定行数。
+   */
+  it("gives the list the remaining height and its own scroller", async () => {
+    api.listFiles.mockResolvedValue({
+      path: "src",
+      truncated: false,
+      entries: [],
+    });
+    const view = renderFiles();
+    await screen.findByLabelText("过滤");
+
+    const scroller = view.container.querySelector(
+      '[data-slot="scroll-area"]',
+    ) as HTMLElement;
+    expect(scroller.className).toContain("flex-1");
+    expect(scroller.className).toContain("min-h-0");
+  });
+
   it("starts an internal file drag without opening an editor", async () => {
     api.listFiles.mockResolvedValue({
       path: "src",
