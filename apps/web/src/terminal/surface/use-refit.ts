@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { shouldRefit } from "../compat";
+import { resyncDomRendererSpacing } from "./dom-spacing";
 import type { SurfaceRefs } from "./refs";
 
 /**
@@ -15,6 +16,17 @@ export function useRefit(refs: SurfaceRefs): () => void {
     const terminal = refs.terminalRef.current;
     const fit = refs.fitRef.current;
     if (!terminal || !fit || !refs.visibleRef.current) return;
+    /*
+     * 字距重算门。丢名额 / 折叠时 `WebglAddon.dispose()` 跑在 cleanup 里，
+     * 那会儿元素已经被 React 摘掉，新建的 DOM 渲染器按 `offsetWidth === 0`
+     * 推出「一整格」的 `letter-spacing`——就是「字母散开」那一下。这里是它第一
+     * 次重新量得出尺寸的时刻。字距已经对得上就完全不碰（见 `dom-spacing.ts`）。
+     *
+     * 放在 `shouldRefit` 的早退之前：列/行没变也要治，而多数情况下正是没变。
+     */
+    if (resyncDomRendererSpacing(terminal)) {
+      terminal.refresh(0, terminal.rows - 1);
+    }
     let proposed: { cols: number; rows: number } | undefined;
     try {
       proposed = fit.proposeDimensions();
