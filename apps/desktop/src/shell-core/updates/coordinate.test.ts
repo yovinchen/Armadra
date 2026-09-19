@@ -1,7 +1,7 @@
 /**
  * What a desktop update may stop, and how a restart proves itself
  * (docs/design/updates-and-service-install.md §2.3, §3.4; acceptance R5, R6).
- * Ported from `src-tauri/tests/updates_coordinate.rs`, all 7 test functions.
+ * Ported from the Rust shell's coordinate suite, all 7 test functions.
  */
 import { afterEach, expect, it } from "vitest";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

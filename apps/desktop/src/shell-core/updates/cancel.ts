@@ -1,6 +1,6 @@
 /**
  * Stopping a transfer that is already running (design §2.1 `downloading →
- * available`). A port of `src-tauri/src/updates/cancel.rs`.
+ * available`). Ported from the Rust shell this one replaced.
  *
  * electron-updater hands out no abort handle either: `downloadUpdate()` is one
  * promise that either resolves or does not. So the shell keeps the only handle

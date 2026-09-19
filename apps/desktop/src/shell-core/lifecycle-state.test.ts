@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LifecycleState } from "./lifecycle-state";
 
-/** The assertions of `src-tauri/src/lifecycle.rs:222-245`. */
+/** The Rust shell's own lifecycle-state assertions. */
 describe("desktop lifecycle", () => {
   it("never requests a service shutdown when the foreground closes", () => {
     const state = new LifecycleState();

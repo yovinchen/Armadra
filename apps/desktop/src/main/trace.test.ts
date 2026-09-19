@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LIFECYCLE_EVENTS, traceLifecycle } from "./trace";
 
 /**
- * The trace is off unless asked for, and its event names are the Tauri shell's
+ * The trace is off unless asked for, and its event names are the Rust shell's
  * word for word — during the migration a trace from either shell has to be
  * comparable against the other.
  */
@@ -36,8 +36,8 @@ describe("the lifecycle trace", () => {
     );
   });
 
-  it("keeps the Tauri shell's event vocabulary", () => {
-    // `src-tauri/src/main.rs` traces exactly these, in this wording.
+  it("keeps the Rust shell's event vocabulary", () => {
+    // The Rust shell traced exactly these, in this wording: a trace from
     expect(LIFECYCLE_EVENTS).toEqual([
       "setup",
       "ready",

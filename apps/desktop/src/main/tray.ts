@@ -18,7 +18,7 @@ import { revealWindow } from "./window";
 /**
  * The tray icon, its menu, and the usage strip at the top of it.
  *
- * Ported from `src-tauri/src/main.rs:177-249` + `usage.rs`. Two differences,
+ * Ported from the Rust shell this one replaced. Two differences,
  * both forced by Electron rather than chosen: a `Menu` is immutable once
  * built, so every refresh REBUILDS it (muda could rewrite a label in place),
  * and the polling loop is a `setTimeout` chain instead of a Tokio task.

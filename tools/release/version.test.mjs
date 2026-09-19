@@ -48,7 +48,7 @@ test("the repository's own versions agree", () => {
 test("one file left behind fails the check", () => {
   const base = workspace();
   try {
-    const stale = base + "apps/desktop/src-tauri/tauri.conf.json";
+    const stale = base + "apps/desktop/package.json";
     writeFileSync(
       stale,
       readFileSync(stale, "utf8").replace(
@@ -65,7 +65,7 @@ test("one file left behind fails the check", () => {
       }),
     });
     assert.equal(problems.length, 1);
-    assert.match(problems[0], /tauri\.conf\.json says 0\.1\.9/);
+    assert.match(problems[0], /apps\/desktop\/package\.json says 0\.1\.9/);
   } finally {
     rmSync(base, { recursive: true, force: true });
   }

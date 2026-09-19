@@ -1,7 +1,7 @@
 /**
  * The two places a staged update is announced outside the settings page
  * (design §4.1, last rule): the tray's "restart to finish updating" item and
- * one system notification. A port of `src-tauri/src/updates/notify.rs`.
+ * one system notification, ported from the Rust shell this one replaced.
  *
  * The design is explicit that these are the *only* two entry points — no
  * permanent banner, nothing modal. Both say the same thing, both are optional
@@ -21,7 +21,7 @@ export type Locale = "zhCn" | "en";
 /**
  * The UI language, from the environment. Electron's `app.getLocale()` is the
  * better source and W2.1 owns the tray that would use it; this is the same
- * fallback the Tauri shell's `usage::Locale::from_environment` used, so a
+ * fallback the Rust shell's `usage::Locale::from_environment` used, so a
  * notification is never drawn in the wrong language just because the tray has
  * not been wired yet.
  */

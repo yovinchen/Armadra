@@ -25,7 +25,7 @@ import {
 } from "./runtime-process";
 
 /**
- * The half of `src-tauri/src/runtime_process_tests.rs` that needs a real OS
+ * The half of the Rust shell's runtime-process suite that needs a real OS
  * process: the shutdown frame on stdin, the announcement read off a real pipe,
  * SIGTERM sent only to a Runtime we recognise, and what "the address is free"
  * means. These are worth nothing against a fake, which is why they spawn.

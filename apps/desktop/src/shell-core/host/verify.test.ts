@@ -22,7 +22,7 @@ import {
 } from "./verify";
 
 /**
- * The assertion list of `src-tauri/src/host/tests.rs` that concerns what a
+ * The Rust shell's own assertions about what a
  * reported Host has to prove. The two HTTP round trips themselves are in
  * `src/main/host/verify.test.ts`, against a real socket.
  */
@@ -125,7 +125,7 @@ describe("management results", () => {
 });
 
 describe("the CORS answer", () => {
-  const origin = "tauri://localhost";
+  const origin = "http://127.0.0.1:54321";
 
   it("must name our exact origin on a successful response", () => {
     expect(checkOrigin(200, origin, origin)).toBeUndefined();

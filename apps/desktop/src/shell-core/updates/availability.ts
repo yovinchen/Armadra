@@ -1,8 +1,8 @@
 /**
  * What state a shell starts in, before anything is asked (design §2, §4.1).
  *
- * This is `src-tauri/src/updates/mod.rs:69-122` with the one substitution the
- * migration makes. Tauri's rule was "no minisign public key configured = the
+ * Ported from the Rust shell this one replaced, with the one substitution the
+ * migration makes. Its rule was "no minisign public key configured = the
  * shell could verify nothing = `notConfigured`". electron-updater verifies the
  * platform code signature instead of a minisign detached signature, so the
  * same sentence becomes:
@@ -124,7 +124,7 @@ export function markerDisables(marker: unknown): boolean {
 /**
  * The state a shell starts in.
  *
- * The order matters, and it is the Tauri shell's order: a build that could
+ * The order matters, and it is the Rust shell's order: a build that could
  * verify nothing is "not configured" even on a development channel, because
  * that is the thing a person can actually do something about.
  */

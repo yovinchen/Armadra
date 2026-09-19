@@ -86,17 +86,6 @@ jobs:
           key: ${{ matrix.label }}
           workspaces: . -> target
 
-      # Tauri 2 在 Linux 上链接 WebKitGTK；没有这些头文件 armadra-desktop 连
-      # cargo check 都过不去（glib-sys 的 build script 先用 pkg-config 找它们）。
-      - name: 安装 Tauri 的 Linux 系统依赖
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
-            libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-
       - run: pnpm install --frozen-lockfile
 
       # pnpm check = libs:build + prettier + cargo fmt + typecheck +
@@ -121,23 +110,22 @@ jobs:
       - run: pnpm -r --if-present typecheck
       - run: pnpm --filter @armadra/web build
 
-      # Electron 壳的 main/preload/renderer 三个 target 编译一遍，但不打包：
-      # 打包（electron-builder）要真的 sidecar 二进制与平台特定的证书/公证输入，
-      # 是发布流水线的事（同 Tauri 壳的 "桌面壳只 cargo check" 决定，见下）。
-      # 这里要的是三个平台上 electron-vite 的构建图都过得去。
-      - name: Electron 壳构建（不打包）
+      # 桌面壳的 main/preload/renderer 三个 target 编译一遍，但不打包：
+      # 打包（electron-builder）要真的受管二进制与平台特定的证书/公证输入，
+      # 是发布流水线的事。这里要的是三个平台上 electron-vite 的构建图都过得去。
+      - name: 桌面壳构建（不打包）
         run: pnpm --filter @armadra/desktop build
 
       - name: 三端协议契约
         run: pnpm protocol:test
 
       - name: Rust lint
-        run: cargo clippy --workspace --exclude armadra-desktop --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       # 不在第一个失败的二进制处停下：一次运行就要把一个平台上所有失败的
       # 套件都列出来，而不是修一个、推一次、再看下一个。
       - name: Rust 测试
-        run: cargo test --workspace --exclude armadra-desktop --no-fail-fast
+        run: cargo test --workspace --no-fail-fast
 
       - name: Go vet 与测试
         shell: bash
@@ -146,16 +134,7 @@ jobs:
           go -C apps/host vet ./...
           go -C apps/host test ${{ matrix.go_race }} -count=1 ./...
 
-      # 桌面壳只做 cargo check：打包是发布流水线的事，这里要的是「三个平台的
-      # Rust 代码都编译得过」。externalBin 必须存在，但不必是真的二进制。
-      - name: 桌面壳 cargo check
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm --filter @armadra/desktop prepare:sidecar-placeholders
-          cargo check -p armadra-desktop --all-targets
-
-      # Host 要能为另外两个平台交叉编译：sidecar 打包时就是这么做的。
+      # Host 要能为另外两个平台交叉编译：打包受管二进制时就是这么做的。
       - name: Go 交叉编译另外两个平台
         if: runner.os == 'Linux'
         shell: bash

@@ -11,7 +11,7 @@
  * behind. Without that variable `sign` does nothing and says so — a release
  * that could not be signed must be visibly unsigned, never quietly unsigned.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -45,10 +45,24 @@ export function signableFiles(directory) {
   });
 }
 
-/** Sign every signable file in the directory with the given key. */
-export function signDirectory({ directory, key, version = "" }) {
+/**
+ * Sign every signable file in the directory with the given key.
+ *
+ * `onlyMissing` skips a file that already carries a `.sig`. `assemble.mjs`
+ * signs in two passes — the bundles first, because `latest.json` quotes their
+ * signatures, then `latest.json` and `SHA256SUMS` once those exist — and a
+ * second full pass would re-sign several hundred megabytes of installers to
+ * produce the bytes that are already on disk.
+ */
+export function signDirectory({
+  directory,
+  key,
+  version = "",
+  onlyMissing = false,
+}) {
   const signed = [];
   for (const name of signableFiles(directory)) {
+    if (onlyMissing && existsSync(join(directory, `${name}.sig`))) continue;
     const data = readFileSync(join(directory, name));
     // The trusted comment names the file and the release it belongs to, and it
     // is covered by the global signature — so a signature cannot be moved onto

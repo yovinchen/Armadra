@@ -77,7 +77,7 @@ function template(locale: ShellLocale): MenuItemConstructorOptions[] {
           label: shellText(locale, "menu.quit"),
           // Deliberately WITHOUT Ctrl+Q. Quitting stops the Runtime, the Host
           // and every terminal the user has open, and Ctrl+Q sits next to the
-          // chords a terminal uses constantly; the Tauri shell left it off for
+          // chords a terminal uses constantly; the Rust shell left it off for
           // the same reason (`main.rs:137-141`). The window manager's own
           // close button and this item are the ways out.
           click: () => app.quit(),

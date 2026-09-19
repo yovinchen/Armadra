@@ -1,6 +1,6 @@
 /**
  * The tray usage strip — roadmap §3.9「托盘迷你条」, ported from
- * `src-tauri/src/usage.rs` with one change: the wording is no longer here.
+ * the Rust shell's `usage.rs` with one change: the wording is no longer here.
  *
  * Two disabled menu items above the tray's actions: the most pressed session
  * window and the most pressed week window, each a short bar plus a percentage.
@@ -13,7 +13,7 @@
  * that length produces no bar at all, and the strip says so in words rather
  * than drawing an empty bar that reads as "0% used".
  *
- * The Rust version carried its own two-language table because the Tauri shell
+ * The Rust version carried its own two-language table because the Rust shell
  * had no message catalogue. This one takes the three words it needs as an
  * argument; `main/tray.ts` gets them from `apps/web/src/i18n/desktop.ts`
  * (migration design §2.3).

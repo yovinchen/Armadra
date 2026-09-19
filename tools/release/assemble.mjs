@@ -5,14 +5,24 @@
  *     --repo owner/name --tag vX.Y.Z [--unnotarized macOS,Windows] \
  *     [--note release-note.md]
  *
- * In order: check that every file is one the Host can place, write latest.json
- * from the signed desktop bundles, write SHA256SUMS, sign everything, then
- * verify what was just produced. The last step matters most — it is the only
- * one that can catch a release that each individual step was happy with.
+ * In order: check that every file is one the Host can place, sign every
+ * artifact, write latest.json from the signatures that produced, write
+ * SHA256SUMS, then verify what was just produced. The last step matters most —
+ * it is the only one that can catch a release that each individual step was
+ * happy with.
  *
- * Signing needs ARMADRA_RELEASE_SIGNING_KEY. Without it the release is
- * assembled and left visibly unsigned, and the note says so: a release that
- * looks signed and is not is worse than one that admits it.
+ * Signing comes BEFORE the manifest, and that ordering is the whole of what
+ * changed when the desktop packager did. The previous bundler signed each
+ * updater bundle during the build, so the manifest could read a `.sig` that
+ * was already there; electron-builder signs a bundle with the platform's own
+ * code signature and produces no detached signature at all. So the one key
+ * system left is this repo's — `ARMADRA_RELEASE_SIGNING_KEY`, which already
+ * signed the component packages — and the manifest is written from what
+ * `signDirectory` just wrote.
+ *
+ * Without that key the release is assembled and left visibly unsigned, and the
+ * note says so: a release that looks signed and is not is worse than one that
+ * admits it.
  */
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -64,6 +74,11 @@ export async function assemble({
   const download = (name) =>
     `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(name)}`;
 
+  // Sign the bundles first: latest.json quotes the detached signature of each
+  // updater bundle, and nothing else in this pipeline produces one.
+  const key = secret ? keyFromSecret(secret) : null;
+  let signed = key ? signDirectory({ directory, key, version }) : [];
+
   const { manifest, skipped } = writeManifest({
     directory,
     version,
@@ -71,7 +86,7 @@ export async function assemble({
     targets: TARGETS,
     downloadUrl: download,
   });
-  // A build without TAURI_SIGNING_PRIVATE_KEY signs nothing, and that is a
+  // A build without ARMADRA_RELEASE_SIGNING_KEY signs nothing, and that is a
   // release that admits it cannot update itself, not a broken one: every
   // bundle is still shipped for a manual install and the note says so below.
   // A hole — some bundles signed, one not, or a bundle missing outright — is
@@ -88,11 +103,15 @@ export async function assemble({
     );
   }
 
+  // SHA256SUMS last of the three, so it covers latest.json too. Then one more
+  // signing pass for the two files that did not exist during the first, and a
+  // verification over everything.
   await writeChecksums(directory);
-  let signed = [];
-  if (secret) {
-    const key = keyFromSecret(secret);
-    signed = signDirectory({ directory, key, version });
+  if (key) {
+    signed = [
+      ...signed,
+      ...signDirectory({ directory, key, version, onlyMissing: true }),
+    ];
     const { problems: signatureProblems } = verifyDirectory({
       directory,
       publicKeyText: publicKeyFile(key),
@@ -104,7 +123,7 @@ export async function assemble({
   const compatibility = readCompatibility();
   const unsigned = secret ? [] : ["component packages (no signing key)"];
   if (updaterUnsigned) {
-    unsigned.push("desktop updater packages (no Tauri signing key)");
+    unsigned.push("desktop updater packages (no release signing key)");
   }
   const note = releaseNote({
     version,

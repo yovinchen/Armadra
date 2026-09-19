@@ -140,8 +140,7 @@ jobs:
       # 重新生成后比对字节。runner 上再装一个只会引入版本漂移。
       - run: pnpm protocol:check
       - run: pnpm protocol:test
-      # 桌面壳留给 build 作业：它要 WebKitGTK 与真实 sidecar，这里只验业务代码。
-      - run: cargo test --workspace --exclude armadra-desktop
+      - run: cargo test --workspace
       - run: go -C apps/host test ./...
 
   web:
@@ -228,28 +227,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      # Tauri 2 在 Linux 上要 WebKitGTK 与 libsoup3；AppImage 还要 file 与
-      # patchelf，托盘图标要 ayatana-appindicator，.rpm 要 rpmbuild（rpm 包）。
-      # 缺任何一个都是打到一半才报错。
-      - name: 安装 Tauri 的 Linux 系统依赖
+      # electron-builder 自带 Chromium，不链接 WebKitGTK；Linux 侧只差 .rpm
+      # 的 rpmbuild 与 AppImage 用到的 file。缺任何一个都是打到一半才报错。
+      - name: 安装 Linux 打包依赖
         if: startsWith(matrix.target, 'linux-')
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            build-essential curl wget file \
-            libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
-            libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
-            libssl-dev libxdo-dev patchelf rpm xdg-utils
+          sudo apt-get install --no-install-recommends -y file rpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm libs:build
 
-      # LiveAgent 的做法：证书自己导进一个临时钥匙串并当场 find-identity，
-      # 而不是把 APPLE_CERTIFICATE 交给 tauri 去导。理由是失败的时刻——
-      # 证书或口令不对时这一步十秒内就红，交给打包器则要等整个构建跑完。
-      # 两种机制不能并用：APPLE_CERTIFICATE 一旦非空，tauri 会另建一个钥匙串
-      # 并把它设为默认，把这里导入的那张顶掉。
+      # 证书先自己导进一个临时钥匙串并当场 find-identity：证书或口令不对时
+      # 这一步十秒内就红，交给打包器则要等整个构建跑完。导完之后把同一份
+      # base64 交给 electron-builder 的 CSC_LINK / CSC_KEY_PASSWORD——它认的是
+      # 这两个变量，钥匙串只是让失败提前发生的预检。
       - name: 导入 Apple 证书到临时钥匙串
         if: startsWith(matrix.target, 'darwin-')
         shell: bash
@@ -286,7 +279,13 @@ jobs:
             echo "::error::钥匙串里没有可用于 codesign 的身份"
             exit 1
           fi
-          printf 'APPLE_SIGNING_IDENTITY=%s\n' "$identity" >> "$GITHUB_ENV"
+          # electron-builder 自己再导一次同一份证书（signing-electron.mjs 的
+          # CERT_ENV / CERT_PASSWORD_ENV），所以这里把它原样传下去。
+          {
+            printf 'CSC_LINK=%s\n' "$APPLE_CERTIFICATE_P12_BASE64"
+            printf 'CSC_KEY_PASSWORD=%s\n' "$APPLE_CERTIFICATE_PASSWORD"
+            printf 'CSC_NAME=%s\n' "$identity"
+          } >> "$GITHUB_ENV"
 
       # store-credentials --validate 会真的去问一次 Apple。凭据不对时它在这里
       # 报错，而不是在打包最后一步排队等公证时。
@@ -308,48 +307,62 @@ jobs:
             --team-id "$NOTARY_TEAM_ID" \
             --password "$NOTARY_PASSWORD" \
             --validate
-          # tauri 的 bundler 认这三个变量，公证与装订由它在打包末尾做。
+          # electron-builder 认这三个变量（signing-electron.mjs 的
+          # APPLE_ID_ENV / APPLE_PASSWORD_ENV / APPLE_TEAM_ENV），公证与装订
+          # 由它在打包末尾做。
           {
             printf 'APPLE_ID=%s\n' "$NOTARY_APPLE_ID"
             printf 'APPLE_TEAM_ID=%s\n' "$NOTARY_TEAM_ID"
-            printf 'APPLE_PASSWORD=%s\n' "$NOTARY_PASSWORD"
+            printf 'APPLE_APP_SPECIFIC_PASSWORD=%s\n' "$NOTARY_PASSWORD"
           } >> "$GITHUB_ENV"
 
-      # 只有真的存在的 secret 才进环境：tauri 看到空字符串的签名变量会当成
-      # 「有密钥」，然后在最后一步失败；没有密钥时要的是跳过。
-      - name: 解出本次可用的更新签名变量
+      # Windows 的 Authenticode：electron-builder 同样认 CSC_LINK /
+      # CSC_KEY_PASSWORD，所以这里只是把 Windows 的那张证书填进同一对变量。
+      - name: 解出 Windows 签名证书
+        if: startsWith(matrix.target, 'windows-')
         shell: bash
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           set -euo pipefail
-          # printenv rather than ${!name}: the macOS runners still run bash 3.2.
-          for name in TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD; do
-            value="$(printenv "$name" || true)"
-            [ -n "$value" ] || continue
-            {
-              printf '%s<<ARMADRA_SECRET_EOF\n' "$name"
-              printf '%s\n' "$value"
-              printf 'ARMADRA_SECRET_EOF\n'
-            } >> "$GITHUB_ENV"
-          done
-          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
-            echo "::warning::没有 TAURI_SIGNING_PRIVATE_KEY，桌面更新包不会被签名，assemble 会把它排除在 latest.json 之外"
+          if [ -z "${WINDOWS_CERT_BASE64:-}" ]; then
+            echo "::warning::没有 WINDOWS_CERT_BASE64，Windows 安装包不签名，SmartScreen 会提示"
+            exit 0
           fi
+          {
+            printf 'CSC_LINK=%s\n' "$WINDOWS_CERT_BASE64"
+            printf 'CSC_KEY_PASSWORD=%s\n' "${WINDOWS_CERT_PASSWORD:-}"
+          } >> "$GITHUB_ENV"
 
-      # scripts/build.mjs 先做签名判断再编译（signing.mjs），并把更新地址与
-      # 这个判断合成同一个 --config；仓库里的 endpoints 始终为空，免得本地构建
-      # 也去联系发布来源。每平台的 bundle.targets 来自自动合并的
-      # tauri.<平台>.conf.json，不用在命令行再传一遍。
-      # `tauri:build`（不是 `build`）：Electron 壳迁移期间两套壳共存于
-      # `@armadra/desktop`，`build` 已经是 electron-vite 的产物。发布仍然出
-      # Tauri 包，直到 W2.3 把打包切到 electron-builder。
+      # `dist` 只复制、不构建（stage-binaries.mjs），所以受管二进制要先在这里
+      # 产出。每个 runner 都是自己那一行目标的本机，所以两条都不带 `--target`：
+      # 带了就会落到 `target/<triple>/release`，而 stage-binaries 按本机布局
+      # 去 `target/release` 找，正好错开。session-host 只在 Windows 上存在，
+      # `rustSidecars()` 与这里的 `-p` 列表是同一条规则的两头。
+      - name: 构建受管二进制
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(-p armadra-runtime -p armadra-hook)
+          case "${{ matrix.target }}" in
+            windows-*) packages+=(-p armadra-session-host) ;;
+          esac
+          cargo build --release "${packages[@]}"
+          pnpm --filter @armadra/desktop prepare:host --release --native
+
+      # scripts/dist.mjs 三步：先由 signing-electron.mjs 定签名计划（sign /
+      # skip / refuse）并当场报告，再 electron-vite build，最后暂存受管二进制
+      # 并调用 electron-builder。更新地址由 ARMADRA_UPDATER_ENDPOINTS 注入，
+      # 仓库里的 publish.url 始终是占位，免得本地构建也去联系发布来源。
+      # 每平台的 target 列表来自 electron-builder.yml，与
+      # tools/release/artifacts.mjs 的 desktopAssets() 一一对应
+      # （apps/desktop/scripts/artifact-targets.test.mjs 钉住这条对应）。
       - name: 打桌面包
         shell: bash
         env:
           ARMADRA_UPDATER_ENDPOINTS: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
-        run: pnpm --filter @armadra/desktop tauri:build
+        run: pnpm --filter @armadra/desktop dist
 
       # 产物已经落地，先断言它能在承诺的系统上启动，再去改名上传。
       - name: 校验 Linux 的 glibc 基线
@@ -357,41 +370,19 @@ jobs:
         shell: bash
         run: bash tools/release/verify-linux-glibc-baseline.sh
 
-      # AppImage 里自带的 libwayland 会和宿主的 EGL/合成器撞车，剥掉之后用
-      # 宿主自己的那份。重新打包会让 Tauri 的 .sig 失效，所以紧接着再签一次。
-      - name: 剥掉 AppImage 里自带的 Wayland 库并重新签名
-        if: startsWith(matrix.target, 'linux-')
-        shell: bash
-        run: |
-          set -euo pipefail
-          appimage="$(find target/release/bundle/appimage -maxdepth 1 -type f -name '*.AppImage' -print -quit 2>/dev/null || true)"
-          if [ -z "$appimage" ]; then
-            echo "::error::没有找到 AppImage，tauri.linux.conf.json 的 bundle.targets 与这一步不一致"
-            exit 1
-          fi
-          had_signature=false
-          if [ -f "$appimage.sig" ]; then had_signature=true; fi
-          bash tools/release/postprocess-linux-appimage.sh "$appimage"
-          # 没签过就不用补签：没有 TAURI_SIGNING_PRIVATE_KEY 时 signing.mjs 早已
-          # 关掉 createUpdaterArtifacts，本来就不会有 .sig。
-          if [ "$had_signature" = true ] && [ ! -f "$appimage.sig" ]; then
-            pnpm --filter @armadra/desktop exec tauri signer sign "$appimage"
-            test -s "$appimage.sig"
-          fi
-
-      # 打包器的名字（Armadra_0.1.0_x64_en-US.msi、armadra_0.1.0_amd64.deb）
-      # 里读不出 Host 认得的目标，所以这里统一改名，顺带打出 Windows 便携版。
+      # 打包器的名字（Armadra-0.1.0-arm64.dmg、Armadra Setup 0.1.0.exe）里读不出
+      # Host 认得的目标，所以这里统一改名。--require-updater：发布必须产出那个
+      # 能原地更新的包，缺了就在这里失败而不是发一个永远收不到更新的版本。
       - name: 收集并改名桌面产物
         shell: bash
         run: |
           set -euo pipefail
           node tools/release/stage-desktop.mjs \
             --target "${{ matrix.target }}" \
-            --triple "${{ matrix.triple }}" \
-            --from target/release \
+            --from apps/desktop/release \
             --out artifacts \
             --version "${{ needs.verify.outputs.version }}" \
-            ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && '--require-updater' || '' }}
+            --require-updater
 
       - name: 打组件包
         shell: bash
@@ -421,7 +412,7 @@ jobs:
           security default-keychain -s login.keychain-db || true
           security delete-keychain "$keychain" || true
 
-  # 公证与 Authenticode 都由 build 作业里的 Tauri 完成；本作业只报告哪些目标缺
+  # 公证与 Authenticode 都由 build 作业里的 electron-builder 完成；本作业只报告哪些目标缺
   # 少 secret，assemble 会把结论写进 Release 说明顶部。缺 secret 不阻断发布。
   notarize:
     needs: [verify, build]

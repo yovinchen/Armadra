@@ -132,7 +132,7 @@ export interface ArmadraDesktopApi {
   /**
    * The absolute path of a dropped or picked `File`. The page hands the path
    * to the Runtime, which is the process allowed to read it; the bytes never
-   * travel through the renderer. Replaces the Tauri drag-drop event, and is
+   * travel through the renderer. Replaces the Rust shell's drag-drop event, and is
    * why the window is not sandboxed.
    */
   readonly pathForFile: (file: File) => string;
@@ -196,10 +196,9 @@ contextBridge.exposeInMainWorld("armadra", api);
 
 /**
  * Mark the document as desktop-hosted, synchronously and before any of the
- * page's own scripts run. This replaces the Tauri shell's `data-tauri`
- * attribute (`src-tauri/src/main.rs:53-55`), which `apps/web/src/styles/tokens.css`
- * keys its window-chrome rules off. Since W2.1 those rules match on either
- * attribute, so the same stylesheet dresses both shells.
+ * page's own scripts run. `apps/web/src/styles/tokens.css` keys its
+ * window-chrome rules off this attribute, and a browser never sees it — which
+ * is what lets one stylesheet serve the shell and the web build both.
  */
 function markDesktopDocument(): void {
   document.documentElement?.setAttribute(DESKTOP_DOCUMENT_ATTRIBUTE, "");

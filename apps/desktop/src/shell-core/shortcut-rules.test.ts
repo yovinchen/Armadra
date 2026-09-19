@@ -9,7 +9,7 @@ import {
 import { toElectronAccelerator } from "./accelerator";
 
 /**
- * 全局热键请求的判定，ported from `src-tauri/tests/shortcuts.rs`.
+ * 全局热键请求的判定，ported from the Rust shell this one replaced.
  *
  * 真正的注册要问操作系统，测不了；能测的是它之前那一步——一份从页面来的
  * 列表里，哪些请求根本不该走到操作系统面前。
@@ -75,7 +75,7 @@ describe("global hotkey requests", () => {
 
   it("accepts every accelerator the page actually produces", () => {
     // `apps/web/src/keybindings/accelerator.ts` 的输出样本，与
-    // `src-tauri/tests/shortcuts.rs` 的那一组逐条对应。两边的对应关系只有在
+    // 与旧壳那一组逐条对应。两边的对应关系只有在
     // 这里被断言过，改一边才不会静默地让热键装不上。
     const samples: Record<string, string> = {
       "CmdOrCtrl+Shift+K": "CmdOrCtrl+Shift+K",

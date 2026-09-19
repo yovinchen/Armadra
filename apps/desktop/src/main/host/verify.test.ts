@@ -14,13 +14,13 @@ import { hostErrorOf } from "../../shell-core/host/errors";
 import { verifyOrigin } from "./verify";
 
 /**
- * The HTTP half of `src-tauri/src/host/tests.rs`: the preflight, the Hello,
+ * The HTTP half of the Rust shell's Host suite: the preflight, the Hello,
  * and what each of them has to carry. A real loopback server, because the
  * thing being tested is that a *browser-shaped* exchange is performed — a
  * fake would only prove the shell calls its own helper.
  */
 
-const ORIGIN = "tauri://localhost";
+const ORIGIN = "http://127.0.0.1:54321";
 let server: Server | undefined;
 
 afterEach(async () => {

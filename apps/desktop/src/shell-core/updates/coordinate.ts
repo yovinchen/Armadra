@@ -1,7 +1,7 @@
 /**
  * Stopping what this shell owns before an install, and checking afterwards
  * that the update actually happened (design §2.3). A port of
- * `src-tauri/src/updates/coordinate.rs`.
+ * the Rust shell this one replaced.
  *
  * The rule that shapes the whole module: **only what this shell started is
  * stopped.** A machine can run two Hosts — the one the desktop app holds and

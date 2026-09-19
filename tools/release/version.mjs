@@ -29,8 +29,9 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 export const VERSION_SITES = [
   { path: "Cargo.toml", kind: "cargo-workspace" },
   { path: "package.json", kind: "json" },
+  // electron-builder reads the version out of this manifest, so there is no
+  // fourth site to keep in step any more.
   { path: "apps/desktop/package.json", kind: "json" },
-  { path: "apps/desktop/src-tauri/tauri.conf.json", kind: "json" },
 ];
 
 const CARGO_VERSION =

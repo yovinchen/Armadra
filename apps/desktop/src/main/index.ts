@@ -66,7 +66,7 @@ import { ownsRuntime } from "../shell-core/runtime/identity";
 /**
  * The application's assembly. Everything with a rule worth stating lives in
  * `shell-core/` (pure) or in a named module beside this one; this file is the
- * Electron plumbing around them, the same division `src-tauri/src/lib.rs:1-7`
+ * Electron plumbing around them, the same division the Rust shell
  * drew between `lib.rs` and `main.rs`.
  */
 

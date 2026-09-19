@@ -122,26 +122,36 @@ export function assetTarget(name) {
  * The desktop bundles a target produces. Exactly one per platform takes part
  * in automatic updates; the rest exist so a first install is possible.
  *
- * `kind` names the bundler output each one comes from, because the names below
- * are *not* the bundler's own. Tauri writes `Armadra_0.1.0_x64_en-US.msi` and
- * `armadra_0.1.0_amd64.deb`, and neither declares a target the Host can read
- * (`assetTarget` finds nothing in `x64` or `amd64`). `stage-desktop.mjs` looks
- * each bundle up by `kind` and renames it to the name here, so the rename is
- * stated once rather than repeated as a `find` in every release job.
+ * `kind` names the electron-builder target each one comes from, and it is
+ * one-for-one with `apps/desktop/electron-builder.yml`'s per-platform `target`
+ * lists — `apps/desktop/scripts/artifact-targets.test.mjs` fails if the two
+ * drift apart.
  *
- * `portable` has no bundler output at all: it is the plain `release/` exe plus
- * its sidecars, zipped. Windows users who cannot run an installer are the
- * reason it exists; it is not an updater target because there is no installed
- * location to replace.
+ * The names below are NOT electron-builder's own. It writes
+ * `Armadra-0.1.0-arm64.dmg`, `Armadra Setup 0.1.0.exe` and
+ * `armadra_0.1.0_amd64.deb`, and none of those declares a target the Host can
+ * read (`assetTarget` finds nothing in `arm64` or `amd64`, and a space in a
+ * name is its own problem). `stage-desktop.mjs` looks each bundle up by `kind`
+ * and renames it to the name here, so the rename is stated once rather than
+ * repeated as a `find` in every release job.
+ *
+ * Which one updates in place is electron-updater's rule, not a choice:
+ *
+ * - macOS updates from the **zip**, never the `.dmg` — a dmg is a disk image
+ *   a person mounts, and the updater replaces an app bundle.
+ * - Windows updates from the **NSIS installer**, run with its silent flags.
+ *   The zip is the portable copy for machines where an installer cannot run;
+ *   it is not an updater target, because nothing records where it was
+ *   unpacked to.
+ * - Linux updates from the **AppImage**, which is one self-contained file.
+ *   A `.deb` or `.rpm` belongs to a package manager, and offering to replace
+ *   one behind the package manager's back is how a system ends up with two
+ *   disagreeing records of what is installed.
  */
 export function desktopAssets(version, target) {
   if (target.startsWith("darwin-"))
     return [
-      {
-        name: `Armadra_${version}_${target}.app.tar.gz`,
-        updater: true,
-        kind: "app.tar.gz",
-      },
+      { name: `Armadra_${version}_${target}.zip`, updater: true, kind: "zip" },
       { name: `Armadra_${version}_${target}.dmg`, updater: false, kind: "dmg" },
     ];
   if (target.startsWith("windows-"))
@@ -151,18 +161,17 @@ export function desktopAssets(version, target) {
         updater: true,
         kind: "nsis",
       },
-      { name: `Armadra_${version}_${target}.msi`, updater: false, kind: "msi" },
       {
         name: `Armadra_${version}_${target}-portable.zip`,
         updater: false,
-        kind: "portable",
+        kind: "zip",
       },
     ];
   return [
     {
       name: `Armadra_${version}_${target}.AppImage`,
       updater: true,
-      kind: "appimage",
+      kind: "AppImage",
     },
     { name: `Armadra_${version}_${target}.deb`, updater: false, kind: "deb" },
     { name: `Armadra_${version}_${target}.rpm`, updater: false, kind: "rpm" },

@@ -7,8 +7,8 @@ import type { RuntimeProcess } from "./runtime-process";
  * Closing the foreground keeps its document and services alive. Explicit quit
  * serializes with Host startup, stops the configured Host, then our Runtime.
  *
- * Ported from `src-tauri/src/lifecycle.rs` plus the quit orchestration in
- * `src-tauri/src/main.rs:89-120`. The three-phase state itself is pure and
+ * Ported from the Rust shell this one replaced, quit orchestration included.
+ * The three-phase state itself is pure and
  * lives in `shell-core/lifecycle-state.ts`.
  */
 

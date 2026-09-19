@@ -1,6 +1,6 @@
 /**
  * The staged-update announcement: the tray item and the one notification
- * (design §4.1, last rule). Ported from `src-tauri/tests/updates_notify.rs`,
+ * (design §4.1, last rule). ported from the Rust shell's notify suite,
  * all 5 test functions.
  */
 import { expect, it } from "vitest";
@@ -79,7 +79,7 @@ it("the announcement round trips as the tray reads it", () => {
 });
 
 /**
- * Not in the Rust suite: the Tauri shell read the locale through
+ * Not in the Rust suite: the Rust shell read the locale through
  * `usage::Locale::from_environment`, which this port does not have yet (the
  * tray and its locale are W2.1's). The fallback still has to pick a language
  * rather than none.

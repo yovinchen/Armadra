@@ -8,8 +8,8 @@ import type { HostLaunchError } from "./errors";
 
 /**
  * The native session ticket, minus the process that fetches it
- * (docs/design/host-native-session.md §4.4, ported from
- * `src-tauri/src/host/native.rs`).
+ * (docs/design/host-native-session.md §4.4, ported from the Rust shell this
+ * one replaced).
  *
  * The shell and the Host share an OS user, and the Host's private control
  * channel is what `armadra-host pair` speaks. Running that command mints a

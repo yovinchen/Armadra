@@ -11,7 +11,7 @@ import {
 } from "./identity";
 
 /**
- * The assertion list of `src-tauri/src/runtime_process_tests.rs`, the pure
+ * The Rust shell's runtime-process assertions, the pure
  * half. The halves that need a real child process live in
  * `src/main/runtime-process.test.ts`, beside the code that spawns one.
  */

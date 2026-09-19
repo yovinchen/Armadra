@@ -25,7 +25,7 @@ import {
 import { deviceName, issueNativeTicket } from "./ticket";
 
 /**
- * The ticket assertions of `src-tauri/src/host/tests.rs:199-380`, carried
+ * The Rust shell's ticket assertions, carried
  * across: the exact `pair` line, what a ticket has to match before it is
  * believed, and that neither the secret nor the CLI's stderr ever reaches
  * anything the page or a log can read.
@@ -53,7 +53,7 @@ function config(binary: string): HostLaunchConfig {
   return {
     binary,
     dataDir: undefined,
-    browserOrigin: "tauri://localhost",
+    browserOrigin: "http://127.0.0.1:54321",
     cliTimeoutMs: 15_000,
     endpointsDir: undefined,
     expectedHttpEndpoint: HOST_ENDPOINT,
@@ -88,7 +88,7 @@ function ticketWire(
       hostId: "host-1",
       hostInstanceId: "instance-1",
       ticket: SECRET,
-      origin: "tauri://localhost",
+      origin: "http://127.0.0.1:54321",
       expiresAtUnixMs: 2_000_000n,
       ...overrides,
     }),
@@ -138,7 +138,7 @@ describe("the pair line", () => {
       "--output",
       "protobuf",
       "--origin",
-      "tauri://localhost",
+      "http://127.0.0.1:54321",
       "--device-name",
       "本机桌面",
       "--data-dir",
@@ -168,11 +168,11 @@ describe("what a ticket has to prove", () => {
     const ticket = decodeTicket(
       ticketWire(),
       status(),
-      "tauri://localhost",
+      "http://127.0.0.1:54321",
       1_000_000,
     );
     expect(ticket.hostId).toBe("host-1");
-    expect(ticket.origin).toBe("tauri://localhost");
+    expect(ticket.origin).toBe("http://127.0.0.1:54321");
     // A decimal string, never a bigint: the page compares it as one.
     expect(ticket.expiresAtUnixMs).toBe("2000000");
     expect(JSON.parse(JSON.stringify(ticket)).expiresAtUnixMs).toBe("2000000");
@@ -192,13 +192,13 @@ describe("what a ticket has to prove", () => {
       [
         "other host",
         ticketWire({ hostId: "host-2" }),
-        "tauri://localhost",
+        "http://127.0.0.1:54321",
         1e6,
       ],
       [
         "other instance",
         ticketWire({ hostInstanceId: "instance-2" }),
-        "tauri://localhost",
+        "http://127.0.0.1:54321",
         1e6,
       ],
       ["other origin", ticketWire(), "http://127.0.0.1:1420", 1e6],
@@ -209,15 +209,15 @@ describe("what a ticket has to prove", () => {
         "http://127.0.0.1:54322",
         1e6,
       ],
-      ["expired", ticketWire(), "tauri://localhost", 2_000_000],
-      ["empty ticket", ticketWire({ ticket: "" }), "tauri://localhost", 1e6],
+      ["expired", ticketWire(), "http://127.0.0.1:54321", 2_000_000],
+      ["empty ticket", ticketWire({ ticket: "" }), "http://127.0.0.1:54321", 1e6],
       [
         "malformed ticket",
         ticketWire({ ticket: "not a ticket" }),
-        "tauri://localhost",
+        "http://127.0.0.1:54321",
         1e6,
       ],
-      ["garbage", new Uint8Array([0x0a, 0xff]), "tauri://localhost", 1e6],
+      ["garbage", new Uint8Array([0x0a, 0xff]), "http://127.0.0.1:54321", 1e6],
     ];
     for (const [name, wire, origin, now] of cases) {
       expect(
@@ -300,7 +300,7 @@ describe.runIf(unix)("issuing a ticket against a real CLI", () => {
   it("returns the ticket, bounded, and never echoes stderr", async () => {
     const wire = ticketWire({ expiresAtUnixMs: 9_223_372_036_854_775_807n });
     const fixture = scriptFixture(
-      `test "$1 $2 $3 $4 $5 $6 $7" = 'pair --output protobuf --origin tauri://localhost --device-name 本机桌面' || exit 9\n` +
+      `test "$1 $2 $3 $4 $5 $6 $7" = 'pair --output protobuf --origin http://127.0.0.1:54321 --device-name 本机桌面' || exit 9\n` +
         `printf '${escape(wire)}'`,
     );
     const ticket = await issueNativeTicket(

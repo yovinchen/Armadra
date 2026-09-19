@@ -44,7 +44,7 @@ function spec(
 export const IPC = {
   /**
    * Where the page should send its Runtime and Host traffic, plus the data
-   * directory both processes agreed on without talking. Replaces the Tauri
+   * directory both processes agreed on without talking. Replaces the Rust shell's
    * shell's `__armadra/transport` port publication.
    *
    * Answered twice over: `invoke` re-reads, and `sendSync` on the same channel
@@ -81,7 +81,7 @@ export const IPC = {
   shellOpenExternal: spec("shell:open-external", "invoke", "window"),
 
   /**
-   * The seven update commands, one for one with the Tauri commands they
+   * The seven update commands, one for one with the Rust shell's commands they
    * replace (W2.2). `updates:check` carries the Host's answer the page already
    * fetched with its own session; everything else takes no argument and
    * answers with the state machine's state.
@@ -295,7 +295,7 @@ export interface TransportEndpoints {
   readonly dataDir: string;
 }
 
-/** The attribute the preload sets on `<html>`, replacing Tauri's `data-tauri`. */
+/** The attribute the preload sets on `<html>`; a browser build has none. */
 export const DESKTOP_DOCUMENT_ATTRIBUTE = "data-desktop";
 
 /**

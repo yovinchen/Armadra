@@ -8,7 +8,7 @@ import {
 import { getMainWindow, revealWindow, sendToWindow } from "./window";
 
 /**
- * System-wide hotkeys, the Electron half of `src-tauri/src/shortcuts.rs`. The
+ * System-wide hotkeys, the shell half of the feature. The
  * rules it follows — nothing bound by default, only the two known ids, a
  * refusal reported rather than swallowed — are written down (and tested) in
  * `shell-core/shortcut-rules.ts`.

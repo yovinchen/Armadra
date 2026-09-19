@@ -23,7 +23,7 @@ import {
  * Proving that the Host on the reported endpoint answers as itself, to the
  * origin the page will actually use. The rules are in
  * `shell-core/host/verify.ts`; this file is only the two HTTP round trips that
- * feed them. Ported from `src-tauri/src/host/verify.rs:99-191`.
+ * feed them, ported from the Rust shell this one replaced.
  */
 
 export async function verifyOrigin(
