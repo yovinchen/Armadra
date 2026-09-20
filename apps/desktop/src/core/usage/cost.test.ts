@@ -5,7 +5,9 @@ import { join } from "node:path";
 
 import {
   BUILT_IN_PRICES,
+  CHUNK_BYTES,
   bucketKey,
+  digest,
   MANUAL_COOLDOWN_MS,
   ScanState,
   WINDOW_DAYS,
@@ -150,6 +152,108 @@ describe("记录扫描", () => {
       cacheRead: 50,
       cacheCreation: 25,
     });
+  });
+
+  /* ----------------------------- 内存的守门 ------------------------------ */
+
+  it("扫过之后不持有任何一行记录的原文", async () => {
+    // 一行里塞一段认得出来的文本，再断言扫描状态里没有它。从前这里读的是整段
+    // 追加（一个八十兆的文件就是三份八十兆），而扫描器承诺的是「没有一行记录
+    // 文本离开扫描器」。
+    const marker = "SENTINEL-".repeat(64) + "y".repeat(2 * 1024 * 1024);
+    write(".claude/projects/demo/session.jsonl", [
+      JSON.stringify({
+        type: "assistant",
+        requestId: "req-text",
+        timestamp: `${today()}T10:00:00Z`,
+        message: {
+          model: "claude-opus-5",
+          content: [{ type: "text", text: marker }],
+          usage: { input_tokens: 7, output_tokens: 7 },
+        },
+      }),
+    ]);
+    const state = new ScanState();
+    const result = await state.scan([
+      ["claude", join(home, ".claude/projects")],
+    ]);
+    expect(result.buckets.size).toBe(1);
+    const held = reachableText(state);
+    expect(held).not.toContain("SENTINEL");
+    // 不只是「那一段文本不在」：整个扫描状态能碰到的字符串加起来也只有路径、日期
+    // 和模型 id 那点东西。留着整段追加的实现在这里会是两兆。
+    expect(held.length).toBeLessThan(4_096);
+  });
+
+  it("每个文件留下的只有几个数字和它的桶，行数再多也不涨", async () => {
+    const stamp = `${today()}T10:00:00Z`;
+    const lines: string[] = [];
+    for (let i = 0; i < 2_000; i += 1) {
+      lines.push(
+        JSON.stringify({
+          type: "assistant",
+          requestId: `req-${i}`,
+          timestamp: stamp,
+          message: {
+            model: "claude-opus-5",
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        }),
+      );
+    }
+    write(".claude/projects/demo/many.jsonl", lines);
+    const state = new ScanState();
+    await state.scan([["claude", join(home, ".claude/projects")]]);
+    const files = (
+      state as unknown as {
+        files: Map<string, { buckets: Map<string, unknown> }>;
+      }
+    ).files;
+    expect(files.size).toBe(1);
+    // 两千行都是同一天同一个模型，所以桶只有一个：每个文件的常驻量跟着
+    // (日期 × 模型) 走，不跟着行数走。
+    for (const file of files.values()) expect(file.buckets.size).toBe(1);
+    // 去重集合存的是摘要，不是那七万个 id 的原文。
+    const seen = (state as unknown as { seen: Set<unknown> }).seen;
+    expect(seen.size).toBe(2_000);
+    for (const key of seen) expect(typeof key).toBe("number");
+  });
+
+  it("一条比读块还长的行仍然被完整读出来", async () => {
+    // 行跨块是 `eachAppendedLine` 里唯一一处要把上一块的尾巴带过来的地方。
+    const filler = "x".repeat(CHUNK_BYTES * 2);
+    write(".claude/projects/demo/huge.jsonl", [
+      JSON.stringify({ type: "user", message: { content: filler } }),
+      JSON.stringify({
+        type: "assistant",
+        requestId: "req-huge",
+        timestamp: `${today()}T10:00:00Z`,
+        message: {
+          model: "claude-opus-5",
+          content: [{ type: "text", text: filler }],
+          usage: { input_tokens: 11, output_tokens: 13 },
+        },
+      }),
+    ]);
+    const result = await new ScanState().scan([
+      ["claude", join(home, ".claude/projects")],
+    ]);
+    const bucket = [...result.buckets.values()][0];
+    expect(bucket).toEqual({
+      input: 11,
+      output: 13,
+      cacheRead: 0,
+      cacheCreation: 0,
+    });
+  });
+
+  it("id 的摘要是个数字，而且逐字符地区分得开", () => {
+    expect(typeof digest("req-1")).toBe("number");
+    expect(Number.isSafeInteger(digest("req-1"))).toBe(true);
+    expect(digest("req-1")).toBe(digest("req-1"));
+    expect(digest("req-1")).not.toBe(digest("req-2"));
+    expect(digest("ab")).not.toBe(digest("ba"));
+    expect(digest("")).toBe(digest(""));
   });
 
   it("Codex 记的是每一轮的增量，缓存的那部分从 input 里减掉", async () => {
@@ -373,3 +477,36 @@ describe("汇总", () => {
     expect(MANUAL_COOLDOWN_MS).toBe(30_000);
   });
 });
+
+/**
+ * 从一个对象出发能碰到的所有字符串，拼成一段。守门用例拿它问「扫描状态里还有没
+ * 有记录原文」——比断言某个字段不存在结实：换一个字段名也瞒不过去。
+ */
+function reachableText(root: unknown): string {
+  const seen = new Set<unknown>();
+  const out: string[] = [];
+  const walk = (value: unknown, depth: number): void => {
+    if (depth > 8 || value === null || value === undefined) return;
+    if (typeof value === "string") {
+      out.push(value);
+      return;
+    }
+    if (typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    if (value instanceof Map) {
+      for (const [key, entry] of value) {
+        walk(key, depth + 1);
+        walk(entry, depth + 1);
+      }
+      return;
+    }
+    if (value instanceof Set) {
+      for (const entry of value) walk(entry, depth + 1);
+      return;
+    }
+    for (const entry of Object.values(value)) walk(entry, depth + 1);
+  };
+  walk(root, 0);
+  return out.join("\u0000");
+}

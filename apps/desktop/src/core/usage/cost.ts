@@ -409,36 +409,216 @@ export function localDate(timestamp: unknown, nowMs: number): string {
  * 增量扫描的状态。一次恢复或者分叉的会话会逐字重复行，所以一个 request id 在**整个
  * 扫描**里只被计一次。
  */
-/** The bytes of `path` from `offset` to `size`, decoded as UTF-8. */
-async function readFrom(
+/**
+ * 一次从磁盘搬进内存多少字节。
+ *
+ * 曾经这里读的是**整段追加**：一次 `Buffer.allocUnsafe(size - offset)`，再
+ * `toString("utf8")`，再 `split("\n")`。一个八十兆的记录因此同时活着三份——缓冲
+ * 区、整段字符串、每一行的数组——而第一趟扫描要对一千多个文件各走一遍。量出来
+ * 的后果是 RSS 峰值 2.8 GB，而 `heapUsed` 全程不到 15 MB：大头是走了一趟就再也
+ * 没还给系统的页，不是任何一个还被引用着的对象。
+ *
+ * 按块读之后，一个文件在任一时刻只欠这一个缓冲区加上它当前那一行。块大小取
+ * 256 KiB：比绝大多数记录行大一个数量级，又小到峰值可以忽略。
+ */
+export const CHUNK_BYTES = 256 * 1024;
+
+/**
+ * 那**一个**读缓冲区。
+ *
+ * 每个文件自己 `allocUnsafe(CHUNK_BYTES)` 的代价是一千四百个文件 × 256 KiB =
+ * 350 MB 的外部分配。没有一份被留下来，但进程也拿不回那些页——量出来成本扫描之
+ * 后 RSS 从 92 MB 涨到 507 MB，而 `heapUsed` 只有 15 MB。
+ *
+ * 一趟扫描里文件是一个接一个走的（{@link CostService.scan} 自己保证同时只有一
+ * 趟），所以一个缓冲区够用。租不到的调用者（测试里两个 `ScanState` 并发）自带一
+ * 个，正确性不依赖这把锁。
+ */
+let chunk: Buffer | undefined;
+
+function leaseChunk(): Buffer {
+  const leased = chunk ?? Buffer.allocUnsafe(CHUNK_BYTES);
+  chunk = undefined;
+  return leased;
+}
+
+function returnChunk(leased: Buffer): void {
+  if (chunk === undefined) chunk = leased;
+}
+
+/**
+ * 一行**有可能**贡献点什么吗。在字节上判，判错的方向只能是「放过一行其实没用的」。
+ *
+ * * claude：{@link ScanState.absorbClaude} 第一件事就是要 `message.usage` 是个对
+ *   象；没有 `usage` 这个键的行一个 token 都出不来。
+ * * codex：要么是 `token_count` 的 payload，要么是某一处 `model` 声明——后者会被
+ *   记进 `state.model` 给后面的事件用，所以不能只看 `token_count`。
+ *
+ * 判据是 JSON 里那个键**字面的**样子。理论上 `"usage"` 是同一个键而这里会漏
+ * 掉它；两家 CLI 的序列化器都不会那么写，而代价（漏算）比反过来（把整份记录全解
+ * 析一遍）小得多。
+ */
+const EMPTY_VIEW = Buffer.alloc(0);
+
+const CLAUDE_NEEDLES = [Buffer.from('"usage"')] as const;
+const CODEX_NEEDLES = [
+  Buffer.from('"model"'),
+  Buffer.from('"token_count"'),
+] as const;
+
+/**
+ * 一条行（`view` 的 `[from, to)` 那一段）里有没有任何一个 needle。
+ *
+ * 每个 needle 记着自己在这一块里的下一个位置，位置落到行首后面才重新找一次——
+ * 于是一块里的搜索次数是「命中数 + 1」而不是「行数」，而且**一次分配都没有**。
+ * 为一行做一个 `subarray` 再 `includes` 也能算出同一个答案，代价是每行一个对象。
+ */
+class NeedleCursor {
+  private readonly at: number[];
+
+  private view: Buffer = EMPTY_VIEW;
+
+  constructor(private readonly needles: readonly Buffer[]) {
+    this.at = needles.map(() => -1);
+  }
+
+  /** 换了一块（或者同一块被挪过），重新定位。 */
+  reset(view: Buffer, from: number): void {
+    this.view = view;
+    for (let i = 0; i < this.needles.length; i += 1) {
+      this.at[i] = view.indexOf(this.needles[i] as unknown as Uint8Array, from);
+    }
+  }
+
+  hits(from: number, to: number): boolean {
+    for (let i = 0; i < this.needles.length; i += 1) {
+      let at = this.at[i] as number;
+      if (at !== -1 && at < from) {
+        at = this.view.indexOf(this.needles[i] as unknown as Uint8Array, from);
+        this.at[i] = at;
+      }
+      if (at !== -1 && at < to) return true;
+    }
+    return false;
+  }
+}
+
+/**
+ * `path` 的 `[offset, size)` 按行喂给 `onLine`，返回**完整行**一共占了多少字节。
+ *
+ * 结尾那条不完整的行不喂也不计数：CLI 可能正写到一半，而半个 JSON 对象解析出来
+ * 什么都不是，它留给下一趟。
+ *
+ * **跨块的那半行留在同一个缓冲区里**，靠 `copyWithin` 挪到开头，下一次读接在它后
+ * 面。曾经这里是 `Buffer.from(tail)` / `Buffer.concat([carry, tail])`——每块一次，
+ * 五千兆的记录就是两万次几 KB 的分配。量出来那两行值 340 MB：同一趟扫描，把它们
+ * 去掉之后 RSS 从 416 MB 回到 77 MB，而循环里其余部分一个字节都没变。
+ *
+ * 一条比缓冲区还长的行会把缓冲区翻倍（私有的那一份不还进池子）。此后的峰值就是
+ * 那一行本身，仍然远小于从前的「整段追加」。
+ *
+ * 读到一半出错不抛：已经喂出去的行是真的被吃过了，它们的字节必须被计进返回值，
+ * 否则下一趟会把同一段再吃一遍（codex 的行没有 request id，去重接不住）。
+ *
+ * `needles` 在**解码之前**看字节。一份记录里绝大多数行是提示词和工具结果，一个
+ * 字节都进不了任何一个桶；让它们连字符串都不变成，省掉的是那一份 JSON.parse。
+ */
+async function eachAppendedLine(
   path: string,
   offset: number,
   size: number,
-): Promise<string> {
-  if (size <= offset) return "";
-  const handle = await open(path, "r");
+  needles: readonly Buffer[],
+  onLine: (line: string) => Promise<void> | void,
+): Promise<number> {
+  if (size <= offset) return 0;
+  let handle;
   try {
-    const buffer = Buffer.allocUnsafe(size - offset);
-    let filled = 0;
-    while (filled < buffer.length) {
+    handle = await open(path, "r");
+  } catch {
+    return 0;
+  }
+  const leased = leaseChunk();
+  let buffer = leased;
+  let consumed = 0;
+  const cursor = new NeedleCursor(needles);
+  try {
+    let position = offset;
+    // 缓冲区开头那几个字节是上一块结尾那条没读完的行。
+    let pending = 0;
+    while (position < size) {
+      if (pending === buffer.length) {
+        // 一条比缓冲区还长的行：翻倍，把已经读到的那一段带过去。
+        const grown = Buffer.allocUnsafe(buffer.length * 2);
+        buffer.copy(grown, 0, 0, pending);
+        buffer = grown;
+      }
       const { bytesRead } = await handle.read(
         buffer,
-        filled,
-        buffer.length - filled,
-        offset + filled,
+        pending,
+        Math.min(buffer.length - pending, size - position),
+        position,
       );
       if (bytesRead === 0) break;
-      filled += bytesRead;
+      position += bytesRead;
+      const end = pending + bytesRead;
+      const view = buffer.subarray(0, end);
+      cursor.reset(view, 0);
+      let start = 0;
+      for (;;) {
+        const newline = view.indexOf(10, start);
+        if (newline === -1) break;
+        const from = start;
+        consumed += newline - start + 1;
+        start = newline + 1;
+        if (cursor.hits(from, newline)) {
+          await onLine(view.toString("utf8", from, newline));
+        }
+      }
+      pending = end - start;
+      if (pending > 0 && start > 0) buffer.copyWithin(0, start, end);
+      // 每读完一块让一次路。`LINES_PER_YIELD` 数的是**解析过**的行，而一块里可能
+      // 一行都没有人要；没有这一下，一个几百兆的文件会把循环占住。
+      await yieldToLoop();
     }
-    return buffer.subarray(0, filled).toString("utf8");
+  } catch {
+    // 读或解析出错就停在这里；已经消费的字节仍然算数。
   } finally {
-    await handle.close();
+    returnChunk(leased);
+    await handle.close().catch(() => undefined);
   }
+  return consumed;
+}
+
+/**
+ * 一个 request id 的 53 位摘要。
+ *
+ * 去重集合存的是这个数字而不是那个字符串。重度用户一趟扫描见到七万多个 id，每个
+ * 三十多个字符——留着原文是二十多兆，留摘要是两三兆，而集合被问的问题只有「见过
+ * 没有」。
+ *
+ * 代价是碰撞：两个不同的 id 撞到同一个数字时，后来那一行被当成重复丢掉。七万个
+ * 值落在 2^53 上，生日问题给出的概率约 4×10⁻⁷——比「记录文件在扫描中途被轮转」
+ * 之类的事件低好几个数量级，而它换来的是二十兆常驻内存。
+ *
+ * FNV-1a 的 32 位变体跑两遍（正序与反序、不同的种子），拼成 53 位里的高低两半。
+ */
+export function digest(value: string): number {
+  let forward = 0x811c9dc5;
+  let backward = 0x01000193;
+  for (let i = 0; i < value.length; i += 1) {
+    forward = Math.imul(forward ^ value.charCodeAt(i), 0x01000193);
+    backward = Math.imul(
+      backward ^ value.charCodeAt(value.length - 1 - i),
+      0x85ebca6b,
+    );
+  }
+  // 两个 32 位拼成 53 位以内的一个安全整数：高 21 位 + 低 32 位。
+  return (forward >>> 11) * 0x100000000 + (backward >>> 0);
 }
 
 export class ScanState {
   private readonly files = new Map<string, FileState>();
-  private readonly seen = new Set<string>();
+  private readonly seen = new Set<number>();
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
@@ -548,32 +728,29 @@ export class ScanState {
     state.modifiedMs = mtimeMs;
 
     // 只读追加的那一段：从记住的偏移量起。读整个文件再切片会让一个八十兆的记录
-    // 每五分钟被完整读一次。
-    let appended: string;
-    try {
-      appended = await readFrom(path, state.offset, info.size);
-    } catch {
-      this.files.set(path, state);
-      return;
-    }
-    // 结尾那条不完整的行留给下一趟：CLI 可能写到一半，而半个 JSON 对象解析出来
-    // 什么都不是。
-    const complete = appended.lastIndexOf("\n") + 1;
-    state.offset += Buffer.byteLength(appended.slice(0, complete), "utf8");
+    // 每五分钟被完整读一次；按块读还让任一时刻常驻的只有一个 256 KiB 的缓冲区。
     let parsed = 0;
-    for (const line of appended.slice(0, complete).split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed === "") continue;
-      if (++parsed % LINES_PER_YIELD === 0) await yieldToLoop();
-      let value: unknown;
-      try {
-        value = JSON.parse(trimmed);
-      } catch {
-        continue;
-      }
-      if (provider === "claude") this.absorbClaude(state, value);
-      else this.absorbCodex(state, value);
-    }
+    const consumed = await eachAppendedLine(
+      path,
+      state.offset,
+      info.size,
+      provider === "claude" ? CLAUDE_NEEDLES : CODEX_NEEDLES,
+      async (line) => {
+        const trimmed = line.trim();
+        if (trimmed === "") return;
+        if (++parsed % LINES_PER_YIELD === 0) await yieldToLoop();
+        let value: unknown;
+        try {
+          value = JSON.parse(trimmed);
+        } catch {
+          return;
+        }
+        if (provider === "claude") this.absorbClaude(state, value);
+        else this.absorbCodex(state, value);
+      },
+    );
+    // 结尾那条不完整的行留给下一趟。
+    state.offset += consumed;
     this.files.set(path, state);
   }
 
@@ -591,8 +768,9 @@ export class ScanState {
           ? message.id
           : undefined;
     if (identity !== undefined) {
-      if (this.seen.has(identity)) return;
-      this.seen.add(identity);
+      const key = digest(identity);
+      if (this.seen.has(key)) return;
+      this.seen.add(key);
     }
     const tokens: TokenTotals = {
       input: number(usage.input_tokens),
