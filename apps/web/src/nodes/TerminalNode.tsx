@@ -1,13 +1,10 @@
 import * as React from "react";
 import {
   ArrowUpDown,
-  Ban,
   Boxes,
   Moon,
   RotateCw,
-  Search,
   Share2,
-  Square,
   Unplug,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -24,11 +21,8 @@ import {
   DropdownMenuSubTrigger,
 } from "@/ui/dropdown-menu";
 import { useT } from "@/app/preferences-store";
-import { useAgentsQuery } from "@/app/use-agents";
 import { useCanvasStore } from "@/store/canvas-store";
 import { AccountBindingBadge } from "@/agent/account/AccountBindingBadge";
-import { ContextUsageMenu } from "@/agent/context-usage/ContextUsageMenu";
-import { useContextUsage } from "@/agent/context-usage/use-context-usage";
 import { agentLabel } from "@/agent/launch";
 import { useAgentModels } from "../agent/models";
 import { useNodeCapabilities } from "@/agent/capabilities";
@@ -60,9 +54,6 @@ import { answerApproval } from "./runtime-extras";
 import { registerTerminalHandle } from "./terminal-registry";
 // 副作用：注册 Agent 专属的右键菜单项（重启 / 权限模式 / 回收）
 import "./terminal-menu";
-
-/** 「打断这一轮」写进 PTY 的全部内容。没有正文，也不补回车。 */
-const ESCAPE = "\x1b";
 
 /** 清未读（本地 + 回执）。已读时是空操作，可以随手调。 */
 function markNodeRead(nodeId: string): void {
@@ -97,22 +88,6 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
   });
   const [findOpen, setFindOpen] = React.useState(false);
   const workspaceId = useCanvasStore((state) => state.workspace?.id ?? null);
-  const agents = useAgentsQuery();
-  const contextEnabled = Boolean(
-    agent &&
-      !data?.ssh &&
-      agents.data
-        ?.find((entry) => entry.id === agent.id)
-        ?.capabilities.includes("contextUsage"),
-  );
-  const context = useContextUsage({
-    workspaceId,
-    nodeId: id,
-    sessionId: surface.binding?.sessionId ?? null,
-    generation: surface.binding?.generation ?? null,
-    modelSelection: agent?.model || null,
-    enabled: contextEnabled,
-  });
   const [query, setQuery] = React.useState("");
   /** BEL：头部图标闪 600ms（§18.3 铃声行）。只换颜色，不改任何尺寸。 */
   const [bell, setBell] = React.useState(false);
@@ -218,8 +193,8 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
    *
    * 内存常驻；账号 / 交接 / GitHub 三个徽标只在真的有绑定、有进行中的交接、
    * 有关联条目时才出现，所以它们不算常驻噪音；退出码与掉线是异常，必须说。
-   * 上下文占用、Agent 名、SSH 主机名都挪进了 `···`：用户的原话是「只想看
-   * 内存」，而那三样在多数时刻要么是「未知」，要么是一句重复的品牌名。
+   * Agent 名与 SSH 主机名挪进了 `···`：用户的原话是「只想看内存」，而那两样
+   * 多数时刻只是一句重复的品牌名。
    */
   const headerChips = (
     <>
@@ -348,7 +323,14 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
     </span>
   );
 
-  /** 收进 `···` 的那些：这个终端自己能做的事，排在通用的视图项之前。 */
+  /**
+   * 收进 `···` 的那些，排在通用的视图项之前。
+   *
+   * 只有三样：这是什么、交接给谁、下一次用哪个模型。中断 / 打断这一轮 /
+   * 结束进程 / 销毁会话 / 回收 / 重新运行都不在这里——停一个 Agent 的正经
+   * 办法是在终端里按键，而画布上的销毁与回收归节点自己的右键菜单。搜索也
+   * 一样：⌘F 与头部那个搜索框已经是它的两个入口。
+   */
   const menuItems = (
     <>
       {/* 「这是什么」先说：Agent 名与 SSH 主机名以前常驻头部，现在是菜单里
@@ -363,40 +345,6 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
             </>
           )}
         </DropdownMenuLabel>
-      )}
-      {/* 上下文占用（F5）：有来源时这一行直接写百分比，展开才是诊断表。 */}
-      {agent && (
-        <ContextUsageMenu
-          nodeId={id}
-          sessionId={sessionId}
-          generation={generation}
-          usage={context.usage}
-          unavailableReason={
-            exited ? "session_ended" : context.unavailableReason
-          }
-        />
-      )}
-      <DropdownMenuItem onSelect={() => setFindOpen(true)}>
-        <Search />
-        {t("terminal.find")}
-      </DropdownMenuItem>
-      {!exited && (
-        <DropdownMenuItem
-          onSelect={() => surfaceRef.current?.terminate("interrupt")}
-        >
-          <Square />
-          {t("terminal.interrupt")}
-        </DropdownMenuItem>
-      )}
-      {/* Escape，不是 Ctrl+C。上一项把 SIGINT 发给前台进程组，对一个 Agent
-          CLI 来说往往是把它整个打断掉；这一项只发一个 Escape——各家 CLI 用
-          它停下当前这一轮，会话和上下文都还在。走的是用户自己按键的那条
-          socket，不经 hook 路由：这就是用户按了一下 Esc。 */}
-      {!exited && agent && (
-        <DropdownMenuItem onSelect={() => surfaceRef.current?.sendKeys(ESCAPE)}>
-          <Ban />
-          {t("terminal.stopTurn")}
-        </DropdownMenuItem>
       )}
       {/* 协作只剩「交接给…」（用户实测反馈 F8）：发消息、读上下文这些动词
           归 CLI 自己的技能，画布这边再摆一份入口只会多一处坏掉的路。
@@ -458,23 +406,6 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       )}
-      <DropdownMenuItem
-        onSelect={() => surfaceRef.current?.terminate("process")}
-      >
-        {t("terminal.killProcess")}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        variant="destructive"
-        onSelect={() => surfaceRef.current?.terminate("session")}
-      >
-        {t("terminal.destroySession")}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => surfaceRef.current?.recycle()}>
-        {t("terminal.recycle")}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => surfaceRef.current?.restart()}>
-        {t("terminal.rerun")}
-      </DropdownMenuItem>
     </>
   );
 

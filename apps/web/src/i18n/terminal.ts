@@ -4,11 +4,6 @@ import type { MessageModule } from "./index";
 const zh = {
   "terminal.label": "终端",
   "terminal.input": "终端输入",
-  "terminal.interrupt": "中断",
-  "terminal.stopTurn": "打断这一轮",
-  "terminal.killProcess": "结束进程",
-  "terminal.destroySession": "销毁会话",
-  "terminal.recycle": "回收会话",
   "terminal.rerun": "重新运行",
   "terminal.find": "搜索",
   "terminal.findNext": "下一个",
@@ -62,11 +57,6 @@ const zh = {
 const en: Record<keyof typeof zh, string> = {
   "terminal.label": "Terminal",
   "terminal.input": "Terminal input",
-  "terminal.interrupt": "Interrupt",
-  "terminal.stopTurn": "Stop this turn",
-  "terminal.killProcess": "Kill process",
-  "terminal.destroySession": "Destroy session",
-  "terminal.recycle": "Recycle session",
   "terminal.rerun": "Run again",
   "terminal.find": "Find",
   "terminal.findNext": "Next",
