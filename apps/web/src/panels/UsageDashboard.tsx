@@ -2,13 +2,12 @@
  * 额度、用量与成本看板（§4.2）。
  *
  * 从用量球或 Dock 打开。两种形态和资源管理器一致：右侧抽屉，或 pin 成
- * 常驻浮卡。上半是每个 Provider 一张卡，下半是本地成本——30 天日柱状图
- * 加模型分解。
+ * 常驻浮卡。上半是每个 Provider 一张卡，下半是本地成本——范围与指标两个
+ * 开关，配用量分布、按模型、按 Agent 三块图（`usage/UsagePanel`）。
  *
  * 状态显示是这一页的重点：采集时间、过期、错误各自有文字，`unavailable /
  * error / stale` 都不会渲染成 0。
  */
-import { useState } from "react";
 import { Pin, PinOff, RefreshCw, X } from "lucide-react";
 
 import { useT } from "../app/preferences-store";
@@ -18,8 +17,8 @@ import { useRuntimeSettings } from "./settings/use-runtime-settings";
 import { useCanvasStore } from "../store/canvas-store";
 import { formatRelativeTime } from "../lib/format";
 import { formatTokens, formatUsd, totalTokens } from "../lib/cost";
-import { CostChart } from "./usage/CostChart";
 import { ProviderCard } from "./usage/ProviderCard";
+import { UsagePanel } from "./usage/UsagePanel";
 import { IconButton } from "../ui/icon-button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
@@ -100,13 +99,8 @@ function DashboardBody() {
   const { cost, refresh: rescan } = useCost(
     Boolean(settings.data) && costEnabled,
   );
-  const [selected, setSelected] = useState<string | null>(null);
-
   const providers = usage.data?.providers ?? [];
   const summary = cost.data;
-  const day = summary?.daily.find((entry) => entry.date === selected);
-  // 选中某一天就看那天的模型分解，否则看 30 天窗口。
-  const breakdown = day ?? summary?.last30Days;
 
   return (
     <div className="flex flex-col gap-4 p-3">
@@ -167,21 +161,6 @@ function DashboardBody() {
           </p>
         ) : (
           <>
-            <dl className="grid grid-cols-2 gap-2">
-              <Total
-                label={t("usage.cost.today")}
-                tokens={totalTokens(summary.today.tokens)}
-                usd={summary.today.costUsd}
-                complete={summary.today.complete}
-              />
-              <Total
-                label={t("usage.cost.window")}
-                tokens={totalTokens(summary.last30Days.tokens)}
-                usd={summary.last30Days.costUsd}
-                complete={summary.last30Days.complete}
-              />
-            </dl>
-
             {summary.currentSession && (
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
                 <span className="text-muted-foreground">
@@ -200,36 +179,7 @@ function DashboardBody() {
               </div>
             )}
 
-            <CostChart
-              daily={summary.daily}
-              selected={selected}
-              onSelect={setSelected}
-            />
-
-            {breakdown && breakdown.models.length > 0 && (
-              <div className="flex flex-col gap-1.5">
-                <h3 className="text-xs font-medium text-muted-foreground">
-                  {t("usage.cost.models")}
-                </h3>
-                {breakdown.models.map((model) => (
-                  <div
-                    key={model.model}
-                    data-slot="cost-model"
-                    className="flex items-baseline justify-between gap-3 text-xs"
-                  >
-                    <span className="min-w-0 truncate" title={model.model}>
-                      {model.model}
-                    </span>
-                    <span className="shrink-0 tabular-nums text-muted-foreground">
-                      {formatTokens(totalTokens(model.tokens))} ·{" "}
-                      {model.costUsd === null
-                        ? t("usage.cost.unpricedShort")
-                        : formatUsd(model.costUsd)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <UsagePanel summary={summary} />
 
             {summary.unpricedModels.length > 0 && (
               <p className="text-xs text-muted-foreground">
@@ -251,33 +201,6 @@ function DashboardBody() {
           </>
         )}
       </section>
-    </div>
-  );
-}
-
-function Total({
-  label,
-  tokens,
-  usd,
-  complete,
-}: {
-  label: string;
-  tokens: number;
-  usd: number;
-  complete: boolean;
-}) {
-  const t = useT();
-  return (
-    <div className="flex flex-col gap-0.5 rounded-lg border border-border bg-panel p-3">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-sm font-medium tabular-nums">
-        {complete
-          ? formatUsd(usd)
-          : t("usage.cost.partial", { value: formatUsd(usd) })}
-      </dd>
-      <dd className="text-xs tabular-nums text-muted-foreground">
-        {t("usage.cost.tokenCount", { value: formatTokens(tokens) })}
-      </dd>
     </div>
   );
 }

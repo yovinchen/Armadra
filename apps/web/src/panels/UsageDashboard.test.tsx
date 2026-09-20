@@ -6,6 +6,7 @@ const getUsage = vi.fn();
 const refreshUsage = vi.fn();
 const usageCost = vi.fn();
 const refreshUsageCost = vi.fn();
+const agents = vi.fn();
 vi.mock("../api/client", () => ({
   runtimeApi: {
     settings: () => getSettings(),
@@ -14,6 +15,7 @@ vi.mock("../api/client", () => ({
     refreshUsage: () => refreshUsage(),
     usageCost: () => usageCost(),
     refreshUsageCost: () => refreshUsageCost(),
+    agents: () => agents(),
   },
 }));
 
@@ -51,27 +53,78 @@ function daily() {
   });
 }
 
+const window30 = {
+  tokens: tokens(1_000_400),
+  costUsd: 5,
+  complete: false,
+  models: [
+    { model: "claude-opus-5", tokens: tokens(1_000_000), costUsd: 5 },
+    { model: "gpt-5-codex", tokens: tokens(400), costUsd: null },
+  ],
+};
+
+/** 多维度范围：形状照契约给全，断言只用得上合计与 `byAgent` 的来源标记。 */
+function range(points: ReturnType<typeof daily>) {
+  return {
+    granularity: "day" as const,
+    points: points.map((day) => ({
+      key: day.date,
+      tokens: day.tokens,
+      costUsd: day.costUsd,
+      complete: day.complete,
+      models: day.models,
+      agents: [
+        {
+          agent: "claude",
+          tokens: day.tokens,
+          costUsd: day.costUsd,
+          complete: day.complete,
+          source: "local" as const,
+        },
+        {
+          agent: "opencode",
+          tokens: tokens(0),
+          costUsd: 0,
+          complete: true,
+          source: "none" as const,
+        },
+      ],
+    })),
+    totals: window30,
+    byModel: window30.models,
+    byAgent: [
+      {
+        agent: "claude",
+        tokens: tokens(1_000_400),
+        costUsd: 5,
+        complete: false,
+        source: "local" as const,
+      },
+      {
+        agent: "opencode",
+        tokens: tokens(0),
+        costUsd: 0,
+        complete: true,
+        source: "none" as const,
+      },
+    ],
+    peak: { key: "2026-08-30", tokens: tokens(1_000_000), costUsd: 5 },
+    activeIntervals: 1,
+    longestStreak: 1,
+  };
+}
+
 const summary = {
   status: "ok" as const,
-  today: {
-    tokens: tokens(1_000_400),
-    costUsd: 5,
-    complete: false,
-    models: [
-      { model: "claude-opus-5", tokens: tokens(1_000_000), costUsd: 5 },
-      { model: "gpt-5-codex", tokens: tokens(400), costUsd: null },
-    ],
-  },
-  last30Days: {
-    tokens: tokens(1_000_400),
-    costUsd: 5,
-    complete: false,
-    models: [
-      { model: "claude-opus-5", tokens: tokens(1_000_000), costUsd: 5 },
-      { model: "gpt-5-codex", tokens: tokens(400), costUsd: null },
-    ],
-  },
+  today: window30,
+  last30Days: window30,
   daily: daily(),
+  ranges: {
+    "24h": range(daily().slice(-1)),
+    "7d": range(daily().slice(-7)),
+    "30d": range(daily()),
+    all: range(daily()),
+  },
   unpricedModels: ["gpt-5-codex"],
   files: { claude: 1, codex: 1 },
   truncated: false,
@@ -86,53 +139,39 @@ describe("UsageDashboard", () => {
       panels: { ...state.panels, usage: "pinned" },
     }));
     getSettings.mockResolvedValue({ usage: { enabled: true } });
+    agents.mockResolvedValue([]);
     getUsage.mockResolvedValue({ providers: [] });
     refreshUsage.mockResolvedValue({ providers: [] });
     usageCost.mockResolvedValue(summary);
     refreshUsageCost.mockResolvedValue(summary);
   });
 
-  it("画 30 根柱子，并把没有价格的模型标成仅 token", async () => {
-    const { container } = render(
+  it("本地成本走新面板：合计不完整时照实说，没有价格的模型进脚注", async () => {
+    render(
       <TestProviders>
         <UsageDashboard />
       </TestProviders>,
     );
-    await screen.findByRole("heading", { name: "每日用量" });
-    expect(container.querySelectorAll("[data-slot='cost-bar']")).toHaveLength(
-      30,
-    );
+    await screen.findByRole("heading", { name: "用量分布" });
     // 总额不完整时不能装作是全部花费。
     expect(screen.getAllByText("$5.00（不完整）").length).toBeGreaterThan(0);
-    // 模型分解一行，加上下方「没有价格的模型」那句提示。
+    // 模型在「按模型」的图例里，加上下方「没有价格的模型」那句提示。
     expect(screen.getAllByText(/gpt-5-codex/).length).toBe(2);
-    // 没有价格的那一行只说 token，不给一个假的 $0.00。
-    const rows = [...container.querySelectorAll("[data-slot='cost-model']")];
-    const codex = rows.find((row) => row.textContent?.includes("gpt-5-codex"));
-    expect(codex?.textContent).toContain("仅 token");
-    expect(codex?.textContent).not.toContain("$");
+    expect(screen.getByText(/没有价格的模型只统计 token/)).toBeTruthy();
   });
 
-  it("选中某一天后模型分解切到那一天", async () => {
-    const { container } = render(
+  it("范围开关在看板里可用，切到 24 小时不丢卡片", async () => {
+    render(
       <TestProviders>
         <UsageDashboard />
       </TestProviders>,
     );
-    await screen.findByRole("heading", { name: "每日用量" });
-    const bars = [
-      ...container.querySelectorAll<HTMLElement>("[data-slot='cost-bar']"),
-    ];
-    const first = bars[0]!;
-    // 第一根柱子那天没有活动，分解应当清空。
-    fireEvent.click(first);
-    expect(container.querySelectorAll("[data-slot='cost-model']")).toHaveLength(
-      0,
-    );
-    fireEvent.click(first);
+    await screen.findByRole("heading", { name: "用量分布" });
+    fireEvent.click(screen.getByRole("radio", { name: "24 小时" }));
     expect(
-      container.querySelectorAll("[data-slot='cost-model']").length,
-    ).toBeGreaterThan(0);
+      screen.getByRole("radio", { name: "24 小时" }).getAttribute("data-state"),
+    ).toBe("on");
+    expect(screen.getAllByText("$5.00（不完整）").length).toBeGreaterThan(0);
   });
 
   it("provider 卡上的错误与过期状态不会显示成 0%", async () => {
@@ -217,7 +256,7 @@ describe("UsageDashboard", () => {
       </TestProviders>,
     );
     await screen.findByText("已关闭本地成本统计");
-    expect(screen.queryByText("今日")).toBeNull();
+    expect(screen.queryByText("用量分布")).toBeNull();
     expect(usageCost).not.toHaveBeenCalled();
   });
 });
