@@ -227,11 +227,17 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
       "browser.back": () => step(-1),
       "browser.forward": () => step(1),
       /*
-        `select()` 在一个没有焦点的 input 上只选中文字，**不**把焦点搬过来。
-        从 guest 里转发回来的 ⌘L 正是这种情况：焦点在另一个进程的页面里，
-        于是「聚焦地址栏」看起来什么也没做。
+        三步，一步都不能少。真机上 ⌘L 从 guest 转发回来时：
+
+        1. `blur()` 那个 `<webview>`。宿主文档的 `activeElement` 就是这个元
+           素——焦点在另一个渲染进程的页面里——不先交出来，接下来的 `focus()`
+           会被它立刻夺回去（实测：地址栏拿不到焦点，`activeElement` 仍是
+           `WEBVIEW`）。
+        2. `focus()`，因为 `select()` 在一个没有焦点的 input 上只选中文字。
+        3. `select()`，这样直接打字就是换地址，而不是在旧地址中间插字。
       */
       "browser.focusAddress": () => {
+        guestOf(tabs.activeId)?.blur();
         addressRef.current?.focus();
         addressRef.current?.select();
       },
