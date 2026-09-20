@@ -19,11 +19,18 @@ import type { Caller } from "./nodes";
 export interface TerminalBridge {
   /** Writes into a live session, refusing a generation that has moved on. */
   write(sessionId: string, generation: number, data: string): Promise<void>;
-  /** The last `lines` rendered rows of the pane. */
+  /**
+   * The last `lines` rendered rows of the pane.
+   *
+   * `withEscapes` is what the HTTP route calls `escapes`, and both callers
+   * here pass `false`: a screen that is about to become prose for a model, or
+   * a title, wants the characters and not the SGR around them. It was named
+   * `plain` once, which reads as the opposite of what `false` does.
+   */
   capture(
     sessionId: string,
     lines: number,
-    plain: boolean,
+    withEscapes: boolean,
   ): Promise<{ readonly lines: number; readonly data: string }>;
   /** What is in the foreground, for the pane gate. */
   foreground(

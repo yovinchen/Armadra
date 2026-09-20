@@ -12,6 +12,8 @@ import { remoteDomain } from "../remote";
 import { DirectBackend } from "./direct";
 import { agentEnvironment, setHookClient } from "./environment";
 import { launcherClientBinary } from "../hook/install/shared";
+import { setTerminalBridge } from "../agent";
+import { terminalBridge } from "./bridge";
 import { SshBackend } from "./ssh/backend";
 import { permissionWaitEnvironment } from "../hook/approvals";
 import { issueNodeToken } from "../hook/tokens";
@@ -423,7 +425,24 @@ export function install(
     },
   );
 
-  return { manager, backends, stop: () => manager.shutdown() };
+  // The seam the agent domain published before this one was assembled. Until
+  // it is handed a bridge, every verb that needs a pane — `context terminal`,
+  // `canvas interrupt`, `canvas close`, the title suggestion, and every
+  // scheduled delivery — refuses with "the terminal domain is not assembled",
+  // on a canvas whose panes are running.
+  setTerminalBridge(terminalBridge(manager, context.db.database));
+
+  return {
+    manager,
+    backends,
+    stop: async () => {
+      // Withdrawn before the panes go: a verb that reached a bridge over a
+      // manager that is shutting down would be told a session is missing
+      // rather than that there is nothing to talk to.
+      setTerminalBridge(undefined);
+      await manager.shutdown();
+    },
+  };
 }
 
 /**
