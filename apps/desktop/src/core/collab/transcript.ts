@@ -141,7 +141,13 @@ export function readRange(
     const buffer = Buffer.alloc(size);
     let filled = 0;
     while (filled < size) {
-      const read = readSync(handle, buffer, filled, size - filled, from + filled);
+      const read = readSync(
+        handle,
+        buffer,
+        filled,
+        size - filled,
+        from + filled,
+      );
       if (read === 0) break;
       filled += read;
     }
@@ -212,7 +218,9 @@ function renderDocument(value: unknown, context: RenderContext): string[] {
   const render = (entry: unknown): string | undefined =>
     renderEntry(entry, context);
   if (Array.isArray(value)) {
-    return value.map(render).filter((line): line is string => line !== undefined);
+    return value
+      .map(render)
+      .filter((line): line is string => line !== undefined);
   }
   if (value === null || typeof value !== "object") return [];
   const record = value as Record<string, unknown>;

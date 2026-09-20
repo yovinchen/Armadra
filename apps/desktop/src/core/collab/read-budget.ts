@@ -124,9 +124,10 @@ function window(
     | undefined;
   return {
     bytes: Number(row?.bytes ?? 0),
-    oldestAtMs: row?.oldest === null || row?.oldest === undefined
-      ? undefined
-      : Number(row.oldest),
+    oldestAtMs:
+      row?.oldest === null || row?.oldest === undefined
+        ? undefined
+        : Number(row.oldest),
   };
 }
 

@@ -79,7 +79,12 @@ describe("读取预算", () => {
     const other = fixture.agentNode("Other");
     noteRead(
       fixture.database,
-      { reader: other, target, verb: "transcript", bytes: READ_BUDGET_MINUTE_BYTES },
+      {
+        reader: other,
+        target,
+        verb: "transcript",
+        bytes: READ_BUDGET_MINUTE_BYTES,
+      },
       NOW - 1_000,
     );
     expect(checkReadBudget(fixture.database, reader, target, NOW).allowed).toBe(

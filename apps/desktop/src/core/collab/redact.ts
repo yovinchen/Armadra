@@ -61,7 +61,10 @@ export const PATTERNS: readonly RedactionRule[] = [
     name: "private-key-open",
     pattern: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*/g,
   },
-  { name: "github-token", pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}/g },
+  {
+    name: "github-token",
+    pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}/g,
+  },
   { name: "github-pat", pattern: /\bgithub_pat_[A-Za-z0-9_]{20,}/g },
   { name: "openai-key", pattern: /\bsk-[A-Za-z0-9_-]{16,}/g },
   { name: "aws-access-key", pattern: /\bAKIA[0-9A-Z]{12,}/g },

@@ -49,8 +49,7 @@ const SECRETS: readonly {
   },
   {
     name: "PEM 私钥块",
-    text:
-      "-----BEGIN RSA PRIVATE KEY-----\nMIIEow=\nAQEA\n-----END RSA PRIVATE KEY-----",
+    text: "-----BEGIN RSA PRIVATE KEY-----\nMIIEow=\nAQEA\n-----END RSA PRIVATE KEY-----",
     secret: "MIIEow=",
   },
   {

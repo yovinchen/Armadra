@@ -20,7 +20,12 @@ import {
   loadSession,
   workspaceRoot,
 } from "./nodes";
-import { type ReadVerb, noteRead, readCursor, writeCursor } from "./context-reads";
+import {
+  type ReadVerb,
+  noteRead,
+  readCursor,
+  writeCursor,
+} from "./context-reads";
 import { requireReadBudget } from "./read-budget";
 import { redact } from "./redact";
 import { type Args, Refusal, truncate } from "./refusals";
@@ -629,7 +634,8 @@ function locateTranscript(
 /** 这个节点现在在五态的哪一个。 */
 function stateOf(context: CollabContext, target: NodeRef): TargetState {
   const bridge = context.terminals;
-  if (bridge?.driveTarget !== undefined) return bridge.driveTarget(target.id).state;
+  if (bridge?.driveTarget !== undefined)
+    return bridge.driveTarget(target.id).state;
   const status = getAgentStatus(context.database, target.id);
   const session = loadSession(context.database, target.id);
   const live =
@@ -688,11 +694,8 @@ function readTranscript(
   const found = locateTranscript(context, target);
   const full = args.flag("full");
   const maxBytes = full
-    ? clamp(
-        args.count(["max-kb", "maxKb"]) ?? MAX_FULL_KB,
-        1,
-        MAX_FULL_KB,
-      ) * 1024
+    ? clamp(args.count(["max-kb", "maxKb"]) ?? MAX_FULL_KB, 1, MAX_FULL_KB) *
+      1024
     : MAX_TRANSCRIPT_BYTES;
   const since = args.flag("since");
 
@@ -807,7 +810,11 @@ function pick(
     return { lines, endOffset, truncated: false };
   }
 
-  const wanted = clamp(entries ?? DEFAULT_TRANSCRIPT_ENTRIES, 1, records.length);
+  const wanted = clamp(
+    entries ?? DEFAULT_TRANSCRIPT_ENTRIES,
+    1,
+    records.length,
+  );
   const tail = records.slice(records.length - wanted);
   const lines: string[] = [];
   let bytes = 0;
@@ -838,13 +845,15 @@ function pick(
  * 路上的事（防伪造帧行），这里不重复。
  */
 export function stripAnsi(text: string): string {
-  return text
-    // OSC：`ESC ] … BEL` 或 `ESC ] … ESC \`（窗口标题、超链接）。
-    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
-    // CSI：`ESC [ … 终结字符`（光标定位、清行、滚动区）。
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
-    // 剩下的两字节转义（`ESC M`、`ESC =` 这些）。
-    .replace(/\u001b[@-Z\\-_]/g, "");
+  return (
+    text
+      // OSC：`ESC ] … BEL` 或 `ESC ] … ESC \`（窗口标题、超链接）。
+      .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+      // CSI：`ESC [ … 终结字符`（光标定位、清行、滚动区）。
+      .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+      // 剩下的两字节转义（`ESC M`、`ESC =` 这些）。
+      .replace(/\u001b[@-Z\\-_]/g, "")
+  );
 }
 
 function sticky(target: NodeRef): string {

@@ -104,7 +104,9 @@ export function digestTranscript(text: string): TranscriptDigest {
 
   return {
     ...(lastUser === undefined ? {} : { lastUser: quote(lastUser) }),
-    ...(lastAssistant === undefined ? {} : { lastAssistant: quote(lastAssistant) }),
+    ...(lastAssistant === undefined
+      ? {}
+      : { lastAssistant: quote(lastAssistant) }),
     files,
     filesTruncated: dropped,
     toolCalls,

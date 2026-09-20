@@ -152,7 +152,9 @@ describe("摘要", () => {
 describe("原文读取", () => {
   it("默认只给最近 20 条", async () => {
     peerWithTranscript(
-      Array.from({ length: 50 }, (_value, index) => say("user", `第${index}条`)),
+      Array.from({ length: 50 }, (_value, index) =>
+        say("user", `第${index}条`),
+      ),
     );
     const body = await read(me, "transcript", { node: "Peer" });
     expect(body).toContain("最近的 20 条");
@@ -325,7 +327,10 @@ describe("脱敏", () => {
       join(fixture.directory, "secret.env"),
       "CLIENT_SECRET=0123456789abcdefghij\n",
     );
-    const editor = node("editor", "Env", { kind: "editor", path: "secret.env" });
+    const editor = node("editor", "Env", {
+      kind: "editor",
+      path: "secret.env",
+    });
     fixture.link(me, editor);
     const body = await read(me, "summary", { node: "Env" });
     expect(body).not.toContain("0123456789abcdefghij");
