@@ -1,109 +1,100 @@
 import { describe, expect, it } from "vitest";
 import {
   CEILING_MS,
-  CELLS,
   FLOOR_MS,
-  bar,
-  parseMiniUsage,
+  costLine,
   pollIntervalMs,
+  providerLines,
   refreshMinutes,
-  usageLine,
-  usageLines,
-  type MiniBar,
+  traySummary,
+  type TrayStrings,
 } from "./usage";
-import { desktop } from "../../../web/src/i18n/desktop";
 
-/**
- * The assertions are the Rust shell's own, ported one for one — the
- * strip is the same readout whichever shell draws it, so the port is only
- * honest if it keeps being checked against the same payloads and the same
- * rendered strings.
- */
-
-const zh = {
-  session: desktop["zh-CN"]["tray.usage.session"]!,
-  week: desktop["zh-CN"]["tray.usage.week"]!,
-  unknown: desktop["zh-CN"]["tray.usage.unknown"]!,
-};
-const en = {
-  session: desktop.en["tray.usage.session"]!,
-  week: desktop.en["tray.usage.week"]!,
-  unknown: desktop.en["tray.usage.unknown"]!,
+const strings: TrayStrings = {
+  provider: (id) => ({ claude: "Claude", codex: "Codex" })[id] ?? id,
+  reason: (code) => `reason:${code}`,
+  signedOut: "signed out",
+  noData: "no data",
+  costToday: "Today",
 };
 
-function value(percent: number): MiniBar {
-  return { provider: "claude", label: "5h", usedPercent: percent };
-}
+const SNAPSHOT = JSON.stringify({
+  providers: [
+    {
+      id: "claude",
+      status: "ok",
+      windows: [
+        { label: "5h", usedPercent: 42.4, resetsAt: null },
+        { label: "7d", usedPercent: 13, resetsAt: null },
+        { label: "∞", usedPercent: 0, unlimited: true, resetsAt: null },
+      ],
+    },
+    { id: "codex", status: "error", reason: "network", windows: [] },
+    { id: "copilot", status: "unavailable", windows: [] },
+  ],
+});
 
-describe("the tray usage strip", () => {
-  it("says unknown for a missing window, and never draws an empty bar", () => {
-    for (const strings of [zh, en]) {
-      const text = usageLine(strings.session, strings.unknown, null);
-      expect(text).toContain(strings.unknown);
-      expect(text).not.toContain("▯");
-      expect(text).not.toContain("%");
-    }
-  });
-
-  it("makes zero percent look different from unknown", () => {
-    const zero = usageLine(en.session, en.unknown, value(0));
-    expect(zero).toContain("0%");
-    expect(zero.match(/▯/g)).toHaveLength(CELLS);
-    expect(zero).not.toBe(usageLine(en.session, en.unknown, null));
-  });
-
-  it("fills the bar with the percentage and clamps at both ends", () => {
-    expect(bar(0)).toBe("▯".repeat(CELLS));
-    expect(bar(50)).toBe("▮▮▮▮▮▯▯▯▯▯");
-    expect(bar(100)).toBe("▮".repeat(CELLS));
-    // A provider over its own limit has still only filled the bar once.
-    expect(bar(140)).toBe("▮".repeat(CELLS));
-    expect(bar(-5)).toBe("▯".repeat(CELLS));
-    expect(usageLine(en.week, en.unknown, value(140))).toContain("100%");
-  });
-
-  it("renders both rows even when only one window answered", () => {
-    const [session, week] = usageLines(zh, {
-      session: value(42),
-      week: null,
-    });
-    expect(session.startsWith(zh.session)).toBe(true);
-    expect(session).toContain("42%");
-    expect(session).toContain("claude·5h");
-    expect(week.startsWith(zh.week)).toBe(true);
-    expect(week.endsWith(zh.unknown)).toBe(true);
-    // Nothing fetched yet is two unknowns, not two empty bars.
-    for (const line of usageLines(en, null))
-      expect(line.endsWith(en.unknown)).toBe(true);
-  });
-
-  it("parses the payload and keeps an absent window absent", () => {
-    const usage = parseMiniUsage(
-      '{"session":{"provider":"codex","label":"7d","usedPercent":12.5,"resetsAt":null},"week":null,"fetchedAt":null}',
-    );
-    expect(usage?.session?.provider).toBe("codex");
-    expect(usage?.week).toBeNull();
-    // An empty document is two unknowns, and an unreadable one is null.
-    expect(parseMiniUsage("{}")?.session).toBeNull();
-    expect(parseMiniUsage("not json")).toBeNull();
-    // A window that is present but malformed is absent, not a NaN bar.
-    expect(parseMiniUsage('{"session":{"provider":"x"}}')?.session).toBeNull();
-  });
-
-  /** The exact body a running Runtime answered `GET /api/usage/mini` with,
-   * kept verbatim from the pre-merge implementation so the strip is checked against a real
-   * payload rather than against a shape this file invented. */
-  it("renders both rows of a real Runtime answer", () => {
-    const body =
-      '{"session":{"provider":"claude","label":"5h","usedPercent":26.0,"resetsAt":"2026-09-05T22:10:00.461989+00:00"},"week":{"provider":"claude","label":"7d","usedPercent":21.0,"resetsAt":"2026-09-11T11:00:00.462016+00:00"},"fetchedAt":"2026-09-05T19:17:32.108356+00:00"}';
-    const usage = parseMiniUsage(body);
-    expect(usageLines(zh, usage)).toEqual([
-      "会话  ▮▮▮▯▯▯▯▯▯▯  26%  claude·5h",
-      "周窗口  ▮▮▯▯▯▯▯▯▯▯  21%  claude·7d",
+describe("the tray readout", () => {
+  it("writes one line per provider: windows, the reason, or signed out", () => {
+    expect(providerLines(SNAPSHOT, strings)).toEqual([
+      "Claude · 5h 42% · 7d 13%",
+      "Codex · reason:network",
+      "copilot · signed out",
     ]);
-    expect(usageLines(en, usage)[0]).toBe(
-      "Session  ▮▮▮▯▯▯▯▯▯▯  26%  claude·5h",
+  });
+
+  it("says no data for a provider that answered without windows", () => {
+    const body = JSON.stringify({
+      providers: [{ id: "claude", status: "ok", windows: [] }],
+    });
+    expect(providerLines(body, strings)).toEqual(["Claude · no data"]);
+  });
+
+  it("refuses a body that is not a snapshot", () => {
+    expect(providerLines("nope", strings)).toBeUndefined();
+    expect(providerLines("{}", strings)).toBeUndefined();
+  });
+
+  it("shows today's cost only when the scan is on and has run", () => {
+    expect(
+      costLine(
+        JSON.stringify({ status: "ok", today: { costUsd: 12.345 } }),
+        strings,
+      ),
+    ).toBe("Today $12.35");
+    expect(
+      costLine(
+        JSON.stringify({ status: "disabled", today: { costUsd: 1 } }),
+        strings,
+      ),
+    ).toBeUndefined();
+    expect(costLine("broken", strings)).toBeUndefined();
+  });
+
+  it("keeps the previous reading for whatever did not arrive this round", () => {
+    const first = traySummary(
+      null,
+      {
+        usage: SNAPSHOT,
+        cost: JSON.stringify({ status: "ok", today: { costUsd: 2 } }),
+      },
+      strings,
     );
+    expect(first?.cost).toBe("Today $2.00");
+    const stale = traySummary(first, { usage: null, cost: null }, strings);
+    expect(stale).toBe(first);
+    const partial = traySummary(
+      first,
+      { usage: null, cost: "broken" },
+      strings,
+    );
+    expect(partial).toBe(first);
+    const next = traySummary(
+      first,
+      { usage: JSON.stringify({ providers: [] }), cost: null },
+      strings,
+    );
+    expect(next).toEqual({ providers: [], cost: "Today $2.00" });
   });
 
   it("follows the refresh setting within bounds", () => {

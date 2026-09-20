@@ -60,10 +60,37 @@ vi.mock("electron", () => ({
     quit: () => quits.push(1),
   },
   nativeImage: {
+    // A 2×2 "icon": one dark pixel, three light ones — enough for the glyph
+    // cut-out to have a shape to trim to.
     createFromPath: () => ({
       isEmpty: () => iconEmpty,
+      getSize: () => ({ width: 2, height: 2 }),
+      toBitmap: () =>
+        Buffer.from([
+          20, 20, 20, 255, 245, 245, 245, 255, 245, 245, 245, 255, 245, 245,
+          245, 255,
+        ]),
+      resize: () => ({ isEmpty: () => false }),
       setTemplateImage: () => undefined,
     }),
+    createFromBitmap: (
+      data: Buffer,
+      size: { width: number; height: number },
+    ) => ({
+      resize: () => ({ toPNG: () => Buffer.from([data.length, size.width]) }),
+    }),
+    createEmpty: () => {
+      const image = {
+        representations: [] as unknown[],
+        addRepresentation: (rep: unknown) => image.representations.push(rep),
+        setTemplateImage: (flag: boolean) => {
+          templateFlags.push(flag);
+        },
+        isEmpty: () => false,
+      };
+      images.push(image);
+      return image;
+    },
   },
 }));
 
@@ -73,10 +100,22 @@ vi.mock("./window", () => ({
 
 vi.mock("./repo-root", () => ({ repoRoot: () => "/repo" }));
 
-const MINI = JSON.stringify({
-  session: { provider: "anthropic", label: "5h", usedPercent: 42 },
-  week: { provider: "anthropic", label: "7d", usedPercent: 13 },
+const USAGE = JSON.stringify({
+  providers: [
+    {
+      id: "claude",
+      status: "ok",
+      windows: [
+        { label: "5h", usedPercent: 42, resetsAt: null },
+        { label: "7d", usedPercent: 13, resetsAt: null },
+      ],
+    },
+    { id: "codex", status: "error", reason: "network", windows: [] },
+  ],
 });
+const COST = JSON.stringify({ status: "ok", today: { costUsd: 3.5 } });
+const images: { representations: unknown[] }[] = [];
+const templateFlags: boolean[] = [];
 
 /** What the fake Runtime answers next, per path. `null` = the fetch fails. */
 let answers: Record<string, string | null> = {};
@@ -91,7 +130,13 @@ beforeEach(() => {
   quits.length = 0;
   requested.length = 0;
   iconEmpty = false;
-  answers = { "/api/usage/mini": MINI, "/api/settings": "{}" };
+  images.length = 0;
+  templateFlags.length = 0;
+  answers = {
+    "/api/usage": USAGE,
+    "/api/usage/cost": COST,
+    "/api/settings": "{}",
+  };
   vi.stubGlobal("fetch", async (url: string) => {
     const path = url.replace("http://runtime", "");
     requested.push(path);
@@ -121,22 +166,38 @@ function lastMenu(): MenuItem[] {
   return trays[0]?.menus.at(-1) ?? [];
 }
 
-describe("the usage strip", () => {
-  it("is drawn from what the Runtime answered", async () => {
+describe("the menu-bar glyph", () => {
+  it("is a template image with a 1× and a 2× representation on macOS", async () => {
+    await startTray();
+    if (process.platform !== "darwin") return;
+    expect(images).toHaveLength(1);
+    expect(
+      images[0]?.representations.map(
+        (r) => (r as { scaleFactor: number }).scaleFactor,
+      ),
+    ).toEqual([1, 2]);
+    expect(templateFlags).toEqual([true]);
+  });
+});
+
+describe("the usage readout", () => {
+  it("is one line per provider plus today's cost, drawn from the core's answers", async () => {
     await startTray();
     const labels = lastMenu().map((item) => item.label);
-    expect(labels[0]).toContain("42%");
-    expect(labels[1]).toContain("13%");
+    expect(labels[0]).toBe("Claude · 5h 42% · 7d 13%");
+    expect(labels[1]).toBe("Codex · cannot reach the usage endpoint");
+    expect(labels[2]).toBe("Local cost today $3.50");
     // A readout, not an action.
     expect(lastMenu()[0]?.enabled).toBe(false);
-    expect(lastMenu()[1]?.enabled).toBe(false);
+    expect(lastMenu()[2]?.enabled).toBe(false);
   });
 
   it("keeps the previous reading when the next poll fails", async () => {
     const module = await startTray();
     const before = lastMenu().map((item) => item.label);
 
-    answers["/api/usage/mini"] = null;
+    answers["/api/usage"] = null;
+    answers["/api/usage/cost"] = null;
     await vi.advanceTimersByTimeAsync(5 * 60_000 + 10);
 
     // The Runtime restarting, or being a second slow, must not blank a strip
@@ -149,7 +210,8 @@ describe("the usage strip", () => {
     const module = await startTray();
     const before = lastMenu().map((item) => item.label);
 
-    answers["/api/usage/mini"] = "not json";
+    answers["/api/usage"] = "not json";
+    answers["/api/usage/cost"] = "not json";
     await vi.advanceTimersByTimeAsync(5 * 60_000 + 10);
 
     expect(lastMenu().map((item) => item.label)).toEqual(before);
@@ -160,7 +222,11 @@ describe("the usage strip", () => {
 describe("the polling loop", () => {
   it("re-reads the refresh setting every round, so a change needs no restart", async () => {
     const module = await startTray();
-    expect(requested).toEqual(["/api/usage/mini", "/api/settings"]);
+    expect(requested).toEqual([
+      "/api/usage",
+      "/api/usage/cost",
+      "/api/settings",
+    ]);
 
     // 1 minute is below the ceiling, so the interval clamps to 60s.
     answers["/api/settings"] = JSON.stringify({ usage: { refreshMinutes: 1 } });

@@ -135,10 +135,11 @@ export function copyWithRetry(
 export function bundleResources(platformName) {
   const resources = [
     { from: "out/cli/armadra-hook.js", to: "cli/armadra-hook.js" },
-    // The tray icon. `main/tray.ts` reads it from the checkout in development
-    // and from `process.resourcesPath` in a packaged app; without this entry
-    // the packaged tray logged "could not be loaded" and stayed off.
-    { from: "build/icons/32x32.png", to: "tray.png" },
+    // The app icon the tray cuts its menu-bar glyph from. `main/tray.ts`
+    // reads it from the checkout in development and from
+    // `process.resourcesPath` in a packaged app; without this entry the
+    // packaged tray logged "could not be loaded" and stayed off.
+    { from: "build/icons/icon.png", to: "tray.png" },
   ];
   if (platformName === "win32")
     resources.push({

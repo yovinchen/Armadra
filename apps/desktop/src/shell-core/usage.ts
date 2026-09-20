@@ -1,97 +1,136 @@
 /**
- * The tray usage strip — roadmap §3.9「托盘迷你条」, ported from
- * the Rust shell's 合并前的实现 with one change: the wording is no longer here.
+ * What the tray menu says about usage, computed from the core's answers.
  *
- * Two disabled menu items above the tray's actions: the most pressed session
- * window and the most pressed week window, each a short bar plus a percentage.
- * The numbers come from the Runtime's `GET /api/usage/mini`, which is a read of
- * a cache the Runtime already keeps; the tray never causes an upstream quota
- * request of its own.
- *
- * The rule that matters here is the one from the design: **unknown is not
- * zero**. A provider that has not answered, is disabled, or has no window of
- * that length produces no bar at all, and the strip says so in words rather
- * than drawing an empty bar that reads as "0% used".
- *
- * The Rust version carried its own two-language table because the Rust shell
- * had no message catalogue. This one takes the three words it needs as an
- * argument; `main/tray.ts` gets them from `apps/web/src/i18n/desktop.ts`
- * (migration design §2.3).
+ * Pure: strings in, lines out. `main/tray.ts` fetches and redraws; this
+ * decides the words. The rule that matters is in `traySummary`: a poll that
+ * fails keeps the previous reading, so the menu never flips to "no data"
+ * because one request timed out.
  */
 
-/** How wide the bar is, in characters. A tray menu is a proportional font, so
- * this is a rough gauge, not a measurement — hence the percentage next to it. */
-export const CELLS = 10;
-
-/** The floor for the poll interval, in milliseconds. `usage.refreshMinutes: 0`
- * means the user asked the Runtime not to fetch on a schedule; the tray still
- * re-reads the cache occasionally so a manual refresh shows up, which costs
- * nothing upstream. */
 export const FLOOR_MS = 300_000;
-/** Never poll faster than this, whatever the setting says. */
 export const CEILING_MS = 60_000;
 
-/** One bar of `GET /api/usage/mini`. */
-export interface MiniBar {
-  readonly provider: string;
-  readonly label: string;
-  readonly usedPercent: number;
+export interface TrayStrings {
+  /** Provider display names by id; an id not in here is shown as-is. */
+  readonly provider: (id: string) => string;
+  /** Reason codes (`expired_credentials`, `network`, …) → one short sentence. */
+  readonly reason: (code: string) => string;
+  readonly signedOut: string;
+  readonly noData: string;
+  readonly costToday: string;
 }
 
-export interface MiniUsage {
-  readonly session?: MiniBar | null;
-  readonly week?: MiniBar | null;
+export interface TraySummary {
+  /** One per provider, in the core's order. */
+  readonly providers: readonly string[];
+  /** Today's local cost, when the scan is on and has run. */
+  readonly cost?: string;
 }
 
-/** The three words the strip needs, in the window's locale. */
-export interface UsageStrings {
-  readonly session: string;
-  readonly week: string;
-  readonly unknown: string;
+interface UsageWindow {
+  readonly label?: unknown;
+  readonly usedPercent?: unknown;
+  readonly unlimited?: unknown;
 }
 
-function isBar(value: unknown): value is MiniBar {
-  if (typeof value !== "object" || value === null) return false;
-  const bar = value as Record<string, unknown>;
-  return (
-    typeof bar.provider === "string" &&
-    typeof bar.label === "string" &&
-    typeof bar.usedPercent === "number" &&
-    Number.isFinite(bar.usedPercent)
-  );
+interface Provider {
+  readonly id?: unknown;
+  readonly status?: unknown;
+  readonly reason?: unknown;
+  readonly windows?: unknown;
 }
 
-/** `▮▮▮▯▯▯▯▯▯▯`. Clamped, because a provider that reports over 100% has still
- * only filled the bar once. */
-export function bar(percent: number): string {
-  const clamped = Math.min(100, Math.max(0, percent));
-  const filled = Math.min(CELLS, Math.round((clamped / 100) * CELLS));
-  return "▮".repeat(filled) + "▯".repeat(CELLS - filled);
+function windowText(window: UsageWindow): string | undefined {
+  if (window.unlimited === true) return undefined;
+  if (
+    typeof window.label !== "string" ||
+    typeof window.usedPercent !== "number"
+  )
+    return undefined;
+  const percent = Math.round(Math.min(100, Math.max(0, window.usedPercent)));
+  return `${window.label} ${percent}%`;
 }
 
-/** One menu line. A missing window is rendered as the word for "unknown",
- * never as a full-width empty bar, which a reader would take for 0% used. */
-export function usageLine(
-  row: string,
-  unknown: string,
-  value: MiniBar | null | undefined,
-): string {
-  if (!value) return `${row}  ${unknown}`;
-  const percent = Math.min(100, Math.max(0, value.usedPercent));
-  return `${row}  ${bar(value.usedPercent)}  ${Math.round(percent)}%  ${
-    value.provider
-  }·${value.label}`;
+function providerLine(
+  provider: Provider,
+  strings: TrayStrings,
+): string | undefined {
+  if (typeof provider.id !== "string") return undefined;
+  const name = strings.provider(provider.id);
+  switch (provider.status) {
+    case "ok": {
+      const windows = Array.isArray(provider.windows)
+        ? (provider.windows as UsageWindow[]).map(windowText).filter(Boolean)
+        : [];
+      return windows.length > 0
+        ? `${name} · ${windows.join(" · ")}`
+        : `${name} · ${strings.noData}`;
+    }
+    case "error":
+      return `${name} · ${strings.reason(String(provider.reason ?? "provider_error"))}`;
+    default:
+      return `${name} · ${strings.signedOut}`;
+  }
 }
 
-/** Both lines, in menu order. */
-export function usageLines(
-  strings: UsageStrings,
-  usage: MiniUsage | null | undefined,
-): [string, string] {
-  return [
-    usageLine(strings.session, strings.unknown, usage?.session),
-    usageLine(strings.week, strings.unknown, usage?.week),
-  ];
+/** Lines from `GET /api/usage`; `undefined` when the body is not a snapshot. */
+export function providerLines(
+  body: string,
+  strings: TrayStrings,
+): readonly string[] | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  const providers = (parsed as { providers?: unknown })?.providers;
+  if (!Array.isArray(providers)) return undefined;
+  return providers
+    .map((provider) => providerLine(provider as Provider, strings))
+    .filter((line): line is string => line !== undefined);
+}
+
+/** The cost line from `GET /api/usage/cost`; `undefined` when off or unscanned. */
+export function costLine(
+  body: string,
+  strings: TrayStrings,
+): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  const summary = parsed as { status?: unknown; today?: { costUsd?: unknown } };
+  if (summary?.status !== "ok") return undefined;
+  const cost = summary.today?.costUsd;
+  if (typeof cost !== "number" || !Number.isFinite(cost)) return undefined;
+  return `${strings.costToday} $${cost.toFixed(2)}`;
+}
+
+/**
+ * Merges one poll into the previous summary: a part that did not arrive keeps
+ * its last value, so the menu degrades to "stale" rather than to "unknown".
+ */
+export function traySummary(
+  previous: TraySummary | null,
+  answers: { usage: string | null; cost: string | null },
+  strings: TrayStrings,
+): TraySummary | null {
+  const providers =
+    answers.usage === null ? undefined : providerLines(answers.usage, strings);
+  const cost =
+    answers.cost === null ? undefined : costLine(answers.cost, strings);
+  if (providers === undefined && cost === undefined) return previous;
+  return {
+    providers: providers ?? previous?.providers ?? [],
+    ...(cost !== undefined
+      ? { cost }
+      : previous?.cost !== undefined
+        ? { cost: previous.cost }
+        : {}),
+  };
 }
 
 /**
@@ -108,8 +147,8 @@ export function pollIntervalMs(refreshMinutes: number | null): number {
 
 /**
  * `usage.refreshMinutes` out of `GET /api/settings`. A document that does not
- * have it — an older Runtime, a hand-edited file — is `null`, which is the
- * floor, not zero.
+ * have it — an older core, a hand-edited file — is `null`, which is the floor,
+ * not zero.
  */
 export function refreshMinutes(settings: string): number | null {
   try {
@@ -121,21 +160,6 @@ export function refreshMinutes(settings: string): number | null {
       minutes >= 0
       ? Math.floor(minutes)
       : null;
-  } catch {
-    return null;
-  }
-}
-
-/** `GET /api/usage/mini`. An unreadable body is `null` — which the caller keeps
- * the previous reading for, rather than redrawing the strip as two unknowns. */
-export function parseMiniUsage(body: string): MiniUsage | null {
-  try {
-    const parsed = JSON.parse(body) as Record<string, unknown>;
-    if (typeof parsed !== "object" || parsed === null) return null;
-    return {
-      session: isBar(parsed.session) ? parsed.session : null,
-      week: isBar(parsed.week) ? parsed.week : null,
-    };
   } catch {
     return null;
   }

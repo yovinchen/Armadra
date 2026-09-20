@@ -3,7 +3,6 @@ import {
   copilotAuthSchema,
   copilotPollSchema,
   costSummarySchema,
-  usageMiniSchema,
   usageSchema,
 } from "../src/index.js";
 
@@ -95,21 +94,6 @@ describe("usage dashboard contracts", () => {
         truncated: false,
       }).success,
     ).toBe(false);
-  });
-
-  it("treats a bar with no usable window as null, never as zero percent", () => {
-    const parsed = usageMiniSchema.parse({
-      session: {
-        provider: "codex",
-        label: "5h",
-        usedPercent: 65,
-        resetsAt: null,
-      },
-      week: null,
-      fetchedAt: "2026-09-05T10:00:00Z",
-    });
-    expect(parsed.week).toBeNull();
-    expect(parsed.session?.usedPercent).toBe(65);
   });
 
   it("never models a device code on the Copilot sign-in payloads", () => {

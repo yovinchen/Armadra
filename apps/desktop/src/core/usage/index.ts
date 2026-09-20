@@ -12,20 +12,13 @@
 
 import type { CoreContext } from "../main";
 import { settingsDomain } from "../settings";
-import { emptySnapshot, miniUsage, type UsageSnapshot } from "./snapshot";
+import type { UsageSnapshot } from "./snapshot";
 import { UsageService } from "./service";
 import { catalogPrices, modelsDomain } from "../models";
 
-export {
-  emptySnapshot,
-  labelHours,
-  miniUsage,
-  USAGE_PROVIDER_IDS,
-} from "./snapshot";
+export { emptySnapshot, USAGE_PROVIDER_IDS } from "./snapshot";
 export type {
   CredentialSource,
-  MiniBar,
-  MiniUsage,
   ProviderUsage,
   UsageFailure,
   UsageSnapshot,
@@ -65,21 +58,6 @@ export {
   tokenFromPayload,
 } from "./providers";
 
-/**
- * `mini` 的数据从哪来。
- *
- * 一个函数而不是一个值，这样 R1b 写下的那条路由在这一批接上真正的缓存时一个字都
- * 不用改：`mini` 是那份缓存当前持有的东西的一个投影。
- */
-export type UsageSource = () => UsageSnapshot;
-
-let source: UsageSource = emptySnapshot;
-
-/** 让 `mini` 指向一份真的缓存。 */
-export function setUsageSource(next: UsageSource): void {
-  source = next;
-}
-
 export interface UsageDomain {
   readonly service: UsageService;
   stop(): void;
@@ -99,13 +77,8 @@ export function install(context: CoreContext): UsageDomain {
     // 装配这一刻的（那时候它还不存在）。
     catalogPrices: () => catalogPrices(modelsDomain()?.catalog.current()),
   });
-  setUsageSource(() => service.snapshot());
 
   const { router } = context.server;
-  router.handle("GET", "/api/usage/mini", () => ({
-    status: 200,
-    body: miniUsage(source()),
-  }));
 
   // 缓存着的快照（plan §19）。只有百分比和重置时间：没有令牌、没有账号 id、没有
   // 套餐名。

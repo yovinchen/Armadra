@@ -831,12 +831,6 @@ export const ROUTES: readonly RouteEntry[] = [
     implemented: true,
   },
   {
-    path: "/api/usage/mini",
-    methods: ["GET"],
-    surface: "runtime",
-    implemented: true,
-  },
-  {
     path: "/api/usage/cost",
     methods: ["GET"],
     surface: "runtime",

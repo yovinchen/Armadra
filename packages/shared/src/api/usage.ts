@@ -69,24 +69,6 @@ export const usageSchema = z.object({
 
 /* ------------------------------ 托盘迷你条 -------------------------------- */
 
-/**
- * `GET /api/usage/mini`（§4.2「托盘迷你条」）。会话（≤ 24h）与周（> 24h）
- * 两条进度，取所有 provider 中占用最高的那条；没有可用窗口时是 `null`，
- * 不是 0。
- */
-export const usageMiniBarSchema = z.object({
-  provider: z.string(),
-  label: z.string(),
-  usedPercent: z.number(),
-  resetsAt: z.string().nullable(),
-});
-
-export const usageMiniSchema = z.object({
-  session: usageMiniBarSchema.nullable().optional(),
-  week: usageMiniBarSchema.nullable().optional(),
-  fetchedAt: z.string().nullable().optional(),
-});
-
 /* -------------------------------- 本地成本 -------------------------------- */
 
 /**
@@ -154,8 +136,6 @@ export type UsageWindow = z.infer<typeof usageWindowSchema>;
 export type UsageWindowKey = z.infer<typeof usageWindowKeySchema>;
 export type UsageCredentialSource = z.infer<typeof usageCredentialSourceSchema>;
 export type UsageCredits = z.infer<typeof usageCreditsSchema>;
-export type UsageMini = z.infer<typeof usageMiniSchema>;
-export type UsageMiniBar = z.infer<typeof usageMiniBarSchema>;
 export type CostTokens = z.infer<typeof costTokensSchema>;
 export type CostModel = z.infer<typeof costModelSchema>;
 export type CostWindow = z.infer<typeof costWindowSchema>;

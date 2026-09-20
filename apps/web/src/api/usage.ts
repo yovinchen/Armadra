@@ -3,7 +3,6 @@ import {
   copilotPollSchema,
   costSummarySchema,
   modelCatalogSchema,
-  usageMiniSchema,
   usageSchema,
 } from "@armadra/shared";
 import { request } from "./request";
@@ -18,9 +17,6 @@ export const usageApi = {
   /** 手动刷新；Runtime 侧 30s 内只真取一次，超频时直接回缓存。 */
   refreshUsage: () =>
     request("/api/usage/refresh", usageSchema, { method: "POST" }),
-
-  /** `GET /api/usage/mini`（§4.2）：托盘迷你条的两条进度。 */
-  usageMini: () => request("/api/usage/mini", usageMiniSchema),
 
   /* --------------------------------- 本地成本 --------------------------- */
   /** 缓存的成本汇总；不触碰文件系统。 */

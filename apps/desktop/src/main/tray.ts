@@ -5,12 +5,13 @@ import {
   shellText,
   type ShellLocale,
 } from "../shell-core/messages";
+import { templateGlyph } from "../shell-core/tray-glyph";
 import {
-  parseMiniUsage,
   pollIntervalMs,
   refreshMinutes,
-  usageLines,
-  type MiniUsage,
+  traySummary,
+  type TrayStrings,
+  type TraySummary,
 } from "../shell-core/usage";
 import { repoRoot } from "./repo-root";
 import { revealWindow } from "./window";
@@ -31,7 +32,7 @@ import { revealWindow } from "./window";
 let tray: Tray | null = null;
 let locale: ShellLocale = "zh-CN";
 /** The last reading that arrived. Kept across failures on purpose. */
-let usage: MiniUsage | null = null;
+let summary: TraySummary | null = null;
 /** Whether an update is staged. W2.2 owns the flow; the item is its door. */
 let updateStaged = false;
 let onRestart: () => void = () => undefined;
@@ -42,36 +43,68 @@ let stopped = false;
  * shutdown sequence is `main/index.ts`'s, not the tray's. */
 let onQuit: () => void = () => app.quit();
 
+/** The 512 px app icon: in the checkout in development, beside the app when packaged. */
+function iconSource(): string {
+  return app.isPackaged
+    ? // Placed by `scripts/after-pack.mjs`; the checkout is not there once packaged.
+      join(process.resourcesPath, "tray.png")
+    : join(repoRoot(), "apps/desktop/build/icons/icon.png");
+}
+
+/**
+ * The menu-bar image. On macOS a *template* glyph cut out of the app icon
+ * (`shell-core/tray-glyph.ts`), at 1× and 2×; elsewhere the icon itself,
+ * small. Empty when the source could not be read.
+ */
 function icon(): Electron.NativeImage {
-  // The same icon set electron-builder packages from (`build/icons/`), shared
-  // rather than duplicated. A template image so macOS tints it for light and
-  // dark menu bars by itself.
-  const image = nativeImage.createFromPath(
-    app.isPackaged
-      ? // Placed beside the app by `scripts/after-pack.mjs`; the checkout is
-        // not there to read from once packaged.
-        join(process.resourcesPath, "tray.png")
-      : join(repoRoot(), "apps/desktop/build/icons/32x32.png"),
-  );
-  if (!image.isEmpty() && process.platform === "darwin")
-    image.setTemplateImage(true);
+  const source = nativeImage.createFromPath(iconSource());
+  if (source.isEmpty()) return source;
+  if (process.platform !== "darwin")
+    return source.resize({ width: 22, height: 22 });
+  const { width, height } = source.getSize();
+  const glyph = templateGlyph({ width, height, data: source.toBitmap() });
+  const shape = nativeImage.createFromBitmap(glyph.data, {
+    width: glyph.width,
+    height: glyph.height,
+  });
+  const image = nativeImage.createEmpty();
+  for (const scale of [1, 2]) {
+    image.addRepresentation({
+      scaleFactor: scale,
+      width: 18,
+      height: 18,
+      buffer: shape.resize({ width: 18 * scale, height: 18 * scale }).toPNG(),
+    });
+  }
+  image.setTemplateImage(true);
   return image;
 }
 
+function strings(): TrayStrings {
+  return {
+    provider: (id) =>
+      ({ claude: "Claude", codex: "Codex", copilot: "Copilot" })[id] ?? id,
+    reason: (code) => shellText(locale, `tray.usage.reason.${code}`),
+    signedOut: shellText(locale, "tray.usage.signedOut"),
+    noData: shellText(locale, "tray.usage.noData"),
+    costToday: shellText(locale, "tray.usage.costToday"),
+  };
+}
+
 function buildMenu(): Menu {
-  const [session, week] = usageLines(
-    {
-      session: shellText(locale, "tray.usage.session"),
-      week: shellText(locale, "tray.usage.week"),
-      unknown: shellText(locale, "tray.usage.unknown"),
-    },
-    usage,
-  );
+  const readout: string[] = summary
+    ? [...summary.providers, ...(summary.cost ? [summary.cost] : [])]
+    : [shellText(locale, "tray.usage.noData")];
   return Menu.buildFromTemplate([
-    // A readout, not an action: the two rows are disabled so clicking them
-    // does nothing rather than doing something unstated.
-    { label: session, enabled: false },
-    { label: week, enabled: false },
+    // A readout, not an action: the rows are disabled so clicking them does
+    // nothing rather than doing something unstated.
+    ...readout.map(
+      (label) =>
+        ({
+          label,
+          enabled: false,
+        }) satisfies Electron.MenuItemConstructorOptions,
+    ),
     { type: "separator" },
     // Present exactly while an update is staged. An item that is always there
     // but disabled would say the feature exists and is unavailable, when the
@@ -163,13 +196,14 @@ async function poll(runtimeBase: () => Promise<string>): Promise<void> {
   let interval = pollIntervalMs(null);
   try {
     const base = await runtimeBase();
-    const mini = await fetchText(base, "/api/usage/mini");
-    if (mini !== null) {
-      const parsed = parseMiniUsage(mini);
-      if (parsed) {
-        usage = parsed;
-        redraw();
-      }
+    const [usage, cost] = await Promise.all([
+      fetchText(base, "/api/usage"),
+      fetchText(base, "/api/usage/cost"),
+    ]);
+    const next = traySummary(summary, { usage, cost }, strings());
+    if (next !== summary) {
+      summary = next;
+      redraw();
     }
     const settings = await fetchText(base, "/api/settings");
     interval = pollIntervalMs(

@@ -172,14 +172,6 @@ describe("用量的九条路由", () => {
     }
   });
 
-  it("mini 是同一份缓存的投影：没有数据时两条都是 null", async () => {
-    expect(await json("/api/usage/mini")).toEqual({
-      session: null,
-      week: null,
-      fetchedAt: null,
-    });
-  });
-
   it("手动刷新返回快照，而不是让调用方为节流分支", async () => {
     const refreshed = await json("/api/usage/refresh", "POST");
     expect(refreshed.providers).toHaveLength(3);
