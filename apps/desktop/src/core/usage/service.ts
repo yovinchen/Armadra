@@ -67,10 +67,13 @@ export class UsageService {
   constructor(private readonly options: UsageServiceOptions) {
     this.fetcher = options.fetch ?? globalThis.fetch;
     this.now = options.now ?? (() => Date.now());
-    this.cost = new CostService(() => this.costEnabled(), this.now, () =>
-      options.catalogPrices === undefined
-        ? BUILT_IN_PRICES
-        : [BUILT_IN_PRICES, options.catalogPrices()],
+    this.cost = new CostService(
+      () => this.costEnabled(),
+      this.now,
+      () =>
+        options.catalogPrices === undefined
+          ? BUILT_IN_PRICES
+          : [BUILT_IN_PRICES, options.catalogPrices()],
     );
     this.copilot = new CopilotLogin(
       new SecretStore(COPILOT_SECRET_SERVICE, options.dataDir),

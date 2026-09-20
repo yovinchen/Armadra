@@ -47,6 +47,7 @@ export const errors: MessageModule = {
     "error.unauthenticated": "Your sign-in expired — reconnect the account",
     "error.permissionDenied": "That account lacks this permission",
     "error.rateLimited": "Too many requests — try again shortly",
-    "error.unknownOutcome": "Outcome unknown — reload to see whether it applied",
+    "error.unknownOutcome":
+      "Outcome unknown — reload to see whether it applied",
   },
 };

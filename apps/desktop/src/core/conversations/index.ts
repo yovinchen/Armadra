@@ -115,9 +115,9 @@ export function configuredScope(database: DatabaseSync): Scope {
 
 /** 这个库里登记的工作空间根目录。 */
 export function workspaceRoots(database: DatabaseSync): string[] {
-  const rows = database
-    .prepare("SELECT root_path FROM workspaces")
-    .all() as { root_path: string }[];
+  const rows = database.prepare("SELECT root_path FROM workspaces").all() as {
+    root_path: string;
+  }[];
   return rows
     .map((row) => String(row.root_path))
     .filter((path) => path !== "")

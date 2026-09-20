@@ -308,11 +308,19 @@ describe("索引的范围", () => {
       },
     ]);
     writeClaude("s-other", [
-      { type: "user", cwd: "/Users/me/somewhere-else", message: { content: "别处" } },
+      {
+        type: "user",
+        cwd: "/Users/me/somewhere-else",
+        message: { content: "别处" },
+      },
     ]);
     const roots = [["claude", claudeRoot()]] as const;
 
-    const scoped = refresh(database, roots, currentScope(database, "workspaces"));
+    const scoped = refresh(
+      database,
+      roots,
+      currentScope(database, "workspaces"),
+    );
     expect(scoped).toMatchObject({ scanned: 2, indexed: 2 });
     expect(
       listConversations(database, undefined, 50)
@@ -329,7 +337,11 @@ describe("索引的范围", () => {
       { type: "user", cwd: mine, message: { content: "本仓库" } },
     ]);
     writeClaude("s-other", [
-      { type: "user", cwd: "/Users/me/elsewhere", message: { content: "别处" } },
+      {
+        type: "user",
+        cwd: "/Users/me/elsewhere",
+        message: { content: "别处" },
+      },
     ]);
     const roots = [["claude", claudeRoot()]] as const;
 
@@ -367,8 +379,8 @@ describe("索引的范围", () => {
     expect(inScope(ALL_CONVERSATIONS, "/anywhere")).toBe(true);
     expect(inScope({ mode: "workspaces", roots: [mine] }, "")).toBe(false);
     // 前缀相同但不是子目录：`/a/b` 不在 `/a/bc` 下面。
-    expect(
-      inScope({ mode: "workspaces", roots: ["/a/bc"] }, "/a/bcd"),
-    ).toBe(false);
+    expect(inScope({ mode: "workspaces", roots: ["/a/bc"] }, "/a/bcd")).toBe(
+      false,
+    );
   });
 });

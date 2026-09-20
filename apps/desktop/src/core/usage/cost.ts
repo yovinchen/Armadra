@@ -781,7 +781,9 @@ export class CostService {
   constructor(
     private readonly enabled: () => boolean,
     private readonly now: () => number = () => Date.now(),
-    private readonly prices: PriceLookup | (() => PriceLookup) = BUILT_IN_PRICES,
+    private readonly prices:
+      | PriceLookup
+      | (() => PriceLookup) = BUILT_IN_PRICES,
   ) {
     this.state = new ScanState(now);
   }
