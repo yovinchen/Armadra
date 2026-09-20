@@ -26,8 +26,8 @@ import { settingsDomain } from "../settings";
  *     few thousand `stat` calls and no reads.
  *   * **Everything is bounded** — files per provider, walk depth, bytes and
  *     lines per file. See `scan.ts`.
- *   * **It never blocks a request.** The startup scan runs after the listener
- *     is bound.
+ *   * **Nothing is scanned until someone asks.** The first read of the index
+ *     pays for the walk; assembly does not. See {@link ensureIndexed}.
  *
  * Rows are keyed by session id rather than by path so that a moved or
  * rewritten file updates its row instead of duplicating it; a row whose file
@@ -159,6 +159,7 @@ export function refresh(
   roots: Roots = defaultRoots(),
   scope: Scope = ALL_CONVERSATIONS,
 ): ScanReport {
+  indexedOnce = true;
   let scanned = 0;
   let indexed = 0;
   let removed = 0;
@@ -170,6 +171,38 @@ export function refresh(
     removed += forgetMissing(database, provider, root, seen);
   }
   return { scanned, indexed, removed, total: count(database) };
+}
+
+/**
+ * 有没有人真的需要过这张索引。
+ *
+ * 曾经装配时无条件跑一趟 {@link refresh}：一千九百多个文件、1.1 s，而且**RSS 再
+ * 也没降回来**——量出来是启动 RSS 88 MB → 141 MB。一块空画布从来不开命令面板，
+ * 那 53 MB 是为一件没人要的结果付的。
+ *
+ * 所以第一次有人读索引时才扫。`POST /api/conversations/refresh` 仍然每次都真扫，
+ * 语义一个字没变：延后的是**什么时候**扫，不是扫什么。
+ */
+let indexedOnce = false;
+
+/** 第一次有人读这张索引时补上那一趟扫描；之后是空操作。 */
+export function ensureIndexed(
+  database: DatabaseSync,
+  onError?: (error: unknown) => void,
+): void {
+  if (indexedOnce) return;
+  try {
+    // The first walk honours the configured scope, exactly as a manual
+    // refresh would; a lazy index is not a reason to index everything.
+    refresh(database, undefined, configuredScope(database));
+  } catch (error) {
+    onError?.(error);
+  }
+}
+
+/** 测试用：把「扫过了」这件事忘掉。 */
+export function forgetIndexed(): void {
+  indexedOnce = false;
 }
 
 interface IndexRow {

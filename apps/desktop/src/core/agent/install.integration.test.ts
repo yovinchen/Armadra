@@ -70,6 +70,15 @@ describe("the assembled agent domain", () => {
     expect(columns).toContain("revision");
   });
 
+  it("leaves the conversations index empty until someone reads it", async () => {
+    // 装配不再无条件走一遍记录目录（量过：启动 RSS 88 MB → 141 MB、1.1 s）。
+    // 这一条必须排在下面那条 `GET /api/conversations` 前面——就是那次读补上扫描的。
+    const row = core.db.database
+      .prepare("SELECT count(*) AS n FROM conversations")
+      .get() as { n: number } | undefined;
+    expect(Number(row?.n ?? 0)).toBe(0);
+  });
+
   it("answers its routes for real rather than 501", async () => {
     const conversations = await get("/api/conversations");
     expect(conversations.status).toBe(200);

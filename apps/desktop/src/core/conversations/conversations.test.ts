@@ -384,6 +384,9 @@ describe("索引的范围", () => {
     expect(inScope({ mode: "workspaces", roots: ["/a/bc"] }, "/a/bcd")).toBe(
       false,
     );
+  });
+});
+
 describe("the index is built on demand", () => {
   // 装配时无条件扫一遍的代价量过：启动 RSS 88 MB → 141 MB、1.1 s，而一块空画布
   // 从来不开命令面板。这两条盯的是「谁触发了扫描」这件结构上的事。

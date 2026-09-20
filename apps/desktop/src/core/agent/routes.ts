@@ -13,6 +13,7 @@ import {
 import {
   commandFromCapture,
   configuredScope,
+  ensureIndexed,
   listConversations,
   refresh,
   transcriptTitle,
@@ -358,6 +359,8 @@ export function installRoutes(deps: AgentRouteDeps): void {
     "GET",
     "/api/conversations",
     answered((_match, request) => {
+      // 第一次有人读的时候才建索引；装配时不扫（见 `conversations.ensureIndexed`）。
+      ensureIndexed(database);
       const limit = Number.parseInt(request.query.get("limit") ?? "", 10);
       const q = request.query.get("q");
       return {

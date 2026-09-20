@@ -16,10 +16,6 @@ import {
 import { eventStream } from "../events";
 import type { CoreContext } from "../main";
 import {
-  configuredScope,
-  refresh as refreshConversations,
-} from "../conversations";
-import {
   authorizeMailboxAck,
   noteAcknowledged,
   readForCaller,
@@ -144,29 +140,6 @@ export function install(context: CoreContext): CollabContext {
   // imported by the installer, so a build with no collaboration domain writes
   // no skill instead of writing one that promises verbs nobody answers.
   installCollaborationSkill();
-
-  // The index is a convenience, so a provider directory that cannot be read is
-  // a warning and an empty palette group, not a startup failure. One pass now;
-  // the palette refreshes on demand through `POST /api/conversations/refresh`.
-  try {
-    const report = refreshConversations(
-      context.db.database,
-      undefined,
-      configuredScope(context.db.database),
-    );
-    if (report.indexed > 0 || report.removed > 0) {
-      context.log.info("refreshed the conversations index", {
-        scanned: report.scanned,
-        indexed: report.indexed,
-        removed: report.removed,
-        total: report.total,
-      });
-    }
-  } catch (error) {
-    context.log.warn("could not refresh the conversations index", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
 
   // A client that was killed mid-wait leaves a pending request and its answer
   // behind, and they contain the tool call the agent wanted to make.
