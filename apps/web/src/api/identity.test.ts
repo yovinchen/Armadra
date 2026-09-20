@@ -228,6 +228,32 @@ describe("the desktop shell transport", () => {
     expect(headers.Authorization).toBe("Bearer A");
     expect(headers["X-Armadra-CSRF"]).toBe(undefined);
   });
+
+  /** 访问密钥与刷新密钥都过期后，壳还能签票：重新配对，不停在「已断开」。 */
+  it("re-pairs with a fresh shell ticket once both keys have expired", async () => {
+    answer = (call) =>
+      call.url.includes("/pair")
+        ? {
+            body: {
+              ...session,
+              csrfToken: "",
+              native: { accessToken: "A2", refreshToken: "R2" },
+            },
+          }
+        : call.url.includes("/session")
+          ? { status: 401, body: { code: "UNAUTHENTICATED", message: "" } }
+          : defaultAnswer(call);
+    await resumeIdentity(); // first pairing
+    const resumed = await resumeIdentity(); // session + refresh both 401
+    expect(resumed?.hostId).toBe("h1");
+    expect(mocks.ticket).toHaveBeenCalledTimes(2);
+    expect(calls.map((c) => c.url.split("/api/identity/")[1])).toEqual([
+      "pair",
+      "session",
+      "session/refresh",
+      "pair",
+    ]);
+  });
 });
 
 describe("permits", () => {

@@ -310,10 +310,20 @@ export async function resumeIdentity(): Promise<IdentitySession | null> {
   try {
     return await call("session", identitySessionSchema);
   } catch (error) {
-    if (error instanceof IdentityRequestError && error.status === 401) {
-      // Cookie 会话过期时刷新密钥可能还在：换一份再说「没登录」。
+    if (
+      error instanceof IdentityRequestError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      // 会话过期时刷新密钥可能还在：换一份再说「没登录」。
       const refreshed = await refreshIdentity().catch(() => null);
       if (refreshed) return refreshed;
+      if (isNativeShell()) {
+        // 桌面壳里「登录」是进程内的事实：访问密钥过了 15 分钟、刷新密钥也
+        // 到期时，向壳再要一张票重新配对，而不是让面板停在「已断开」等人
+        // 重载页面。
+        resetIdentityCredentials();
+        return pairIdentity(await fetchNativeTicket());
+      }
       return null;
     }
     throw error;

@@ -92,11 +92,11 @@ test("a platform's placements are its out/ bundles plus every migration, nothing
   // Only Windows carries the session host; every platform carries the hook.
   assert.deepEqual(
     bundleResources("darwin").map((r) => r.to),
-    ["cli/armadra-hook.js"],
+    ["cli/armadra-hook.js", "tray.png"],
   );
   assert.deepEqual(
     bundleResources("win32").map((r) => r.to),
-    ["cli/armadra-hook.js", "session-host/host.cjs"],
+    ["cli/armadra-hook.js", "tray.png", "session-host/host.cjs"],
   );
 });
 

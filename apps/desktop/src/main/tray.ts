@@ -47,7 +47,11 @@ function icon(): Electron.NativeImage {
   // rather than duplicated. A template image so macOS tints it for light and
   // dark menu bars by itself.
   const image = nativeImage.createFromPath(
-    join(repoRoot(), "apps/desktop/build/icons/32x32.png"),
+    app.isPackaged
+      ? // Placed beside the app by `scripts/after-pack.mjs`; the checkout is
+        // not there to read from once packaged.
+        join(process.resourcesPath, "tray.png")
+      : join(repoRoot(), "apps/desktop/build/icons/32x32.png"),
   );
   if (!image.isEmpty() && process.platform === "darwin")
     image.setTemplateImage(true);
