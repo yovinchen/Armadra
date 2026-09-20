@@ -114,6 +114,59 @@ export const costSessionSchema = z.object({
 /** `disabled` = 设置里关掉了扫描；`unavailable` = 本机没有可读的转录。 */
 export const costStatusSchema = z.enum(["ok", "disabled", "unavailable"]);
 
+/* ------------------------------ 多维度范围 ------------------------------- */
+
+/**
+ * `local` = 这个 agent 有本地可解析的转录，数字是真的；`none` = 目前没有任何
+ * 本地来源，token 一律为 0，界面显示「暂无本地用量数据」而不是一根空柱。
+ */
+export const costAgentSourceSchema = z.enum(["local", "none"]);
+
+/** 一个 agent 在某个窗口里的用量。`agent` 是注册表里的 id（`claude` / `codex` …）。 */
+export const costAgentSchema = z.object({
+  agent: z.string(),
+  tokens: costTokensSchema,
+  costUsd: z.number(),
+  complete: z.boolean(),
+  source: costAgentSourceSchema,
+});
+
+/**
+ * 时间轴上的一个点。`key` 在小时粒度是本地 `YYYY-MM-DDTHH`，在日粒度是本地
+ * `YYYY-MM-DD`；同一条轴上所有点粒度一致。
+ */
+export const costPointSchema = costWindowSchema.extend({
+  key: z.string(),
+  agents: z.array(costAgentSchema),
+});
+
+export const costRangeKeySchema = z.enum(["24h", "7d", "30d", "all"]);
+
+export const costRangeSchema = z.object({
+  granularity: z.enum(["hour", "day"]),
+  /** 由旧到新、连续、零填充：24h 是 24 个小时，7d / 30d 是 7 / 30 天，all 从最早有记录的那天到今天。 */
+  points: z.array(costPointSchema),
+  totals: costWindowSchema,
+  /** 花得最多的在前，然后是 token 最多的。 */
+  byModel: z.array(costModelSchema),
+  /** 固定列出注册表里的每个 agent，按注册表顺序；没有本地来源的标 `source: "none"`。 */
+  byAgent: z.array(costAgentSchema),
+  peak: z
+    .object({ key: z.string(), tokens: costTokensSchema, costUsd: z.number() })
+    .nullable(),
+  /** 有活动的点数。 */
+  activeIntervals: z.number(),
+  /** 连续有活动的最长点数。 */
+  longestStreak: z.number(),
+});
+
+export const costRangesSchema = z.object({
+  "24h": costRangeSchema,
+  "7d": costRangeSchema,
+  "30d": costRangeSchema,
+  all: costRangeSchema,
+});
+
 export const costSummarySchema = z.object({
   status: costStatusSchema,
   today: costWindowSchema,
@@ -121,6 +174,7 @@ export const costSummarySchema = z.object({
   currentSession: costSessionSchema.optional(),
   /** 由旧到新，含当天，固定 30 项；没有活动的那天也在，值为 0。 */
   daily: z.array(costDaySchema),
+  ranges: costRangesSchema,
   unpricedModels: z.array(z.string()),
   files: z.record(z.string(), z.number()),
   truncated: z.boolean(),
@@ -142,4 +196,10 @@ export type CostWindow = z.infer<typeof costWindowSchema>;
 export type CostDay = z.infer<typeof costDaySchema>;
 export type CostSession = z.infer<typeof costSessionSchema>;
 export type CostStatus = z.infer<typeof costStatusSchema>;
+export type CostAgentSource = z.infer<typeof costAgentSourceSchema>;
+export type CostAgent = z.infer<typeof costAgentSchema>;
+export type CostPoint = z.infer<typeof costPointSchema>;
+export type CostRangeKey = z.infer<typeof costRangeKeySchema>;
+export type CostRange = z.infer<typeof costRangeSchema>;
+export type CostRanges = z.infer<typeof costRangesSchema>;
 export type CostSummary = z.infer<typeof costSummarySchema>;
