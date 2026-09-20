@@ -41,7 +41,13 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     traceId: z.string(),
     sourceNodeId: z.string(),
     targetNodeId: z.string(),
+    /** `delivered` / `queued` / `unknown` / `refused`。 */
     outcome: z.string(),
+    /**
+     * 被拦下时的稳定码（`LOOP_DETECTED`、`RATE_LIMITED`…）。页面按它取文案，
+     * core 的中文句子不上界面（设计 `agent-delivery.md` §3.5、§10）。
+     */
+    code: z.string().optional(),
   }),
   z.object({
     type: z.literal("terminal.exit"),

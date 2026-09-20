@@ -63,6 +63,11 @@ export interface WorkspaceEventPayloads {
     readonly sourceNodeId: string;
     readonly targetNodeId: string;
     readonly outcome: string;
+    /**
+     * `outcome === "refused"` 时的稳定码（`LOOP_DETECTED` 之类）。页面按它取
+     * 文案并决定要不要在顶部说一句（设计 `agent-delivery.md` §10）。
+     */
+    readonly code?: string;
   };
   "terminal.exit": {
     readonly sessionId: string;

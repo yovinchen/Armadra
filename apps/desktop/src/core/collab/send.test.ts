@@ -574,6 +574,39 @@ describe("the delivery record", () => {
     );
     expect(published[0]?.event).toMatchObject({ outcome: "queued" });
   });
+
+  /**
+   * 被拦下的那一次也要上事件流（设计 §10 的顶部通知条）。发起者的回执里有这个
+   * 码，但那是**没有人在看**的地方：环里的两个模型各自读到一句「这是一个环」，
+   * 画布前面的人什么都看不到。
+   */
+  it("被拦下的那一次也发一帧，只带码不带那句话", async () => {
+    ok(await send());
+    const meSession = fixture.session(me, "claude");
+    fixture.terminal.drive.set(me, {
+      nodeId: me,
+      sessionId: meSession,
+      state: "idle",
+      stateSource: "hook",
+      lease: freeLease(0),
+      driveGeneration: 0,
+    } as never);
+    fixture.terminal.foreground = { command: "claude" };
+    const refused = refusal(await run(peer, "send", { to: me, body: "回敬" }));
+    expect(refused.code).toBe("LOOP_DETECTED");
+    const published = fixture.events
+      .filter((entry) => entry.event.type === "agent.delivery")
+      .map((entry) => entry.event as unknown as Record<string, unknown>)
+      .filter((event) => event.outcome === "refused");
+    expect(published).toHaveLength(1);
+    expect(published[0]).toMatchObject({
+      sourceNodeId: peer,
+      targetNodeId: me,
+      outcome: "refused",
+      code: "LOOP_DETECTED",
+    });
+    expect(JSON.stringify(published[0])).not.toContain("环");
+  });
 });
 
 function nowSeconds(): number {

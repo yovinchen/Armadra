@@ -192,16 +192,65 @@ interface LiveTarget {
 
 /* ---------------------------------- send ---------------------------------- */
 
+/**
+ * 被拦下的那一次也要发一帧 `agent.delivery`（设计 §10 的顶部通知条）。
+ *
+ * 在这之前只有 `delivered` / `queued` / `unknown` 上过事件流，于是「两个 Agent
+ * 在互相喂」这件事只有发起者的回执里看得见——而那正是**没有人在看**的地方：
+ * 一个环里的两个模型各自读到一句「这是一个环」，画布前面的人什么都看不到。
+ *
+ * 帧里只有码，没有那句话：页面按码取自己的文案（`status §20.4`），core 的中文
+ * 句子不该出现在英文界面上。
+ */
+function announceRefusal(
+  context: CollabContext,
+  sourceNodeId: string,
+  workspaceId: string,
+  targetNodeId: string,
+  error: unknown,
+): void {
+  const code = codeOf(error);
+  if (code === undefined || code === "") return;
+  context.publish(workspaceId, {
+    type: "agent.delivery",
+    traceId: nonce(16),
+    sourceNodeId,
+    targetNodeId,
+    outcome: "refused",
+    code,
+  });
+}
+
 export async function send(
   context: CollabContext,
   caller: Caller,
   args: Args,
 ): Promise<Outcome> {
+  const target = resolveTarget(context, caller, args);
+  try {
+    return await sendTo(context, caller, args, target);
+  } catch (error) {
+    announceRefusal(
+      context,
+      caller.node.id,
+      caller.node.workspaceId,
+      target.id,
+      error,
+    );
+    throw error;
+  }
+}
+
+async function sendTo(
+  context: CollabContext,
+  caller: Caller,
+  args: Args,
+  target: NodeRef,
+): Promise<Outcome> {
   const nowMs = nowDate(context).getTime();
   const now = nowSeconds(context);
   const limits = sendLimits();
 
-  const target = resolveTarget(context, caller, args);
   const body = readBody(args);
   const key = readKey(args);
 
