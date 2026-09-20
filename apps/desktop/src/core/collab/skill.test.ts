@@ -17,7 +17,11 @@ import {
   skillInstaller,
   registerSkillInstaller,
 } from "../hook/install/skills";
-import { collaborationSkill, installCollaborationSkill, skillBody } from "./skill";
+import {
+  collaborationSkill,
+  installCollaborationSkill,
+  skillBody,
+} from "./skill";
 
 /**
  * The skill half of the install unit.

@@ -212,6 +212,24 @@ TS `armadra-hook` 客户端由安装步骤写成 `<dataDir>/bin/armadra-hook` �
 
 验证：`pnpm --filter @armadra/desktop test`（含 `hook-bridge.test.ts`、`core/browser/**` 60 例，以及对 Rust 用例的移植）。
 
+### 9.1 2026-09-20 打包验收：动词家族在装出来的应用里跑通
+
+在 `pnpm --filter @armadra/desktop dist` 的产物里，用独立数据目录与独立 CLI 配置目录（`ARMADRA_DATA_DIR`、`CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`COPILOT_HOME`）跑了一遍真 CLI（Claude Code 2.1.260、Codex 0.155.1）。**单测全绿不等于装出来的应用能用**——下面五处都只在打包运行时才看得见，每一处都补了用例：
+
+| 现象                                                                                         | 原因                                                                     | 修复                                      |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------- |
+| 新建菜单里没有任何 Agent，只能开普通终端                                                     | `GET /api/agents` 没有 handler，页面拿到 501                             | `core/agent/list.ts`                      |
+| 安装集成后技能永远「未安装」，集成状态永远不完整                                             | `registerSkillInstaller` 这个接缝没有人填                                | `core/collab/skill.ts`                    |
+| 画布终端里 `armadra-hook` 是 command not found，三族动词都够不着                             | `childEnvironment` 的 `hookBin` 所有调用点都没传                         | `core/terminal/install.ts` 启动时写启动器 |
+| `context terminal`、`canvas interrupt`、`canvas close`、定时投递一律答「终端域还没有装配好」 | `setTerminalBridge` 没有人调用                                           | `core/terminal/bridge.ts`                 |
+| 上下文动词的拒绝全变成 `(500) 核心处理 hook 请求时失败`                                      | 桥没有接 `Refusal`（`browser` 家族的分发器是返回拒绝的，所以只有这一族） | `core/agent/hook-bridge.ts`               |
+
+另有两处会话身份问题：同一个 `session_key` 下的两行会话（重启后被接管的旧 pane + 这期间新开的会话）会被对账同时复活，接管又按无序的 `SELECT` 取行，于是「节点当前的会话」是随机的；空文本的粘贴在 tmux 后端走 `load-buffer` 报 `no buffer`，路由答 500。
+
+跑通的：tmux 与 direct 两个后端的建/输入/resize/粘贴/Ctrl-C/十万行输出/颜色/中文宽字符/断开重附；`Cmd+Q` 后 tmux 会话存活并在重开后重附（同一个 shell pid）；`context list | summary | terminal`、`canvas list | post | inbox | ack | link | rename | interrupt | sticky --dry-run | handoff-read`、`browser read` 的拒绝；交接 prepare → accept → 收件箱通知 → `handoff-read`；会话索引（真实 CLI 目录下 1,974 条）。
+
+**仍然没有的**：`GET /api/agents/{id}/models` 与 `GET /api/models/catalog` 仍是 501，所以节点头的「模型」子菜单开出来是空的；`agents.probes` 没有写者（`CAPABILITY_MIN_VERSION` 为空，所以今天不影响任何能力判定）。
+
 ## 10. R4 / R5：路由表只剩电源租约与所有权两类未认领
 
 R4 与 R5 的六条线全部合入。迁移编号合入时重排为：`0017_event_outbox`（定时与事件 outbox）、`0018_github`（GitHub 三张表）；R6 的账号迁移预分配 `0019`。

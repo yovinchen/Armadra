@@ -347,13 +347,18 @@ describe("start-up reconciliation", () => {
 
     expect(report).toMatchObject({ detached: 1, exited: 1 });
     expect(adopted).toEqual([
-      { key: "node" as SessionKey, reference: "armadra-ws-node-1", generation: 1 },
+      {
+        key: "node" as SessionKey,
+        reference: "armadra-ws-node-1",
+        generation: 1,
+      },
     ]);
     const rows = Object.fromEntries(
       (
-        db
-          .prepare("SELECT id, status FROM terminal_sessions")
-          .all() as Record<string, unknown>[]
+        db.prepare("SELECT id, status FROM terminal_sessions").all() as Record<
+          string,
+          unknown
+        >[]
       ).map((row) => [row.id, row.status]),
     );
     expect(rows).toEqual({ current: "running", stale: "exited" });

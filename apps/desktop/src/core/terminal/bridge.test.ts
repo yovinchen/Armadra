@@ -33,7 +33,10 @@ afterEach(async () => {
   open = undefined;
 });
 
-async function core(): Promise<{ workspaceId: string; bridge: TerminalBridge }> {
+async function core(): Promise<{
+  workspaceId: string;
+  bridge: TerminalBridge;
+}> {
   open = fixture([
     installWorkspaces,
     installCanvas,
@@ -49,8 +52,10 @@ async function core(): Promise<{ workspaceId: string; bridge: TerminalBridge }> 
     id: string;
   }[];
   const bridge = collab()?.terminals;
-  expect(bridge, "the terminal domain left no bridge on the collab context")
-    .toBeDefined();
+  expect(
+    bridge,
+    "the terminal domain left no bridge on the collab context",
+  ).toBeDefined();
   return { workspaceId: (workspaces[0] as { id: string }).id, bridge: bridge! };
 }
 
@@ -84,7 +89,11 @@ describeUnix("the terminal bridge", () => {
     // A generation that has moved on, and somebody else's node: both refused
     // rather than answered about the pane that *is* there.
     expect(
-      await bridge.isCurrentNodeSession(node, session.id, session.generation + 1),
+      await bridge.isCurrentNodeSession(
+        node,
+        session.id,
+        session.generation + 1,
+      ),
     ).toBe(false);
     expect(
       await bridge.isCurrentNodeSession(
@@ -110,8 +119,15 @@ describeUnix("the terminal bridge", () => {
     expect(foreground?.command ?? "").toContain("sh");
 
     await bridge.terminate(session.id, "session");
-    await settled(async () => bridge.generation(session.id) === undefined ||
-      !(await bridge.isCurrentNodeSession(node, session.id, session.generation)));
+    await settled(
+      async () =>
+        bridge.generation(session.id) === undefined ||
+        !(await bridge.isCurrentNodeSession(
+          node,
+          session.id,
+          session.generation,
+        )),
+    );
   }, 60_000);
 
   it("is withdrawn when the domain stops", async () => {

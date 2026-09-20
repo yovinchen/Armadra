@@ -34,7 +34,9 @@ export function terminalBridge(
       // what it was told.
       return {
         ...(info.command === undefined ? {} : { command: info.command }),
-        ...(info.children === undefined ? {} : { children: [...info.children] }),
+        ...(info.children === undefined
+          ? {}
+          : { children: [...info.children] }),
       };
     },
     generation: (sessionId) => manager.generation(sessionId),
@@ -74,5 +76,7 @@ function isCurrentNodeSession(
   if (row === undefined) return false;
   if (Number(row.generation) !== generation) return false;
   if (row.status !== "running") return false;
-  return manager.generation(sessionId) === generation && manager.isAlive(sessionId);
+  return (
+    manager.generation(sessionId) === generation && manager.isAlive(sessionId)
+  );
 }
