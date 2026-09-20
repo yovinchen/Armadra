@@ -1,4 +1,11 @@
-import { History, KeyRound, Recycle, RotateCcw, Tag } from "lucide-react";
+import {
+  History,
+  KeyRound,
+  Recycle,
+  RotateCcw,
+  SlidersHorizontal,
+  Tag,
+} from "lucide-react";
 import { supportedPermissionModes, type PermissionMode } from "@armadra/shared";
 
 import {
@@ -9,6 +16,7 @@ import { useCanvasStore } from "@/store/canvas-store";
 import { customAgentFor, permissionModeLabel } from "@/agent/launch";
 import { t } from "@/app/preferences-store";
 import { openNodeAnnotation } from "@/meta/annotations";
+import { openAgentSettings } from "./agent-settings";
 import { terminalHandle } from "./terminal-registry";
 
 /**
@@ -46,6 +54,13 @@ export function registerTerminalNodeMenu(): () => void {
         label: t("handoff.historyTitle"),
         icon: History,
         run: () => useCanvasStore.getState().setPanel("handoff", "drawer"),
+      },
+      // Agent 设置（设计 §10）：收件箱唤醒、从的投递、转录读取三项的唯一入口。
+      {
+        id: "agent.settings",
+        label: `${t("agentSettings.title")}…`,
+        icon: SlidersHorizontal,
+        run: () => openAgentSettings(node.id),
       },
       {
         id: "agent.restart",

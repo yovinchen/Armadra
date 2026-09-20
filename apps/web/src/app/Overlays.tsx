@@ -21,6 +21,7 @@ import {
   SshPromptDialog,
   UsageDashboard,
 } from "./lazy";
+import { AgentSettingsDialog } from "@/nodes/AgentSettingsDialog";
 import { NodeNameDialog } from "@/nodes/NodeNameDialog";
 import { useMountedOnce, useOverlayRequested } from "./overlay-gates";
 
@@ -104,6 +105,7 @@ export function Overlays() {
       {/* 事件流驱动的四个：必须先订阅，不能等状态。 */}
       <ControlConfirmDialog />
       <NodeNameDialog />
+      <AgentSettingsDialog />
       <SshPromptDialog />
       <HandoffDialog />
     </Suspense>
