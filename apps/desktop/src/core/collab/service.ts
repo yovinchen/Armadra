@@ -1,8 +1,13 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { WorkspaceEvent } from "../bus";
 import type { AgentSettings } from "../agent/registry";
+import type { ObservedActivity } from "../agent/target-state";
+import type { Actor as DriveActor } from "../drive/lease";
+import type { DriveTarget } from "../terminal/manager";
 import { BoardLog } from "./board-log";
 import type { Caller } from "./nodes";
+
+export type { DriveTarget, DriveActor };
 
 /**
  * What the collaboration verbs are handed at assembly time.
@@ -47,6 +52,28 @@ export interface TerminalBridge {
     sessionId: string,
     generation: number,
   ): Promise<boolean>;
+  /**
+   * 一次投递要知道的全部：目标在五态里的哪一个、租约在谁手里、代次是几
+   * （设计 `agent-delivery.md` §4 / §6，阶段 B 留下的接口）。
+   *
+   * 可选，与这个接口上其它几个一样的理由：没有终端域的装配照样要能答路由，
+   * 只是需要 pane 的动词换一句拒绝。`send` 拿不到它就 503。
+   */
+  driveTarget?(nodeId: string): DriveTarget;
+  /**
+   * 写进去**并回车**，一次 `write`（§3.6）。
+   *
+   * 括号粘贴的包裹与 `\r` 必须是同一次写，所以这里借的是终端域那条原语而不是
+   * 自己拼一遍：拼接只有一处，用例直接断言它写出去的字符串形状。
+   */
+  writeSubmit?(
+    sessionId: string,
+    generation: number,
+    text: string,
+    driver?: DriveActor,
+  ): Promise<void>;
+  /** 没有状态适配的会话，终端域对它知道的全部（§4.3 的启发式要的三样）。 */
+  observed?(sessionId: string): ObservedActivity | undefined;
 }
 
 /**
@@ -103,6 +130,12 @@ export interface CollabContext {
   /** `<data dir>`, for the pending-approval files. */
   readonly dataDir: string;
   readonly now?: (() => Date) | undefined;
+  /**
+   * 等一小会儿。`send --interrupt` 是唯一的用户：它发一个 `ESC` 之后要等目标
+   * 报一条 `idle`（§4.5），而「等」在用例里必须是一个可以被跳过的值，否则那条
+   * 「等不到就退回排队」的用例要真的睡五秒。
+   */
+  readonly delay?: ((ms: number) => Promise<void>) | undefined;
 }
 
 export interface CollabOptions {
@@ -115,6 +148,7 @@ export interface CollabOptions {
   readonly handoffReader?: HandoffReader | undefined;
   readonly dataDir?: string;
   readonly now?: (() => Date) | undefined;
+  readonly delay?: ((ms: number) => Promise<void>) | undefined;
 }
 
 /** A context with the optional halves defaulted, for tests and for assembly. */
@@ -130,6 +164,7 @@ export function collabContext(options: CollabOptions): CollabContext {
     boardLog: new BoardLog(),
     dataDir: options.dataDir ?? ".",
     now: options.now,
+    delay: options.delay,
   };
 }
 

@@ -18,9 +18,13 @@ import { type Caller, loadNode } from "../collab/nodes";
 import type { AgentSettings, CustomAgent } from "./registry";
 import {
   type CollabContext,
+  type DriveActor,
+  type DriveTarget,
   type TerminalBridge,
   collabContext,
 } from "../collab/service";
+import { freeLease } from "../drive/lease";
+import type { ObservedActivity } from "./target-state";
 import {
   authorizeMailboxAck,
   noteAcknowledged,
@@ -61,19 +65,41 @@ export function migrationsDir(): string {
 export interface StubTerminal {
   /** Everything written into a pane, newest last. */
   readonly writes: { sessionId: string; generation: number; data: string }[];
+  /**
+   * 每一次 `writeSubmit`，也就是 `send` 真的投出去的那些。
+   *
+   * 与 `writes` 分开记：那条原语的全部意义是「括号粘贴、正文与回车是同一次
+   * 写」，而用例要断言的正是它写出去的那一个字符串的形状。
+   */
+  readonly submits: {
+    sessionId: string;
+    generation: number;
+    data: string;
+    driver: DriveActor | undefined;
+  }[];
   /** Sessions terminated, in order. */
   readonly terminated: string[];
   capture: string;
   foreground: { command?: string; children?: string[] } | undefined;
   liveGeneration: number | undefined;
   current: boolean;
+  /** `driveTarget` 的答案，按节点 id。缺席时由 `agent_status` 的行算出来。 */
+  readonly drive: Map<string, Partial<DriveTarget>>;
+  /** `observed` 的答案，按会话 id。 */
+  readonly activity: Map<string, ObservedActivity>;
+  /** 下一次 `writeSubmit` 抛这个。 */
+  submitError: Error | undefined;
   bridge: TerminalBridge;
 }
 
 export function stubTerminal(): StubTerminal {
   const stub: StubTerminal = {
     writes: [],
+    submits: [],
     terminated: [],
+    drive: new Map(),
+    activity: new Map(),
+    submitError: undefined,
     capture: "",
     foreground: { command: "claude" },
     liveGeneration: 1,
@@ -92,6 +118,23 @@ export function stubTerminal(): StubTerminal {
         stub.terminated.push(sessionId);
       },
       isCurrentNodeSession: async () => stub.current,
+      driveTarget: (nodeId) => {
+        const override = stub.drive.get(nodeId) ?? {};
+        return {
+          nodeId,
+          sessionId: "session",
+          state: "idle",
+          stateSource: "hook",
+          lease: freeLease(0),
+          driveGeneration: 0,
+          ...override,
+        } satisfies DriveTarget;
+      },
+      writeSubmit: async (sessionId, generation, data, driver) => {
+        if (stub.submitError !== undefined) throw stub.submitError;
+        stub.submits.push({ sessionId, generation, data, driver });
+      },
+      observed: (sessionId) => stub.activity.get(sessionId),
     },
   };
   return stub;

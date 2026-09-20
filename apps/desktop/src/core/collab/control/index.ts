@@ -3,10 +3,13 @@ import type { Caller } from "../nodes";
 import { HELP, PROTOCOL, runMailbox } from "../mailbox";
 import { Args, Refusal, Refused, asRefused } from "../refusals";
 import type { CollabContext } from "../service";
+import { cancel } from "./cancel";
 import { close } from "./close";
 import { color, link, rename } from "./edits";
 import { interrupt } from "./interrupt";
 import { list, openAgent, openTerminal, sticky } from "./nodes";
+import { outbox } from "./outbox";
+import { send } from "./send";
 import { type Outcome, outcomeBody, raw, result } from "./outcome";
 
 export { outcomeBody };
@@ -47,6 +50,11 @@ export const VERBS = [
   "color",
   "interrupt",
   "close",
+  // 推式投递（设计 agent-delivery.md §3.3）。`post` 留在原处：一张表与一次
+  // 按键是两件事，不是同一件事的两种写法。
+  "send",
+  "outbox",
+  "cancel",
 ] as const;
 
 export type ControlVerb = (typeof VERBS)[number];
@@ -79,6 +87,8 @@ export type ControlOutcome =
       readonly status: number;
       readonly code: string;
       readonly message: string;
+      /** 机器读的附加字段，原样摊进拒绝体里。 */
+      readonly detail?: Record<string, unknown>;
     };
 
 /**
@@ -115,6 +125,9 @@ export function createControlDispatcher(
           status: refused.status,
           code: refused.code,
           message: refused.message,
+          // `retryable` / `retryAfterMs` / 来源链：一个要靠解析中文句子才能
+          // 知道该退避多久的调用者，没有退避，只有猜测（§3.5、§3.7）。
+          ...(refused.detail === undefined ? {} : { detail: refused.detail }),
         };
       }
     },
@@ -184,6 +197,12 @@ export async function run(
       return interrupt(context, caller, args);
     case "close":
       return close(context, caller, args);
+    case "send":
+      return send(context, caller, args);
+    case "outbox":
+      return outbox(context, caller, args);
+    case "cancel":
+      return cancel(context, caller, args);
     default:
       throw Refusal.badRequest(`未知的画布动词 \`${verb}\`。`);
   }

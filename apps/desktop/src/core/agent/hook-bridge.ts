@@ -83,7 +83,14 @@ export function installHookBridge(
         : {
             kind: "json",
             status: outcome.status,
-            body: { code: outcome.code, message: outcome.message },
+            body: {
+              code: outcome.code,
+              message: outcome.message,
+              // 拒绝体的附加字段摊平在 `{code, message}` 旁边而不是嵌在一个
+              // `detail` 键里：模型读到的是 `retryable: false`，不是
+              // `detail.retryable`（设计 agent-delivery.md §3.7）。
+              ...(outcome.detail ?? {}),
+            },
           };
     },
   );

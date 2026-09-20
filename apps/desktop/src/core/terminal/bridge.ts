@@ -14,7 +14,7 @@ import type { TerminalManager } from "./manager";
  * delivery all refused with "the terminal domain is not assembled" on a canvas
  * whose panes were running.
  *
- * Six methods, each one a single manager call, except the last.
+ * Nine methods, each one a single manager call, except `isCurrentNodeSession`.
  */
 export function terminalBridge(
   manager: TerminalManager,
@@ -45,6 +45,12 @@ export function terminalBridge(
     },
     isCurrentNodeSession: async (nodeId, sessionId, generation) =>
       isCurrentNodeSession(database, manager, nodeId, sessionId, generation),
+    // 阶段 C 的 `send` 要的三样（设计 `agent-delivery.md` §4、§6）。都是
+    // 一行一个 manager 调用，理由与上面那几个一样：协作域不 import 管理器。
+    driveTarget: (nodeId) => manager.driveTarget(nodeId),
+    writeSubmit: (sessionId, generation, text, driver) =>
+      manager.writeSubmit(sessionId, generation, text, driver),
+    observed: (sessionId) => manager.observedActivity(sessionId),
   };
 }
 

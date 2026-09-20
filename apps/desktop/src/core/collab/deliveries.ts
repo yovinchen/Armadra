@@ -1,18 +1,20 @@
+import type { DatabaseSync } from "node:sqlite";
 import { getWorkspace } from "../workspaces/table";
+import { rfc3339 } from "../workspaces/support";
 import type { CollabContext } from "./service";
 
 /**
  * `GET /api/workspaces/{id}/deliveries` — the delivery record panel.
  *
- * Ported from the pre-merge implementation. **Deprecated as a
- * collaboration record.** The verbs that typed a peer's message into a
- * terminal are gone, and nothing in this core inserts here any more: a peer's
- * message lives in `agent_mailbox` until its recipient reads it.
+ * Ported from the pre-merge implementation, and **written into again** since
+ * `send` landed: the verb that types a peer's message into a terminal is back
+ * (设计 `agent-delivery.md` §3.4 最后一段), so this table is the delivery
+ * record once more rather than a history that only ever gets shorter. `post`
+ * still writes nothing here — a mailbox entry is not a delivery, it is a row
+ * its recipient may never read.
  *
- * The table and this reader stay because published rows keep meaning what they
- * meant — a Host wrote some of them, and the panel is a history. Rows never
- * contain the message body, only how many characters it had, so this is safe
- * to render verbatim.
+ * Rows never contain the message body, only how many characters it had, so
+ * this is safe to render verbatim.
  */
 
 export interface AgentDelivery {
@@ -62,4 +64,47 @@ export function listDeliveries(
     bodyChars: Number(row.body_chars),
     createdAt: row.created_at,
   }));
+}
+
+export interface NewDelivery {
+  readonly traceId: string;
+  readonly workspaceId: string;
+  readonly sourceNodeId: string;
+  readonly targetNodeId: string;
+  readonly outcome: string;
+  /** 队列项 id，或者别的什么让这一行能被追回去的东西。 */
+  readonly receipt?: string | undefined;
+  readonly bodyChars: number;
+}
+
+/**
+ * 记一次投递、一次排队或者一次拒绝。
+ *
+ * 永不抛：这张表是**记录**，而一条投递已经发生的事实不该因为记不下来而被回滚
+ * （`board-log.ts` 的同一条规矩）。写不进去时那一次仍然有 board-log 那一行。
+ */
+export function recordDelivery(
+  database: DatabaseSync,
+  delivery: NewDelivery,
+): void {
+  try {
+    database
+      .prepare(
+        "INSERT OR REPLACE INTO agent_deliveries (trace_id, workspace_id, source_node_id, " +
+          "target_node_id, outcome, receipt, body_chars, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        delivery.traceId,
+        delivery.workspaceId,
+        delivery.sourceNodeId,
+        delivery.targetNodeId,
+        delivery.outcome,
+        delivery.receipt ?? null,
+        delivery.bodyChars,
+        rfc3339(),
+      );
+  } catch {
+    // 见上：记录写不进去不是投递失败。
+  }
 }

@@ -53,12 +53,29 @@ export class Refusal extends Error {
 export class Refused extends Error {
   readonly status: number;
   readonly code: string;
+  /**
+   * Extra machine-readable fields the refusal body carries beside
+   * `{code, message}` — `retryable`, `retryAfterMs`, the source chain that
+   * closed a loop.
+   *
+   * A caller that has to parse a sentence to learn how long to back off does
+   * not have a backoff, it has a guess. `send` is the first verb with codes
+   * that carry a number (§3.5 的 `RATE_LIMITED`), so the slot lives here
+   * rather than in that one verb.
+   */
+  readonly detail?: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    detail?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = "Refused";
     this.status = status;
     this.code = code;
+    if (detail !== undefined) this.detail = detail;
   }
 
   /** The code a bare {@link Refusal}'s status implies. */

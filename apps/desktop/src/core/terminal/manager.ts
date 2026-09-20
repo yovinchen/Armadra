@@ -48,7 +48,11 @@ import {
   type DriveSessionRef,
 } from "./drive";
 import { getAgentStatus } from "../agent/status";
-import { type TargetState, targetState } from "../agent/target-state";
+import {
+  type ObservedActivity,
+  type TargetState,
+  targetState,
+} from "../agent/target-state";
 import { allows } from "../identity/gate";
 import { scope } from "../identity/scopes";
 import {
@@ -945,6 +949,23 @@ export class TerminalManager {
       undefined,
       driver,
     );
+  }
+
+  /**
+   * 没有状态适配的会话，这个域对它知道的全部（设计 `agent-delivery.md` §4.3）。
+   *
+   * 三样都是已有的东西：输入围栏的 `pending`、最后一次活动的时刻。**不**解析
+   * 提示符、**不**识别 OSC。`lastActivity` 在输入与输出两侧都被更新，所以输入
+   * 与输出的时刻在这里是同一个数——那条启发式取的本来就是两者的较晚者。
+   */
+  observedActivity(sessionId: string): ObservedActivity | undefined {
+    const record = this.records.get(sessionId);
+    if (record === undefined || record.exited) return undefined;
+    return {
+      pending: record.inputSafety.pending,
+      lastInputAt: record.lastActivity,
+      lastOutputAt: record.lastActivity,
+    };
   }
 
   private noteInput(record: SessionRecord, bytes: Buffer): void {
