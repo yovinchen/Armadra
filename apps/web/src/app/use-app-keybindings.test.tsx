@@ -101,6 +101,20 @@ describe("useAppKeybindings", () => {
     expect(useCanvasStore.getState().panels.sidebar).toBe("open");
   });
 
+  it("浏览器节点自己的命令不在这里接，留给焦点所在的节点", () => {
+    // ⌘R 是 browser.reload 的默认键位；没有节点在时它什么都不该做，
+    // 也不该把这一下吃掉。
+    const event = new KeyboardEvent("keydown", {
+      key: "r",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(runCanvasCommand).not.toHaveBeenCalledWith("browser.reload");
+  });
+
   it("画布类命令转发给 runCanvasCommand", () => {
     press("z");
     expect(runCanvasCommand).toHaveBeenCalledWith("canvas.undo");

@@ -69,6 +69,11 @@ export function useAppKeybindings(dispatch: CommandDispatch): void {
   const handlers = useMemo<KeybindingHandlers>(() => {
     const map: KeybindingHandlers = {};
     for (const command of COMMANDS) {
+      // The browser node's own commands are answered by the node that has the
+      // focus (`WebviewSurface` binds them on its subtree). Registering them
+      // here too meant this capture-phase listener won first, called a
+      // dispatcher that knows nothing of them, and swallowed the keystroke.
+      if (command.scope === "browser") continue;
       map[command.id] = () => dispatch.run(command.id);
     }
     return map;
