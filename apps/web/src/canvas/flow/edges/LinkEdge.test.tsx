@@ -1,5 +1,13 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { cleanup, render } from "@testing-library/react";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { act, cleanup, render } from "@testing-library/react";
 import {
   Position,
   ReactFlow,
@@ -9,11 +17,14 @@ import {
   type NodeHandle,
   type NodeTypes,
 } from "@xyflow/react";
-import type { CanvasNode } from "@armadra/shared";
+import type { CanvasNode, WorkspaceEvent } from "@armadra/shared";
 
 import { installDomPolyfills } from "@/app/test-harness";
 import { makeNode } from "@/canvas/test-support";
+import { dispatchWorkspaceEvent } from "@/api/events";
+import { DELIVERY_FLASH_MS, useDeliveryStore } from "@/agent/delivery-store";
 import { edgeTypes } from "./edge-types";
+import { deliveryTooltip } from "./LinkEdge";
 
 /**
  * 上下文连线的渲染（React Flow 计划 F06）。
@@ -24,7 +35,17 @@ import { edgeTypes } from "./edge-types";
  */
 
 beforeAll(installDomPolyfills);
-afterEach(cleanup);
+
+beforeEach(() => {
+  // 闪动有一个明确的终点，所以时间在这一组里是一个值。
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  useDeliveryStore.getState().reset();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const A = "019ff7d1-0d12-7421-833d-2c5e8d64ed01";
 const B = "019ff7d1-0d12-7421-833d-2c5e8d64ed02";
@@ -144,5 +165,52 @@ describe("LinkEdge", () => {
     ) as SVGPathElement;
     expect(pickedPath.style.strokeWidth).toBe("3.5");
     expect(edgeGroup(picked.container).style.color).toBe("var(--brand)");
+  });
+
+  /**
+   * 投递（设计 §10）。闪动是**一次事件**：两秒之内这条边高亮并有一段流动的
+   * 虚线，之后自己回到常态；悬停提示留着，因为「最近一次」比「刚刚」长命。
+   */
+  it("一次投递让这条边闪一下，两秒后自己停", () => {
+    act(() => {
+      dispatchWorkspaceEvent({
+        type: "agent.delivery",
+        traceId: "t-1",
+        sourceNodeId: A,
+        targetNodeId: B,
+        outcome: "delivered",
+      } as WorkspaceEvent);
+    });
+    const { container } = renderEdge("terminal", "terminal");
+    expect(edgeGroup(container).dataset.delivery).toBe("true");
+    expect(
+      edgeGroup(container).querySelector(".anim-delivery-flow"),
+    ).not.toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(DELIVERY_FLASH_MS + 10);
+    });
+    expect(edgeGroup(container).dataset.delivery).toBeUndefined();
+    expect(
+      edgeGroup(container).querySelector(".anim-delivery-flow"),
+    ).toBeNull();
+  });
+
+  it("悬停提示说最近一次的结果与时刻，被拒的多说一句为什么", () => {
+    const t = (key: string, vars?: Record<string, string | number>) =>
+      `${key}${vars === undefined ? "" : JSON.stringify(vars)}`;
+    expect(deliveryTooltip(undefined, t)).toBeNull();
+    const refused = deliveryTooltip(
+      {
+        sourceNodeId: A,
+        targetNodeId: B,
+        outcome: "refused",
+        code: "LOOP_DETECTED",
+        at: Date.now(),
+      },
+      t,
+    );
+    expect(refused).toContain("delivery.edge.last");
+    expect(refused).toContain("error.delivery.LOOP_DETECTED");
   });
 });

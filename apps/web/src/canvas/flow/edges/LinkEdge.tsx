@@ -3,7 +3,9 @@ import { BaseEdge, useInternalNode, useStore } from "@xyflow/react";
 import type { EdgeProps, InternalNode, Node } from "@xyflow/react";
 import type { CanvasNode } from "@armadra/shared";
 
+import { useDeliveryEdge, type DeliveryMark } from "@/agent/delivery-store";
 import { useT } from "@/app/preferences-store";
+import { formatRelativeTime } from "@/lib/format";
 import type { Box } from "../../geometry";
 import type { LinkFlowEdge } from "../../sync/project";
 import {
@@ -50,6 +52,27 @@ function typeOf(node: InternalNode<Node> | undefined): string | undefined {
   return data?.type;
 }
 
+/**
+ * 边上那句悬停提示：最近一次投递的结果与时刻。
+ *
+ * 结果码原样按码取文案（`i18n/errors.ts` 的码表），拒绝的那一条多说一句为什么
+ * ——`refused` 单独看等于什么都没说。没有投递过就没有这句话。
+ */
+export function deliveryTooltip(
+  mark: DeliveryMark | undefined,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string | null {
+  if (mark === undefined) return null;
+  const outcome = t(`delivery.outcome.${mark.outcome}`);
+  const line = t("delivery.edge.last", {
+    outcome,
+    time: formatRelativeTime(mark.at),
+  });
+  return mark.code === undefined
+    ? line
+    : `${line} · ${t(`error.delivery.${mark.code}`)}`;
+}
+
 export function LinkEdge({
   source,
   target,
@@ -62,6 +85,10 @@ export function LinkEdge({
   // 缩得太小时标签只剩糊成一团的墨点（§2.3）。只订阅缩放这一个数，
   // 平移时不会把每条边都重渲一遍。
   const zoom = useStore((state) => state.transform[2]);
+  // 这条边上最近一次投递（设计 §10）。两个方向取较新的那一次：画布上的一条线
+  // 是无向的，投递不是。
+  const { mark, flashing } = useDeliveryEdge(source, target);
+  const tooltip = deliveryTooltip(mark, t);
 
   const sourceBox = boxOf(sourceNode);
   const targetBox = boxOf(targetNode);
@@ -75,21 +102,52 @@ export function LinkEdge({
   );
   const { curve } = view;
   const width = selected ? STROKE_WIDTH_SELECTED : STROKE_WIDTH;
-  const color = selected ? "var(--brand)" : "var(--muted-foreground)";
+  const color = flashing
+    ? "var(--brand)"
+    : selected
+      ? "var(--brand)"
+      : "var(--muted-foreground)";
   const label = zoom >= LABEL_MIN_ZOOM ? t(view.labelKey) : "";
 
   return (
-    <g style={{ color }} data-slot="link-edge">
+    <g
+      style={{ color }}
+      data-slot="link-edge"
+      data-delivery={flashing ? "true" : undefined}
+    >
+      {/*
+        最近一次投递（设计 §10）。原生 `<title>` 而不是一个浮层：一条边不该
+        因为要说一句话就变成一个可聚焦的控件，而这句话只在鼠标停下来时有用。
+        正文不在这里——记录里从来就没有正文。
+      */}
+      {tooltip === null ? null : <title>{tooltip}</title>}
       <BaseEdge
         path={curve.d}
         interactionWidth={INTERACTION_WIDTH}
         style={{
           ...style,
           stroke: "currentColor",
-          strokeWidth: width,
+          strokeWidth: flashing ? width + 1 : width,
           strokeLinecap: "round",
         }}
       />
+      {/*
+        投递的那一下：一段沿着同一条曲线流向目标的虚线，两秒后自己停。
+        动效由 `prefers-reduced-motion` 统一压掉（tokens.css），压掉之后线仍然
+        是高亮的——「刚刚发生过一件事」这个事实不该只由动画承担。
+      */}
+      {flashing ? (
+        <path
+          className="anim-delivery-flow"
+          d={curve.d}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={width + 1}
+          strokeLinecap="round"
+          strokeDasharray="6 10"
+          pointerEvents="none"
+        />
+      ) : null}
       {view.arrowStart ? (
         <path
           d={arrowHead({ x: curve.sourceX, y: curve.sourceY }, curve.c1)}

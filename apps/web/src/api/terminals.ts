@@ -1,5 +1,8 @@
 import {
   createTerminalRequestSchema,
+  driveLeaseSchema,
+  terminalDriveRequestSchema,
+  type TerminalDriveAction,
   sessionsResponseSchema,
   terminalBackendInfoSchema,
   terminalCaptureResponseSchema,
@@ -40,6 +43,18 @@ export const terminalsApi = {
     request(`/api/terminals/${sessionId}/paste`, noContentSchema, {
       method: "POST",
       ...json(terminalPasteRequestSchema.parse({ text, enter })),
+    }),
+  /**
+   * 接管 / 交还这块屏幕（设计 `agent-delivery.md` §6.1）。
+   *
+   * 与「人敲一个键」不是同一件事：那是抢占，十秒后自己过期；这是一句明确的
+   * 「现在归我」，Agent 一律被拒直到有人按交还。答回来的就是新的租约，但徽标
+   * 不读它——那一帧 `terminal.lease` 会到每一台看着这块画布的设备上。
+   */
+  driveTerminal: (sessionId: string, action: TerminalDriveAction) =>
+    request(`/api/terminals/${sessionId}/drive`, driveLeaseSchema, {
+      method: "POST",
+      ...json(terminalDriveRequestSchema.parse({ action })),
     }),
   /** 三级终止（§15.5）：中断信号 / 杀进程树 / 连持久会话一起销毁。 */
   terminateTerminal: (sessionId: string, mode: TerminateMode = "process") =>

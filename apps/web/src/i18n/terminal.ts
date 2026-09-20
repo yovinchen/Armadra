@@ -27,6 +27,8 @@ const zh = {
   "terminal.drive.you": "你在驱动",
   "terminal.drive.takeover": "你已接管",
   "terminal.drive.agent": "Agent {name} 在驱动",
+  "terminal.drive.take": "接管",
+  "terminal.drive.giveBack": "交还",
 
   "terminal.render.disconnected": "已断开",
   "terminal.render.detached": "已分离",
@@ -75,6 +77,8 @@ const en: Record<keyof typeof zh, string> = {
   "terminal.drive.you": "You are driving",
   "terminal.drive.takeover": "You took over",
   "terminal.drive.agent": "Agent {name} is driving",
+  "terminal.drive.take": "Take over",
+  "terminal.drive.giveBack": "Hand back",
 
   "terminal.render.disconnected": "Disconnected",
   "terminal.render.detached": "Detached",

@@ -4,10 +4,13 @@ import {
   AlertTriangle,
   PlugZap,
   Recycle,
+  Repeat2,
   TerminalSquare,
   X,
 } from "lucide-react";
 import { runtimeApi } from "../api/client";
+import { useDeliveryStore } from "../agent/delivery-store";
+import { requestCenterOnNode } from "../canvas/flow/flow-context";
 import { usePreferencesStore, useT } from "../app/preferences-store";
 import { useEnabledAgents } from "../app/use-agents";
 import { useCanvasStore } from "../store/canvas-store";
@@ -33,6 +36,12 @@ export function Banners() {
   );
   const agents = useEnabledAgents();
   const [dismissed, setDismissed] = useState<string[]>([]);
+  const notices = useDeliveryStore((state) => state.notices);
+  const dismissNotice = useDeliveryStore((state) => state.dismissNotice);
+  const selectNodes = useCanvasStore((state) => state.selectNodes);
+  const nodes = useCanvasStore((state) => state.document?.nodes);
+  const nodeTitle = (nodeId: string) =>
+    nodes?.find((node) => node.id === nodeId)?.title ?? nodeId;
 
   const health = useQuery({
     queryKey: ["health"],
@@ -136,6 +145,35 @@ export function Banners() {
           setPanel("settings", true);
         }}
         onDismiss={() => setDismissed((list) => [...list, "residue"])}
+      />,
+    );
+  }
+
+  /*
+   * 被拦下的投递（设计 `agent-delivery.md` §10）。
+   *
+   * 这是通知条里唯一一条**由一次事件**而不是由一个持续状态驱动的：环与速率
+   * 闸拦下的那一次不会留下任何一个「还在错着」的状态，所以它只能由发生过的
+   * 那件事自己说一次。去重、计数与「关掉之后多久不再来」都在 store 里
+   * （`agent/delivery-store.ts`），这里只画。
+   */
+  for (const notice of notices) {
+    items.push(
+      <Banner
+        key={notice.id}
+        tone="warn"
+        icon={<Repeat2 />}
+        text={t("delivery.notice", {
+          source: nodeTitle(notice.sourceNodeId),
+          target: nodeTitle(notice.targetNodeId),
+          reason: t(`error.delivery.${notice.code}`),
+        })}
+        actionLabel={t("delivery.notice.open")}
+        onAction={() => {
+          selectNodes([notice.sourceNodeId, notice.targetNodeId]);
+          requestCenterOnNode(notice.targetNodeId);
+        }}
+        onDismiss={() => dismissNotice(notice.id)}
       />,
     );
   }

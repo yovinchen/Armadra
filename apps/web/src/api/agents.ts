@@ -9,6 +9,8 @@ import {
   controlConfirmRequestSchema,
   controlConfirmResponseSchema,
   deliveriesResponseSchema,
+  deliveryCancelResponseSchema,
+  deliveryQueueResponseSchema,
   exportPngRequestSchema,
   exportPngResponseSchema,
   importAssetRequestSchema,
@@ -51,6 +53,26 @@ export const agentsApi = {
     request(
       `/api/workspaces/${workspaceId}/deliveries?limit=${limit}`,
       deliveriesResponseSchema,
+    ),
+  /**
+   * 排在一个终端节点前面的那些（设计 `agent-delivery.md` §4.6、§10）。
+   *
+   * 与上面那条是同一条路径的两个切片：记录说「发生过什么」，这一条说「还压着
+   * 什么」。节点头的「排队 N」数的就是它，所以计数不由页面自己按事件加减——
+   * core 才是那张表的唯一来源。
+   */
+  deliveryQueue: (workspaceId: string, nodeId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/deliveries?node=${query(nodeId)}`,
+      deliveryQueueResponseSchema,
+      { signal },
+    ),
+  /** 人拒收一条还排着的。已经在投的那条收不回来，答 `cancelled:false`。 */
+  cancelDelivery: (workspaceId: string, deliveryId: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/deliveries/${query(deliveryId)}`,
+      deliveryCancelResponseSchema,
+      { method: "DELETE" },
     ),
   /** 关闭确认的人工答复（§5.8）。`accepted:false` = 那边已经等超时了。 */
   confirmControl: (requestId: string, approve: boolean) =>

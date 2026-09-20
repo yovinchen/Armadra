@@ -47,6 +47,7 @@ import {
 } from "@/terminal/TerminalSurface";
 import { autoNameNode } from "@/meta/annotations";
 import { HandoffBadge } from "@/agent/handoff/HandoffBadge";
+import { DeliveryQueueBadge } from "./DeliveryQueueBadge";
 import { DriveBadge } from "./DriveBadge";
 import { MemoryBadge } from "@/panels/resources/MemoryBadge";
 import { openHandoff } from "@/agent/handoff/handoff-targets";
@@ -241,7 +242,14 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
         谁在驱动（`agent-delivery.md` §6）。只有真的有人或有 Agent 在驱动时
         才出现：空闲是常态，画出来只是噪音。
       */}
-      {!exited && <DriveBadge nodeId={id} />}
+      {!exited && <DriveBadge nodeId={id} sessionId={sessionId} />}
+      {/*
+        排在这个终端前面的那些（`agent-delivery.md` §4.6）。队空就不画：
+        没有人排队是常态。
+      */}
+      {!exited && (
+        <DeliveryQueueBadge nodeId={id} workspaceId={workspaceId ?? null} />
+      )}
       <GithubReferenceBadge nodeId={id} />
       {exited && (
         <Badge

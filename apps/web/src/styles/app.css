@@ -234,6 +234,17 @@
   }
 }
 
+/*
+ * 一次投递（`agent-delivery.md` §10）：虚线沿着那条连线流向目标，两秒后
+ * 由页面自己撤掉。与 rope 的区别是它是**一次事件**而不是一个持续状态，所以
+ * 节奏更快、笔画更短。
+ */
+@keyframes armadra-delivery-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
 @layer utilities {
   .anim-dot-pulse {
     animation: armadra-dot-pulse 1.6s ease-in-out infinite;
@@ -241,6 +252,10 @@
 
   .anim-rope-flow {
     animation: armadra-rope-flow 1s linear infinite;
+  }
+
+  .anim-delivery-flow {
+    animation: armadra-delivery-flow 0.6s linear infinite;
   }
 }
 

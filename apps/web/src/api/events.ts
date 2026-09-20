@@ -22,6 +22,8 @@ import { workspaceEventSchema, type WorkspaceEvent } from "@armadra/shared";
 
 import { workspaceEventsUrl } from "./client";
 import { useAgentStatusStore } from "../agent/status-store";
+import { useDeliveryStore } from "../agent/delivery-store";
+import { useDriveStore } from "../agent/drive-store";
 import { useLanguageStatusStore } from "../editor/language/status-store";
 
 type EventType = WorkspaceEvent["type"];
@@ -62,6 +64,11 @@ export function dispatchWorkspaceEvent(event: WorkspaceEvent): void {
   // 语言会话与服务器状态走同一条流（语言服务设计 §2.9）：状态栏和设置页
   // 因此不必为了看一眼状态就开一条会话 socket。
   useLanguageStatusStore.getState().handleEvent(event);
+  // 投递的痕迹（连线闪动、「排队 N」、被拦下的那一条）也是一份易失镜像，
+  // 与上面两个同一档：订阅者不必为了看一眼就各自记一份。
+  useDeliveryStore.getState().handleEvent(event);
+  // 谁在驱动哪个终端，同一档：节点头的徽标与命令面板读同一个答案。
+  useDriveStore.getState().handleEvent(event);
   for (const handler of handlers.get(event.type) ?? []) handler(event);
 }
 

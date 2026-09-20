@@ -16,6 +16,7 @@ import { sshMenuItems } from "../canvas/menus/add-menu";
 import { requestCenterOnNode } from "../canvas/flow/flow-context";
 import { nodeDropPosition } from "../canvas/placement";
 import { useSshHosts } from "./settings/ssh-hosts";
+import { useTerminalNodeCommands } from "./delivery-commands";
 import {
   CommandDialog,
   CommandEmpty,
@@ -52,6 +53,8 @@ export function CommandPalette() {
     ],
     [addMenuItems, hosts, t],
   );
+  // 选中的那个终端能做的几件事（投递队列、接管 / 交还）。
+  const terminalCommands = useTerminalNodeCommands(t);
   const [query, setQuery] = useState("");
   // 历史对话索引（§17）：只在面板开着时查，输入去抖 150ms。
   const conversations = useConversations(query, open);
@@ -180,6 +183,28 @@ export function CommandPalette() {
                 <CommandShortcut className="tabular-nums">
                   {formatRelativeTime(conversation.updatedAt)}
                 </CommandShortcut>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/*
+          选中的那个终端节点能做的两件事（设计 `agent-delivery.md` §10）。
+          只对**当前选中的终端节点**出现：这两条都是对一个具体终端说的话，
+          没有选中任何终端时它们没有主语。
+        */}
+        {terminalCommands.length > 0 && (
+          <CommandGroup heading={t("palette.command")}>
+            {terminalCommands.map((command) => (
+              <CommandItem
+                key={command.id}
+                value={`${t("palette.command")} ${command.label}`}
+                onSelect={() => {
+                  close();
+                  command.run();
+                }}
+              >
+                {command.label}
               </CommandItem>
             ))}
           </CommandGroup>
