@@ -41,3 +41,32 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
       }) as unknown as MediaQueryList,
   });
 }
+
+/**
+ * `DOMMatrixReadOnly`：React Flow 的 `updateNodeInternals` 用它解析节点的
+ * `transform` 取缩放（`getDimensions` → `.m22`）；把手挂上时会补量一次
+ * （`ConnectionHandles`），于是任何在真 React Flow 里挂过节点的测试都会走到
+ * 这里。jsdom 没有这个类。恒等矩阵：测试里从不断言像素。
+ */
+if (
+  typeof window !== "undefined" &&
+  typeof window.DOMMatrixReadOnly !== "function"
+) {
+  class DOMMatrixReadOnlyStub {
+    readonly a = 1;
+    readonly b = 0;
+    readonly c = 0;
+    readonly d = 1;
+    readonly e = 0;
+    readonly f = 0;
+    readonly m11 = 1;
+    readonly m22 = 1;
+    readonly is2D = true;
+    readonly isIdentity = true;
+  }
+  Object.defineProperty(window, "DOMMatrixReadOnly", {
+    writable: true,
+    configurable: true,
+    value: DOMMatrixReadOnlyStub,
+  });
+}
