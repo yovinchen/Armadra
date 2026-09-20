@@ -14,6 +14,16 @@
 /** 自动化面板认的那个名字。改它等于让所有已装机器的面板一起熄灭。 */
 export const AUTOMATION_CAPABILITY = "automation.plans.v1";
 
+/**
+ * GitHub 面板认的那个名字（`apps/web/src/host/github-session.ts` 的
+ * `GITHUB_CAPABILITY`）。
+ *
+ * 面板在发第一条请求之前先看 Hello 里有没有它，没有就整块显示「这个 Host 没有
+ * GitHub 服务」。所以 GitHub 域装配成功必须报出来——否则 24 个动词全在，面板却
+ * 一条都不发。
+ */
+export const GITHUB_CAPABILITY = "github.issues.v1";
+
 const registered = new Set<string>();
 
 /** 报一个能力名，返回撤销函数。同一个名字报两次只算一次。 */

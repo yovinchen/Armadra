@@ -122,10 +122,16 @@ describe("fetchNativeTicket through the shell bridge", () => {
     expect(mocks.bridgeTicket).not.toHaveBeenCalled();
   });
 
-  it("returns the shell's ticket as the JSON pair() accepts", async () => {
+  /**
+   * core 的 `/api/identity/pair` 收的是 `<id>.<secret>` 那个票本身
+   * （`core/identity/service.ts` 的 `parseToken`）。送整个信封 JSON 会在拆票
+   * 那一步就落空，配对永远 401：桌面壳一台设备都配不出来，自动化与 GitHub
+   * 两块面板从此打不开。
+   */
+  it("交出去的是信封里那个票，不是信封", async () => {
     shell();
     mocks.bridgeTicket.mockResolvedValue({ ok: true, ticket: shellTicket });
-    expect(JSON.parse(await fetchNativeTicket())).toEqual(shellTicket);
+    expect(await fetchNativeTicket()).toBe(shellTicket.ticket);
     expect(mocks.bridgeTicket).toHaveBeenCalledOnce();
   });
 

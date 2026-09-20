@@ -503,8 +503,10 @@ describe("请求落不了地时不再静默", () => {
  * 这两条钉住：同 id 不注销，换 id 才注销旧的那个。
  */
 describe("guest 重新登记", () => {
-  const register = vi.fn(async () => ({ ok: true }));
-  const unregister = vi.fn(async () => ({ ok: true }));
+  const register = vi.fn(async (_registration: { webContentsId: number }) => ({
+    ok: true,
+  }));
+  const unregister = vi.fn(async (_webContentsId: number) => ({ ok: true }));
 
   beforeEach(() => {
     register.mockClear();
@@ -536,10 +538,7 @@ describe("guest 重新登记", () => {
     });
     expect(register).toHaveBeenCalled();
     expect(
-      register.mock.calls.every(
-        ([call]) =>
-          (call as unknown as { webContentsId: number }).webContentsId === 7,
-      ),
+      register.mock.calls.every(([call]) => call.webContentsId === 7),
     ).toBe(true);
     expect(unregister).not.toHaveBeenCalled();
   });

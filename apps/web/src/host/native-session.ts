@@ -129,15 +129,22 @@ function validTicket(value: unknown): value is NativeTicket {
  * `{ ok: false, error: { code } }`——Electron 会把 `handle` 的拒绝压成一句话，
  * 结构留不下来，所以拒绝走返回值而不是异常。
  *
- * 认不出的东西一律 `shellUnavailable`。票据不进日志、不进存储，原样交给
- * `POST /api/identity/pair`。
+ * 认不出的东西一律 `shellUnavailable`。票据不进日志、不进存储。
+ *
+ * 交出去的是**信封里那个票本身**，不是信封。`POST /api/identity/pair` 的
+ * `ticket` 是 `<id>.<secret>` 那个字符串（core 那边 `parseToken` 就按这个拆），
+ * 服务器壳从 `#pair=<票>` 带来的也是同一种东西。把整个信封 JSON 塞进去会在
+ * `parseToken` 那一步就落空，配对永远 401——于是桌面壳上一台设备都配不出来，
+ * 自动化面板显示「连不上 Host」、GitHub 面板打不开，两张 JSON 面的本机主人
+ * 判定也答 `unauthenticated`。信封的其余字段（host、instance、origin、有效期）
+ * 在壳里由 `checkCoreTicket` 核过，不需要再送一遍。
  */
 export async function fetchNativeTicket(): Promise<string> {
   const bridge = isNativeShell() ? ticketBridge() : undefined;
   if (!bridge) throw new HostNativeSessionError("shellUnavailable");
   const ticket = await ticketFromBridge(bridge);
   if (!validTicket(ticket)) throw new HostNativeSessionError("malformed");
-  return JSON.stringify(ticket);
+  return ticket.ticket;
 }
 
 async function ticketFromBridge(bridge: {
