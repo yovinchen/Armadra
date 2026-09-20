@@ -14,6 +14,7 @@ import type { CoreContext } from "../main";
 import { settingsDomain } from "../settings";
 import { emptySnapshot, miniUsage, type UsageSnapshot } from "./snapshot";
 import { UsageService } from "./service";
+import { catalogPrices, modelsDomain } from "../models";
 
 export {
   emptySnapshot,
@@ -46,7 +47,13 @@ export {
   summarize,
   undated,
 } from "./cost";
-export type { CostSummary, ModelPrice, TokenTotals } from "./cost";
+export type {
+  CostSummary,
+  ModelPrice,
+  PriceLookup,
+  PriceTable,
+  TokenTotals,
+} from "./cost";
 export {
   claudeWindows,
   codexCliWindows,
@@ -88,6 +95,9 @@ export function install(context: CoreContext): UsageDomain {
   const service = new UsageService({
     settings: settingsDomain()?.settings,
     dataDir: context.dataDir,
+    // 目录域装在用量域**后面**，所以这里问的是「扫描那一刻」的那份目录，而不是
+    // 装配这一刻的（那时候它还不存在）。
+    catalogPrices: () => catalogPrices(modelsDomain()?.catalog.current()),
   });
   setUsageSource(() => service.snapshot());
 

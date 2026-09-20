@@ -231,17 +231,42 @@ export function undated(model: string): string | undefined {
 export type PriceTable = Readonly<Record<string, ModelPrice>>;
 
 /**
+ * 查价时按顺序问的那几张表。
+ *
+ * 三级回退：**内置 → 目录 → 未定价**。内置表在前，因为它是和 Rust Runtime 逐行
+ * 对过的那一份，同一台机器在两种实现下必须算出同一个数字；models.dev 的目录在
+ * 后，它覆盖的是内置表里没有的那些模型（新发布的、别家的）。一个模型两张表都
+ * 没有就是**没有价格**，看板只显示它的 token——从一个名字相近的模型估价，比不
+ * 报价更糟。
+ */
+export type PriceLookup = PriceTable | readonly PriceTable[];
+
+function tablesOf(lookup: PriceLookup): readonly PriceTable[] {
+  return Array.isArray(lookup)
+    ? (lookup as readonly PriceTable[])
+    : [lookup as PriceTable];
+}
+
+/**
  * 一个记录里写的模型 id 的价格。不在表里的模型**完全没有成本**——看板只显示它的
  * token。**永远不从一个名字相近的模型估**。
+ *
+ * 每张表都先按原名查、再按去掉日期的名字查，然后才轮到下一张：一个带日期的快照
+ * 命中内置表的不带日期条目，仍然算内置表答的，目录不该把它顶掉。
  */
 export function priceFor(
-  table: PriceTable,
+  lookup: PriceLookup,
   model: string,
 ): ModelPrice | undefined {
-  const direct = table[model];
-  if (direct !== undefined) return direct;
   const fallback = undated(model);
-  return fallback === undefined ? undefined : table[fallback];
+  for (const table of tablesOf(lookup)) {
+    const direct = table[model];
+    if (direct !== undefined) return direct;
+    if (fallback !== undefined && table[fallback] !== undefined) {
+      return table[fallback];
+    }
+  }
+  return undefined;
 }
 
 /** 一桶 token 值多少美元。 */
@@ -637,7 +662,7 @@ export class ScanState {
 
 function windowFrom(
   entries: readonly (readonly [string, TokenTotals])[],
-  prices: PriceTable,
+  prices: PriceLookup,
 ): CostWindow {
   const merged = new Map<string, TokenTotals>();
   for (const [model, tokens] of entries) {
@@ -673,7 +698,7 @@ function windowFrom(
 /** 把一次原始扫描变成线上形状：切窗口、定价、补齐 30 天的轴。 */
 export function summarize(
   result: ScanResult,
-  prices: PriceTable,
+  prices: PriceLookup,
   nowMs: number,
 ): CostSummary {
   const now = new Date(nowMs);
@@ -749,10 +774,14 @@ export class CostService {
   private readonly state: ScanState;
   private lastScanMs: number | undefined;
 
+  /**
+   * `prices` 可以是一个**函数**，因为目录是会变的：models.dev 抓回来之后，下一
+   * 次扫描就该用上新价格，而不是等到重启。
+   */
   constructor(
     private readonly enabled: () => boolean,
     private readonly now: () => number = () => Date.now(),
-    private readonly prices: PriceTable = BUILT_IN_PRICES,
+    private readonly prices: PriceLookup | (() => PriceLookup) = BUILT_IN_PRICES,
   ) {
     this.state = new ScanState(now);
   }
@@ -801,7 +830,12 @@ export class CostService {
       .then((result) => {
         this.lastScanMs = nowMs;
         this.summaryValue = {
-          ...summarize(result, this.prices, nowMs),
+          // 价格在这里才读：刚抓回来的目录这一趟就算得上，不必等重启。
+          ...summarize(
+            result,
+            typeof this.prices === "function" ? this.prices() : this.prices,
+            nowMs,
+          ),
           refreshAvailableAt: new Date(
             nowMs + MANUAL_COOLDOWN_MS,
           ).toISOString(),

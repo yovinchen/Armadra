@@ -22,6 +22,7 @@ import { DomainError, notFound } from "../workspaces/support";
 import type { HandlerResult } from "../http/router";
 import { forgetMenus, menuFor } from "./agents";
 import { BUILT_IN_PRICES } from "../usage/cost";
+import type { ModelPrice, PriceTable } from "../usage/cost";
 import type { Catalog, CatalogModel } from "./catalog";
 import { CatalogService } from "./service";
 
@@ -74,6 +75,32 @@ export function catalogDocument(
     ...(refreshError === undefined ? {} : { refreshError }),
     models: catalog.models,
   };
+}
+
+/**
+ * 目录里带价格的那些条目，摆成成本扫描器认得的价目表。
+ *
+ * 只收四个数都在的条目（`usableCost` 已经保证了这一点），键按**原样**与小写
+ * 各存一份：转录里写的模型 id 大小写不一定和目录一致，而 `priceFor` 是精确
+ * 匹配——它不猜，所以这里替它把两种写法都摆出来。
+ *
+ * 单位不用换：目录和内置表都是「每百万 token 多少美元」。
+ */
+export function catalogPrices(catalog: Catalog | undefined): PriceTable {
+  if (catalog === undefined) return {};
+  const table: Record<string, ModelPrice> = {};
+  for (const model of catalog.models) {
+    if (model.cost === undefined) continue;
+    const price: ModelPrice = {
+      input: model.cost.input,
+      output: model.cost.output,
+      cacheRead: model.cost.cacheRead,
+      cacheWrite: model.cost.cacheWrite,
+    };
+    table[model.modelId] = price;
+    table[model.modelId.toLowerCase()] = price;
+  }
+  return table;
 }
 
 /** 内置价目表 ∪ 目录里带价格的条目，去重。 */

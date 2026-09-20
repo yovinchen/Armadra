@@ -16,6 +16,8 @@ import {
   readCache,
   writeCache,
 } from "./catalog";
+import { catalogPrices, pricedModels } from "./index";
+import { BUILT_IN_PRICES, priceFor } from "../usage/cost";
 
 /** models.dev 发布的形状，缩到能证明每条规则的最小一份。 */
 const UPSTREAM = JSON.stringify({
@@ -202,5 +204,47 @@ describe("缓存文件", () => {
       }),
     );
     expect(readCache(path)).toBeUndefined();
+  });
+});
+
+/**
+ * 目录里的价格进本地成本统计：`priceFor` 的第二级回退。
+ *
+ * 之前成本看板只认内置价目表，目录里明明有价格的模型照样被算进
+ * `unpricedModels`——数字偏低而看板说不出为什么。
+ */
+describe("目录价格接进成本", () => {
+  it("带价格的条目变成价目表，没价格的不进", () => {
+    const catalog = parse(UPSTREAM, "network");
+    const table = catalogPrices(catalog);
+    const priced = catalog.models.filter((model) => model.cost !== undefined);
+    expect(priced.length).toBeGreaterThan(0);
+    for (const model of priced) {
+      expect(table[model.modelId], model.modelId).toEqual({
+        input: model.cost?.input,
+        output: model.cost?.output,
+        cacheRead: model.cost?.cacheRead,
+        cacheWrite: model.cost?.cacheWrite,
+      });
+      // 大小写两种写法都在：转录写的 id 不保证和目录一致，而 `priceFor` 不猜。
+      expect(table[model.modelId.toLowerCase()]).toBeDefined();
+    }
+    for (const model of catalog.models) {
+      if (model.cost !== undefined) continue;
+      expect(table[model.modelId], model.modelId).toBeUndefined();
+    }
+  });
+
+  it("没有目录就是一张空表，回退到只有内置价", () => {
+    expect(catalogPrices(undefined)).toEqual({});
+    const layered = [BUILT_IN_PRICES, catalogPrices(undefined)];
+    expect(priceFor(layered, "claude-opus-5")).toBeDefined();
+  });
+
+  it("内置表 ∪ 目录的去重计数和价目表对得上", () => {
+    const catalog = parse(UPSTREAM, "network");
+    expect(pricedModels(catalog)).toBeGreaterThanOrEqual(
+      Object.keys(BUILT_IN_PRICES).length,
+    );
   });
 });

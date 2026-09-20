@@ -4,7 +4,7 @@
  */
 
 import type { SettingsStore } from "../settings/store";
-import { CostService } from "./cost";
+import { BUILT_IN_PRICES, CostService, type PriceTable } from "./cost";
 import { CopilotLogin } from "./copilot-login";
 import {
   CLAUDE_ID,
@@ -44,6 +44,13 @@ export interface UsageServiceOptions {
   readonly dataDir: string;
   readonly fetch?: Fetcher;
   readonly now?: () => number;
+  /**
+   * models.dev 目录里那份价格，成本扫描的第二级回退（内置 → 目录 → 未定价）。
+   *
+   * 是个函数而不是一张表：目录会在后台被抓回来换掉，而成本扫描每五分钟跑一趟
+   * ——下一趟就该用上新价格。不给就只有内置表，和以前一样。
+   */
+  readonly catalogPrices?: () => PriceTable;
 }
 
 export class UsageService {
@@ -60,7 +67,11 @@ export class UsageService {
   constructor(private readonly options: UsageServiceOptions) {
     this.fetcher = options.fetch ?? globalThis.fetch;
     this.now = options.now ?? (() => Date.now());
-    this.cost = new CostService(() => this.costEnabled(), this.now);
+    this.cost = new CostService(() => this.costEnabled(), this.now, () =>
+      options.catalogPrices === undefined
+        ? BUILT_IN_PRICES
+        : [BUILT_IN_PRICES, options.catalogPrices()],
+    );
     this.copilot = new CopilotLogin(
       new SecretStore(COPILOT_SECRET_SERVICE, options.dataDir),
       this.now,

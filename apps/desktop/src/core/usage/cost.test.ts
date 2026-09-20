@@ -35,6 +35,24 @@ describe("价格表", () => {
     expect(priceFor(BUILT_IN_PRICES, "claude-opus-9")).toBeUndefined();
   });
 
+  it("三级回退：内置在前，目录补它没有的，两张都没有就是没有价格", async () => {
+    const catalog = {
+      // 内置表已经有 `claude-opus-5`：目录不该把它顶掉，否则同一台机器在两个
+      // 实现下算出的数字会不一样。
+      "claude-opus-5": { input: 99, output: 99, cacheRead: 99, cacheWrite: 99 },
+      // 内置表没有的那些，目录来答。
+      "gemini-3-pro": { input: 2, output: 12, cacheRead: 0.2, cacheWrite: 0 },
+    };
+    const layered = [BUILT_IN_PRICES, catalog];
+    expect(priceFor(layered, "claude-opus-5")?.input).toBe(5);
+    expect(priceFor(layered, "gemini-3-pro")?.output).toBe(12);
+    expect(priceFor(layered, "nobody-prices-this")).toBeUndefined();
+    // 带日期的快照命中内置表的不带日期条目，仍然算内置表答的。
+    expect(priceFor(layered, "claude-opus-5-20261001")?.input).toBe(5);
+    // 单张表仍然是合法的入参：旧调用点一行没改。
+    expect(priceFor(BUILT_IN_PRICES, "gemini-3-pro")).toBeUndefined();
+  });
+
   it("OpenAI 的行不按缓存写计费", async () => {
     expect(BUILT_IN_PRICES["gpt-5"]?.cacheWrite).toBe(0);
     // Anthropic 的行是 1.25×。
@@ -266,6 +284,35 @@ describe("汇总", () => {
     const pad = (value: number): string => String(value).padStart(2, "0");
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   }
+
+  it("目录里的价格让 unpricedModels 变短", async () => {
+    const rows = [
+      [localToday(), "claude-opus-5", 1_000_000] as const,
+      [localToday(), "gemini-3-pro", 1_000_000] as const,
+    ];
+    const withoutCatalog = summarize(scanned([...rows]), BUILT_IN_PRICES, NOW);
+    expect(withoutCatalog.unpricedModels).toEqual(["gemini-3-pro"]);
+    expect(withoutCatalog.today.complete).toBe(false);
+
+    const withCatalog = summarize(
+      scanned([...rows]),
+      [
+        BUILT_IN_PRICES,
+        {
+          "gemini-3-pro": {
+            input: 2,
+            output: 12,
+            cacheRead: 0.2,
+            cacheWrite: 0,
+          },
+        },
+      ],
+      NOW,
+    );
+    expect(withCatalog.unpricedModels).toEqual([]);
+    expect(withCatalog.today.complete).toBe(true);
+    expect(withCatalog.today.costUsd).toBe(7);
+  });
 
   it("补齐 30 天的轴，没有活动的那天也在", async () => {
     const summary = summarize(scanned([]), BUILT_IN_PRICES, NOW);
