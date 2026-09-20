@@ -3,7 +3,7 @@
  *
  * 规则只剩两条：不能自连，同一对节点不能连两次（无论方向）。类型不再参与
  * 判断——任意两个节点都可以连，连上之后 Agent 能读到什么由 Runtime 按对方
- * 的类型决定（`collab/context_link.rs`）。
+ * 的类型决定（合并前的实现）。
  */
 
 export interface ConnectionEnds {

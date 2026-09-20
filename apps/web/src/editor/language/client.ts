@@ -164,7 +164,7 @@ export class LanguageClient {
   /**
    * 断线后重开一条**新会话**，而不是重连旧的那条。
    *
-   * 旧会话的出口在 Runtime 那边随 socket 一起没了（`routes.rs` 的 `pump`
+   * 旧会话的出口在 Runtime 那边随 socket 一起没了（合并前的实现 的 `pump`
    * 退出即丢弃接收端），所以「重连同一个 sessionId」只会得到一条哑管道。
    * 新会话建好后 `LSPClient.connect` 会调 `workspace.connected()`，把打开
    * 的文件重新 `didOpen` 一遍，正是 §1.3 说的重放。

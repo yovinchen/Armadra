@@ -47,7 +47,7 @@ export function usageResetLabel(
   });
 }
 
-/** 前端能说清楚的原因代码；Runtime 的 `UsageFailure`（`usage/mod.rs`）。 */
+/** 前端能说清楚的原因代码；Runtime 的 `UsageFailure`（合并前的实现）。 */
 const USAGE_REASONS: ReadonlySet<string> = new Set([
   "expired_credentials",
   "unreadable_credentials",

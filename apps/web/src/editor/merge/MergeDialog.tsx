@@ -31,7 +31,7 @@ import { useMergeStore } from "./merge-store";
  *
  * 「保存并标记已解决」不是两个动作被并成一个：写盘之后仍然调**现有的**
  * `git/resolve`，由它重读文件、确认再没有冲突标记，才把路径加进索引。
- * 保存一个文件从来都不等于解决了它，这条规矩这里不绕过（`git/stage.rs`
+ * 保存一个文件从来都不等于解决了它，这条规矩这里不绕过（合并前的实现
  * 的 `mark_resolved`）。
  */
 export function MergeDialog() {

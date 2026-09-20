@@ -29,7 +29,7 @@ import { Input } from "@/ui/input";
  *
  * 主机表存在 Runtime 的 `settings.json` 里，这里只做「读整段、改一条、写整段」
  * ——PATCH 对数组是整段替换，所以删除也是发一份新数组。校验用的是
- * `sshHostSchema`（与 `terminal/ssh.rs` 同一套规则），不合法就不允许保存，
+ * `sshHostSchema`（与 合并前的实现 同一套规则），不合法就不允许保存，
  * 免得 Runtime 静默丢掉这条主机。
  *
  * 编辑不再叠一层对话框：点一行推入右栏内的子页，删除放在子页页尾。

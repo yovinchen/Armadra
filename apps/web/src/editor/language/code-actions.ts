@@ -20,7 +20,7 @@ import { pathOfUri } from "./uri";
  * 重命名那条路（预览 → 执行主机按内容版本逐文件写），不新开第二条写盘路径。
  *
  * **带 `command` 的动作不在列表里。** 执行主机在把结果发给浏览器之前就把
- * 它们摘掉了（`language/policy.rs` 的 `code_action_is_offered`），因为应用
+ * 它们摘掉了（合并前的实现 的 `code_action_is_offered`），因为应用
  * 它们要靠 `workspace/executeCommand`，而那是设计 §6.2 明确不开放的。这里
  * 不去把它们找回来：一个点了没反应的菜单项比没有这一项更糟。
  */

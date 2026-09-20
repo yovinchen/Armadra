@@ -16,7 +16,7 @@ describe("workspace uris", () => {
 
   it("encodes the way the runtime does, so both sides agree byte for byte", () => {
     // `A-Za-z0-9-._~/:` 原样保留，其余按 UTF-8 字节转 `%XX`
-    // （`apps/runtime/src/language/uri.rs::encode_path`）。
+    // （合并前的实现）。
     expect(workspaceUri("a b.rs")).toBe("armadra:///a%20b.rs");
     expect(workspaceUri("x/y-z_1.~ts")).toBe("armadra:///x/y-z_1.~ts");
     expect(workspaceUri("中")).toBe("armadra:///%E4%B8%AD");

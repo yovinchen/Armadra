@@ -1,7 +1,7 @@
 /**
  * 扩展名 → LSP `languageId`（语言服务设计 §1.2、§4.2）。
  *
- * 这张表必须和 `apps/runtime/src/language/registry.rs` 的
+ * 这张表必须和 合并前实现的
  * `LANGUAGES` / `FILE_NAMES` 逐条对上：Runtime 按 languageId 找 server，
  * Web 按同一个 id 开会话，两边不一致就是「打开了一个永远不会有诊断的会话」。
  * `language-ids.test.ts` 直接读那份 Rust 常量做比对。

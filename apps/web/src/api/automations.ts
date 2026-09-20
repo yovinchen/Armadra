@@ -1,7 +1,7 @@
 /**
  * 自动化面板对 core 的调用面 —— `/api/automations/*`（R7a）。
  *
- * 取代 `@armadra/host-client` 的 `HostAutomationClient`：方法名与参数逐条对得上，
+ * 取代合并前实现的 `HostAutomationClient`：方法名与参数逐条对得上，
  * 换掉的是**传输**与**写入侧的编码**。从前写一个计划要先把配置编成 protobuf 再
  * base64 一次；现在配置、启动参数和载荷都是普通 JSON，载荷是 UTF-8 文本——它本来
  * 就是用户自己敲进去的 prompt，base64 只会让人读不懂自己的计划。

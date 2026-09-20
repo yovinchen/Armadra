@@ -39,7 +39,7 @@ import {
  * `GET/PATCH /api/settings`。
  *
  * Runtime 侧把 settings.json 当作「已知键归一 + 未知键透传」的裸对象
- * （apps/runtime/src/settings.rs），所以这里也用宽松 object：
+ * （合并前的实现），所以这里也用宽松 object：
  * 只校验我们要读的 `terminal` 段，其它键原样留着，免得新旧版本互删配置。
  */
 /**

@@ -26,7 +26,7 @@ import { canvasScheme } from "./whiteboard/scheme";
  *
  * 跨端契约一个字段都没变（§2.5）：`ContextLink.content` 仍是
  * `{ status, sourceShapeId, shapeType, text, textTruncated, pngPath }`，
- * Runtime 的 `collab/context_link.rs` 不动。变的只有两处来源——
+ * Runtime 的 合并前的实现 不动。变的只有两处来源——
  *
  *  - `sourceShapeId` 填 `wb:<uuid>`，`shapeType` 填 `ink / text / shape /
  *    image / line`（提示字段，Runtime 不按它分支）；
@@ -49,7 +49,7 @@ export const MAX_CONTENT_TEXT_BYTES = 20_000;
 /** 一个节点的链接文档最多 64 条（`contextLinksRequestSchema`）。 */
 export const MAX_LINKS = 64;
 
-/** 内容引用在链接文档里的 `kind`（Runtime 的 `collab/context_link.rs`）。 */
+/** 内容引用在链接文档里的 `kind`（Runtime 的 合并前的实现）。 */
 export const SHAPE_KIND = "shape";
 
 /** 一次导出最多重试几次；之后停在 `error`，等显式重试。 */
