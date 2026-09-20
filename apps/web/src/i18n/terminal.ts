@@ -20,6 +20,14 @@ const zh = {
    * 视图状态胶囊（终端宿主设计 §7.1）。两个都不表示进程结束了：
    * 「已断开」是连接掉了正在重连，「已分离」是我们主动收了前端实例。
    */
+  /*
+   * 谁在驱动这个终端（`agent-delivery.md` §6）。人敲一个键就抢占，停手十秒
+   * 自然过期；显式接管一直持有到交还。
+   */
+  "terminal.drive.you": "你在驱动",
+  "terminal.drive.takeover": "你已接管",
+  "terminal.drive.agent": "Agent {name} 在驱动",
+
   "terminal.render.disconnected": "已断开",
   "terminal.render.detached": "已分离",
 
@@ -63,6 +71,10 @@ const en: Record<keyof typeof zh, string> = {
   "terminal.findPrev": "Previous",
   "terminal.exited": "Exited",
   "terminal.failed": "Terminal operation failed",
+
+  "terminal.drive.you": "You are driving",
+  "terminal.drive.takeover": "You took over",
+  "terminal.drive.agent": "Agent {name} is driving",
 
   "terminal.render.disconnected": "Disconnected",
   "terminal.render.detached": "Detached",

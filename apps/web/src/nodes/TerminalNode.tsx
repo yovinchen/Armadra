@@ -47,6 +47,7 @@ import {
 } from "@/terminal/TerminalSurface";
 import { autoNameNode } from "@/meta/annotations";
 import { HandoffBadge } from "@/agent/handoff/HandoffBadge";
+import { DriveBadge } from "./DriveBadge";
 import { MemoryBadge } from "@/panels/resources/MemoryBadge";
 import { openHandoff } from "@/agent/handoff/handoff-targets";
 import { useSshHosts } from "@/panels/settings/ssh-hosts";
@@ -236,6 +237,11 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       )}
       {agent && <AccountBindingBadge agent={agent} />}
       {agent && <HandoffBadge nodeId={id} />}
+      {/*
+        谁在驱动（`agent-delivery.md` §6）。只有真的有人或有 Agent 在驱动时
+        才出现：空闲是常态，画出来只是噪音。
+      */}
+      {!exited && <DriveBadge nodeId={id} />}
       <GithubReferenceBadge nodeId={id} />
       {exited && (
         <Badge
