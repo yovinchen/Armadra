@@ -50,6 +50,12 @@ import { useCanvasStore } from "@/store/canvas-store";
  *
  * 逐出在每一次投影时判一遍，所以读在那时候发生：设置页把上限调小，下一帧
  * 就把多出来的 ghost 逐掉，不用等应用重启。
+ *
+ * 同一个上限在 `./background` 里先起一次作用，而且更早：超出上限的隐藏
+ * guest 不等五分钟就被 `discard` 释放掉进程，节点、标签与地址都还在。到这
+ * 里的逐出是更狠的那一步——条目离开池，React 卸载整棵子树，回来是一个全新
+ * 的组件。两者说的是同一句话（「这台机器愿意为看不见的页面留几个」），顺
+ * 序是先放进程、再放条目。
  */
 export const BACKGROUND_WEBVIEW_MAX = BROWSER_DEFAULT_BACKGROUND_MAX;
 

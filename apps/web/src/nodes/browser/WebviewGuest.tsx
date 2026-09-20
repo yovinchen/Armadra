@@ -3,6 +3,13 @@ import * as React from "react";
 import { useBrowserPreferences, useT } from "@/app/preferences-store";
 import { Button } from "@/ui/button";
 
+import {
+  backgroundMax,
+  guestKey,
+  isOverBudget,
+  markHidden,
+  markVisible,
+} from "./background";
 import { DISCARD_TICK_MS, discardSettings, shouldDiscard } from "./discard";
 import { registerGuest, reportView } from "./drive";
 import type {
@@ -364,6 +371,18 @@ export function WebviewGuest({
   const hiddenSinceRef = React.useRef<number | null>(
     hidden ? Date.now() : null,
   );
+  /**
+   * 「隐藏着的 guest 一共有几个」只有一张模块级的表答得上来（`./background`）。
+   * 登记与注销都在这里，卸载也注销——一个已经不存在的 guest 占着后台名额，
+   * 会让真正该被释放的那个永远排不到。
+   */
+  const key = guestKey(nodeId, tab.id);
+  React.useEffect(() => {
+    if (hidden && !discarded) markHidden(key);
+    else markVisible(key);
+  }, [key, hidden, discarded]);
+  React.useEffect(() => () => markVisible(key), [key]);
+
   React.useEffect(() => {
     hiddenSinceRef.current = hidden ? Date.now() : null;
     if (!hidden && discarded) {
@@ -396,6 +415,8 @@ export function WebviewGuest({
           audible: audibleRef.current,
           driven: drivenRef.current,
           hiddenMs: Date.now() - since,
+          // 隐藏着的 guest 超过上限时，排在最外面的那个不等五分钟。
+          overBudget: isOverBudget(key, backgroundMax()),
         })
       ) {
         return;
@@ -406,7 +427,7 @@ export function WebviewGuest({
       setDiscarded(true);
     }, DISCARD_TICK_MS);
     return () => clearInterval(timer);
-  }, [discarded]);
+  }, [discarded, key]);
 
   /* -------------------------------- 渲染 --------------------------------- */
   const style: React.CSSProperties = {

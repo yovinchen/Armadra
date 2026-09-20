@@ -87,6 +87,7 @@ describe("shouldDiscard", () => {
     audible: false,
     driven: false,
     hiddenMs: BROWSER_DISCARD_MS + 1,
+    overBudget: false,
   };
 
   it("四条都过且超时才回收", () => {
@@ -108,5 +109,29 @@ describe("shouldDiscard", () => {
     expect(shouldDiscard({ ...base, audible: true })).toBe(false);
     // Agent 正在驱动：回收会让上一次 read 拿到的 ref 全部静默失效。
     expect(shouldDiscard({ ...base, driven: true })).toBe(false);
+  });
+
+  it("超出后台上限时不等阈值", () => {
+    // 「隐藏着的页面太多了」本身就是现在放掉一个的理由；再等五分钟等于让
+    // 上限那一项在这一侧完全不起作用。
+    expect(
+      shouldDiscard({ ...base, hiddenMs: 0, overBudget: true }),
+    ).toBe(true);
+  });
+
+  it("超预算跳过的是阈值，不是四条否决", () => {
+    // 放掉一个正在放视频的页面、或者 Agent 正在驱动的页面，不因为数量多了
+    // 就变成对的。
+    for (const veto of ["enabled", "loading", "audible", "driven"] as const) {
+      const value = veto === "enabled" ? false : true;
+      expect(
+        shouldDiscard({
+          ...base,
+          hiddenMs: 0,
+          overBudget: true,
+          [veto]: value,
+        }),
+      ).toBe(false);
+    }
   });
 });

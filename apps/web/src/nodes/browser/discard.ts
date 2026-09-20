@@ -20,6 +20,14 @@ export const DISCARD_TICK_MS = 15 * 1000;
 export interface DiscardInputs {
   /** 设置里的总开关。**在定时器触发时重读**，不是设定时读。 */
   enabled: boolean;
+  /**
+   * 隐藏着的 guest 已经超出这台机器愿意留的数量，而这一个排在最外面
+   * （`./background` 的 LRU）。
+   *
+   * 它**跳过时间阈值，但不跳过四条否决**：数量超了是「现在就该放掉一个」
+   * 的理由，不是「可以放掉一个正在放视频的页面」的理由。
+   */
+  overBudget: boolean;
   /** 设置里的阈值（毫秒）。同样在定时器触发时重读。 */
   discardMs: number;
   /** 正在加载。回收会丢掉 POST 的结果和中间页。 */
@@ -46,6 +54,8 @@ export function shouldDiscard(inputs: DiscardInputs): boolean {
   if (inputs.loading) return false;
   if (inputs.audible) return false;
   if (inputs.driven) return false;
+  // 四条否决之后才轮到「为什么现在放」：数量超了，或者已经隐藏够久了。
+  if (inputs.overBudget) return true;
   return inputs.hiddenMs > inputs.discardMs;
 }
 
