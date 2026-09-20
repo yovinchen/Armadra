@@ -19,6 +19,23 @@ import {
 const NOW = Date.parse("2026-09-20T00:00:00Z");
 
 /** 移植自 `apps/runtime/src/usage/{claude,codex,copilot,mod}.rs` 的用例。 */
+describe("凭据载荷里的令牌", () => {
+  it("expiresAt 为 0 是「不按时钟过期」，不是 1970 年就过期了", () => {
+    const payload = JSON.stringify({
+      claudeAiOauth: { accessToken: "tok", expiresAt: 0 },
+    });
+    expect(tokenFromPayload(payload, NOW)).toBe("tok");
+    const stale = JSON.stringify({
+      claudeAiOauth: { accessToken: "tok", expiresAt: NOW - 1 },
+    });
+    expect(tokenFromPayload(stale, NOW)).toBeUndefined();
+    const fresh = JSON.stringify({
+      claudeAiOauth: { accessToken: "tok", expiresAt: NOW + 60_000 },
+    });
+    expect(tokenFromPayload(fresh, NOW)).toBe("tok");
+  });
+});
+
 describe("共用的换算", () => {
   it("窗口秒数变成 CLI 打印的那个短标签", () => {
     expect(durationLabel(604_800)).toBe("7d");

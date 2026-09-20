@@ -155,8 +155,14 @@ export function tokenFromPayload(
   }
   const oauth = record(record(parsed)?.claudeAiOauth);
   if (oauth === undefined) return undefined;
+  // `expiresAt: 0` is what the keychain payload carries for a token the CLI
+  // does not expire on a clock; reading it as "expired in 1970" made every
+  // logged-in machine report an expired login. Only a positive time in the
+  // past disqualifies; the endpoint's own 401 covers a token that is stale.
   const expiresAt = num(oauth.expiresAt);
-  if (expiresAt !== undefined && expiresAt <= nowMs) return undefined;
+  if (expiresAt !== undefined && expiresAt > 0 && expiresAt <= nowMs) {
+    return undefined;
+  }
   const token = oauth.accessToken;
   return typeof token === "string" && token !== "" ? token : undefined;
 }
