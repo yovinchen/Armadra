@@ -238,7 +238,7 @@ describe("the assembled filesystem and import domains", () => {
     expect(statSync(join(root, landed)).size).toBe(big.length);
   });
 
-  it("still refuses a body above the import ceiling before reading it", async () => {
+  it("answers 413 to a body above the import ceiling instead of resetting", async () => {
     const answer = await send(
       "POST",
       `/api/workspaces/${workspaceId}/imports`,
@@ -248,7 +248,8 @@ describe("the assembled filesystem and import domains", () => {
         Buffer.alloc(MAX_IMPORT_BODY_BYTES + 1024),
       ),
       { "content-type": "multipart/form-data; boundary=edge" },
-    ).catch(() => ({ status: 400, body: undefined, headers: new Headers() }));
-    expect(answer.status).toBe(400);
+    );
+    expect(answer.status).toBe(413);
+    expect(answer.body).toMatchObject({ code: "payload_too_large" });
   });
 });

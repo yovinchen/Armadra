@@ -174,10 +174,15 @@ export class HookServer {
     try {
       const body = await readBody(request, MAX_BODY_BYTES);
       if (!body.ok) {
-        answer = {
-          status: 400,
-          body: { code: "bad_request", message: body.reason },
-        };
+        answer = body.tooLarge
+          ? {
+              status: 413,
+              body: { code: "payload_too_large", message: body.reason },
+            }
+          : {
+              status: 400,
+              body: { code: "bad_request", message: body.reason },
+            };
       } else {
         answer = (await this.router.dispatch(
           request.method ?? "GET",

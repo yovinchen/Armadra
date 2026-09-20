@@ -32,6 +32,9 @@ export const methodNotAllowed = (method: string, path: string): ErrorResponse =>
 export const badRequest = (message: string): ErrorResponse =>
   coreError(400, "bad_request", message);
 
+export const payloadTooLarge = (message: string): ErrorResponse =>
+  coreError(413, "payload_too_large", message);
+
 export const forbidden = (message: string): ErrorResponse =>
   coreError(403, "forbidden", message);
 

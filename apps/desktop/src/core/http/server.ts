@@ -9,7 +9,12 @@ import { WebSocketServer, type WebSocket } from "ws";
 import type { EventBus } from "../bus";
 import type { CorePlatform } from "../platform";
 import { corsHeaders, websocketOriginAllowed } from "./cors";
-import { type ErrorResponse, badRequest, internal } from "./errors";
+import {
+  type ErrorResponse,
+  badRequest,
+  internal,
+  payloadTooLarge,
+} from "./errors";
 import { type HookHealth, NO_HOOK_SERVICE, healthDocument } from "./health";
 import { type CoreRequest, type HandlerResult, Router } from "./router";
 
@@ -114,7 +119,9 @@ export class CoreServer {
     try {
       const body = await readBody(request, this.bodyLimitFor(path));
       if (!body.ok) {
-        answer = badRequest(body.reason);
+        answer = body.tooLarge
+          ? payloadTooLarge(body.reason)
+          : badRequest(body.reason);
       } else {
         const core = coreRequest(request, url, body.body);
         // Raw routes come before the table: they own their own encoding
@@ -346,12 +353,26 @@ function coreRequest(
 
 type BodyResult =
   | { readonly ok: true; readonly body: Buffer }
-  | { readonly ok: false; readonly reason: string };
+  | {
+      readonly ok: false;
+      readonly tooLarge?: boolean;
+      readonly reason: string;
+    };
 
 /**
  * Reads the body, refusing anything over the ceiling *while* it reads. A check
  * on `content-length` alone is a check a chunked request walks around.
  */
+/**
+ * How much of an over-limit body is drained before the socket is dropped.
+ *
+ * Destroying the request the moment the ceiling is crossed left the client
+ * with a reset connection and no answer — the page saw a network error, not
+ * "too large". Draining the rest (bounded, so a hostile stream cannot keep a
+ * handler busy forever) lets the 413 actually reach it.
+ */
+export const DRAIN_LIMIT_BYTES = 8 * 1024 * 1024;
+
 export function readBody(
   request: IncomingMessage,
   limit: number,
@@ -359,18 +380,44 @@ export function readBody(
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    let drained = 0;
+    let over = false;
     request.on("data", (chunk: Buffer) => {
+      if (over) {
+        drained += chunk.byteLength;
+        if (drained > DRAIN_LIMIT_BYTES) request.destroy();
+        return;
+      }
       size += chunk.byteLength;
       if (size > limit) {
-        request.destroy();
-        resolve({ ok: false, reason: `请求体超过 ${limit} 字节上限` });
+        over = true;
+        chunks.length = 0;
         return;
       }
       chunks.push(chunk);
     });
-    request.on("end", () => resolve({ ok: true, body: Buffer.concat(chunks) }));
+    request.on("end", () =>
+      resolve(
+        over
+          ? {
+              ok: false,
+              tooLarge: true,
+              reason: `请求体超过 ${limit} 字节上限`,
+            }
+          : { ok: true, body: Buffer.concat(chunks) },
+      ),
+    );
     request.on("error", (error) =>
       resolve({ ok: false, reason: error.message }),
     );
+    request.on("close", () => {
+      // A drain that hit its own ceiling: answer anyway; the socket is gone.
+      if (over)
+        resolve({
+          ok: false,
+          tooLarge: true,
+          reason: `请求体超过 ${limit} 字节上限`,
+        });
+    });
   });
 }
