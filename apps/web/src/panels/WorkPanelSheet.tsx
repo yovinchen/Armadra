@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import { Sheet, SheetContent } from "@/ui/sheet";
+import { noDragProps } from "../shell/window-region";
 
 /**
  * 工作面板的外壳（画布平台设计 §4）。
@@ -168,6 +169,12 @@ export function WorkPanelSheet({
         side={bottom ? "bottom" : "right"}
         showCloseButton={false}
         aria-label={label}
+        // A right-docked panel's header sits inside the window-drag strip
+        // (`WindowDragLayer`, the top 44px), and Chromium resolves
+        // `-webkit-app-region: drag` from geometry, not stacking: a real
+        // click on the title, pin or close button dragged the window while a
+        // synthetic one landed. `no-drag` carves the whole surface out.
+        {...noDragProps()}
         aria-describedby={undefined}
         onInteractOutside={(event) => event.preventDefault()}
         style={
