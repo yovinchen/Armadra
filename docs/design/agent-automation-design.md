@@ -1,12 +1,12 @@
 # Agent 能力、上下文、对话交接与后台自动化
 
-> 状态：目标设计，部分实施。Host/Worker 及协议边界见[服务端设计](../history/host-protocol-design.md)。
+> 状态：目标设计，部分实施。下文「实现状态」一节写于 Rust Runtime / Go Host 尚分进程的年代（2026-09-05 前后）；二者已于 R7d 合并进统一的 TS core（`apps/desktop/src/core/`，见 [typescript-core.md](typescript-core.md)），下文的 Runtime/Host/Worker 提法是彼时的实现分工，读作 core 内的对应模块即可。协议边界的历史记录见[服务端设计](../history/host-protocol-design.md)。
 
-## 实现状态（截至 2026-09-05）
+## 实现状态（截至 2026-09-05，实现分工已并入 core）
 
-§1 能力交集已落地：能力表新增 `nativeRecurrence`、`structuredInputAck`、`supportsModelSelection`；求交集顺序为基础适配器 → 自定义配置 → CLI 版本探测 → 执行主机，实现在 `packages/shared/src/agent-capabilities.ts`，设置页的能力清单逐项显示裁决它的那一级。版本探测跑 `<launchCmd> --version` 并缓存到 `settings.agents.probes[<agentId>]`（`apps/runtime/src/agent_probe.rs`，24 小时过期，换启动程序即重探）；探不到就是 `failed`，对应能力显示 unknown，界面不画按钮。`CAPABILITY_MIN_VERSION` 目前是空表——没有可引用的发行说明就不编版本门槛，探测眼下只提供「问不出来 → 不承诺」这一半。`nativeRecurrence` 仍无内置适配器声明：六种 CLI 都没有可读的任务列表。但**读得到规则的时候**有一层适配：活动卡片可以带一条 `nativeRecurrence { dialect, rule, timezone }`（`packages/shared/src/domain/node-data.ts`，原文逐字保存、不做规范化），`apps/web/src/panels/automation/native-recurrence.ts` 把 cron 表达式与 launchd 的 `StartCalendarInterval` / `StartInterval` 翻成平台计划的 recurrence 预填进向导。翻不动的一律返回机器码并把原文摆出来：`@reboot`（是事件不是周期）、带秒的六字段、`L`/`W`/`#` 扩展、只有事件触发的 launchd 任务、`StartCalendarInterval` 数组里的多个时刻（一份计划只有一条重复规则）、以及超出 Host 上下限的 interval。时区不猜——crontab 行不带时区、launchd 用本机时区，源头没写就留空由人选。执行主机方面，SSH 终端不带 `contextUsage` 与 `usage`（转录和账号都在对面机器上）。
+§1 能力交集已落地：能力表新增 `nativeRecurrence`、`structuredInputAck`、`supportsModelSelection`；求交集顺序为基础适配器 → 自定义配置 → CLI 版本探测 → 执行主机，实现在 `packages/shared/src/agent-capabilities.ts`，设置页的能力清单逐项显示裁决它的那一级。版本探测跑 `<launchCmd> --version` 并缓存到 `settings.agents.probes[<agentId>]`（core 的对应域模块，24 小时过期，换启动程序即重探）；探不到就是 `failed`，对应能力显示 unknown，界面不画按钮。`CAPABILITY_MIN_VERSION` 目前是空表——没有可引用的发行说明就不编版本门槛，探测眼下只提供「问不出来 → 不承诺」这一半。`nativeRecurrence` 仍无内置适配器声明：六种 CLI 都没有可读的任务列表。但**读得到规则的时候**有一层适配：活动卡片可以带一条 `nativeRecurrence { dialect, rule, timezone }`（`packages/shared/src/domain/node-data.ts`，原文逐字保存、不做规范化），`apps/web/src/panels/automation/native-recurrence.ts` 把 cron 表达式与 launchd 的 `StartCalendarInterval` / `StartInterval` 翻成平台计划的 recurrence 预填进向导。翻不动的一律返回机器码并把原文摆出来：`@reboot`（是事件不是周期）、带秒的六字段、`L`/`W`/`#` 扩展、只有事件触发的 launchd 任务、`StartCalendarInterval` 数组里的多个时刻（一份计划只有一条重复规则）、以及超出 Host 上下限的 interval。时区不猜——crontab 行不带时区、launchd 用本机时区，源头没写就留空由人选。执行主机方面，SSH 终端不带 `contextUsage` 与 `usage`（转录和账号都在对面机器上）。
 
-§2 上下文用量：Claude 仍是 `provider_hook` / `reported` 精确来源。Codex 走 `structured_transcript` / `estimated`——读其结构化转录，用可解释的字符启发式 `chars-v1`（ASCII 每四字符 1 token，非 ASCII 每字符 1 token）求和，附带置信、已统计消息数与是否截断（`apps/runtime/src/context_estimate.rs`）。转录读不出内容时返回 unknown，不返回 0%。分母来自模型上下文窗口表（`packages/shared/src/model-context.ts` 与 `apps/runtime/src/context_models.rs`），转录里报出的模型优先于启动时选的模型，表里没有的模型 capacity 为 null。opencode / Pi / OMP / Copilot 不声明 `contextUsage`：它们的历史不在本地结构化文件里。80/95 阈值进了设置页并持久化，只改徽标措辞，不自动压缩或打断。
+§2 上下文用量：Claude 仍是 `provider_hook` / `reported` 精确来源。Codex 走 `structured_transcript` / `estimated`——读其结构化转录，用可解释的字符启发式 `chars-v1`（ASCII 每四字符 1 token，非 ASCII 每字符 1 token）求和，附带置信、已统计消息数与是否截断（core 的对应域模块）。转录读不出内容时返回 unknown，不返回 0%。分母来自模型上下文窗口表（`packages/shared/src/model-context.ts` 与 core 的对应域模块），转录里报出的模型优先于启动时选的模型，表里没有的模型 capacity 为 null。opencode / Pi / OMP / Copilot 不声明 `contextUsage`：它们的历史不在本地结构化文件里。80/95 阈值进了设置页并持久化，只改徽标措辞，不自动压缩或打断。
 
 §8 自动命名：Hook 报出本会话第一个回合后调一次 `suggest-title`，仅在标题仍是占位名时应用，用户改名即锁定，按 (节点, 会话, 代次) 缓存，请求期间被改名则丢弃结果；OSC 标题不覆盖自动命名写入的语义标题（`apps/web/src/meta/auto-title.ts`）。设置页有开关。普通终端不参与：`suggest-title` 需要 Agent 状态行，没有 Agent 的终端仍只跟随 OSC 标题。提交信息草稿新增语言（zh/en）与 Conventional Commits 选项，二者只追加固定的风格子句，不改变读取范围、文件排除、敏感行处理与 digest 复核。
 
@@ -29,7 +29,7 @@ interface AgentCapabilities {
 }
 ```
 
-这是领域形状示意；对外字段定义在 Protobuf 中。能力按内置基础适配器 → 自定义 Agent 配置 → CLI 版本探测 → 执行主机能力 → 项目授权求交集。未知能力不由名称推断为支持；自定义配置可以关闭能力，不能凭声明绕过版本探测。
+这是领域形状示意；对外字段定义为 core 的 TypeScript 类型（无跨进程协议）。能力按内置基础适配器 → 自定义 Agent 配置 → CLI 版本探测 → 执行主机能力 → 项目授权求交集。未知能力不由名称推断为支持；自定义配置可以关闭能力，不能凭声明绕过版本探测。
 
 配置继承：用户默认 → 项目默认 → worktree/Frame 默认 → 节点覆盖；既有 Session 保存启动快照，不随全局设置改变而热切身份。权限、模型、环境变量和账号分别合成并标出来源。环境变量只在 Worker 启动进程时解析，禁止写进共享画布和终端命令历史。
 
@@ -37,7 +37,7 @@ interface AgentCapabilities {
 
 账号切换默认创建新的 SessionRun，显式提示是否恢复旧对话；不在运行中的 CLI 下替换认证文件。账号失效时用量及计划状态转为需处理，不能自动切到另一个账号消费额度。
 
-预留部分已落地的：`proto/armadra/v1/account.proto` 的 `AccountRef { accountId, providerId, label }` 与 `CredentialBinding { credentialRef, scope, authorizationId }`；节点数据的 `agent.account`（`packages/shared/src/domain.ts`，可选、默认缺省，Runtime 侧逐字段限长）。`agentSessionRequest`（`apps/web/src/agent/launch.ts`）只在字段存在时透传 `accountId`，`credentialRef` 不上行；命令会话对非 `default` 账号仍然显式拒绝。节点头部的 `AccountBindingBadge` 只在字段存在时出现，设置页没有绑定入口，Host 把 `accountBinding` 报为 unsupported。账号的创建、列举与切换都未实现。
+预留部分已落地的：core 的 `AccountRef { accountId, providerId, label }` 与 `CredentialBinding { credentialRef, scope, authorizationId }` 类型；节点数据的 `agent.account`（`packages/shared/src/domain.ts`，可选、默认缺省，core 侧逐字段限长）。`agentSessionRequest`（`apps/web/src/agent/launch.ts`）只在字段存在时透传 `accountId`，`credentialRef` 不上行；命令会话对非 `default` 账号仍然显式拒绝。节点头部的 `AccountBindingBadge` 只在字段存在时出现，设置页没有绑定入口，core 把 `accountBinding` 报为 unsupported。账号的创建、列举与切换都未实现。
 
 ## 2. 单会话上下文占用
 
@@ -70,9 +70,9 @@ interface AgentCapabilities {
 | 类型              | 所有者                      | 数据与动作                                                      | 页面关闭后                          |
 | ----------------- | --------------------------- | --------------------------------------------------------------- | ----------------------------------- |
 | AgentActivityNode | CLI 内部 Loop/Cron/Schedule | 显示迭代、计划、父会话、最近结果；暂停/取消仅在适配器支持时开放 | CLI 与对应后端继续；观察器在 Worker |
-| AutomationNode    | Go Host 的平台 Automation   | 创建、编辑、激活、暂停、立即运行、历史、关联目标                | Host 常驻调度，与客户端数量无关     |
+| AutomationNode    | core 的平台 Automation 模块 | 创建、编辑、激活、暂停、立即运行、历史、关联目标                | core 常驻调度，与客户端数量无关     |
 
-原生活动 ID 采用 executionHost/session/generation/nativeJobId，不用标题作为去重键。Worker 持久化观察事件，Host 维护活动镜像；刷新页面从 Host 恢复。无法读取到的 CLI 内部计划不编造卡片。
+原生活动 ID 采用 executionHost/session/generation/nativeJobId，不用标题作为去重键。core 持久化观察事件并维护活动镜像；刷新页面从 core 恢复。无法读取到的 CLI 内部计划不编造卡片。
 
 活动卡片包含来源徽标、任务文字、循环次数/下次执行、最近事件、父节点定位、展开历史和备注。仅隐藏卡片不会取消原生计划；删除时提供“隐藏观察卡片”和“取消原生计划”不同操作，不支持取消时明确说明能力。
 
@@ -112,7 +112,7 @@ Cron 正常触发、misfire 补发和一次性计划过期是三种记录，不�
 
 ### 4.1 实施状态（2026-09-05）
 
-右侧工作面板的“自动化”页有计划、运行历史、新建计划三个页签，全部走 Host 的 HTTPS 认证接口（`@armadra/host-client` 的 `HostAutomationClient`，复用设备会话的 Cookie、序列化队列与 CSRF）。创建向导把执行位置固定为当前 Host——计划只能派发到定义它的那台 Host，所以不提供一个必然失败的下拉；命令会话可选已有的或当场定义新的，五字段 cron、显式 IANA 时区、misfire/并发策略与“完成后循环必须有次数或截止时间”都在发出请求前校验。激活需要确认，确认框显示绑定的 revision、configVersion 与 config sha。运行历史逐条显示状态、收据阶段与派发次数：“已投递”与“已成功”分开，“结果未知”自成一行。“移除展示，保留计划”与“停用并移除”始终是两个按钮。
+右侧工作面板的“自动化”页有计划、运行历史、新建计划三个页签，全部走 core 的 HTTPS 认证接口（复用设备会话的 Cookie、序列化队列与 CSRF）。创建向导把执行位置固定为当前 Host——计划只能派发到定义它的那台 Host，所以不提供一个必然失败的下拉；命令会话可选已有的或当场定义新的，五字段 cron、显式 IANA 时区、misfire/并发策略与“完成后循环必须有次数或截止时间”都在发出请求前校验。激活需要确认，确认框显示绑定的 revision、configVersion 与 config sha。运行历史逐条显示状态、收据阶段与派发次数：“已投递”与“已成功”分开，“结果未知”自成一行。“移除展示，保留计划”与“停用并移除”始终是两个按钮。
 
 Host 未连接、未配对、没有执行 Worker 或设备没有该工作空间的自动化权限时，整页只显示原因与“前往设置 → 连接”，不渲染任何点了会失败的按钮；只读设备能看列表但没有管理按钮。
 
@@ -130,13 +130,13 @@ Agent 目标冻结的是**节点** + 一份 `AgentLaunchSpec`（agentId、目录
 
 投递门：同一个节点的多份计划共用一道门（门按节点键，不按会话，否则冷启动一换会话就不再串行）。写入前要求前台确实是那个 Agent、上一回合已结束、期间没有别的输入；这三项由 Runtime 的 `paste_handoff` 同一段临界区判断。
 
-传输选的是**扩展 Worker stdio 协议 + Rust Worker 代理到本机 Runtime**，而不是让 Runtime 再对 Host 开一个认证接口：Host 已经有一条到执行器的认证通道，再开一条就要自己的配对、轮换与可达性；代理走的是 hook 客户端已经在用的那道门——同一份 `hook-endpoint.env`、同一个 Unix socket（或它发布的回环端口）、同一个 app bearer，不新开监听、不新造凭据，Host 也不会知道 Runtime 的地址或令牌。够不到活的 Runtime 时整条能力报 UNSUPPORTED，这是 Host 已经会画的状态。
+传输复用的是 hook 客户端已经在用的那道门——同一份 `hook-endpoint.env`、同一个 Unix socket（或它发布的回环端口）、同一个 app bearer，不新开监听、不新造凭据（这条路径定于 Rust Runtime 与 Go Host 尚分进程的年代：当时选它是为了不让 Host 再对 Runtime 开一条新的认证通道，避免自己的配对、轮换与可达性；合并为 core 后投递与执行同在一个进程内，仍沿用同一套复用逻辑）。够不到目标会话时整条能力报 UNSUPPORTED，这是 core 已经会画的状态。
 
 收据由 Runtime 持久化在 `agent_prompt_deliveries`，按 operationId 幂等，且**先写后投**：同一个 operationId 再来一次从表里回答，不会第二次粘贴；进程死在写入中途的行读回来是 unknown。阶段映射到自动化结果：`notWritten`（预检拒绝，唯一带「无副作用」证明的，可安全重试）→ NOT_DISPATCHED，`submitted` → DELIVERED（写进输入框不等于做完），`completed`（结束的那一回合期间没有别的输入，可归因）→ SUCCEEDED，`abandoned`（会话先结束了）→ FAILED，其余（包括「有人在我们之后打过字」）→ UNKNOWN，永不自动重发。
 
 冷启动只在**目标探测**里发生，不在写入里：那时 run 已认领、授权刚复查过。会话不在时按冻结定义起一个新的（程序由 Runtime 解析，argv 逐个 shell 引用后写进去，所以计划里加不了 shell 操作符），把新会话写回节点的 `sessionId`，然后报 busy——刚起来的 Agent 还没启动完，更没有回合结束——于是真正碰 PTY 的那一步只对着 ready 的目标发生。同一节点 60 秒内不做第二次冷启动，起不来的 shell 不会变成起进程的循环。没开冷启动的计划遇到会话不在就 skip，不起任何进程。
 
-验收：`apps/host/internal/automationhost/real_agent_test.go`（设 `ARMADRA_TEST_REAL_WORKER` 与 `ARMADRA_TEST_REAL_HOOK` 后运行）跑真的 Once 计划 → 真的 Host 引擎 → 真的 Worker 子进程 → 真的 Runtime → 真的 PTY，断言的是那个伪 Agent 自己读到了提示词，以及运行记录写的是「已投递」而不是「已完成」。伪 Agent 的 idle 是它自己用真的 hook 客户端报的，测试里没有手写观测。
+验收：core 自动化模块的集成测试（设 `ARMADRA_TEST_REAL_WORKER` 与 `ARMADRA_TEST_REAL_HOOK` 后运行）跑真的 Once 计划 → 真的 core 自动化引擎 → 真的执行子进程 → 真的 PTY，断言的是那个伪 Agent 自己读到了提示词，以及运行记录写的是「已投递」而不是「已完成」。伪 Agent 的 idle 是它自己用真的 hook 客户端报的，测试里没有手写观测。
 
 ## 5. 调度执行、持久性与不确定结果
 
@@ -207,7 +207,7 @@ Agent 目标冻结的是**节点** + 一份 `AgentLaunchSpec`（agentId、目录
 
 投递尝试次数来自 `agent_handoff_outbox.attempts`（迁移 0006），在**认领**时自增，因此数的是尝试而不是成功：投递门证明的拒绝（目标忙、前台不是那个 Agent）会把通知退回队列，只看 `state` 分不出第一次和第二十次。
 
-`armadra-hook canvas handoff-read` 的真实端到端在 `tools/handoff-read-smoke.mjs`（`node tools/handoff-read-smoke.mjs <armadra-runtime> <armadra-hook>`）：真的 Runtime 进程、真的 PTY、真的节点令牌，用真的 hook 客户端读包并 ack。它断言三件事——目标读得到并且拿到的是标了 peer data 的资料；**读不等于确认**，读完状态仍不是 acknowledged；`canvas ack` 才是确认，且只有被寻址的那个会话能做（来源自己去读会被 403 拒绝）。
+`armadra-hook canvas handoff-read` 的真实端到端由一个 smoke 测试脚本跑通：真的 core 进程、真的 PTY、真的节点令牌，用真的 hook 客户端读包并 ack。它断言三件事——目标读得到并且拿到的是标了 peer data 的资料；**读不等于确认**，读完状态仍不是 acknowledged；`canvas ack` 才是确认，且只有被寻址的那个会话能做（来源自己去读会被 403 拒绝）。
 
 ## 8. 自动命名与 AI 文本生成
 
@@ -229,7 +229,7 @@ Agent 目标冻结的是**节点** + 一份 `AgentLaunchSpec`（agentId、目录
 | Dependency | CreateGraph、Release、Cancel、Repair              | Waiting、Satisfied、Missing、Launched                   |
 | Handoff    | Prepare、Preview、Accept、Get、Retry              | Prepared、Transferred、TargetStarted、Failed            |
 
-Host 表：agent_capability_cache、context_usage、agent_activities、automations、automation_activations、automation_runs、dependencies、handoffs、suggestions。Worker 表：dispatch_receipts、hook_outbox。大量转录/附件落资产存储；数据库存引用、hash、权限和保留期。
+core 表（同一份数据库）：agent_capability_cache、context_usage、agent_activities、automations、automation_activations、automation_runs、dependencies、handoffs、suggestions、dispatch_receipts、hook_outbox。大量转录/附件落资产存储；数据库存引用、hash、权限和保留期。
 
 ## 10. 验收要点
 
