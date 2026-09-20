@@ -133,4 +133,14 @@ describe("IntegrationPage", () => {
       screen.queryByRole("button", { name: zh("integration.uninstall") }),
     ).toBeNull();
   });
+
+  /**
+   * 接口没答上来时整页是空白的：没有 CLI 与还没读完长得一模一样，用户
+   * 只能看着一张空页猜。
+   */
+  it("says so when there is no CLI to list", async () => {
+    mock.agents.mockReset().mockResolvedValue([]);
+    view();
+    expect(await screen.findByText(zh("integration.empty"))).toBeTruthy();
+  });
 });

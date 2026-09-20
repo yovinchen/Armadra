@@ -42,13 +42,23 @@ import {
  * 包括「这个 CLI 还没有安装器」这种答复（协作通道 §5.1 B4）。
  */
 export function IntegrationPage() {
+  const t = useT();
   const agents = useAgentsQuery();
+  const list = agents.data ?? [];
 
   return (
     <SettingsGroup>
-      {(agents.data ?? []).map((agent) => (
+      {list.map((agent) => (
         <AgentIntegrationRow key={agent.id} agent={agent} />
       ))}
+      {/* 一行都没有时整页是空白的——没有 CLI 与还没读完看起来一模一样。 */}
+      {list.length === 0 && (
+        <SettingsRow
+          label={t(
+            agents.isPending ? "integration.loading" : "integration.empty",
+          )}
+        />
+      )}
     </SettingsGroup>
   );
 }

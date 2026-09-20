@@ -11,6 +11,7 @@ import type { MessageModule } from "./index";
 export const integration: MessageModule = {
   "zh-CN": {
     "integration.nav": "集成",
+    "integration.empty": "没有可接入的 CLI",
     "integration.mode.launch": "启动时注入",
     "integration.mode.file": "写配置文件",
     "integration.mode.extension": "进程内扩展",
@@ -38,6 +39,7 @@ export const integration: MessageModule = {
   },
   en: {
     "integration.nav": "Integration",
+    "integration.empty": "No CLI to integrate",
     "integration.mode.launch": "Injected at launch",
     "integration.mode.file": "Writes a config file",
     "integration.mode.extension": "In-process extension",
