@@ -543,6 +543,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/api/workspaces/{workspaceId}/exports/{exportId}/png",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/assets",

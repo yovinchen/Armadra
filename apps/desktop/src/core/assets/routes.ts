@@ -8,6 +8,7 @@ import {
   optionalString,
 } from "../workspaces/support";
 import { getWorkspace } from "../workspaces/table";
+import { writePngExport } from "./exports";
 import {
   assetExtension,
   decodeAssetDataUrl,
@@ -33,6 +34,34 @@ import {
 export function install(context: CoreContext): void {
   const database = context.db.database;
   const { server } = context;
+
+  server.router.handle(
+    "POST",
+    "/api/workspaces/{workspaceId}/exports/{exportId}/png",
+    answered((match, request) => {
+      const workspace = getWorkspace(database, workspaceId(match));
+      if (!workspace.permissions.write) {
+        throw new DomainError(
+          403,
+          "forbidden",
+          "This workspace is opened read-only",
+        );
+      }
+      const body = jsonObject(request.body);
+      const dataUrl = optionalString(body, "dataUrl");
+      if (dataUrl === undefined) {
+        throw badRequest("Export body is not a JSON data URL");
+      }
+      return {
+        status: 200,
+        body: writePngExport(
+          canonicalDirectory(workspace.rootPath),
+          match.params.exportId ?? "",
+          dataUrl,
+        ),
+      };
+    }),
+  );
 
   server.router.handle(
     "POST",
