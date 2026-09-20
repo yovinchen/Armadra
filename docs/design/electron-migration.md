@@ -1,6 +1,6 @@
 # 桌面壳迁移到 Electron
 
-> 状态：已实施（2026-09-19，W0–W5 全部合入，主线 `9b989dbd3`）；未完成的只有真机手工验收（见 status）。本文把桌面壳从 Tauri 换成 Electron，并借此把浏览器节点从「CDP 截屏流」换成进程内 `<webview>`。业务仍由 Rust Runtime 执行，Go Host 迁移方向不变；终端（tmux 已是主后端）、Agent、持久化三个域**原地不动**。
+> 状态：已实施（2026-09-19，W0–W5 全部合入，主线 `9b989dbd3`）；未完成的只有真机手工验收（见 status）。本文把桌面壳从 Tauri 换成 Electron，并借此把浏览器节点从「CDP 截屏流」换成进程内 `<webview>`。写这份文档时业务仍由 Rust Runtime 执行、Go Host 迁移方向不变；终端（tmux 已是主后端）、Agent、持久化三个域**原地不动**——这几点后来随 [TypeScript Core](./typescript-core.md) 一并改变：Runtime 与 Host 已合并重写为一个 TS core，下文出现的 `apps/runtime`、`crates/`、`apps/host`、`cargo test`、`go test` 等都是当时的落点，仅作实施批次的历史记录，不代表现状；本文关于 Electron 壳结构、`<webview>` 与画布性能的决策本身仍然成立。
 > 范围：`apps/desktop`（整体重写）、`apps/web` 的壳耦合面（9 个文件 + 14 处 `isTauri()`）、`apps/runtime/src/browser/` 的瘦身、Go Host 的原生来源判定、发布与更新管线、以及一组与换壳无关但必须先做的画布性能修正。
 > 基线：2026-09-19 的 Armadra `34cd50497`，覆盖现状盘点、进程模型、终端与 tmux、浏览器节点、画布与状态、Agent 集成六个方面。本文行数与测试数均以该基线为准；Electron 42 + React Flow 的浏览器路径由 W3.0 探针验证。
 
@@ -194,7 +194,7 @@ W3.5 之前不删任何东西：webview 生命周期陷阱只在真机上暴露�
 
 ### W5 · 收尾
 
-删除 `apps/desktop/src-tauri/`、根 `Cargo.toml` 成员、capability/CSP 配置、`sidecar-targets.mjs` 等四个脚本；`docs/guides/architecture.md` §2 三层图 / §6 端口表 / §7 安全边界，`development.md` 桌面壳三段与环境变量表；`host-native-session.md` 按 W1.2 结果归档进 `history/` 或改状态；`host-device-auth.md:48-53` 同步；`docs/status/` 记录换壳与浏览器能力回退。验收：`pnpm check` 全绿；`cargo test --workspace` 与 `go -C apps/host test ./...` 不受影响；文档不再出现 `tauri://localhost`、`armadra://`、`__armadra/transport` 的现状描述。
+删除 `apps/desktop/src-tauri/`、根 `Cargo.toml` 成员、capability/CSP 配置、`sidecar-targets.mjs` 等四个脚本；`docs/guides/architecture.md` §2 三层图 / §6 端口表 / §7 安全边界，`development.md` 桌面壳三段与环境变量表；`host-native-session.md` 按 W1.2 结果归档进 `history/` 或改状态；`host-device-auth.md:48-53` 同步；`docs/status/` 记录换壳与浏览器能力回退。验收：`pnpm check` 全绿；写这份文档时还要求 `cargo test --workspace` 与 `go -C apps/host test ./...` 不受影响，这两条命令随 Runtime/Host 合并成 TS core 已不存在，对应验收现在是 `pnpm --filter @armadra/desktop test`；文档不再出现 `tauri://localhost`、`armadra://`、`__armadra/transport` 的现状描述。
 
 ### 5.1 依赖与并行
 

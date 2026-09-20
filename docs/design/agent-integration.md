@@ -3,10 +3,11 @@
 > 状态：**已实施（2026-09-13）**，偏离与未竟之处见 §8。2026-09-19：Gemini CLI 已从产品移除，见迁移 `0014_retire_gemini.sql`；下文涉及 Gemini 的行已删。保留
 > [agent-collaboration-channels.md](./agent-collaboration-channels.md) 的两条通道（Hook / 进程内扩展报事件，技能教 CLI 用 `armadra-hook canvas …` 动词），只改**安装、注入与管理**的方式。不引入 MCP（用户决定）。
 >
-> 落点：`apps/runtime/src/hook/install/{mod,integration,repair,claude}.rs`、`collab/skills.rs`、
-> `api/agents.rs`、`worker/agent_host.rs`；`proto/armadra/v1/agent.proto`（worker 动作 109–112，107/108 已 reserved）；
-> `apps/host/internal/{agenthost,server,worker}`；`packages/shared/src/api/agents.ts`、`packages/host-client/src/agent.ts`、
-> `apps/web/src/api/agents.ts`。现状文档见 [Agent 适配与低干扰协作](../guides/agent-collaboration.md)。
+> 落点：core 的 `hook/install/{integration,repair,claude}.ts`、`collab/skills.ts`、agents 域路由；
+> `packages/shared/src/api/agents.ts`、`apps/web/src/api/agents.ts`。写这份文档时业务还分在 Rust Runtime
+> （`apps/runtime/src/hook/install/*.rs`、`worker/agent_host.rs`）与 Go Host（`apps/host/internal/{agenthost,server,worker}`）
+> 两处，`proto/armadra/v1/agent.proto` 是两者之间的协议；现在两者已合一为 TS core，没有跨进程协议，落点即代码本身。
+> 现状文档见 [Agent 适配与低干扰协作](../guides/agent-collaboration.md)。
 
 ## 1. 现状与问题
 
@@ -18,7 +19,7 @@
 | 操作画布 | 技能 `armadra/SKILL.md` 教 CLI 去跑 `armadra-hook canvas …` | 各 CLI 的技能目录                                     | 与 Hook 分开安装、分开显示状态；旧技能（`aicc-canvas`）与新技能并存                                         |
 | 协作     | 同上的 `post` / `inbox` / `link` / `handoff-read` 动词      | 同上                                                  | 与操作画布是同一套问题                                                                                      |
 
-用户实测：安装失败（实际是旧 Runtime 没有新路由）、CLI 找不到 `aicc-hook`、Codex 拒绝 `hooks.json`、连线后上下文不通。
+用户实测：安装失败（实际是旧实现没有新路由）、CLI 找不到 `aicc-hook`、Codex 拒绝 `hooks.json`、连线后上下文不通。
 
 ## 2. 结论
 
@@ -38,11 +39,11 @@
 | Copilot       | 命令 Hook（已有，核实是否可走会话配置）                               | Copilot 的技能目录（核实）                     | 视核实结果     |
 | Pi / Oh My Pi | 进程内扩展（已有）                                                    | 各自技能目录（已有）                           | 只技能         |
 
-每种 CLI 的方式、参数与核实出处写在 `hook/install/<cli>.rs` 顶部注释；会话临时文件放 `<data_dir>/sessions/<id>/`，会话结束删除。
+每种 CLI 的方式、参数与核实出处写在 `hook/install/<cli>.ts` 顶部注释；会话临时文件放 `<data_dir>/sessions/<id>/`，会话结束删除。
 
 ## 4. 旧残留的清理（修复）
 
-`hook/install/repair.rs`，设置页按钮 + Runtime 启动时自动检测（只报不改）：
+`hook/install/repair.ts`，设置页按钮 + core 启动时自动检测（只报不改）：
 
 - 识别：各 CLI 配置里的旧版接入残留（早期 hook 安装路径），以及指向 `aicc-hook`、`target/debug/…` 的 hook 条目；技能目录 `aicc-canvas`、`aicc-linked-context`、`get-linked-context`、早期画布管理技能、旧版 `armadra`（内容修订号落后）；Codex `hooks.json` 顶层的 `version`；全局 `AGENTS.md` / `CLAUDE.md` 里 由早期接入标记或 `aicc:` 前缀的 HTML 注释（`start/end`）围起来的指令块（2026-09-15 补）。
 - 动作：列出 → 备份为 `<file>.armadra-backup-<时间戳>` → 删条目 / 目录 → 按现行写法重写；只动我们认得的条目，其余原样。
@@ -52,7 +53,6 @@
 
 - `GET /api/agents/{id}/integration` → `{ mode: "launch" | "file" | "extension", hook: {installed, path?, revision}, skill: {installed, path?, revision}, legacy: {found: [{kind, path, detail}]}, revision }`。
 - `POST /api/agents/{id}/integration/install` / `uninstall`（Hook + 技能一起）；`POST …/integration/repair`。旧的 `/hooks/*`、`/skills/*` 路由删除。
-- Host 模式：agent 域转发（worker.proto 编号 +1）。
 
 ## 6. 不做
 
@@ -72,9 +72,9 @@
 设计写的是「会话临时文件放 `<data_dir>/sessions/<id>/`，会话结束删除」。实际落在
 `<data_dir>/integration/claude/settings.json`——装一次写一份，卸载删掉。
 
-原因是启动行不在 Runtime 手里：`assembleLaunchArgv` 在 Web 侧拼好，由前端敲进 shell（`apps/web/src/agent/launch.ts`），
-Runtime 只负责建 PTY。要让路径随会话变，就得把会话 id 从建终端的响应一路穿回敲启动行的地方，还要同时改
-Host 模式的 `session.proto` 投影——为了一份内容永远相同的文件。所以改成：Runtime 在 `GET /api/agents` 的
+原因是启动行不在 core 手里：`assembleLaunchArgv` 在 Web 侧拼好，由前端敲进 shell（`apps/web/src/agent/launch.ts`），
+core 只负责建 PTY。要让路径随会话变，就得把会话 id 从建终端的响应一路穿回敲启动行的地方（写这份文档时还要同步
+改 Go Host 那边的投影，是两处实现要对齐的额外成本）——为了一份内容永远相同的文件。所以改成：core 在 `GET /api/agents` 的
 `launchArgs` 里现答这份 argv，前端原样附加。
 
 设计真正要的那条性质**保住了**：`~/.claude/settings.json` 一个字节都不写，用户自己在别处开的 `claude` 完全不受影响，
@@ -96,12 +96,12 @@ Pi / Oh My Pi 另有 `-e <扩展>` 与 `--skill <路径>` 两个启动参数，�
 
 ### 8.3 Codex 0.153 的 hook 信任：本轮未解决
 
-`hook/install/codex.rs` 复现的 `trusted_hash`（对着 Codex 0.149.1 逐字节核过）在 **0.153.4 上不再匹配**：
+`hook/install/codex.ts` 复现的 `trusted_hash`（对着 Codex 0.149.1 逐字节核过）在 **0.153.4 上不再匹配**：
 装完之后 TUI 弹「Hooks need review — 8 hooks are new or changed」，在用户按 `t` 之前一条事件都不会到。
 另外 **`codex exec` 根本不跑 hook**（0.153.4 上一个已信任的 `session_start` 条目在 `exec` 下也不触发），
 所以 `pnpm agent:smoke codex` 改成了交互式 + 粘贴，与 Copilot 同路。
 
-这不是本轮改动引入的：`codex.rs` 的哈希算法这一轮没有动，`HOOK_CLIENT_REVISION` 也没有动。要修需要把
+这不是本轮改动引入的：`codex.ts` 的哈希算法这一轮没有动，`HOOK_CLIENT_REVISION` 也没有动。要修需要把
 0.153+ 的 `NormalizedHookIdentity` 重新读一遍——一个线索是 0.153.4 里 `chrome@openai-bundled` 与
 `browser@openai-bundled` 两个不同插件的 `stop` 条目共用同一个 `trusted_hash`，说明身份里已经不含命令或路径。
 在此之前 Codex 的状态通道需要用户在 TUI 里确认一次。
