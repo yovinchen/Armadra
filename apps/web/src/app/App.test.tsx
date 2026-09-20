@@ -14,6 +14,9 @@ vi.mock("../api/client", () => ({
     agents: vi.fn().mockResolvedValue([]),
     usage: vi.fn().mockResolvedValue(null),
     conversations: vi.fn().mockResolvedValue([]),
+    // The SSH prompt dialog polls on mount now that the overlays gate mounts
+    // it eagerly (it is the one overlay that has to be awake before a prompt).
+    sshPrompts: vi.fn().mockResolvedValue([]),
   },
 }));
 
