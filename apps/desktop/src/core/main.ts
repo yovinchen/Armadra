@@ -363,6 +363,19 @@ function describe(error: unknown): string {
 }
 
 /**
+ * A shell that bundles this core into its own single file claims the process
+ * entry by setting this before the bundle body runs.
+ *
+ * `require.main === module` cannot tell the two apart there: esbuild inlines
+ * both modules into ONE CommonJS file, so `module` is the same object for the
+ * core and for the shell, and both entry guards fire. The core then parses the
+ * shell's argv, fails on the shell's own subcommand and calls `process.exit(1)`
+ * before the shell ever serves anything. The flag is the shell saying "this
+ * process is mine"; the core does not need to know which shell set it.
+ */
+const CLAIMED = "__armadraShellEntry";
+
+/**
  * The process entry point, exercised by the integration test.
  *
  * The `typeof` guards are not decoration: the bundle is CJS, but the same
@@ -372,7 +385,8 @@ function describe(error: unknown): string {
 const isEntryPoint =
   typeof require !== "undefined" &&
   typeof module !== "undefined" &&
-  require.main === module;
+  require.main === module &&
+  (globalThis as Record<string, unknown>)[CLAIMED] === undefined;
 
 if (isEntryPoint) {
   run({

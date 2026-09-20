@@ -32,5 +32,15 @@ await build({
   target: "node22",
   sourcemap: true,
   external: ["node-pty", "bufferutil", "utf-8-validate", "electron"],
+  /**
+   * 这个进程的入口是服务器壳，不是 core。
+   *
+   * core 与壳各有一个 `require.main === module` 的入口判断，而 esbuild 把两
+   * 个模块**内联进同一个 CommonJS 文件**：`module` 是同一个对象，于是两个判
+   * 断同时成立。core 会去解析壳的命令行，在 `serve` 上失败并
+   * `process.exit(1)`，壳一个请求都还没服务过。banner 在 bundle 正文之前执
+   * 行，所以 core 的判断读到它时已经写好了。
+   */
+  banner: { js: 'globalThis.__armadraShellEntry = "server";' },
   logLevel: "info",
 });
