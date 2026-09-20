@@ -136,6 +136,16 @@ export interface CollabContext {
    * 「等不到就退回排队」的用例要真的睡五秒。
    */
   readonly delay?: ((ms: number) => Promise<void>) | undefined;
+  /**
+   * 「这个节点现在值得看一眼」——出队泵的那一下推。
+   *
+   * `post` 是唯一的用户：一条投进空闲节点收件箱的消息，目标那一侧不会因此报
+   * 任何状态（它本来就空着），所以只听 `agent.status` 的话收件箱唤醒要等到它
+   * 下一次跑完一轮才发生，而那正好是它最不需要被提醒的时刻（§5）。
+   *
+   * 注入而不是 import：泵在 agent 域装配，协作域反过来 import 它就是一个环。
+   */
+  readonly nudge?: ((nodeId: string) => void) | undefined;
 }
 
 export interface CollabOptions {
@@ -149,6 +159,7 @@ export interface CollabOptions {
   readonly dataDir?: string;
   readonly now?: (() => Date) | undefined;
   readonly delay?: ((ms: number) => Promise<void>) | undefined;
+  readonly nudge?: ((nodeId: string) => void) | undefined;
 }
 
 /** A context with the optional halves defaulted, for tests and for assembly. */
@@ -165,6 +176,7 @@ export function collabContext(options: CollabOptions): CollabContext {
     dataDir: options.dataDir ?? ".",
     now: options.now,
     delay: options.delay,
+    nudge: options.nudge,
   };
 }
 

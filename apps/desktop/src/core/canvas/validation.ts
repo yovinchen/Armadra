@@ -40,6 +40,14 @@ export const PERMISSION_MODES = [
   "full-auto",
   "plan",
 ] as const;
+/**
+ * 收件箱唤醒的三档（设计 `agent-delivery.md` §5）。
+ *
+ * 与这个文件里其余几张表同样是**镜像**：唯一来源是 `collab/wake.ts`，那边有
+ * 一条用例断言两份一致。文档校验不 import 协作域，因为方向反过来了——协作域
+ * import 画布域。
+ */
+export const INBOX_WAKE_MODES = ["off", "notify", "deliver"] as const;
 export const DIFF_SCOPES = ["worktree", "staged"] as const;
 export const AUTOMATION_SCHEDULE_KINDS = [
   "once",
@@ -315,11 +323,18 @@ function validAgentBlock(agent: unknown): boolean {
       optionalBoundedString(value, "credentialRef", 200)
     );
   });
+  // 收件箱唤醒的三档（设计 agent-delivery.md §5）。一个不认识的值不是「关」也
+  // 不是「开」，是一份坏文档——`inboxWakeOf` 那边读到它会退回默认档，所以这里
+  // 挡住它，免得两处各有一个答案。
+  const validWake = isAbsentOr(agent, "inboxWake", (value) =>
+    (INBOX_WAKE_MODES as readonly string[]).includes(value as string),
+  );
   return (
     validId &&
     validPermission &&
     validPending &&
     validAccount &&
+    validWake &&
     optionalBoundedString(agent, "accountId", 120) &&
     optionalBoundedString(agent, "model", 120) &&
     optionalBoundedString(agent, "sessionId", 200) &&

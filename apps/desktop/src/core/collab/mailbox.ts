@@ -241,6 +241,9 @@ function post(
       "This key already identifies different content; use a new handoff key.",
     );
   }
+  // 目标空着的话，这条消息就该现在被它知道（§5）。`post` 的语义一个字没变：
+  // 这里推的是出队泵，泵再按目标自己的设置决定提示、直投还是什么都不做。
+  if (Number(inserted.changes) > 0) context.nudge?.(target.id);
   return {
     ok: true,
     protocol: PROTOCOL,
@@ -443,6 +446,52 @@ export function pendingCount(
     )
     .get(targetNodeId, now) as { total: number };
   return Number(row.total);
+}
+
+/**
+ * 收件箱唤醒要知道的全部（设计 §5）：有几条、最早那条是谁写的写了什么，以及
+ * 这一批里最大的 `sequence`——「同一批未读只提示一次」认的就是这个数。
+ *
+ * 署名与 `inbox` 的每一行同源：名字优先，没有名字才退回标题（§2.4）。
+ */
+export interface UnreadDigest {
+  readonly count: number;
+  readonly latestSequence: number;
+  readonly earliestFrom: string;
+  readonly earliestBody: string;
+}
+
+export function unreadDigest(
+  context: CollabContext,
+  targetNodeId: string,
+  now: number,
+): UnreadDigest | undefined {
+  const row = context.database
+    .prepare(
+      "SELECT COUNT(*) AS total, MAX(sequence) AS latest " +
+        "FROM agent_mailbox WHERE target_node_id = ? AND acknowledged_at IS NULL " +
+        "AND expires_at > ?",
+    )
+    .get(targetNodeId, now) as { total: number; latest: number | null };
+  const count = Number(row.total);
+  if (count === 0 || row.latest === null) return undefined;
+  const earliest = context.database
+    .prepare(
+      "SELECT COALESCE(h.handle, n.title, '') AS from_name, m.body AS body " +
+        "FROM agent_mailbox m LEFT JOIN nodes n ON n.id = m.source_node_id " +
+        "LEFT JOIN node_handles h ON h.node_id = m.source_node_id " +
+        "WHERE m.target_node_id = ? AND m.acknowledged_at IS NULL " +
+        "AND m.expires_at > ? ORDER BY m.sequence LIMIT 1",
+    )
+    .get(targetNodeId, now) as { from_name: string; body: string } | undefined;
+  if (earliest === undefined) return undefined;
+  return {
+    count,
+    latestSequence: Number(row.latest),
+    earliestFrom:
+      earliest.from_name === "" ? "一个已删除的节点" : earliest.from_name,
+    earliestBody: earliest.body,
+  };
 }
 
 function clamp(value: number, low: number, high: number): number {

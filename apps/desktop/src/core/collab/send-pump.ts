@@ -2,6 +2,7 @@ import { attempt } from "./control/send";
 import { sendLimits } from "./send-limits";
 import { expireQueue, pendingFor } from "./send-queue";
 import { type CollabContext, nowSeconds } from "./service";
+import { wakeInbox } from "./wake";
 
 /**
  * 出队：目标进入 `idle` 的那一刻，把排在它前面的第一条投进去。
@@ -71,6 +72,13 @@ export class SendPump {
     if (this.running.has(targetNodeId)) return;
     const context = this.context();
     if (context === undefined) return;
+    // 唤醒在出队**之前**（§5 第 1 条）：它塞的是同一条队列里的一条普通排队
+    // 项，所以「有没有未读」这个问题和「队伍里有没有人」是同一次回答。
+    try {
+      wakeInbox(context, targetNodeId);
+    } catch (error) {
+      this.onError(error);
+    }
     const now = nowSeconds(context);
     const queued = pendingFor(context.database, targetNodeId, now);
     const next = queued.find((item) => item.state === "queued");

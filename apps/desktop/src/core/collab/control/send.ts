@@ -101,6 +101,15 @@ export const INTERRUPT_POLL_MS = 200;
  */
 const ESCAPE = "\u001b";
 
+/**
+ * 收件箱唤醒的信封署名与来源链（§5）。
+ *
+ * 它不是一次 Agent 之间的对话：没有第二个节点在发话，所以 `from:` 写应用自己，
+ * 而不是把目标自己的名字写上去冒充一次对话。
+ */
+export const WAKE_SENDER = "Armadra 收件箱";
+const WAKE_VIA = "收件箱";
+
 /* --------------------------------- 错误码 --------------------------------- */
 
 /**
@@ -136,7 +145,7 @@ function isRetryable(code: SendCode): boolean {
   return code === "RATE_LIMITED" || code === "QUEUE_FULL";
 }
 
-function refuse(
+export function refuse(
   code: SendCode,
   message: string,
   detail: Record<string, unknown> = {},
@@ -394,6 +403,13 @@ export async function attempt(
   try {
     live = await gate(context, item);
   } catch (error) {
+    // 「还没起来」对带任务启动与收件箱唤醒不是拒绝，是「还早」：`open-agent`
+    // 建完节点到页面挂起 PTY 之间有一段真空，而那一条排队项的全部意义就是等过
+    // 这一段。没有人在等它的回执，所以它退回队列，由 TTL 决定它什么时候死。
+    if (item.origin !== "send" && codeOf(error) === "TARGET_GONE") {
+      requeue(context.database, item.id, "TARGET_GONE");
+      throw error;
+    }
     // 门链上的硬拒绝：这一条再等也不会变好，从队列里拿掉。
     settle(context.database, item.id, "cancelled", codeOf(error));
     throw error;
@@ -492,11 +508,16 @@ export async function attempt(
     throw new Refused(503, "internal_error", "终端域还没有装配好，无法投递。");
   }
   const source = loadNode(context.database, item.sourceNodeId);
-  const sourceName = displayName(source, item.sourceNodeId);
+  // 收件箱唤醒没有第二个节点在发话：那一条是应用自己说的，署名就该是应用，而
+  // 不是把目标自己的名字写在 `from:` 上冒充一次对话（§5、§2.4）。
+  const wake = item.origin === "mailbox-wake";
+  const sourceName = wake
+    ? WAKE_SENDER
+    : displayName(source, item.sourceNodeId);
   const envelope = buildEnvelope({
     sourceNodeId: item.sourceNodeId,
     sourceName,
-    trail: renderTrail(context, item.trail),
+    trail: wake ? WAKE_VIA : renderTrail(context, item.trail),
     body: item.body,
   });
   const traceId = nonce(16);
@@ -658,10 +679,15 @@ function authorize(
   context: CollabContext,
   source: NodeRef,
   target: NodeRef,
+  options: { readonly requireLink?: boolean } = {},
 ): void {
-  const linked = getContextLinks(context.database, source.id).links.some(
-    (link) => link.id === target.id,
-  );
+  // 收件箱唤醒是节点对自己说话（§5）：连线编译的是**节点之间**那条边的授权，
+  // 而这里没有第二个节点。其余每一条照跑——能力位关掉的节点仍然不该被写入。
+  const linked =
+    options.requireLink === false ||
+    getContextLinks(context.database, source.id).links.some(
+      (link) => link.id === target.id,
+    );
   if (!linked) {
     throw refuse(
       "NOT_LINKED",
@@ -715,7 +741,11 @@ async function gate(
   if (source === undefined) {
     throw refuse("NOT_LINKED", "发起这条投递的节点已经不在画布上了。");
   }
-  authorize(context, source, target);
+  authorize(context, source, target, {
+    requireLink: !(
+      item.origin === "mailbox-wake" && item.sourceNodeId === item.targetNodeId
+    ),
+  });
   return observe(context, target);
 }
 
@@ -785,14 +815,26 @@ function readBody(args: Args): string {
   if (rawBody === undefined) {
     throw new Refused(400, "bad_request", "send 需要 --body <正文>。");
   }
-  const body = stripControl(rawBody);
+  return checkBody(rawBody, "--body");
+}
+
+/**
+ * The one set of rules a body has to pass, whichever verb collected it.
+ *
+ * `open-agent --task` queues an item that the same code path will write into a
+ * PTY, so it answers to the same length and the same control-character rule —
+ * otherwise the first task of a node's life would be the single delivery in
+ * this system with limits of its own (§8.3 第 4 条).
+ */
+export function checkBody(raw: string, flag: string): string {
+  const body = stripControl(raw);
   if (body.trim() === "") {
-    throw new Refused(400, "bad_request", "正文是空的。");
+    throw new Refused(400, "bad_request", `${flag} 的正文是空的。`);
   }
   if ([...body].length > MAX_BODY_CHARS) {
     throw refuse(
       "BODY_TOO_LONG",
-      `正文超过 ${MAX_BODY_CHARS} 个字符；把大产物写进文件，发路径。`,
+      `${flag} 的正文超过 ${MAX_BODY_CHARS} 个字符；把大产物写进文件，发路径。`,
     );
   }
   return body;

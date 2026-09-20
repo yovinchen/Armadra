@@ -124,6 +124,12 @@ export function install(context: CoreContext): CollabContext {
     audience: (workspaceId) => eventStream()?.subscriberCount(workspaceId) ?? 0,
     terminals,
     dataDir: context.dataDir,
+    // `post` 往一个空闲节点的收件箱里放了一条：那个节点不会因此报任何状态，
+    // 所以唤醒要么现在发生，要么等到它下一次跑完一轮——而那正是它最不需要被
+    // 提醒的时刻（§5）。
+    nudge: (nodeId) => {
+      void pump.drain(nodeId);
+    },
   });
   const withHandoff: CollabContext = {
     ...collabState,

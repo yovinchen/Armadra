@@ -150,6 +150,8 @@ export interface AgentFixture {
   readonly usage: ContextUsageCache;
   /** Every workspace event published, in order. */
   readonly events: { workspaceId: string; event: WorkspaceEvent }[];
+  /** Node ids the collaboration context asked the send pump to look at. */
+  readonly nudged: string[];
   /** How many clients the fixture pretends are watching. */
   watchers: number;
   customAgents: CustomAgent[];
@@ -203,6 +205,7 @@ export function agentFixture(): AgentFixture {
   const customAgents: CustomAgent[] = [];
   const settings: AgentSettings = { customAgents: () => customAgents };
   const state = { watchers: 0 };
+  const nudged: string[] = [];
 
   const base = collabContext({
     database,
@@ -216,6 +219,11 @@ export function agentFixture(): AgentFixture {
     // `send --interrupt` 等 `idle` 的那一段：注入一个空操作，用例才不用真的睡
     // 五秒去证明「等不到就退回排队」。
     delay: async () => {},
+    // 出队泵在 agent 域装配，这里只记下「谁被推了一下」：用例要断言的是
+    // `post` 有没有去敲那一下，泵自己的行为由它自己的用例守。
+    nudge: (nodeId) => {
+      nudged.push(nodeId);
+    },
   });
   const collab: CollabContext = {
     ...base,
@@ -252,6 +260,7 @@ export function agentFixture(): AgentFixture {
     terminal,
     usage,
     events,
+    nudged,
     get watchers() {
       return state.watchers;
     },

@@ -77,6 +77,11 @@ export const accountRefSchema = z.object({
 
 export type AccountRef = z.infer<typeof accountRefSchema>;
 
+/** The three settings of the inbox wake (docs/design/agent-delivery.md §5). */
+export const INBOX_WAKE_MODES = ["off", "notify", "deliver"] as const;
+
+export type InboxWake = (typeof INBOX_WAKE_MODES)[number];
+
 export const terminalAgentSchema = z.object({
   id: agentIdSchema,
   accountId: z.string().max(120).optional(),
@@ -89,6 +94,12 @@ export const terminalAgentSchema = z.object({
   /** Launch line written into the shell once it is ready. */
   initialCommand: z.string().max(4_000).optional(),
   pendingLaunch: pendingLaunchSchema.optional(),
+  /**
+   * What happens when this node goes idle with unread canvas mail
+   * (docs/design/agent-delivery.md §5): nothing, a one-line notice, or the
+   * earliest unread message itself. Absent means the core's default.
+   */
+  inboxWake: z.enum(INBOX_WAKE_MODES).optional(),
 });
 
 /**
