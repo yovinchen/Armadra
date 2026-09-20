@@ -156,11 +156,21 @@ export function install(context: CoreContext): CollabContext {
   // 出队挂在 `agent.status` 的发布点上，不轮询（§4.6）。同一条事件回答两个
   // 问题：谁的一轮结束了（扇出计数清零），以及谁空出来了（该出队了）。
   context.bus.on("workspace.event", ({ event }) => {
-    if (event.type !== "agent.status") return;
-    const status = event.status as { nodeId?: unknown; state?: unknown };
-    const nodeId = typeof status.nodeId === "string" ? status.nodeId : "";
-    const state = typeof status.state === "string" ? status.state : undefined;
-    pump.noteStatus(nodeId, state);
+    if (event.type === "agent.status") {
+      const status = event.status as { nodeId?: unknown; state?: unknown };
+      const nodeId = typeof status.nodeId === "string" ? status.nodeId : "";
+      const state = typeof status.state === "string" ? status.state : undefined;
+      pump.noteStatus(nodeId, state);
+      return;
+    }
+    // 租约放开也是一次「现在可以投了」。人抢占之后停手十秒，租约自己过期并广播
+    // 一帧 `free`——而目标那一侧此时什么状态都不会再报（它本来就空闲着）。没有
+    // 这一条，「停手十秒后自动投进去」就会等一个永远不来的状态事件。
+    if (event.type !== "terminal.lease") return;
+    const lease = event.lease as { state?: unknown };
+    if (lease.state !== "free") return;
+    if (typeof event.nodeId !== "string") return;
+    pump.noteFree(event.nodeId);
   });
   pump.start();
 

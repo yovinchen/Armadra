@@ -534,8 +534,14 @@ function queueOrRefuse(
     now,
   );
   const traceId = nonce(16);
-  trace(context, item, "queued", traceId, reason);
-  recordAndAnnounce(context, item, traceId, "queued", options);
+  // 同一个理由的重复等待不再记一次。一条排了两分钟的指令会被每一次
+  // `agent.status` 试一遍，每次都记一行的话，投递记录面板与连线上的那一下闪动
+  // 说的就不再是「发生了一件事」而是「泵跑了一圈」。
+  const repeated = item.state === "queued" && item.lastReason === reason;
+  if (!repeated) {
+    trace(context, item, "queued", traceId, reason);
+    recordAndAnnounce(context, item, traceId, "queued", options);
+  }
   return receipt({
     ok: true,
     protocol: DELIVERY_PROTOCOL,

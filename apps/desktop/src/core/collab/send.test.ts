@@ -487,6 +487,33 @@ describe("dequeueing", () => {
     expect(pendingCountFor(fixture.database, peer, nowSeconds())).toBe(1);
   });
 
+  it("resumes when the person's lease expires, which reports no status at all", async () => {
+    // 真机上撞到的那一条：人敲了一个键，租约抢占，排队项等下一次事件；而人停手
+    // 十秒之后**目标什么都不会报**——它本来就空闲着。只听 `agent.status` 的话，
+    // 这一条会等一个永远不来的事件。
+    target({ state: "busy" });
+    ok(await send());
+    target({
+      state: "idle",
+      lease: {
+        state: "human",
+        generation: 1,
+        expiresAt: "",
+        holder: { kind: "human", id: "device-1", displayName: "你" },
+      },
+    });
+    const driver = pump();
+    await driver.drain(peer);
+    expect(fixture.terminal.submits).toHaveLength(0);
+    // 十秒过去，租约自己过期并广播一帧 `free`。
+    target({ state: "idle", lease: freeLease(2) });
+    driver.noteFree(peer);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 20);
+    });
+    expect(fixture.terminal.submits).toHaveLength(1);
+  });
+
   it("is driven by the status event, not by a poll", async () => {
     target({ state: "busy" });
     ok(await send());

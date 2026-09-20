@@ -49,6 +49,19 @@ export class SendPump {
   }
 
   /**
+   * 目标的驱动租约放开了。
+   *
+   * 与 {@link noteStatus} 分开的原因只有一个：人抢占之后停手十秒，租约自己过期
+   * 而**目标那一侧什么都不会报**——它本来就空闲着，没有新的一轮，也就没有新的
+   * `agent.status`。只听状态事件的话，「停手十秒后自动投进去」会等一个永远不来
+   * 的事件。
+   */
+  noteFree(nodeId: string): void {
+    if (nodeId === "") return;
+    void this.drain(nodeId);
+  }
+
+  /**
    * 把这个目标队伍里最前面那条投出去，如果它现在真的空闲的话。
    *
    * 状态判断不在这里：`attempt` 会重跑整条门链，而在这里先猜一次只会得到第二
