@@ -19,6 +19,7 @@ describe("usage dashboard contracts", () => {
     peak: null,
     activeIntervals: 0,
     longestStreak: 0,
+    sessions: 0,
   };
   const ranges = { "24h": range, "7d": range, "30d": range, all: range };
 

@@ -138,6 +138,8 @@ export const costAgentSchema = z.object({
 export const costPointSchema = costWindowSchema.extend({
   key: z.string(),
   agents: z.array(costAgentSchema),
+  /** 这个点里有活动的转录文件数——一个文件就是一个会话。 */
+  sessions: z.number(),
 });
 
 export const costRangeKeySchema = z.enum(["24h", "7d", "30d", "all"]);
@@ -158,6 +160,8 @@ export const costRangeSchema = z.object({
   activeIntervals: z.number(),
   /** 连续有活动的最长点数。 */
   longestStreak: z.number(),
+  /** 整个范围里有活动的转录文件数（去重）。 */
+  sessions: z.number(),
 });
 
 export const costRangesSchema = z.object({
