@@ -41,6 +41,21 @@ const zh = {
   "delivery.palette.takeover": "接管「{title}」的终端",
   "delivery.palette.release": "交还「{title}」的终端",
 
+  /* 被读取（阶段 C+，`agent-delivery.md` §10） */
+  "contextReads.count": "被读取 {count} 次",
+  "contextReads.title": "最近读过这个节点的",
+  "contextReads.empty": "还没有记录。",
+  "contextReads.entry": "{name} · {verb} · {bytes}",
+
+  /* 节点的 Agent 设置（§10「节点设置」） */
+  "agentSettings.title": "Agent 设置",
+  "agentSettings.inboxWake": "收件箱唤醒",
+  "agentSettings.inboxWake.off": "关",
+  "agentSettings.inboxWake.notify": "提示",
+  "agentSettings.inboxWake.deliver": "直接投递",
+  "agentSettings.acceptSubDelivery": "允许从向我投递",
+  "agentSettings.contextShare": "允许相连 Agent 读取转录",
+
   /* 关闭确认（§5.8） */
   "confirm.title": "Agent 请求关闭节点",
   "confirm.allow": "允许",
@@ -78,6 +93,19 @@ const en: Record<keyof typeof zh, string> = {
   "delivery.palette.queue": "Show the delivery queue for “{title}”",
   "delivery.palette.takeover": "Take over the terminal of “{title}”",
   "delivery.palette.release": "Hand back the terminal of “{title}”",
+
+  "contextReads.count": "Read {count}×",
+  "contextReads.title": "Recently read this node",
+  "contextReads.empty": "Nothing recorded yet.",
+  "contextReads.entry": "{name} · {verb} · {bytes}",
+
+  "agentSettings.title": "Agent settings",
+  "agentSettings.inboxWake": "Inbox wake",
+  "agentSettings.inboxWake.off": "Off",
+  "agentSettings.inboxWake.notify": "Notify",
+  "agentSettings.inboxWake.deliver": "Deliver",
+  "agentSettings.acceptSubDelivery": "Let subs type into my terminal",
+  "agentSettings.contextShare": "Let linked agents read my transcript",
 
   "confirm.title": "An agent wants to close a node",
   "confirm.allow": "Allow",

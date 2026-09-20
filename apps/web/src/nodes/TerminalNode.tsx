@@ -47,6 +47,7 @@ import {
 } from "@/terminal/TerminalSurface";
 import { autoNameNode } from "@/meta/annotations";
 import { HandoffBadge } from "@/agent/handoff/HandoffBadge";
+import { ContextReadsBadge } from "./ContextReadsBadge";
 import { DeliveryQueueBadge } from "./DeliveryQueueBadge";
 import { DriveBadge } from "./DriveBadge";
 import { MemoryBadge } from "@/panels/resources/MemoryBadge";
@@ -249,6 +250,13 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       */}
       {!exited && (
         <DeliveryQueueBadge nodeId={id} workspaceId={workspaceId ?? null} />
+      )}
+      {/*
+        谁读过这个节点的转录（设计 §10）。没人读过就不画：读取是常态里的
+        零次，把 `0` 画出来只是噪音。
+      */}
+      {agent && (
+        <ContextReadsBadge nodeId={id} visible={!collapsed && !exited} />
       )}
       <GithubReferenceBadge nodeId={id} />
       {exited && (

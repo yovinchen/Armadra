@@ -5,6 +5,7 @@ import {
   answerApprovalResponseSchema,
   contextLinksRequestSchema,
   contextLinksResponseSchema,
+  contextReadsResponseSchema,
   contextUsageSchema,
   controlConfirmRequestSchema,
   controlConfirmResponseSchema,
@@ -65,6 +66,18 @@ export const agentsApi = {
     request(
       `/api/workspaces/${query(workspaceId)}/deliveries?node=${query(nodeId)}`,
       deliveryQueueResponseSchema,
+      { signal },
+    ),
+  /**
+   * 谁读过这个节点的转录（设计 §10）。
+   *
+   * 读是一件发生过的事，读的人知道，被读的人今天不知道；节点头的「被读取 N
+   * 次」数的就是它。只有元数据：谁、什么动词、多少字节、什么时候。
+   */
+  contextReads: (nodeId: string, signal?: AbortSignal) =>
+    request(
+      `/api/nodes/${query(nodeId)}/context-reads`,
+      contextReadsResponseSchema,
       { signal },
     ),
   /** 人拒收一条还排着的。已经在投的那条收不回来，答 `cancelled:false`。 */
