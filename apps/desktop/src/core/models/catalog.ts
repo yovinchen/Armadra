@@ -23,11 +23,12 @@
  * 会话有没有触发某档附加费，从转录里看不出来，按它计费和凭空编一个价格是同一
  * 个错误。
  *
- * ## 只留四家
+ * ## 只留主流的第一方
  *
- * 上游 213 家 provider、7784 个模型、约 4.6 MB。只留我们有适配器的那几家
- * （{@link KEPT_PROVIDERS}），缓存就是约 100 KB。别处的模型仍然「没有价格」，
- * 和今天一样。
+ * 上游 220 多家 provider、几千个模型、约 4.6 MB。只留模型的**第一方**里主流的
+ * 那些（{@link KEPT_PROVIDERS}），缓存不到 100 KB。转发商、路由器、各家的套餐
+ * 变体都不要：同一个模型 id 在它们那里各有一个价，而这里查价是按 id 精确匹配，
+ * 多留一家就多一处「最后写入的那个赢」。别处的模型仍然「没有价格」。
  *
  * ## 什么时候读
  *
@@ -74,18 +75,34 @@ const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 30_000;
 
 /**
- * 从上游文档里留下的 provider。
+ * 从上游文档里留下的 provider：模型的第一方，海外与国内的主流各家，外加
+ * GitHub Copilot（它按自己的额度重列别家的模型）。
  *
- * 一家对一个我们发了适配器的 CLI：Claude Code（anthropic）、Codex（openai）、
- * GitHub Copilot（它按自己的额度重列别家的模型）。可以指向任意 provider 的 CLI
- * （opencode、pi、omp）不在这里：它的模型是它自己配置里写的，替它猜一家
- * provider 只会列出这个账号用不了的模型。
+ * 一个 id 只从它的第一方取价——Codex 可以配到 DeepSeek 或 Kimi 的兼容端点，
+ * 转录里写的就是那家的原生 id，第一方的价目就是对的那份。同一家的 `-cn` /
+ * `-coding-plan` 变体不收：id 相同、价钱各异，收了只会让「最后写入的赢」。
  */
 export const KEPT_PROVIDERS = [
+  // 海外
   "anthropic",
   "openai",
   "google",
+  "xai",
+  "meta",
+  "mistral",
+  "cohere",
+  "perplexity",
+  "ai21",
   "github-copilot",
+  // 国内
+  "deepseek",
+  "moonshotai",
+  "alibaba",
+  "zhipuai",
+  "minimax",
+  "volcengine",
+  "stepfun",
+  "xiaomi",
 ] as const;
 
 /** USD / 百万 token，上游怎么发布就怎么记。 */

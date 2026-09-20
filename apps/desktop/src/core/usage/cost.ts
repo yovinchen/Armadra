@@ -127,6 +127,8 @@ export interface CostPoint extends CostWindow {
   readonly key: string;
   /** 只有这个点里真有 token 的 agent，按注册表顺序。 */
   readonly agents: readonly AgentCost[];
+  /** 这个点里有活动的转录文件数——一个文件就是一个会话。 */
+  readonly sessions: number;
 }
 
 export type CostRangeKey = "24h" | "7d" | "30d" | "all";
@@ -146,6 +148,8 @@ export interface CostRange {
   } | null;
   readonly activeIntervals: number;
   readonly longestStreak: number;
+  /** 整个范围里有活动的转录文件数，去重。 */
+  readonly sessions: number;
 }
 
 export type CostRanges = Readonly<Record<CostRangeKey, CostRange>>;
@@ -193,6 +197,7 @@ function emptyRange(granularity: "hour" | "day"): CostRange {
     peak: null,
     activeIntervals: 0,
     longestStreak: 0,
+    sessions: 0,
   };
 }
 
@@ -368,6 +373,8 @@ export interface ScanResult {
   readonly buckets: Map<string, TokenTotals>;
   /** 同一个形状，第一段是本地小时，只有最近 48 小时。 */
   readonly hourBuckets: Map<string, TokenTotals>;
+  /** 日期或小时 → 在那一格里有活动的文件（一次扫描内的序号）。 */
+  readonly sessions: Map<string, Set<number>>;
   readonly files: Record<string, number>;
   truncated: boolean;
   current:
@@ -595,6 +602,7 @@ export class ScanState {
     const result: ScanResult = {
       buckets: new Map(),
       hourBuckets: new Map(),
+      sessions: new Map(),
       files: {},
       truncated: false,
       current: undefined,
@@ -634,15 +642,19 @@ export class ScanState {
     }
 
     let current: FileState | undefined;
+    let fileId = 0;
     for (const state of this.files.values()) {
+      fileId += 1;
       // 这里清，而不是在 `parse()` 里：一个什么都没被追加的文件早退，它的小时桶也
       // 得跟着时间往前走。
       pruneHours(state, nowMs);
       for (const [key, tokens] of state.buckets) {
         addToBucket(result.buckets, key, tokens);
+        addSession(result.sessions, key, fileId);
       }
       for (const [key, tokens] of state.hourBuckets) {
         addToBucket(result.hourBuckets, key, tokens);
+        addSession(result.sessions, key, fileId);
       }
       if (state.buckets.size === 0) continue;
       if (current === undefined || state.modifiedMs > current.modifiedMs) {
@@ -766,6 +778,17 @@ function windowFrom(
   return { tokens: total, costUsd: roundCents(cost), complete, models };
 }
 
+function addSession(
+  sessions: Map<string, Set<number>>,
+  key: string,
+  fileId: number,
+): void {
+  const slot = splitKey(key).date;
+  const files = sessions.get(slot);
+  if (files === undefined) sessions.set(slot, new Set([fileId]));
+  else files.add(fileId);
+}
+
 /** 一个桶对一个点的贡献：谁、哪个模型、多少 token。 */
 interface Cell {
   readonly agent: string;
@@ -837,11 +860,13 @@ function rangeOf(
   granularity: "hour" | "day",
   keys: readonly string[],
   cells: ReadonlyMap<string, Cell[]>,
+  sessions: ReadonlyMap<string, ReadonlySet<number>>,
   prices: PriceLookup,
 ): CostRange {
   const points: CostPoint[] = [];
   const every: Cell[] = [];
   const counted = new Set<string>();
+  const files = new Set<number>();
   let peak: CostRange["peak"] = null;
   let activeIntervals = 0;
   let longestStreak = 0;
@@ -849,12 +874,19 @@ function rangeOf(
   for (const key of keys) {
     const own = cells.get(key) ?? [];
     // 夏令时回拨的那天两个槽位会拼出同一个键；总计只吃一次。
+    const ownSessions = sessions.get(key);
     if (!counted.has(key)) {
       counted.add(key);
       for (const cell of own) every.push(cell);
+      for (const file of ownSessions ?? []) files.add(file);
     }
     const window = windowFrom(modelEntries(own), prices);
-    points.push({ key, ...window, agents: agentCosts(own, prices, false) });
+    points.push({
+      key,
+      ...window,
+      agents: agentCosts(own, prices, false),
+      sessions: ownSessions?.size ?? 0,
+    });
     const total = totalTokens(window.tokens);
     if (total === 0) {
       streak = 0;
@@ -877,6 +909,7 @@ function rangeOf(
     peak,
     activeIntervals,
     longestStreak,
+    sessions: files.size,
   };
 }
 
@@ -931,6 +964,7 @@ export function summarize(
 
   const { cells: dayCells, earliest } = groupCells(result.buckets);
   const { cells: hourCells } = groupCells(result.hourBuckets);
+  const sessions = result.sessions;
 
   const unpriced = new Set<string>();
   const windowModels: [string, TokenTotals][] = [];
@@ -950,13 +984,14 @@ export function summarize(
   }));
 
   const ranges: CostRanges = {
-    "24h": rangeOf("hour", hourKeys(nowMs), hourCells, prices),
-    "7d": rangeOf("day", dayKeys(nowMs, 7), dayCells, prices),
-    "30d": rangeOf("day", dates, dayCells, prices),
+    "24h": rangeOf("hour", hourKeys(nowMs), hourCells, sessions, prices),
+    "7d": rangeOf("day", dayKeys(nowMs, 7), dayCells, sessions, prices),
+    "30d": rangeOf("day", dates, dayCells, sessions, prices),
     all: rangeOf(
       "day",
       earliest === undefined ? [] : spanKeys(earliest, today),
       dayCells,
+      sessions,
       prices,
     ),
   };

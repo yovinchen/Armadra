@@ -54,8 +54,8 @@ const UPSTREAM = JSON.stringify({
       },
     },
   },
-  // 我们不读的 provider：整家丢掉。
-  mistral: {
+  // 转发商不读：整家丢掉。
+  openrouter: {
     models: { "mistral-large": { cost: { input: 2, output: 6 } } },
   },
 });
@@ -121,7 +121,7 @@ describe("models.dev 文档的解析", () => {
       /models\.dev/,
     );
     expect(() =>
-      parse(JSON.stringify({ mistral: { models: {} } }), "x"),
+      parse(JSON.stringify({ openrouter: { models: {} } }), "x"),
     ).toThrow(/provider/);
   });
 

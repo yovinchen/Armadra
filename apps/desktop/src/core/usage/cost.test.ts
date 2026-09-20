@@ -427,6 +427,9 @@ describe("记录扫描", () => {
     const first = await state.scan(roots);
     expect(first.buckets.size).toBe(2);
     expect(first.hourBuckets.size).toBe(1);
+    // 一个文件、两个日期、一个小时：三格各记着同一个会话。
+    expect(first.sessions.size).toBe(3);
+    for (const files of first.sessions.values()) expect(files.size).toBe(1);
     const [key] = [...first.hourBuckets.keys()];
     expect(splitKey(key as string).date).toBe(localHour(at(1), nowMs));
     expect(splitKey(key as string).agent).toBe("claude");
@@ -454,10 +457,15 @@ describe("汇总", () => {
     return buckets;
   }
 
-  function scanned(rows: readonly Row[], hourRows: readonly Row[] = []) {
+  function scanned(
+    rows: readonly Row[],
+    hourRows: readonly Row[] = [],
+    sessions: Map<string, Set<number>> = new Map(),
+  ) {
     return {
       buckets: bucketsOf(rows),
       hourBuckets: bucketsOf(hourRows),
+      sessions,
       files: { claude: 1 },
       truncated: false,
       current: undefined,
@@ -803,3 +811,44 @@ function reachableText(root: unknown): string {
   walk(root, 0);
   return out.join("\u0000");
 }
+
+describe("会话数", () => {
+  const NOW = Date.parse("2026-09-20T12:00:00Z");
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  const day = (back: number): string => {
+    const date = new Date(NOW);
+    date.setDate(date.getDate() - back);
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+  const tokens = { input: 5, output: 0, cacheRead: 0, cacheCreation: 0 };
+
+  it("点上数那一格里的文件，范围上跨格去重", () => {
+    const buckets = new Map([
+      [bucketKey(day(0), "claude", "claude-opus-5"), tokens],
+      [bucketKey(day(1), "codex", "gpt-5"), tokens],
+    ]);
+    // 文件 2 两天都在场：点上各算一次，范围里只算一次。
+    const sessions = new Map([
+      [day(0), new Set([1, 2])],
+      [day(1), new Set([2, 3])],
+    ]);
+    const summary = summarize(
+      {
+        buckets,
+        hourBuckets: new Map(),
+        sessions,
+        files: { claude: 2, codex: 1 },
+        truncated: false,
+        current: undefined,
+      },
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    const week = summary.ranges["7d"];
+    expect(week.sessions).toBe(3);
+    expect(week.points.at(-1)?.sessions).toBe(2);
+    expect(week.points.at(-2)?.sessions).toBe(2);
+    expect(week.points.at(-3)?.sessions).toBe(0);
+    expect(summary.ranges["24h"].sessions).toBe(0);
+  });
+});
