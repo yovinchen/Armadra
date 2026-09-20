@@ -430,31 +430,15 @@ export function NodeMenuContent({
     <DropdownMenuContent align="end" className="min-w-52">
       {items}
       {items ? <DropdownMenuSeparator /> : null}
-      {/* 改名的第二个入口。触屏上双击标题不好按，而这一项和双击翻的是同一个
-          开关，所以它不是「另一种改名」，只是同一条路的另一个门。 */}
-      {onRename && (
-        <DropdownMenuItem onSelect={onRename}>
-          <PencilLine />
-          {t("node.rename")}
-        </DropdownMenuItem>
-      )}
-      {/* 名字是另一件事：标题是给人看的散文，名字是 Agent 之间的称呼，自动
-          命名只改前者（设计 §2.1）。所以它是菜单里独立的一项。 */}
+      {/* 用户实测（2026-09-21）：这一段以前有重命名、折叠、最大化、AI 命名、
+          评论、标签七项，真正用得上的只有「名字…」——标题双击就能改，折叠与
+          最大化几乎没人点，标注走命令面板。名字是 Agent 之间的称呼（设计
+          §2.1），所以留它一项。 */}
       <DropdownMenuItem onSelect={() => requestNodeNames([node.id])}>
         <AtSign />
         {t("node.name.edit")}
       </DropdownMenuItem>
-      <DropdownMenuItem
-        onSelect={() => {
-          focusNode(node.id);
-          useCanvasStore.getState().setCollapsed(node.id, !collapsed);
-        }}
-      >
-        {collapsed ? <ChevronRight /> : <ChevronDown />}
-        {collapsed ? t("node.expand") : t("node.collapse")}
-      </DropdownMenuItem>
-      {/* 手机上「最大化」没有意义——画布本身就只有一屏宽。这一格换成进入
-            单节点焦点页的入口，同一个 `focusNodeId`。 */}
+      {/* 手机上画布只有一屏宽，进入单节点焦点页是这里唯一的入口。 */}
       {compact && canFocusOnPhone(node.type) ? (
         <DropdownMenuItem
           onSelect={() => {
@@ -465,20 +449,7 @@ export function NodeMenuContent({
           <Expand />
           {t("mobile.focus.open")}
         </DropdownMenuItem>
-      ) : (
-        <DropdownMenuItem
-          onSelect={() => {
-            focusNode(node.id);
-            const store = useCanvasStore.getState();
-            if (maximized) store.restoreNode(node.id);
-            else store.maximizeNode(node.id, maximizeRect());
-          }}
-        >
-          {maximized ? <Minimize2 /> : <Maximize2 />}
-          {maximized ? t("node.restore") : t("node.maximize")}
-        </DropdownMenuItem>
-      )}
-      <NodeMetaMenuItems node={node} />
+      ) : null}
     </DropdownMenuContent>
   );
 }

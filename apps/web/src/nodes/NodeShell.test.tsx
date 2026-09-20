@@ -298,19 +298,11 @@ describe("NodeShell", () => {
     }
   });
 
-  /** 触屏上双击不好按，`···` 里的「重命名」是同一个入口。 */
-  it("offers rename from the shared node menu", () => {
-    const onRename = vi.fn();
-    openMenu({ onRename });
-    fireEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
-    expect(onRename).toHaveBeenCalledTimes(1);
-  });
-
   /**
    * 名字与标题是两件事（设计 §2.1）：自动命名只改标题，名字是 Agent 之间的
    * 称呼。所以菜单里它们是两项，头部的徽标也只在有名字时出现。
    */
-  it("offers the name as its own menu item, beside rename", () => {
+  it("offers the name as its own menu item", () => {
     const asked: string[][] = [];
     const release = onNodeNamesRequest((ids) => asked.push([...ids]));
     try {
@@ -485,18 +477,6 @@ describe("NodeShell", () => {
     expect(screen.getByText("便签 1")).toBeTruthy();
   });
 
-  it("toggles collapse through the store", () => {
-    openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "折叠" }));
-    expect(store.setCollapsed).toHaveBeenCalledWith("n1", true);
-  });
-
-  it("expands again when the node is collapsed", () => {
-    openMenu({ node: makeNode({ collapsed: true }), collapsed: true });
-    fireEvent.click(screen.getByRole("menuitem", { name: "展开" }));
-    expect(store.setCollapsed).toHaveBeenCalledWith("n1", false);
-  });
-
   /** 头部只剩标题、常驻徽标、`···` 与关闭（F5）。 */
   it("keeps only the title, the chips, the menu and close in the header", () => {
     const { container } = renderShell();
@@ -533,35 +513,6 @@ describe("NodeShell", () => {
     expect(store.removeNodes).toHaveBeenCalledWith(["n1"]);
   });
 
-  /**
-   * 头部按钮改文档之前必须先同步选中态：按钮自己吃掉了 pointerdown（否则
-   * 一按就开始拖节点），React Flow 的选择不会经手这次点击。
-   */
-  it("selects the node before mutating it from the menu", () => {
-    openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "折叠" }));
-    expect(store.selectNodes).toHaveBeenCalledWith(["n1"]);
-    expect(store.setCollapsed).toHaveBeenCalledWith("n1", true);
-
-    store.selectNodes.mockClear();
-    fireEvent.click(screen.getByRole("menuitem", { name: "最大化" }));
-    expect(store.selectNodes).toHaveBeenCalledWith(["n1"]);
-  });
-
-  it("maximizes with a canvas rect and restores without one", () => {
-    openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "最大化" }));
-    expect(store.maximizeNode).toHaveBeenCalledWith(
-      "n1",
-      expect.objectContaining({ x: expect.any(Number) }),
-    );
-
-    cleanup();
-    openMenu({ maximized: true });
-    fireEvent.click(screen.getByRole("menuitem", { name: "还原" }));
-    expect(store.restoreNode).toHaveBeenCalledWith("n1");
-  });
-
   it("renders a status pill only when a status is given", () => {
     const { container, unmount } = renderShell();
     expect(container.querySelector('[data-slot="status-pill"]')).toBeNull();
@@ -591,14 +542,6 @@ describe("NodeShell", () => {
     // AI 命名 / 评论在每种节点共用的 `···` 里，头部不多按钮
     expect(screen.queryByLabelText("评论")).toBeNull();
     expect(screen.queryByLabelText("AI 命名")).toBeNull();
-  });
-
-  it("puts the annotation entries in the shared node menu", () => {
-    openMenu();
-    expect(screen.getByRole("menuitem", { name: /评论/ })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /标签/ })).toBeTruthy();
-    // 便签没有会话，猜不出标题，所以 AI 命名不出现。
-    expect(screen.queryByRole("menuitem", { name: "AI 命名" })).toBeNull();
   });
 
   it("edits the comment in a dialog, not inside the node", () => {
