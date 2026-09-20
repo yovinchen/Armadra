@@ -10,7 +10,8 @@ import {
 } from "./backend";
 import { remoteDomain } from "../remote";
 import { DirectBackend } from "./direct";
-import { agentEnvironment } from "./environment";
+import { agentEnvironment, setHookClient } from "./environment";
+import { launcherClientBinary } from "../hook/install/shared";
 import { SshBackend } from "./ssh/backend";
 import { permissionWaitEnvironment } from "../hook/approvals";
 import { issueNodeToken } from "../hook/tokens";
@@ -80,6 +81,7 @@ export function install(
   context: CoreContext,
   options: TerminalInstallOptions = {},
 ): TerminalDomain {
+  publishHookClient(context);
   const settings = settingsDomain()?.settings;
   const configured =
     options.configured ??
@@ -422,6 +424,44 @@ export function install(
   );
 
   return { manager, backends, stop: () => manager.shutdown() };
+}
+
+/**
+ * Writes the `armadra-hook` launcher and records where it went.
+ *
+ * Every terminal opened from the board is supposed to carry that directory at
+ * the end of its PATH and the absolute path in `ARMADRA_HOOK_BIN` — the skill
+ * tells the model to run the bare command and to fall back to the variable
+ * when a shell profile has rewritten PATH. Neither was ever set, so
+ * `armadra-hook` was `command not found` in every canvas terminal and none of
+ * the three verb families could be reached: the hooks installed fine and were
+ * unusable.
+ *
+ * It is done here rather than in the hook domain because of the order in
+ * `DOMAINS`: hooks are assembled **last**, and by then this domain has already
+ * built its backends — a tmux server started before the path was known would
+ * carry the old PATH for as long as it lives. Writing the launcher is a pure
+ * file operation with no service behind it, so doing it early costs nothing.
+ *
+ * No bundle on this box (a source checkout with no build) leaves it unset,
+ * which is the truth; an empty `ARMADRA_HOOK_BIN` would point the skill's
+ * fallback at a path that resolves to nothing.
+ */
+function publishHookClient(context: CoreContext): void {
+  let path: string | undefined;
+  try {
+    path = launcherClientBinary({ dataDir: context.dataDir });
+  } catch (error) {
+    context.log.warn("could not write the armadra-hook launcher", {
+      error: describe(error),
+    });
+  }
+  setHookClient(path);
+  if (path === undefined) {
+    context.log.info("no armadra-hook bundle: the canvas verbs have no client");
+  } else {
+    context.log.debug("armadra-hook client", { path });
+  }
 }
 
 /**

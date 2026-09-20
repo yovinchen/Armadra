@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   INHERITED_ENV,
@@ -8,6 +11,7 @@ import {
   contextSessionEnvironment,
   defaultShell,
   inherited,
+  setHookClient,
   withUtf8Locale,
 } from "./environment";
 import { parseProcessLine, processTable, processTree } from "./process";
@@ -194,5 +198,55 @@ describe("the process table", () => {
     // leaves exactly the rows whose parent happened to be the right width.
     expect(table.size).toBeGreaterThan(20);
     expect(processTree(process.pid, table)).toContain(process.pid);
+  });
+});
+
+/**
+ * The hook client every canvas terminal has to be able to reach.
+ *
+ * The skill tells the model to run `armadra-hook` by name and to fall back to
+ * the absolute path in `ARMADRA_HOOK_BIN` when a shell profile has rewritten
+ * PATH. Neither was ever set, so the command was not found in any canvas
+ * terminal and no agent could reach any of the three verb families.
+ */
+describe("the armadra-hook client in a child environment", () => {
+  const ambient = { HOME: "/home/tester", PATH: "/usr/bin" };
+
+  it("is absent entirely when no bundle was found", () => {
+    setHookClient(undefined);
+    const env = asRecord(childEnvironment({ ambient }));
+    // Absent, not empty: the fallback must never name a path that resolves to
+    // nothing.
+    expect(env.ARMADRA_HOOK_BIN).toBeUndefined();
+  });
+
+  it("names the client and puts its directory last on PATH", () => {
+    const directory = mkdtempSync(join(tmpdir(), "armadra-hookbin-"));
+    const client = join(directory, "armadra-hook");
+    writeFileSync(client, "#!/bin/sh\n", "utf8");
+    try {
+      setHookClient(client);
+      const env = asRecord(childEnvironment({ ambient }));
+      expect(env.ARMADRA_HOOK_BIN).toBe(client);
+      // Appended, never prepended: a tool of the user's with the same name
+      // still wins.
+      expect(env.PATH?.split(delimiter).at(-1)).toBe(directory);
+      expect(env.PATH?.startsWith("/usr/bin")).toBe(true);
+    } finally {
+      setHookClient(undefined);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("lets an explicit option win over the published one", () => {
+    setHookClient("/published/armadra-hook");
+    try {
+      const env = asRecord(
+        childEnvironment({ ambient, hookBin: "/explicit/armadra-hook" }),
+      );
+      expect(env.ARMADRA_HOOK_BIN).toBe("/explicit/armadra-hook");
+    } finally {
+      setHookClient(undefined);
+    }
   });
 });

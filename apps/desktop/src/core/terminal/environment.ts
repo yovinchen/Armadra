@@ -149,6 +149,29 @@ export interface ChildEnvironmentOptions {
 }
 
 /**
+ * Where `armadra-hook` is on this machine, as the hook domain resolved it.
+ *
+ * A module-level value rather than a parameter because the callers that need
+ * it are the two backends' environment builders, and one of them builds the
+ * environment of a **tmux server** — a process with no session, no node and no
+ * data directory to ask. Frozen into a row it would be worse: the path belongs
+ * to this install, and a session recycled after an update must get the new one.
+ *
+ * Unset means "no bundle on this box" (a source checkout with no build), and
+ * then neither the PATH entry nor `ARMADRA_HOOK_BIN` appears — an empty
+ * variable would send the skill's fallback at a path that resolves to nothing.
+ */
+let hookClientPath: string | undefined;
+
+export function setHookClient(path: string | undefined): void {
+  hookClientPath = path;
+}
+
+export function hookClient(): string | undefined {
+  return hookClientPath;
+}
+
+/**
  * The environment every terminal child starts from — the tmux server, its
  * sessions, and a direct PTY alike.
  */
@@ -160,15 +183,16 @@ export function childEnvironment(
   for (const [key, value] of Object.entries(ambient)) {
     if (value !== undefined && inherited(key)) env.push([key, value]);
   }
+  const hookBin = options.hookBin ?? hookClient();
   const hookDirectory =
-    options.hookBin !== undefined && existsSync(options.hookBin)
-      ? join(options.hookBin, "..")
+    hookBin !== undefined && existsSync(hookBin)
+      ? join(hookBin, "..")
       : undefined;
   env.push(["PATH", agentPath(ambient, hookDirectory)]);
-  if (options.hookBin !== undefined) {
+  if (hookBin !== undefined) {
     // The sidecar's directory is on that PATH, but an rc file may replace PATH
     // wholesale; the skill then says to use this instead.
-    env.push(["ARMADRA_HOOK_BIN", options.hookBin]);
+    env.push(["ARMADRA_HOOK_BIN", hookBin]);
   }
   // What the CLI on the other end thinks it is talking to (contract §18.3,
   // TERM row). xterm.js implements xterm-256color and renders 24-bit SGR
