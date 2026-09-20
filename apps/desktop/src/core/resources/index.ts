@@ -1,9 +1,9 @@
 /**
  * 资源域的装配：五条路由，一个采样服务。
  *
- * 采样路由是按工作空间的（面板显示一个工作空间的会话）。`/api/power*` **不在这里**
- * ——租约属于机器、跨画布切换存活，是 phase 5 里另一条独立认领的路；这个域只在快照
- * 里报策略和抑制机制能不能用，因为面板在同一屏上显示它们。
+ * 采样路由是按工作空间的（面板显示一个工作空间的会话）；`/api/power*` 那四条**不带
+ * 工作空间**——租约属于机器、跨画布切换存活。两者装在同一个域里，是因为面板在同一
+ * 屏上显示它们，而快照里的电源那一段读的就是这本租约簿。
  *
  * 终止一个孤立会话要拆一棵进程树，而拆树的那一份在终端域
  * （`terminal/process.ts` 的 `terminateTree`）。这里只决定**终止谁**：
@@ -20,11 +20,19 @@ import type { HandlerResult } from "../http/router";
 import type { CoreContext } from "../main";
 import { settingsDomain } from "../settings";
 import { workspaceExists } from "../events/workspaces";
+import {
+  LeaseNotFound,
+  PowerService,
+  type PowerLeaseRequest,
+  type PowerLeaseSource,
+} from "./power";
 import { ResourceService, type SubscribeRequest } from "./service";
 import { OrphanError, adoptOrphan, orphanTarget, panePids } from "./sessions";
 
 export { ResourceService } from "./service";
+export { PowerService } from "./power";
 export type {
+  PowerLease,
   PowerState,
   ResourceSnapshot,
   SubscribeRequest,
@@ -42,6 +50,7 @@ export type { AdoptedSession, OrphanSession } from "./sessions";
 
 export interface ResourceDomain {
   readonly service: ResourceService;
+  readonly power: PowerService;
   stop(): void;
 }
 
@@ -53,11 +62,19 @@ export function resourceDomain(): ResourceDomain | undefined {
 }
 
 export function install(context: CoreContext): ResourceDomain {
+  const power = new PowerService({
+    policy: () => {
+      const value = settingsDomain()?.settings.get("power.policy");
+      return typeof value === "string" ? value : "manual";
+    },
+    log: (message, fields) => context.log.info(message, fields ?? {}),
+  });
   const service = new ResourceService({
     database: context.db.database,
     settings: settingsDomain()?.settings,
     bus: context.bus,
     dataDir: context.dataDir,
+    power: () => power.state(),
   });
   const { router } = context.server;
 
@@ -162,11 +179,109 @@ export function install(context: CoreContext): ResourceDomain {
     },
   );
 
+  /* ---------------------------------- 电源 -------------------------------- */
+
+  router.handle("GET", "/api/power", () => ({
+    status: 200,
+    body: power.state(),
+  }));
+
+  router.handle("POST", "/api/power/leases", (_match, request) => {
+    let body: unknown;
+    try {
+      body = request.json();
+    } catch {
+      return badRequest("The request body is not JSON");
+    }
+    const parsed = parseLeaseRequest(body);
+    if (typeof parsed === "string") return badRequest(parsed);
+    return { status: 200, body: power.acquire(parsed) };
+  });
+
+  router.handle(
+    "POST",
+    "/api/power/leases/{leaseId}/renew",
+    (match, request) => {
+      let ttlSeconds: number | undefined;
+      if (request.body.byteLength > 0) {
+        let body: unknown;
+        try {
+          body = request.json();
+        } catch {
+          return badRequest("The request body is not JSON");
+        }
+        const wanted = (body as { ttlSeconds?: unknown } | null)?.ttlSeconds;
+        if (wanted !== undefined) {
+          if (typeof wanted !== "number" || !Number.isFinite(wanted)) {
+            return badRequest("ttlSeconds is not a number");
+          }
+          ttlSeconds = wanted;
+        }
+      }
+      try {
+        return {
+          status: 200,
+          body: power.renew(match.params.leaseId ?? "", ttlSeconds),
+        };
+      } catch (error) {
+        if (error instanceof LeaseNotFound) {
+          // 过期与从来没有过，对调用方是同一件事：这条租约现在不顶着什么。
+          return coreError(404, "not_found", "No such power lease");
+        }
+        throw error;
+      }
+    },
+  );
+
+  router.handle("DELETE", "/api/power/leases/{leaseId}", (match) => ({
+    status: 200,
+    body: power.release(match.params.leaseId ?? ""),
+  }));
+
   assembled = {
     service,
-    stop: () => service.stop(),
+    power,
+    stop: () => {
+      service.stop();
+      power.stop();
+    },
   };
   return assembled;
+}
+
+const LEASE_SOURCES: readonly PowerLeaseSource[] = [
+  "session",
+  "automation",
+  "manual",
+];
+
+/** 合法就是请求本身，不合法就是那句话。 */
+function parseLeaseRequest(body: unknown): PowerLeaseRequest | string {
+  const raw = (body ?? {}) as Record<string, unknown>;
+  const source = raw.source;
+  if (
+    typeof source !== "string" ||
+    !LEASE_SOURCES.includes(source as PowerLeaseSource)
+  ) {
+    return "source must be session, automation or manual";
+  }
+  if (typeof raw.reason !== "string" || raw.reason.trim() === "") {
+    return "reason is required";
+  }
+  if (raw.ttlSeconds !== undefined && typeof raw.ttlSeconds !== "number") {
+    return "ttlSeconds is not a number";
+  }
+  return {
+    source: source as PowerLeaseSource,
+    reason: raw.reason,
+    ...(typeof raw.sessionId === "string" ? { sessionId: raw.sessionId } : {}),
+    ...(typeof raw.workspaceId === "string"
+      ? { workspaceId: raw.workspaceId }
+      : {}),
+    ...(typeof raw.ttlSeconds === "number"
+      ? { ttlSeconds: raw.ttlSeconds }
+      : {}),
+  };
 }
 
 function orphanFailure(error: unknown): ErrorResponse {

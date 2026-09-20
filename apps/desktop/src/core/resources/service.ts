@@ -80,12 +80,28 @@ export interface ResourceSnapshot {
   readonly sampledAt: string;
 }
 
+/** 一条「保持唤醒」的租约。写在这里是因为它是快照的一部分；簿子在 `power.ts`。 */
+export interface PowerLease {
+  readonly id: string;
+  readonly source: "session" | "automation" | "manual";
+  readonly reason: string;
+  readonly sessionId: string | null;
+  readonly workspaceId: string | null;
+  readonly createdAt: string;
+  readonly renewedAt: string;
+  readonly expiresAt: string;
+  /** 真的在顶着机器不睡。被策略或平台挡下的租约照样列出来，只是这里是 `false`。 */
+  readonly active: boolean;
+  readonly blockedBy: "policy" | "unavailable" | null;
+}
+
 /**
  * 快照里的电源那一段。
  *
- * 租约的增删（`/api/power/leases*`）不归这个域——这里只报**策略**和抑制机制能不能
- * 用，因为面板在同一屏上显示它们。`leases` 永远是空数组而不是缺席：一个缺席的字段
- * 会让前端的 schema 判成不匹配而整帧丢掉。
+ * 租约的**增删**不归这个域（那是 `power.ts` 的 `/api/power/leases*`），但它们
+ * 要和策略、抑制机制出现在同一屏上，所以快照里带着当下这份租约表。没有租约簿
+ * 时 `leases` 是空数组而不是缺席：一个缺席的字段会让前端的 schema 判成不匹配
+ * 而整帧丢掉。
  */
 export interface PowerState {
   readonly policy: string;
@@ -97,7 +113,7 @@ export interface PowerState {
     readonly available: boolean;
     readonly detail: string | null;
   };
-  readonly leases: readonly never[];
+  readonly leases: readonly PowerLease[];
 }
 
 export interface Subscription {
@@ -141,6 +157,11 @@ export interface ResourceServiceOptions {
   readonly sampler?: Sampler;
   /** 语言域记下来的服务器进程。 */
   readonly languageProcesses?: () => readonly TrackedProcess[];
+  /**
+   * 当下的电源状态，由租约簿回答。不给就只报策略与机制、租约恒空——单测与
+   * 任何只要一次采样的调用方不必先装一个租约簿。
+   */
+  readonly power?: () => PowerState;
 }
 
 export class ResourceService {
@@ -292,6 +313,8 @@ export class ResourceService {
   }
 
   private powerState(): PowerState {
+    const held = this.options.power?.();
+    if (held !== undefined) return held;
     const policy = this.options.settings?.get("power.policy");
     const available =
       process.platform === "darwin" || process.platform === "linux";
