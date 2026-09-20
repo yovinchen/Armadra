@@ -1,5 +1,13 @@
 import * as React from "react";
 import { toast } from "sonner";
+// xterm 的样式跟着它的 JS 走，不放应用入口。
+//
+// 入口里那一行 `import "@xterm/xterm/css/xterm.css"` 看着只是一个 CSS，但它
+// 把 `@xterm/xterm` 这个包名带进了入口的静态图，于是 `vite.config.ts` 的
+// `xterm` 分组整块被写进 index.html 的 modulepreload——空画布上没有任何终端，
+// 浏览器照样取回并解析 443 kB。挪到这里之后，它和 `use-xterm` 在同一个懒加载
+// chunk 里，第一个终端出现时才一起到。
+import "@xterm/xterm/css/xterm.css";
 
 import {
   t as translate,

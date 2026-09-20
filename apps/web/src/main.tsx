@@ -1,7 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
-import "@xterm/xterm/css/xterm.css";
 // Tailwind v4 入口；它自己 @import 了 tokens.css，这里不再单独引入
 import "./styles/app.css";
 import "./styles/nodes.css";
