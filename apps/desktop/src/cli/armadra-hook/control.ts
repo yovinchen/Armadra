@@ -27,7 +27,7 @@ export async function runContext(args: string[]): Promise<number> {
   const verb = args[0];
   if (verb === undefined) {
     return fail(
-      "usage: armadra-hook context <list|summary|transcript|terminal> [--node <id|title>] [-n N]",
+      "usage: armadra-hook context <list|summary|transcript|terminal> [--node <id|title>] [-n N] [--since] [--full --max-kb N]",
     );
   }
   if (!(CONTEXT_VERBS as readonly string[]).includes(verb)) {
@@ -38,6 +38,10 @@ export async function runContext(args: string[]): Promise<number> {
 
   let node: string | undefined;
   let lines: number | undefined;
+  // 阶段 C+ 的三个读取旋钮（设计 agent-delivery.md §13）。
+  let since = false;
+  let full = false;
+  let maxKb: number | undefined;
   let index = 1;
   while (index < args.length) {
     const arg = args[index]!;
@@ -62,6 +66,19 @@ export async function runContext(args: string[]): Promise<number> {
       if (parsed === undefined)
         return fail(`-n needs a number, got \`${value}\``);
       lines = parsed;
+    } else if (flag === "--since") {
+      since = true;
+    } else if (flag === "--full") {
+      full = true;
+    } else if (flag === "--max-kb") {
+      const cursor = { index };
+      const value = takeValue(args, cursor, inline);
+      index = cursor.index;
+      if (value === undefined) return fail("--max-kb needs a number");
+      const parsed = parseInteger(value);
+      if (parsed === undefined)
+        return fail(`--max-kb needs a number, got \`${value}\``);
+      maxKb = parsed;
     } else {
       return fail(`unknown option \`${flag}\` for \`context ${verb}\``);
     }
@@ -71,6 +88,9 @@ export async function runContext(args: string[]): Promise<number> {
   const map: Args = {};
   if (node !== undefined) map["node"] = node;
   if (lines !== undefined) map["n"] = lines;
+  if (since) map["since"] = true;
+  if (full) map["full"] = true;
+  if (maxKb !== undefined) map["max-kb"] = maxKb;
   return request(`/context-link/${percentEncodeSegment(verb)}`, map);
 }
 

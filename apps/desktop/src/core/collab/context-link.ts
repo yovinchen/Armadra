@@ -334,7 +334,8 @@ function renderList(links: readonly ContextLink[], handles: Handles): string {
     }
   }
   out +=
-    '\n读取方式：armadra-hook context summary --node "<标题或 id>" [-n 行数]\n';
+    '\n读取方式：armadra-hook context summary --node "<标题或 id>"（摘要，先读它）；' +
+    "要原文再 `context transcript --node ... [-n 20] [--since]`。\n";
   return out;
 }
 

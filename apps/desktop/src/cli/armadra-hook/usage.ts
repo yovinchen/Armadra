@@ -69,13 +69,16 @@ USAGE:
 
 CONTEXT VERBS:
   list                      list the nodes linked to this one
-  summary [-n N]            recent activity of a linked node
-  transcript                the linked node's transcript tail
-  terminal                  the linked node's terminal screen
+  summary                   a <=2 KB digest of a linked node; read this first
+  transcript [-n N]         the linked node's transcript, 20 entries by default
+  terminal [-n N]           the linked node's terminal screen, 40 lines by default
 
 CONTEXT OPTIONS:
   --node <name|id|title>    which linked node to read (defaults to the only link)
-  -n, --lines <N>           how many entries/lines to return
+  -n, --lines <N>           entries for transcript (20), lines for terminal (40, max 200)
+  --since                   transcript: only what is new since your last read
+  --full --max-kb <N>       transcript: lift the 32 KB cap, up to 128 KB
+  Every link has a read budget: 64 KB/minute and 1 MB/hour, then RATE_LIMITED.
 
 CANVAS:
   help                      short collaboration guide (no provider configuration needed)

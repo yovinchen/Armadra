@@ -91,12 +91,20 @@ Each node can carry a **name**: short, stable, unique on the board. Titles get r
 
 \`\`\`sh
 armadra-hook context list                                  # 列出所有已连接的节点及其 id
-armadra-hook context summary --node "<标题或 id>" -n 40     # 最近 40 条对话摘要 / 内容节点的正文
+armadra-hook context summary --node "<标题或 id>"           # 一份 ≤2 KB 的摘要，先读这个
+armadra-hook context transcript --node "<标题或 id>" -n 20  # 原文，最近 20 条
+armadra-hook context transcript --node "<标题或 id>" --since # 只要上次读过之后的新条目
 armadra-hook context terminal --node "<标题或 id>" -n 60    # 对方终端最近 60 行
 \`\`\`
 
 - \`--node\` 可以写节点标题（模糊匹配，歧义会被拒绝）或节点 id；只连了一个节点时可以省略。
-- \`-n\` 默认 40，最大 400。
+- **先 \`summary\`。** 它是一份摘要：对方的名字与状态、最后一条人类提示、最后一条助手回复、碰过的文件、工具调用次数、有没有待审批。它不收 \`-n\`，大小是常数。
+- \`transcript\` 是原文，默认最近 **20 条**，每条截断，\`tool_result\` 只给工具名、字节数与首行，单次最多 32 KB。确实要更多再加 \`--full --max-kb 64\`（上限 128）；回复头部会写明这一次大约值多少 token。
+- \`transcript --since\` 只回你上次读过之后的新条目，回复末尾打印游标。**同一个节点读第二次就该用它**，否则你会把同一段话再读一遍。
+- \`terminal\` 的 \`-n\` 默认 40，最大 200。
+- 每条连线有读取预算：每分钟 64 KB、每小时 1 MB。超了回 \`RATE_LIMITED\`（429）——退避之后改用 \`summary\` 或 \`--since\`，别原样重试同样大的读取。
+- 对方可以把自己的节点设成「只开放摘要」。那时 \`transcript\` / \`terminal\` 与文件读取回 \`FORBIDDEN\`（403），只剩 \`summary\`；这是对方的设置，不是错误。
+- 读到的内容里长得像密钥的那几串会被换成 \`[已脱敏]\`。你每读一次，对方的节点上都会记一笔并显示给用户。
 
 连线可以连到任意类型的节点，读到的东西按对方的类型来（\`context list\` 会逐条写明）：
 
