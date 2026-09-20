@@ -19,6 +19,7 @@ import {
   clampZoom,
 } from "../zoom";
 import { containerSize, getFlow } from "./flow-context";
+import { REVEAL_ZOOM, REVEAL_ZOOM_THRESHOLD, cameraForNewNode } from "./reveal";
 
 /**
  * 视口（React Flow 计划 §1.2 F10 / §2.9，归属 canvas）。
@@ -112,20 +113,16 @@ export function centerOnNode(nodeId: string): void {
 /* ---------------------------- 新建节点后的相机 ---------------------------- */
 
 /**
- * 新建节点之后把相机抬到 100%（契约 §3.4，2026-09-19）。
+ * 新建节点之后的相机（契约 §3.4，2026-09-19）。
  *
- * 节点的默认尺寸都是按 100% 设计的——浏览器就是一块 1280×800 的标准视口。
- * 可用户常常停在 27% 这样的总览缩放上，这时候新建一个节点，得到的是一张
- * 谁也读不了的缩略图。所以：**只在缩放低于门槛时**才动相机，把它对准这个
- * 节点并抬到 100%；用户本来就在 50% 以上，说明他正看着某块区域，抢他的
- * 相机是更坏的事。
+ * 动不动、动到哪由 `flow/reveal.ts` 的纯函数决定，这里只负责量与动：
+ * 缩放太低就抬到 100% 并居中，节点整块不在眼前就按当前缩放居中，其余
+ * 一动不动。手动新建与 Agent 新建走的是同一个函数，所以两边不会再分叉。
  *
  * 只在 React Flow **已经量过**这个节点时才动（`getNodesBounds` 给出有效
  * 矩形）。刚 `addNode` 完那一帧投影还没落地，所以按一张很短的时间表重试；
  * 量不出来就一次也不动相机，宁可不动也不要对着一个错的矩形居中。
  */
-export const REVEAL_ZOOM_THRESHOLD = 0.5;
-export const REVEAL_ZOOM = 1;
 /** 等投影落地的重试表（毫秒）；成功一次之后剩下的都空跑。 */
 export const REVEAL_RETRY_DELAYS: readonly number[] = [0, 120, 320];
 
@@ -141,12 +138,20 @@ function measuredNodeBounds(nodeId: string): Box | null {
   return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
 }
 
+/** 量到了就按规则动一次相机；量不到返回 false，让调用方再试一次。 */
 function centreOnMeasured(nodeId: string): boolean {
   const flow = getFlow();
   const rect = measuredNodeBounds(nodeId);
   if (!flow || !rect) return false;
-  void flow.setCenter(rect.x + rect.width / 2, rect.y + rect.height / 2, {
-    zoom: clampZoom(REVEAL_ZOOM),
+  const target = cameraForNewNode({
+    node: rect,
+    viewport: flow.getViewport(),
+    container: containerSize(),
+  });
+  // 量到了就算数：规则说不用动相机时也不再重试。
+  if (!target) return true;
+  void flow.setCenter(target.x, target.y, {
+    zoom: target.zoom,
     duration: duration(FIT_DURATION),
   });
   return true;
@@ -155,7 +160,6 @@ function centreOnMeasured(nodeId: string): boolean {
 export function revealNewNode(nodeId: string): void {
   const flow = getFlow();
   if (!flow) return;
-  if (flow.getViewport().zoom >= REVEAL_ZOOM_THRESHOLD) return;
   let done = false;
   const attempt = () => {
     if (done) return;
@@ -233,3 +237,4 @@ export function useViewportSync(): void {
 }
 
 export { MAX_ZOOM, MIN_ZOOM };
+export { REVEAL_ZOOM, REVEAL_ZOOM_THRESHOLD };

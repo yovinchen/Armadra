@@ -56,9 +56,13 @@ type TestNode = {
   size: { width: number; height: number };
 };
 
+/** 新建之后要选中它：菜单与 `node.created` 走的是同一个 `revealCreatedNode`。 */
+const selectNodes = vi.fn();
+
 const state = {
   addNode,
   setPanel,
+  selectNodes,
   document: { nodes: [] as TestNode[] },
 };
 
@@ -137,6 +141,7 @@ describe("buildAddMenu", () => {
       pickFilesForCanvas,
       openAutomationPanel,
       runCanvasCommand,
+      selectNodes,
     ])
       fn.mockClear();
     state.document = { nodes: [] };
@@ -156,6 +161,16 @@ describe("buildAddMenu", () => {
   it("新建终端以右键那一点为中心", () => {
     itemById("add.terminal").run(ctx);
     expect(addNode).toHaveBeenCalledWith("terminal", { position: centered });
+  });
+
+  /**
+   * 新建之后发生的事只有一处定义（`canvas/created-node.ts`）：选中它、把
+   * 相机对准它。Agent 用控制动词建的节点收到 `node.created` 之后走的也是
+   * 它，所以两条路不会再一条送到眼前、一条丢在角落。
+   */
+  it("新建之后选中新节点，和 node.created 走同一个函数", () => {
+    itemById("add.terminal").run(ctx);
+    expect(selectNodes).toHaveBeenCalledWith(["node-1"]);
   });
 
   it("落点压住已有节点时让开", () => {

@@ -15,7 +15,7 @@ import {
   resetProjectionCache,
   toItemId,
 } from "./project";
-import { COLLAPSED_HEIGHT } from "../../store/defaults";
+import { COLLAPSED_HEIGHT, defaultNodeSize } from "../../store/defaults";
 
 /**
  * 文档 → React Flow 的投影（React Flow 计划 T01）。
@@ -108,6 +108,30 @@ describe("projectNodes", () => {
     expect(projected.height).toBe(60);
     // 文档一个字都没动。
     expect(document.nodes[0]!.position).toEqual({ x: 10, y: 20 });
+  });
+
+  /**
+   * 控制动词建的节点**不写尺寸**（`core/collab/control/board.ts`）：默认
+   * 尺寸那张表只有一份，就是 `nodes/registry.ts`，投影时按类型补上。
+   * 以前 core 自己抄了一张，于是 Agent 建的终端是 640×440、人建的是
+   * 960×600——同一种节点两个大小。
+   */
+  it("文档里没有尺寸时按类型补默认值，和手动新建拿到的是同一份", () => {
+    const projected = projectNodes(
+      board([
+        node(NODE, {
+          type: "terminal",
+          size: undefined,
+          data: { kind: "terminal" },
+        } as Partial<CanvasNode>),
+      ]),
+      EMPTY,
+      NO_DRAFTS,
+    )[0]!;
+    expect([projected.width, projected.height]).toEqual([
+      defaultNodeSize("terminal").width,
+      defaultNodeSize("terminal").height,
+    ]);
   });
 
   it("折叠时高度钉死在 COLLAPSED_HEIGHT，宽度仍然听文档的", () => {

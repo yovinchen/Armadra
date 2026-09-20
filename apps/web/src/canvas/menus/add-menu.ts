@@ -27,7 +27,7 @@ import { useCanvasStore } from "../../store/canvas-store";
 import type { Translate } from "../../app/preferences-store";
 import { runCanvasCommand, type CanvasCommandId } from "../commands";
 import { nodeDropPosition } from "../placement";
-import { revealNewNode } from "../flow/use-flow-viewport";
+import { revealCreatedNode } from "../created-node";
 import { pickFilesForCanvas } from "../dnd/external-content";
 import { addItems, createItemId, select } from "../whiteboard/store";
 import { textItemAt } from "../whiteboard/tools/draft";
@@ -80,18 +80,19 @@ function command(id: CanvasCommandId): () => void {
 }
 
 /**
- * 新建 + 需要时把相机抬到 100%（契约 §3.4，2026-09-19）。
+ * 新建 + 把新节点送到眼前（契约 §3.4，2026-09-19）。
  *
  * 菜单里每一项都走它，没有一项直接调 `addNode`：默认尺寸是按 100% 设计的，
  * 而用户常常停在总览缩放上，那时候不抬相机就等于建了一张读不了的缩略图。
- * 抬不抬由 `revealNewNode` 自己判断（缩放已经够大、或节点还没被量过就不动）。
+ * 动不动相机由 `revealCreatedNode` 判断——Agent 用控制动词建的节点走的也是
+ * 它，两条路因此不会再分叉。
  */
 function create(
   context: AddMenuContext,
   ...args: Parameters<CanvasActions["addNode"]>
 ): string {
   const id = context.addNode(...args);
-  if (id) revealNewNode(id);
+  if (id) revealCreatedNode(id);
   return id;
 }
 
@@ -120,7 +121,7 @@ function addFrameShape(anchor: Position): void {
     position: nodeDropPosition("group", { anchor, size: FRAME_SIZE }),
     size: FRAME_SIZE,
   });
-  if (id) revealNewNode(id);
+  if (id) revealCreatedNode(id);
 }
 
 /**

@@ -29,6 +29,13 @@ type SetCenter = (
   options: { zoom: number; duration: number },
 ) => Promise<boolean>;
 
+/** 只需要 `getBoundingClientRect`：`containerSize()` 只读这一个。 */
+function fakeContainer(width: number, height: number): HTMLElement {
+  return {
+    getBoundingClientRect: () => ({ width, height }),
+  } as unknown as HTMLElement;
+}
+
 function mountFlow(zoom: number, node: typeof NODE | null = NODE) {
   const setCenter = vi.fn<SetCenter>(() => Promise.resolve(true));
   const handle = {
@@ -58,10 +65,26 @@ describe("revealNewNode", () => {
     expect(options.zoom).toBe(1);
   });
 
-  it("缩放已经够大时不碰相机", () => {
+  it("缩放已经够大、节点又在眼前时不碰相机", () => {
     const setCenter = mountFlow(REVEAL_ZOOM_THRESHOLD);
+    setFlowContainer(fakeContainer(4000, 3000));
     revealNewNode("n1");
     expect(setCenter).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Agent 用控制动词建的节点摆在发起它的那个节点右边，常常整块在屏幕外，
+   * 而缩放本来就是 100%——「只在缩放太小时抬相机」那一条在这里不够用，
+   * 所以看不全就按当前缩放居中。
+   */
+  it("缩放够大但节点在屏幕外时按当前缩放居中", () => {
+    const setCenter = mountFlow(1);
+    setFlowContainer(fakeContainer(800, 600));
+    revealNewNode("n1");
+    expect(setCenter).toHaveBeenCalledTimes(1);
+    const [x, y, options] = setCenter.mock.calls[0]!;
+    expect([x, y]).toEqual([1000 + 1280 / 2, 400 + 800 / 2]);
+    expect(options.zoom).toBe(1);
   });
 
   it("React Flow 还没量过这个节点时相机不动", () => {

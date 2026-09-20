@@ -33,6 +33,7 @@ import {
   useCanvasLocked,
 } from "./canvas-lock";
 import { registerCanvasCommands, type CanvasCommandId } from "./commands";
+import { useCreatedNodeReveal } from "./created-node";
 import { registerEscapeToSelect } from "./escape-to-select";
 import { usePublishContextLinks } from "./context-links";
 import { useOsDrop, usePasteToCanvas } from "./dnd/os-drop";
@@ -170,6 +171,8 @@ function FlowWorkspaceInner() {
   useBoardAutosave();
   usePasteToCanvas();
   usePublishContextLinks();
+  // Agent 用控制动词建的节点也要被送到眼前，和菜单里建的一样（`created-node.ts`）。
+  useCreatedNodeReveal();
   const { onDragOver, onDrop } = useOsDrop();
 
   /* ------------------------------ 生命周期 -------------------------------- */
