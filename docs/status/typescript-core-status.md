@@ -1173,3 +1173,54 @@ releaseDrive(sessionId, actor): Lease;
 ### 24.5 两处已知的红
 
 `0021` 归并行的另一条线（阶段 A 的名字表），本分支里没有它，所以 `pnpm repo:check` 报「迁移编号不连续」，`db/migrations.test.ts` 与 `db/unified.test.ts` 里那两条「连续序列」断言同因失败。两条线合到一起即消失。其余全绿：`@armadra/desktop`（2691 通过 / 2 失败即上述两条）、`@armadra/web`（2553）、`pnpm -r typecheck`、`format:check`。
+
+## 25. Agent 投递阶段 E：界面那一半，加上连线的角色（2026-09-21）
+
+设计是 [Agent 之间的推式投递与终端驱动](../design/agent-delivery.md) §10 与 §11 的「阶段 E」那张表里**界面**那一行（尺寸与 `node.created` 的聚焦已在另一批落地）。阶段 C 结尾记的「界面那一半没做」到这里做完了，另外补上用户当场提的连线角色。
+
+### 25.1 三条路由，两条是页面第一次够得到队列与租约
+
+| 路由                                          | 答什么                                                                                  |
+| --------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `GET /api/workspaces/{id}/deliveries?node=`   | 那个**目标节点**还排着的队（不带正文），与不带 `node=` 的投递记录是同一条路径的两个切片 |
+| `DELETE /api/workspaces/{id}/deliveries/{id}` | 目标那一侧的人拒收一条还在排的；`delivering` 收不回来，答 `cancelled:false`             |
+| `POST /api/terminals/{id}/drive`              | `{action:"takeover"\|"release"}`，人显式接管与交还                                      |
+
+`agent.delivery` 事件多了一个可选的 `code`，`outcome` 多了一个 `refused`：在这之前只有 `delivered` / `queued` / `unknown` 上过事件流，于是 `LOOP_DETECTED` 只有发起者读得到——而发起者是**没有人在看**的地方，环里的两个模型各自读到一句「这是一个环」，画布前面的人什么都看不到。帧里只有码，那句中文不上界面。
+
+### 25.2 界面按码分支，计数按 core 的答案
+
+- **「排队 N」**（`nodes/DeliveryQueueBadge.tsx`）：数字从上面那条只读路由重取，**不按事件加减**——队列会因为出队、取消、过期三种原因变短，自己推算迟早会与那张表说两个数。事件只说「这个节点的队伍动了」。队空不画；点开逐条列出谁排的、排第几、为什么还没投出去，每条都能拒收。
+- **「接管 / 交还」**（`nodes/DriveBadge.tsx`）：租约镜像抬成 `agent/drive-store.ts` 的一份，节点头与命令面板读同一个答案。
+- **连线**：一次投递让那条边闪两秒（`anim-delivery-flow`，`prefers-reduced-motion` 由 tokens.css 统一压掉，压掉之后线仍然高亮），`<title>` 里说最近一次的结果与时刻。
+- **通知条**：`LOOP_DETECTED` / `RATE_LIMITED` / `TARGET_AWAITING_APPROVAL` 在顶部说一次，去重、计数、可关闭，关掉之后五分钟内不再来。文案按 `i18n/errors.ts` 的 `error.delivery.*` 码表取。
+- **命令面板**：对选中的终端节点给「查看投递队列」与「接管 / 交还」；队列那条打开的是节点头上已经有的那个浮层，不另画一份列表——两份列表就会有两份「取消」。
+
+### 25.3 连线分对等与主从
+
+用户当场加的一条：一条边现在有 `role: "peer" | "supervises"`（`source` 是主，`target` 是从），缺省与对等同义。主从边用品牌色、**只画一个指向从的箭头**，`<title>` 写「主 @a → 从 @b」；节点头主画「主 · N 从」，从画「从 @主」，主被删掉之后画「主已离开」——那不是「没有上级」，是上级刚刚消失。拉线落点的命名对话框多一档角色（默认对等），从菜单点「名字…」与 Agent 自己建的边都不问：那里没有人可以回答这个问题。
+
+头部徽标多到一行放不下时折成一枚「···N」，数的是**渲染出来的 DOM** 而不是传进来的子元素——一个 `return null` 的组件仍然是一个子元素。折起来的那些只隐藏不卸载：它们各自还在订阅事件。
+
+写这一节时 core 的连线记录还没有这个字段，页面按约定的形状读，用 fixture 测。
+
+### 25.4 验收：真 core、真 PTY、真 Claude Code 与真 Codex
+
+`ARMADRA_DATA_DIR=/tmp/armadra-phase-e`、core 听 `127.0.0.1:59499`、页面是应用自己的首页（Vite 开发页连同一个 core）、新 profile 的 Chrome 开在 `--remote-debugging-port=9499`。跑完按 PID 关掉并删掉数据目录与 profile。
+
+| 步骤 | 结果                                                                                                                                                       |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ①    | `planner`（真 Claude Code）执行 `armadra-hook canvas send --to codex-1 …` → 回执 `delivered`，Codex 当场开了一轮并写出 `/tmp/a.txt`（内容 `hello`）        |
+| ②    | 趁 `codex-1` 忙再投两条 → 节点头出现「排队 1」「排队 2」，点开列出「planner · 第 1 位 · 12 字 / 刚刚 · 目标正在一轮里」，每条带「拒收」                    |
+| ③    | `codex-1 → planner` 当场 `LOOP_DETECTED`，顶部出现一条「「codex-1」向「planner」的投递被拦下：这两个节点在互相投递，已经停下」，带「看看这两个节点」与关闭 |
+| ④    | 人在 `codex-1` 里敲一个键 → 节点头翻成「你在驱动」并出现「交还」；按下之后租约回到 `free`                                                                  |
+
+三处与脚本的偏差：
+
+1. **壳没起来，用的是 Vite 开发页。** 桌面壳在这台机器上反复起不出自己的 core（页面停在「本地服务已断开」，数据目录里连 `endpoints.json` 都没写出来），同一份 `out/core/main.js` 手动跑起来一切正常。那是壳装配的问题，不在这一批的改动面上，所以验收照阶段 B 的做法改用开发页 + 独立 core，其余每一段都是真的。
+2. **连线上的闪动没在真机上拍到。** 用 API 直接写进画布文档的那条 `link` 边在 React Flow 里没有渲染出来（两端节点都在、投影也把它投出来了），与阶段 A 记的「拖拽落不成边」是同一类夹具问题。闪动与 tooltip 由 `LinkEdge.test.tsx` 在真的 React Flow 上守着。
+3. **④ 撞出一个真 bug 并修掉了。** 人的抢占记在**敲键那条 socket 的设备 id** 上，而「交还」来自同一个人的另一条路（HTTP）；按 `local` 去交还被状态机当成「放别人的租约」，按钮于是什么都不做。现在这条路认的是当前持有者——这台壳前面只有一个人，他敲键和他按钮是同一个人；Agent 的租约不在此列。
+
+### 25.5 一处已知的红，不是这一批的
+
+`packages/shared` 的 `test/usage-dashboard.test.ts` 有一条失败（`costSummarySchema` 现在要求 `ranges`，那条用例的夹具还没跟上），来自基线上的 `2af95490`，与本批无关。其余全绿：`@armadra/web`（264 个文件 2,608 条）、`@armadra/desktop`（core 1,942 条 + 脚本 38 条）、`@armadra/server`、`pnpm -r typecheck`、`pnpm check`。
