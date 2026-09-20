@@ -67,52 +67,14 @@ export function clampViewport(viewport: Viewport): Viewport {
 /* ---------------------------------- lease --------------------------------- */
 
 /**
- * Who is allowed to drive the page. One session, one holder.
- *
- * `humanTakeover` is not merely "a human with a longer lease": it is the state
- * a person enters deliberately, and it revokes the agent's lease instead of
- * making the agent wait. That difference is the whole reason there are two
- * human states rather than one.
+ * 租约的四个类型在 `core/drive/lease.ts`：那台状态机是中立的，终端域持有它的
+ * 另一份实例（设计 `agent-delivery.md` §6.2）。这里原样转出去，所以这一域里
+ * 「租约长什么样」仍然只有 `model.ts` 一个答案，而定义只有一份。
  */
-export type LeaseState = "free" | "human" | "humanTakeover" | "agent";
+import type { Lease } from "../drive/lease";
 
-export interface LeaseHolder {
-  /** `human` or `agent`. */
-  readonly kind: "human" | "agent";
-  /**
-   * A viewer's own opaque id, or an agent's node id. Never an authenticated
-   * identity, so it only ever tells holders apart.
-   */
-  readonly id: string;
-  readonly displayName: string;
-}
-
-export interface Lease {
-  readonly state: LeaseState;
-  readonly generation: number;
-  /**
-   * RFC 3339, or empty when the state does not lapse on its own: a takeover is
-   * held until the person hands it back.
-   */
-  readonly expiresAt: string;
-  readonly holder?: LeaseHolder;
-}
-
-export function freeLease(generation: number): Lease {
-  return { state: "free", generation, expiresAt: "" };
-}
-
-/** Structural equality, which is what "did the lease change?" means. */
-export function sameLease(left: Lease, right: Lease): boolean {
-  return (
-    left.state === right.state &&
-    left.generation === right.generation &&
-    left.expiresAt === right.expiresAt &&
-    left.holder?.kind === right.holder?.kind &&
-    left.holder?.id === right.holder?.id &&
-    left.holder?.displayName === right.holder?.displayName
-  );
-}
+export type { Lease, LeaseHolder, LeaseState } from "../drive/lease";
+export { freeLease, sameLease } from "../drive/lease";
 
 /**
  * One line of "who did what to this page" for the node header.
