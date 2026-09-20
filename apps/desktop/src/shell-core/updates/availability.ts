@@ -128,10 +128,18 @@ export function markerDisables(marker: unknown): boolean {
  */
 export function initialState(environment: UpdaterEnvironment): UpdateState {
   const missing = missingUpdaterConfig(environment);
-  if (missing.pubkey) return { state: "notConfigured", missing };
   // A local package is a build that never went through CI, whatever
   // `app.isPackaged` says about it.
+  //
+  // The marker is read BEFORE the missing-configuration rule, and only the
+  // marker is: "not configured" exists because it names something a person can
+  // go and fix, and for a marked package there is nothing to fix — a local
+  // `dist` is unsigned by construction, so every such build would otherwise
+  // report «no signing pubkey» and offer a settings link that changes nothing.
+  // An unmarked build keeps the old order: it might really be a release whose
+  // signing half is missing.
   if (markerDisables(environment.marker)) return { state: "localBuild" };
+  if (missing.pubkey) return { state: "notConfigured", missing };
   if (!environment.packaged && !environment.developmentOverride) {
     return { state: "localBuild" };
   }

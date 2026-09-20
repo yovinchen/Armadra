@@ -116,6 +116,18 @@ it("a local package marker turns the updater off without lying about a check", (
   // manual check there must not answer as though it had consulted the feed.
   expect(local).toEqual({ state: "localBuild" });
   expect(shouldEnableUpdater(environment({ marker: "disabled" }))).toBe(false);
+  // A local `dist` is unsigned by construction, and that must still read as
+  // «local build», not «no signing pubkey, go to settings» — a marked package
+  // has nothing a person could configure to make it update.
+  expect(
+    initialState(
+      environment({
+        marker: "disabled",
+        signature: "unsigned",
+        publishConfigured: false,
+      }),
+    ),
+  ).toEqual({ state: "localBuild" });
   // A release package carries no marker and keeps updating itself.
   expect(initialState(environment({ marker: undefined }))).toEqual({
     state: "idle",
