@@ -3,7 +3,7 @@ import * as React from "react";
 import { buildAgentLaunch } from "@/agent/launch";
 import { armPendingLaunch } from "@/agent/pending-launch";
 import { useCanvasStore } from "@/store/canvas-store";
-import { LAUNCH_COLD_MS, LAUNCH_PROMPT_MS, LAUNCH_QUIET_MS } from "./constants";
+import { LAUNCH_COLD_MS, LAUNCH_QUIET_MS } from "./constants";
 import type { SurfaceRefs } from "./refs";
 import type { ConnectionStatus } from "./types";
 
@@ -58,23 +58,19 @@ export function useLaunchSequence(
       return;
     }
     try {
+      // 启动行永远在这里重拼，节点上那个 `initialCommand` 从来不是一条指令：
+      // 它是「这次连接敲了什么」的记账，和会话 id 同一类（`use-session.ts`）。
+      // Agent 建节点时也不再往里写任务了——第一条任务走投递，由 core 在节点第
+      // 一次报空闲之后投进来（设计 agent-delivery.md §8）。所以这里也没有第二
+      // 条「提示词写进 stdin」的路：启动行只负责把 CLI 起起来。
       const launch = buildAgentLaunch(agent);
       refs.transportRef.current?.input(`${launch.command}\r`);
       refs.freshSessionRef.current = false;
-      // 启动行是这次连接的记账，和会话 id 同一类（`use-session.ts`）：要存盘，
-      // 但不该占一条撤销。
       store.updateNodeData(
         nodeId,
         { agent: { ...agent, initialCommand: launch.command } },
         { history: "ignore" },
       );
-      if (launch.stdinPrompt) {
-        const prompt = launch.stdinPrompt;
-        refs.promptTimerRef.current = setTimeout(() => {
-          refs.transportRef.current?.input(`${prompt}\r`);
-          refs.promptTimerRef.current = null;
-        }, LAUNCH_PROMPT_MS);
-      }
     } catch (cause) {
       patch({
         error: cause instanceof Error ? cause.message : String(cause),

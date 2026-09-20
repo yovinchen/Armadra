@@ -115,13 +115,14 @@ armadra-hook canvas handoff-read --id <交接 id>             # 读一份冻结�
 - 投递需要画布上已有连线；消息 24 小时后过期。
 - 同一个 \`--key\` 和正文重发是安全的。大块产物写进文件，只发路径。
 - 别轮询信箱。需要的时候读一次，处理完再 \`ack\`。
+- 你空下来而信箱里还有未读时，画布会在你的终端里投一行提示（或直接投最早那条的正文）。那一行的信封署名是 \`Armadra 收件箱\`，它提醒你去读，不替你 \`ack\`。
 
 ## 改画布 / Change the board
 
 \`\`\`sh
 armadra-hook canvas list                                   # 列出本画布的所有节点
 armadra-hook canvas open-terminal --title "构建"            # 新终端节点
-armadra-hook canvas open-agent --agent claude --title "审阅" --prompt "复查 src/ 的改动"
+armadra-hook canvas open-agent --agent claude --title "审阅" --task "复查 src/ 的改动，结论写进便签"
 armadra-hook canvas open-agent --agent codex --after <id> --after <id>   # 等这些节点完成后再启动
 armadra-hook canvas sticky --title "结论" --content "..."   # 便签
 armadra-hook canvas link --from <id> --to <id> [--name-from A --name-to B]   # 建立上下文链接（双向可读），可顺手起名
@@ -150,6 +151,7 @@ armadra-hook canvas cancel --id <待投 id>                            # 撤掉�
 - 送到不是做完。要知道结果就读对方的转录（\`context summary\`），或者请对方 \`post\` 回来。
 
 - \`open-terminal\` / \`open-agent\` / \`sticky\` / \`link\` 支持 \`--dry-run\`，只回报会发生什么，不改画布。
+- \`open-agent --task\` 是给新节点的第一件事：节点建好、从你这里连一条线过去，等它第一次空闲时把任务投进去（和一次 \`send\` 走同一条路）。**不要**把任务写进启动行——启动行只负责把 CLI 起起来。还可以带 \`--permission-mode\` 与 \`--model\`。
 - 新节点会放在你右边。\`--after\` 让新 Agent 等依赖节点跑完再启动。
 - 关节点需要用户在界面上确认，命令行不能直接关。
 

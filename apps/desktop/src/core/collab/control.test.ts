@@ -228,12 +228,12 @@ describe("the verbs that add a node", () => {
   });
 
   it("writes an agent node's launch line but never starts a process", async () => {
-    const body = ok(
-      await run(me, "open-agent", { agent: "codex", prompt: "fix\nthe bug" }),
-    );
+    const body = ok(await run(me, "open-agent", { agent: "codex" }));
+    // 启动行从此不带提示词：它的职责是把 CLI 起起来，第一条任务由一次真正的
+    // 投递完成（设计 agent-delivery.md §8.3）。
     expect(body.result).toMatchObject({
       agent: "codex",
-      command: "codex 'fix the bug'",
+      command: "codex",
       after: [],
     });
     const created = (body.result as { id: string }).id;
@@ -245,7 +245,7 @@ describe("the verbs that add a node", () => {
     const data = document.nodes.find((entry) => entry.id === created)?.data as {
       agent: Record<string, unknown>;
     };
-    expect(data.agent.initialCommand).toBe("codex 'fix the bug'");
+    expect(data.agent.initialCommand).toBeUndefined();
     expect(data.agent.pendingLaunch).toBeUndefined();
     // Nothing was spawned: the node creates its own PTY when it mounts.
     expect(fixture.terminal.writes).toHaveLength(0);

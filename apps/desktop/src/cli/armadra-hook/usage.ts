@@ -82,6 +82,10 @@ CANVAS:
   post --to NAME --key KEY --body TEXT store a handoff for a linked agent
   inbox --limit 10 --after 0           read your pending messages without acknowledgement
   ack --id ID                         acknowledge one received message
+  open-agent --agent ID [--task TEXT] [--title T] [--permission-mode M]
+                                      [--model M] [--after ID] open an agent
+                                      node, link it, and give it a first task
+                                      once it reports idle
   rename --node ID --handle NAME       set this node's name on the board
   link --from ID --to ID [--name-from A --name-to B]  link two nodes, naming either end
   send --to ID --body TEXT [--key KEY]  type a message into a linked agent's
@@ -147,6 +151,10 @@ SEND:
   and the reply says LEASE_HELD_BY_HUMAN; after they stop the queue resumes.
   Branch on \`outcome\` (delivered / queued / unknown) and on \`code\`, never on
   the prose. \`unknown\` means the write failed halfway — do not retry it.
+  A node that goes idle with unread canvas mail is sent one short notice
+  through the same queue, signed \`Armadra 收件箱\`. Reading it is not an ack.
+  \`open-agent --task\` is the same road for a node's first job: the node is
+  created and linked, and the task goes in the first time it reports idle.
 
 Hook mode always exits 0. \`context\`, \`canvas\` and \`doctor\` exit 1 on failure.
 `;
