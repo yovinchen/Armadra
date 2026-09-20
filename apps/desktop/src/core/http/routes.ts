@@ -682,6 +682,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/api/agents",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/models/catalog",

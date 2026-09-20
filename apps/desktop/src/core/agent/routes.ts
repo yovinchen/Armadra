@@ -18,6 +18,7 @@ import {
   DEFAULT_LIMIT,
 } from "../conversations";
 import { definition, baseAgent } from "./registry";
+import { listAgents } from "./list";
 import { loadSession } from "../collab/nodes";
 import { type ContextUsageCache, contextUsage } from "../usage/context-usage";
 import {
@@ -62,6 +63,24 @@ export interface AgentRouteDeps {
 export function installRoutes(deps: AgentRouteDeps): void {
   const { server, collab } = deps;
   const database = collab.database;
+
+  /* --------------------------------- agents ------------------------------- */
+
+  // The new-node menu, the command palette, the settings pages and the node
+  // header all read this one list. Without it the canvas can still open a
+  // plain terminal and nothing else: an empty list is not a degraded menu, it
+  // is a build with no agents in it.
+  server.router.handle(
+    "GET",
+    "/api/agents",
+    answered(() => ({
+      status: 200,
+      body: listAgents({
+        dataDir: collab.dataDir,
+        settings: collab.settings,
+      }),
+    })),
+  );
 
   /* ------------------------------ agent status ---------------------------- */
 
