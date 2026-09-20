@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { CanvasNode } from "@armadra/shared";
+import type { BoardDocument, CanvasNode } from "@armadra/shared";
 
 import { usePreferencesStore } from "@/app/preferences-store";
 import type { ArmadraFlowNode, CanvasFlowNode } from "@/canvas/sync/project";
+import { useCanvasStore } from "@/store/canvas-store";
 
 import {
   BACKGROUND_WEBVIEW_MAX,
@@ -186,5 +187,75 @@ describe("applyWebviewPool", () => {
   it("没有浏览器节点时什么都不做", () => {
     const input = [terminal("t1")];
     expect(applyWebviewPool(input)).toBe(input);
+  });
+});
+
+/**
+ * 删除与「只是没投影出来」是两件事。
+ *
+ * 前者必须立刻把条目摘出 pool——留着就是一个看不见、关不掉、还在跑的
+ * Chromium 渲染进程，而它本来要等到攒够 `backgroundMax` 个 ghost 才被逐出。
+ * 后者（切板、切工作空间、折叠分组）必须照旧变 ghost，guest 毫发无损。
+ */
+describe("applyWebviewPool 的删除判定", () => {
+  function openBoard(boardId: string, nodeIds: string[]): void {
+    useCanvasStore.setState({
+      boardId,
+      document: {
+        board: { id: boardId } as BoardDocument["board"],
+        nodes: nodeIds.map((id) => ({ id }) as BoardDocument["nodes"][number]),
+        edges: [],
+      },
+    });
+  }
+
+  afterEach(() => {
+    useCanvasStore.setState({ boardId: null, document: null });
+  });
+
+  it("同一块画布上节点从文档里消失了：条目立刻离开 pool，guest 跟着走", () => {
+    openBoard("board-1", ["b1", "b2"]);
+    applyWebviewPool([browser("b1"), browser("b2")], 1_000);
+    expect(webviewPoolOrder()).toEqual(["b1", "b2"]);
+
+    openBoard("board-1", ["b1"]);
+    const out = applyWebviewPool([browser("b1")], 2_000);
+    expect(webviewPoolOrder()).toEqual(["b1"]);
+    expect(webviewIds(out)).toEqual(["b1"]);
+  });
+
+  it("最后一个浏览器节点被删掉时 pool 也要空掉", () => {
+    openBoard("board-1", ["b1"]);
+    applyWebviewPool([browser("b1")], 1_000);
+    openBoard("board-1", []);
+    expect(webviewIds(applyWebviewPool([], 2_000))).toEqual([]);
+    expect(webviewPoolOrder()).toEqual([]);
+  });
+
+  it("换一块画布时节点不在新文档里，照旧变 ghost 而不是被删", () => {
+    openBoard("board-1", ["b1"]);
+    applyWebviewPool([browser("b1")], 1_000);
+
+    openBoard("board-2", ["x1"]);
+    applyWebviewPool([], 2_000);
+    expect(webviewPoolOrder()).toEqual(["b1"]);
+
+    // 切回去还是同一个条目，guest 从未被卸载。
+    openBoard("board-1", ["b1"]);
+    expect(webviewIds(applyWebviewPool([browser("b1")], 3_000))).toEqual(["b1"]);
+  });
+
+  it("节点还在文档里、只是这一帧没投影出来（折叠分组）时变 ghost", () => {
+    openBoard("board-1", ["b1"]);
+    applyWebviewPool([browser("b1")], 1_000);
+    applyWebviewPool([], 2_000);
+    expect(webviewPoolOrder()).toEqual(["b1"]);
+  });
+
+  it("文档还没加载时一律按 ghost 处理，不拿空文档去删条目", () => {
+    useCanvasStore.setState({ boardId: "board-1", document: null });
+    applyWebviewPool([browser("b1")], 1_000);
+    applyWebviewPool([], 2_000);
+    expect(webviewPoolOrder()).toEqual(["b1"]);
   });
 });

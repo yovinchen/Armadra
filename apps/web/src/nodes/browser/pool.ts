@@ -8,6 +8,7 @@ import {
   usePreferencesStore,
 } from "@/app/preferences-store";
 import { isDesktop } from "@/platform";
+import { useCanvasStore } from "@/store/canvas-store";
 
 /**
  * pool region —— webview 宿主节点在 React Flow `nodes` 数组里的稳定区段
@@ -56,10 +57,32 @@ function backgroundMax(): number {
   return usePreferencesStore.getState().browser.backgroundMax;
 }
 
+/**
+ * 这个条目是不是**被人删掉了**，而不是只从投影里消失。
+ *
+ * ghost 存在的前提是「节点还在，只是这一帧没投影出来」——切工作空间、折叠
+ * 分组都属于这一类，guest 必须活着。删除不是：文档里那一行没了，再留着
+ * guest 就是一个看不见、关不掉、还在吃内存和网络的 Chromium 渲染进程，而它
+ * 要等到后面攒够 `backgroundMax` 个 ghost 才被逐出。
+ *
+ * 判据只有一条能分开这两件事：**同一块画布还开着**（`boardId` 没变），而这
+ * 个 id 已经不在它的文档里。切板 / 切工作空间时 `boardId` 变了，这条判据自
+ * 动不成立，于是照旧变 ghost。
+ */
+function wasDeleted(entry: PoolEntry): boolean {
+  const state = useCanvasStore.getState();
+  if (state.boardId !== entry.boardId) return false;
+  const document = state.document;
+  if (!document) return false;
+  return !document.nodes.some((node) => node.id === entry.id);
+}
+
 interface PoolEntry {
   id: string;
   /** 最后一次活着时的投影。ghost 期间照它派生，位置与尺寸不再更新。 */
   node: ArmadraFlowNode;
+  /** 建这个条目时开着的画布。删除判定要拿它和当前的比。 */
+  boardId: string | null;
   /** 退休时刻；`null` 表示还活着。 */
   retiredAt: number | null;
 }
@@ -137,20 +160,37 @@ export function applyWebviewPool(
   if (live.size === 0 && entries.length === 0) return nodes;
 
   const known = new Set(entries.map((entry) => entry.id));
+  const deleted: PoolEntry[] = [];
   for (const entry of entries) {
     const current = live.get(entry.id);
     if (current) {
       entry.node = current;
       entry.retiredAt = null;
+    } else if (wasDeleted(entry)) {
+      deleted.push(entry);
     } else if (entry.retiredAt === null) {
       entry.retiredAt = now;
     }
+  }
+  // 删掉的立刻离开 pool：条目一消失，React 卸载那个 `<webview>`，guest 进程
+  // 跟着退出。放进 ghost 队列只会让它多活到下一次逐出。
+  if (deleted.length > 0) {
+    const doomed = new Set(deleted.map((entry) => entry.id));
+    entries = entries.filter((entry) => !doomed.has(entry.id));
+    for (const id of doomed) known.delete(id);
   }
   // 新条目**追加在尾部**：已有条目的相对顺序因此不变，React 不会移动任何一
   // 个已挂载的 guest（探针第 6 条：`[A,B,C] → [A,B,C,X]` 与在最前面插入都是
   // 零重载，致命的只有对调）。
   for (const [id, node] of live) {
-    if (!known.has(id)) entries.push({ id, node, retiredAt: null });
+    if (!known.has(id)) {
+      entries.push({
+        id,
+        node,
+        boardId: useCanvasStore.getState().boardId,
+        retiredAt: null,
+      });
+    }
   }
 
   evictGhosts();
