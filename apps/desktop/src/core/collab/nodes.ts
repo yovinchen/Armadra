@@ -77,7 +77,7 @@ export function agentIdOf(data: Record<string, unknown>): string | null {
   return typeof id === "string" && id !== "" ? id : null;
 }
 
-/** The newest terminal session a node owns, live or not. */
+/** The terminal session a node is running, or its newest dead one. */
 export interface SessionRef {
   readonly sessionId: string;
   readonly generation: number;
@@ -90,8 +90,14 @@ export function loadSession(
 ): SessionRef | undefined {
   const row = database
     .prepare(
+      // A running session wins over a newer dead one. A node can own more
+      // than one row — an old tmux pane adopted after a restart sits beside
+      // the session the node opened meanwhile — and ordering by age alone
+      // handed `context terminal` a session whose process was gone, which
+      // reads as "that node has no terminal" about a node that plainly has.
       "SELECT id, generation, status FROM terminal_sessions WHERE owner_node_id = ? " +
-        "ORDER BY generation DESC, created_at DESC LIMIT 1",
+        "ORDER BY (status = 'running') DESC, generation DESC, created_at DESC " +
+        "LIMIT 1",
     )
     .get(nodeId) as
     | { id: string; generation: number; status: string }
