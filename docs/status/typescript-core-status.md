@@ -967,3 +967,85 @@ KEPT_PROVIDERS 里，目录本来就没有它们，仍然只显示 token。
 - `usage/cost.test.ts`：扫过一个带两兆正文的记录之后，`ScanState` 能碰到的**所有**字符串加起来不到 4 KB，且不含那段正文；每个文件留下的桶数跟着 (日期 × 模型) 走而不是跟着行数走（两千行 → 一个桶）；去重集合里每个元素都是 `number`；一条比读块还长的行仍然被完整读出来。
 - `conversations/conversations.test.ts`：没有人读过索引时表是空的；`refresh` 之后 `ensureIndexed` 不再走第二趟；共用的那个读缓冲区不会把上一个文件的字节漏进下一个（长 → 短、短 → 长两个方向各一次）。
 - `agent/install.integration.test.ts`：真装配一次 core，`conversations` 表在任何人读之前是空的。
+
+## 22. Agent 投递阶段 B：目标状态机与驱动租约（2026-09-20）
+
+设计是 [Agent 之间的推式投递与终端驱动](../design/agent-delivery.md) §4、§6 与 §11 的「阶段 B」那张表。这一节只记做出来的形状与量到的结果；`send`、队列与 `outbox` 是阶段 C，不在这一批里。
+
+### 22.1 租约状态机提到了中立模块
+
+`core/drive/lease.ts` 是那台状态机本身：四个状态、四个 `LEASE_*` 码、代次，以及「持有者续期不换代次」。两个域共用**代码**，各自持有**实例**与常数——`browser/lease.ts` 现在只剩三样东西（两个时间常数、把它们绑上去的 `LeaseMachine`、浏览器措辞的 `leaseRefusal`），其余原样转出去，导入路径一个都没改。
+
+| 常数                 | 浏览器 | 终端 |
+| -------------------- | -----: | ---: |
+| `HUMAN_IDLE_SECONDS` |     10 |   10 |
+| `AGENT_IDLE_SECONDS` |     30 |  120 |
+
+常数**不进**共用模块：那里没有默认值可以让人写错，窗口由各域在构造时传进去。
+
+提取正确的判据是设计定的那一条：`browser/lease.test.ts` 一行不改仍然全过。跑过：`pnpm --filter @armadra/desktop exec vitest run src/core/browser` → 12 个文件 152 个用例全绿。
+
+### 22.2 五态是投影，不是表
+
+`core/agent/target-state.ts`，纯函数，无 I/O：
+
+```ts
+targetState(status: AgentStatus | undefined, live: number | undefined): TargetState
+```
+
+`live` 是终端域那边的 PTY 代次。三条容易读错的规矩落在这个文件里而不是散在调用点：`error` 归 `idle`（一轮失败结束了也是结束了）；`restored` 的 `idle` **不算** idle，走 `starting` 的路径（§4.1、Q4）；`observed` 与空 `stateSource` 也不算 idle——此时对这个节点一无所知，要不要放行由 §4.3 的启发式与 `--unverified` 决定，不在这里悄悄放过去。
+
+没有 hook 的 CLI 那条启发式也在这个文件里（`observedQuiet`，`OBSERVED_QUIET_MS = 2000`），只用已有的输入围栏与输入 / 输出时刻，不解析提示符、不识别 OSC。它**只用于降级**，本阶段没有任何调用者。
+
+### 22.3 终端有了驱动租约
+
+`core/terminal/drive.ts` 挂在终端域，判据用的是已有的那条输入路径（`TerminalManager.noteInput` 旁边的 `noteDrive`），不新增观测：
+
+| 触发                          | 结果                                                               |
+| ----------------------------- | ------------------------------------------------------------------ |
+| 人在终端敲一个键              | 人立刻拿到租约（抢占）；Agent 的下一次写入收 `LEASE_HELD_BY_HUMAN` |
+| 人停手 10 秒                  | 租约自然过期，广播一帧 `free`，Agent 又能驱动                      |
+| 人按「接管」                  | `humanTakeover`：Agent 收 `LEASE_REVOKED`，**不自动恢复**，写审计  |
+| Agent 写完一条                | 它的租约保留 120 秒                                                |
+| 另一个 Agent 在这段时间里写入 | `LEASE_HELD_BY_AGENT`                                              |
+
+三处实现细节值得记：
+
+- **`driver` 缺席就不碰租约。** 今天 `bridge.write`（协作动词与计划投递借的那条路）没说自己是谁，行为与这一批之前一字不差；阶段 C 的 `send` 会显式带上自己的 Agent 身份。
+- **人敲键永不失败。** 人在自己的终端前面打字是他自己的事，因为一把软租约把一次按键弹回去是给用户造一个他无法解释的故障；Agent 那一侧该拒还是拒。
+- **扫一遍。** 「停手十秒自动恢复」必须在没有任何输入的情况下发生，所以 `sweepDrives()` 每秒跑一次；接管没有过期窗口，扫不到它——那正是它与抢占的区别。
+
+代次落 `terminal_sessions.drive_generation`（迁移 `0022_terminal_drive.sql`，已记进 `migrations.lock`）。它与 `generation` 是两个数：后者是 PTY 代次，会话被回收时变；驱动权换手时 PTY 一动不动。回收会**忘掉**租约（那个进程没了），代次不回头。
+
+### 22.4 事件与界面
+
+第 23 个 `WorkspaceEvent`：`terminal.lease`，与 `browser.lease` 同形状（`packages/shared/src/api/drive.ts` 现在是两边共用的那一份 zod，`browserLeaseSchema` 是它的别名）。契约 §5.4 约束的是**已有那 21 个的名字**，不禁止新增；守清单的那个用例跟着从 22 改到 23。
+
+节点头的徽标是一个独立小组件 `apps/web/src/nodes/DriveBadge.tsx`，由终端节点通过 `headerChips` 挂上（`NodeShell.tsx` 没有改）。空闲不画任何东西：「没有人在驱动」是常态，画出来只是噪音。状态只从事件来，不按「我刚才敲过」推断——两台设备看着同一个终端时，各自推断会得到两个答案。
+
+### 22.5 留给阶段 C 的接口（本阶段只提供，不调用）
+
+```ts
+// core/terminal/manager.ts
+driveTarget(nodeId: string): DriveTarget;      // 五态 + 租约持有者 + drive_generation
+writeSubmit(sessionId, generation, text, driver?): Promise<void>;  // 一次 write
+driveLease(sessionId): Lease;
+takeoverDrive(sessionId, actor, principalId?): Lease;
+releaseDrive(sessionId, actor): Lease;
+```
+
+`writeSubmit` 的全部意义是那个拼接**只有一处**：`PASTE_START + sanitizePaste(text) + PASTE_END + "\r"` 必须是同一次 `write`，否则多行正文会一行一行地自己提交出去（§11 阶段 C 的风险项）。用例直接断言写出去的那个字符串的形状。
+
+### 22.6 验收
+
+真 core、真 PTY、真事件流，自己的实例（`ARMADRA_DATA_DIR=/tmp/armadra-phase-b`，`--listen tcp:127.0.0.1:0`），跑完即按 PID 关掉并清理：
+
+- 库：`migrations` 21 条（1–20 与 22，0021 是并行的另一条线），`terminal_sessions` 第 19 列是 `drive_generation`。
+- 脚本探针：建一个 owner 是节点的终端，从终端 socket 送一个 `input` 帧，事件流当场收到
+  `{"type":"terminal.lease","nodeId":"3f7a…","lease":{"state":"human","generation":1,"expiresAt":"…15:26:17.187+00:00","holder":{"kind":"human","id":"probe-device"}}}`；
+  停手 11 秒后收到 `{"state":"free","generation":2,"expiresAt":""}`。两帧之间正好是 10 秒的窗口。
+- 界面：Vite 开发页连同一个 core，画布上新建一个终端节点，在终端里敲一个字符——节点头当场出现「你在驱动」；停手十几秒后徽标自己消失。
+
+### 22.7 一处已知的红
+
+`0021` 归并行的另一条线（阶段 A 的名字表），本分支里没有它，所以 `pnpm repo:check` 报「迁移编号不连续：第 21 个为 22」，`db/migrations.test.ts` 与 `db/unified.test.ts` 里那两条「连续序列」断言同因失败。两条线合到一起即消失，本批没有为它改任何编号。其余全绿：`pnpm --filter @armadra/web test`（2553）、`@armadra/shared test`（163）、`@armadra/desktop test`（2641 通过 / 2 失败即上述两条）、`pnpm -r typecheck`、`format:check`、`ci:workflows`、`release:check`。
