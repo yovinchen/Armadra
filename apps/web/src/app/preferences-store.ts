@@ -1,12 +1,6 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import {
-  DEFAULT_CONTEXT_THRESHOLDS,
-  normalizeContextThresholds,
-  PERMISSION_MODES,
-  type ContextThresholds,
-  type PermissionMode,
-} from "@armadra/shared";
+import { PERMISSION_MODES, type PermissionMode } from "@armadra/shared";
 import {
   DEFAULT_LOCALE,
   LOCALES,
@@ -110,12 +104,6 @@ const SPLASH_KEY = "armadra.splashAnimation";
  * Finder 元数据的人有权看见它们。
  */
 const SHOW_SYSTEM_FILES_KEY = "armadra.showSystemFiles";
-/**
- * 单会话上下文的提醒阈值（Agent 自动化设计 §2.2「80%/95% 为初始提醒阈值，
- * 可设置」）。只改徽标与 Popover 的措辞，不会自动压缩、清空或打断 CLI。
- */
-const CONTEXT_WARN_KEY = "armadra.context.warnPercent";
-const CONTEXT_DANGER_KEY = "armadra.context.dangerPercent";
 /**
  * 会话内存徽标变色的阈值（路线图 §4.3「默认 2 GB，可设」）。
  *
@@ -250,8 +238,6 @@ export interface PreferencesState {
   splashAnimation: boolean;
   /** 文件列表里显示 `.DS_Store` / `Thumbs.db` / `desktop.ini`（F4）。 */
   showSystemFiles: boolean;
-  /** 上下文提醒阈值（设计 §2.2）；`dangerPercent` 不会低于 `warnPercent`。 */
-  contextThresholds: ContextThresholds;
   /** 会话内存徽标的变色阈值，字节（路线图 §4.3）。默认 2 GiB。 */
   sessionMemoryWarnBytes: number;
   /** 同时全速渲染的终端数量（终端宿主设计 §7.1）。默认 4。 */
@@ -300,7 +286,6 @@ export interface PreferencesState {
   setShowUsage: (enabled: boolean) => void;
   setSplashAnimation: (enabled: boolean) => void;
   setShowSystemFiles: (enabled: boolean) => void;
-  setContextThresholds: (thresholds: Partial<ContextThresholds>) => void;
   setSessionMemoryWarnBytes: (bytes: number) => void;
   setRenderBudget: (limit: number) => void;
   setAutoTitle: (enabled: boolean) => void;
@@ -356,20 +341,6 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   showUsage: storedBoolean(SHOW_USAGE_KEY, true),
   splashAnimation: storedBoolean(SPLASH_KEY, true),
   showSystemFiles: storedBoolean(SHOW_SYSTEM_FILES_KEY, false),
-  contextThresholds: normalizeContextThresholds({
-    warnPercent: storedNumber(
-      CONTEXT_WARN_KEY,
-      DEFAULT_CONTEXT_THRESHOLDS.warnPercent,
-      1,
-      100,
-    ),
-    dangerPercent: storedNumber(
-      CONTEXT_DANGER_KEY,
-      DEFAULT_CONTEXT_THRESHOLDS.dangerPercent,
-      1,
-      100,
-    ),
-  }),
   sessionMemoryWarnBytes: storedNumber(
     SESSION_MEMORY_WARN_KEY,
     DEFAULT_SESSION_MEMORY_WARN_BYTES,
@@ -522,19 +493,6 @@ export const usePreferencesStore = create<PreferencesState>((set, get) => ({
   setShowSystemFiles(showSystemFiles) {
     writeStored(SHOW_SYSTEM_FILES_KEY, String(showSystemFiles));
     set({ showSystemFiles });
-  },
-  setContextThresholds(patch) {
-    set((state) => {
-      // Normalising on write is what keeps "danger below warn" from ever
-      // reaching storage: the badge must not have to defend against it.
-      const contextThresholds = normalizeContextThresholds({
-        ...state.contextThresholds,
-        ...patch,
-      });
-      writeStored(CONTEXT_WARN_KEY, String(contextThresholds.warnPercent));
-      writeStored(CONTEXT_DANGER_KEY, String(contextThresholds.dangerPercent));
-      return { contextThresholds };
-    });
   },
   setSessionMemoryWarnBytes(bytes) {
     const sessionMemoryWarnBytes = Math.min(

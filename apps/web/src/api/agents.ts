@@ -6,7 +6,6 @@ import {
   contextLinksRequestSchema,
   contextLinksResponseSchema,
   contextReadsResponseSchema,
-  contextUsageSchema,
   controlConfirmRequestSchema,
   controlConfirmResponseSchema,
   deliveriesResponseSchema,
@@ -26,28 +25,6 @@ import {
 import { RUNTIME_URL, json, query, request } from "./request";
 
 export const agentsApi = {
-  contextUsage: (
-    workspaceId: string,
-    nodeId: string,
-    binding: {
-      sessionId: string;
-      generation: number;
-      /**
-       * The node's model selection, forwarded only as the denominator's
-       * fallback: a transcript that names the model that actually answered
-       * wins over what the launch line asked for.
-       */
-      modelId?: string | null;
-    },
-    signal?: AbortSignal,
-  ) =>
-    request(
-      `/api/workspaces/${query(workspaceId)}/nodes/${query(nodeId)}/context-usage?sessionId=${query(binding.sessionId)}&generation=${binding.generation}${
-        binding.modelId ? `&modelId=${query(binding.modelId)}` : ""
-      }`,
-      contextUsageSchema,
-      { signal },
-    ),
   /* --------------------------------- Agent 协作 -------------------------- */
   /** 投递记录（§5.7 第 10 条）。只有元数据，正文从来不落盘。 */
   deliveries: (workspaceId: string, limit = 200) =>

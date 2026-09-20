@@ -17,8 +17,8 @@ describe("capability inheritance", () => {
     );
     // The accessible name now carries the resolved state and its source, so
     // the label is matched rather than compared whole.
-    fireEvent.click(screen.getByRole("checkbox", { name: /Session context/ }));
-    expect(changed).toHaveBeenCalledWith(["contextUsage"]);
+    fireEvent.click(screen.getByRole("checkbox", { name: /Account usage/ }));
+    expect(changed).toHaveBeenCalledWith(["usage"]);
     rendered.rerender(
       <CapabilityInheritance
         baseAgent="copilot"
@@ -26,10 +26,10 @@ describe("capability inheritance", () => {
         onChange={changed}
       />,
     );
-    // copilot declares neither a context reading nor a subagent adapter, so
+    // copilot declares neither an account-usage nor a subagent adapter, so
     // neither checkbox appears; the status hooks it does have still do.
     expect(
-      screen.queryByRole("checkbox", { name: /Session context/ }),
+      screen.queryByRole("checkbox", { name: /Account usage/ }),
     ).toBeNull();
     expect(screen.queryByRole("checkbox", { name: /Subagents/ })).toBeNull();
     expect(screen.getByRole("checkbox", { name: /Status hooks/ })).toBeTruthy();
@@ -39,7 +39,7 @@ describe("capability inheritance", () => {
     render(
       <CapabilityInheritance
         baseAgent="claude"
-        disabledCapabilities={["contextUsage"]}
+        disabledCapabilities={["usage"]}
         onChange={vi.fn()}
         probe={{
           agentId: "claude",

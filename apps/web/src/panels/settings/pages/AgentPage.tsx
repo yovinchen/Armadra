@@ -10,7 +10,7 @@ import {
   type PermissionMode,
 } from "@armadra/shared";
 import { toast } from "sonner";
-import { CapabilityInheritance } from "@/agent/context-usage/CapabilityInheritance";
+import { CapabilityInheritance } from "@/agent/CapabilityInheritance";
 
 import { useAgentsQuery } from "../../../app/use-agents";
 import {
@@ -74,10 +74,6 @@ export function AgentPage() {
   );
   const permissionMode = usePreferencesStore(
     (state) => state.defaultPermissionMode,
-  );
-  const thresholds = usePreferencesStore((state) => state.contextThresholds);
-  const setContextThresholds = usePreferencesStore(
-    (state) => state.setContextThresholds,
   );
   const autoTitle = usePreferencesStore((state) => state.autoTitle);
   const setAutoTitle = usePreferencesStore((state) => state.setAutoTitle);
@@ -217,40 +213,6 @@ export function AgentPage() {
               ))}
             </SelectContent>
           </Select>
-        </SettingsRow>
-      </SettingsGroup>
-
-      <SettingsGroup title={t("context.thresholds")}>
-        <SettingsRow
-          label={t("context.warnPercent")}
-          footnote={t("context.thresholdNote")}
-        >
-          <Input
-            type="number"
-            min={1}
-            max={100}
-            className="h-8 w-[100px] text-xs"
-            aria-label={t("context.warnPercent")}
-            value={thresholds.warnPercent}
-            onChange={(event) =>
-              setContextThresholds({ warnPercent: Number(event.target.value) })
-            }
-          />
-        </SettingsRow>
-        <SettingsRow label={t("context.dangerPercent")}>
-          <Input
-            type="number"
-            min={1}
-            max={100}
-            className="h-8 w-[100px] text-xs"
-            aria-label={t("context.dangerPercent")}
-            value={thresholds.dangerPercent}
-            onChange={(event) =>
-              setContextThresholds({
-                dangerPercent: Number(event.target.value),
-              })
-            }
-          />
         </SettingsRow>
       </SettingsGroup>
 

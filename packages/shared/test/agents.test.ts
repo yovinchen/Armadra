@@ -27,10 +27,10 @@ describe("agent registry", () => {
       label: "Narrow",
       launchCmd: "wrapper",
       baseAgent: "claude",
-      disabledCapabilities: ["resume", "contextUsage"],
+      disabledCapabilities: ["resume", "usage"],
     });
     expect(inheritedAgentCapabilities(custom)).not.toContain("resume");
-    expect(inheritedAgentCapabilities(custom)).not.toContain("contextUsage");
+    expect(inheritedAgentCapabilities(custom)).not.toContain("usage");
     expect(inheritedAgentCapabilities(custom)).toContain("hooks");
     expect(() =>
       assembleLaunchCommand({
@@ -59,13 +59,13 @@ describe("agent registry", () => {
         baseAgent: "codex",
         disabledCapabilities: [],
       }),
-    ).toContain("contextUsage");
+    ).toContain("subagent");
     expect(
       inheritedAgentCapabilities({
         baseAgent: "codex",
-        disabledCapabilities: ["contextUsage"],
+        disabledCapabilities: ["subagent"],
       }),
-    ).not.toContain("contextUsage");
+    ).not.toContain("subagent");
     // …and one the base adapter never declared stays absent either way.
     expect(
       inheritedAgentCapabilities({

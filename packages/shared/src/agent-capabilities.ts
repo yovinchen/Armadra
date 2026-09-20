@@ -133,15 +133,14 @@ export type ExecutionHostKind = (typeof EXECUTION_HOST_KINDS)[number];
  *
  * An SSH terminal runs the CLI on another machine: its transcripts and its
  * account state live over there, and the runtime only ever reads local paths.
- * Claiming a context reading for it would produce a number belonging to a
- * different session, so both usage capabilities are dropped rather than
- * approximated.
+ * Reporting account usage from them would describe the wrong machine, so the
+ * capability is dropped rather than approximated.
  */
 const HOST_EXCLUSIONS: Readonly<
   Record<ExecutionHostKind, readonly AgentCapability[]>
 > = {
   local: [],
-  ssh: ["contextUsage", "usage"],
+  ssh: ["usage"],
 };
 
 export function hostSupports(

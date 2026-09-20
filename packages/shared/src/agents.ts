@@ -66,7 +66,6 @@ export const AGENT_CAPABILITIES = [
   "contextLink",
   "browser",
   "usage",
-  "contextUsage",
   "nativeRecurrence",
   "structuredInputAck",
   "supportsModelSelection",
@@ -126,7 +125,6 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
         "contextLink",
         "browser",
         "usage",
-        "contextUsage",
         "structuredInputAck",
         "supportsModelSelection",
       ],
@@ -146,15 +144,12 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "positional", verb: "resume" },
-      // `contextUsage` here is the *estimated* kind: codex writes a structured
-      // rollout we can read, but reports no live window of its own.
       capabilities: [
         "hooks",
         "resume",
         "subagent",
         "contextLink",
         "browser",
-        "contextUsage",
         "structuredInputAck",
         "supportsModelSelection",
       ],
@@ -205,15 +200,12 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       // authentication over a different transport
       // (docs/design/agent-collaboration-channels.md §3.1 channel B). So
       // `hooks` here means "there is a status source", not "there is a
-      // `hooks` key in a settings file" — and `contextUsage` is the *reported*
-      // kind, because the extension can read the live window with
-      // `ctx.getContextUsage()` rather than estimating from a transcript.
+      // `hooks` key in a settings file".
       capabilities: [
         "hooks",
         "resume",
         "contextLink",
         "browser",
-        "contextUsage",
         "structuredInputAck",
         "supportsModelSelection",
       ],
@@ -241,7 +233,6 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
         "resume",
         "contextLink",
         "browser",
-        "contextUsage",
         "structuredInputAck",
         "supportsModelSelection",
       ],
@@ -263,11 +254,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
       // Copilot's status source is a command hook like Claude's, written to
-      // `~/.copilot/hooks/armadra.json`. `contextUsage` is deliberately absent:
-      // it has no status line, and whether `session-state/*/events.jsonl`
-      // carries per-turn token counts is an unverified claim
-      // (docs/design/agent-collaboration-channels.md §6). A capability is not
-      // declared from a document.
+      // `~/.copilot/hooks/armadra.json`.
       capabilities: [
         "hooks",
         "resume",

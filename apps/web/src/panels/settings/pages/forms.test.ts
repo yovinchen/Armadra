@@ -117,11 +117,11 @@ describe("parseAgentForm", () => {
         args: "",
         env: "",
         baseAgent: "claude",
-        disabledCapabilities: ["contextUsage", "resume"],
+        disabledCapabilities: ["usage", "resume"],
       },
       "custom:narrow",
     );
-    expect(parsed?.disabledCapabilities).toEqual(["contextUsage", "resume"]);
+    expect(parsed?.disabledCapabilities).toEqual(["usage", "resume"]);
   });
   const empty = {
     label: "",

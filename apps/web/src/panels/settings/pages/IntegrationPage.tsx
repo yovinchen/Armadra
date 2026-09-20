@@ -86,15 +86,10 @@ function AgentIntegrationRow({ agent }: { agent: AgentInfo }) {
   const install = useMutation({
     mutationFn: (action: "install" | "uninstall") =>
       runIntegrationInstall(agent.id, action),
-    onSuccess: (warning, action) => {
+    onSuccess: (_warning, action) => {
       refresh(agent.id);
       toast.success(
         t(action === "install" ? "integration.done" : "integration.removed"),
-        // 装成了但动过用户自己的东西时必须说一句：Claude 的 statusLine 是
-        // 用户写的，我们只是没把它覆盖掉，这值得一行字。
-        warning === "context_statusline_preserved"
-          ? { description: t("context.statusLinePreserved") }
-          : undefined,
       );
     },
     onError: (cause: Error) =>

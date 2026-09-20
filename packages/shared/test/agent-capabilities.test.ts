@@ -3,15 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   agentProbeSchema,
   compareVersions,
-  contextLevel,
-  DEFAULT_CONTEXT_THRESHOLDS,
   effectiveCapabilities,
-  estimateTokens,
   hostSupports,
-  modelContextCapacity,
   modelSuggestions,
-  normalizeContextThresholds,
-  normalizeModelId,
   parseCliVersion,
   resolveAgentCapabilities,
   type AgentProbe,
@@ -48,19 +42,17 @@ describe("capability intersection", () => {
   it("lets a custom entry switch a capability off and reports it as the source", () => {
     const resolved = resolveAgentCapabilities({
       baseAgent: "claude",
-      disabledCapabilities: ["contextUsage"],
+      disabledCapabilities: ["usage"],
       probe: probe(),
     });
-    expect(
-      resolved.find((entry) => entry.capability === "contextUsage"),
-    ).toEqual({
-      capability: "contextUsage",
+    expect(resolved.find((entry) => entry.capability === "usage")).toEqual({
+      capability: "usage",
       state: "unsupported",
       source: "custom",
     });
   });
 
-  it("drops the two usage capabilities on an SSH execution host", () => {
+  it("drops account usage on an SSH execution host", () => {
     const resolved = resolveAgentCapabilities({
       baseAgent: "claude",
       probe: probe(),
@@ -68,16 +60,15 @@ describe("capability intersection", () => {
     });
     const state = (capability: string) =>
       resolved.find((entry) => entry.capability === capability);
-    expect(state("contextUsage")).toEqual({
-      capability: "contextUsage",
+    expect(state("usage")).toEqual({
+      capability: "usage",
       state: "unsupported",
       source: "host",
     });
-    expect(state("usage")?.source).toBe("host");
     // Everything else survives the crossing.
     expect(state("resume")?.state).toBe("supported");
-    expect(hostSupports("local", "contextUsage")).toBe(true);
-    expect(hostSupports("ssh", "contextUsage")).toBe(false);
+    expect(hostSupports("local", "usage")).toBe(true);
+    expect(hostSupports("ssh", "usage")).toBe(false);
   });
 
   it("treats an unprobed CLI as certain only where no version gate exists", () => {
@@ -128,63 +119,10 @@ describe("version parsing", () => {
   });
 });
 
-describe("model context windows", () => {
-  it("answers for documented families and null for anything else", () => {
-    expect(modelContextCapacity("claude-sonnet-4-5")).toBe(200_000);
-    expect(modelContextCapacity("sonnet")).toBe(200_000);
-    expect(modelContextCapacity("claude-opus-5[1m]")).toBe(1_000_000);
-    expect(modelContextCapacity("gpt-5-codex")).toBe(400_000);
-    expect(modelContextCapacity("gpt-4.1-mini")).toBe(1_047_576);
-    expect(modelContextCapacity("some-local-llm")).toBeNull();
-    expect(modelContextCapacity(null)).toBeNull();
-    expect(modelContextCapacity("")).toBeNull();
-  });
-  it("strips a router prefix before matching", () => {
-    expect(normalizeModelId("Anthropic/Claude-Sonnet-4-5")).toBe(
-      "claude-sonnet-4-5",
-    );
-    expect(modelContextCapacity("openai/gpt-5")).toBe(400_000);
-  });
+describe("model suggestions", () => {
   it("offers suggestions only where the CLI documents aliases", () => {
     expect(modelSuggestions("claude")).toContain("sonnet");
     expect(modelSuggestions("copilot")).toEqual([]);
     expect(modelSuggestions("custom:whatever")).toEqual([]);
-  });
-});
-
-describe("character estimator", () => {
-  it("charges ASCII by the quarter and non-ASCII by the character", () => {
-    expect(estimateTokens("abcd")).toBe(1);
-    expect(estimateTokens("中文")).toBe(2);
-    // Mixed text adds the two runs rather than picking one ratio for both.
-    expect(estimateTokens("abcd中文")).toBe(3);
-    expect(estimateTokens("")).toBe(0);
-  });
-});
-
-describe("reminder thresholds", () => {
-  it("keeps danger at or above warn and clamps both into range", () => {
-    expect(normalizeContextThresholds(undefined)).toEqual(
-      DEFAULT_CONTEXT_THRESHOLDS,
-    );
-    expect(
-      normalizeContextThresholds({ warnPercent: 90, dangerPercent: 50 }),
-    ).toEqual({ warnPercent: 90, dangerPercent: 90 });
-    expect(
-      normalizeContextThresholds({ warnPercent: -5, dangerPercent: 900 }),
-    ).toEqual({ warnPercent: 1, dangerPercent: 100 });
-    expect(normalizeContextThresholds({ warnPercent: Number.NaN })).toEqual(
-      DEFAULT_CONTEXT_THRESHOLDS,
-    );
-  });
-  it("returns null for a reading with no percentage", () => {
-    const thresholds = DEFAULT_CONTEXT_THRESHOLDS;
-    expect(contextLevel(null, thresholds)).toBeNull();
-    expect(contextLevel(10, thresholds)).toBe("normal");
-    expect(contextLevel(80, thresholds)).toBe("warn");
-    expect(contextLevel(95, thresholds)).toBe("danger");
-    expect(contextLevel(60, { warnPercent: 50, dangerPercent: 55 })).toBe(
-      "danger",
-    );
   });
 });

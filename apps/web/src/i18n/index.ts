@@ -22,7 +22,7 @@ import { host } from "./host";
 import { integration } from "./integration";
 import { hostIdentity } from "./host-identity";
 import { hostNative } from "./host-native";
-import { contextUsage } from "./context-usage";
+import { agentCapabilities } from "./agent-capabilities";
 import { desktop } from "./desktop";
 import { gitHunks } from "./git-hunks";
 import { handoff } from "./handoff";
@@ -79,7 +79,7 @@ export const MESSAGE_MODULES = {
   "host-identity": hostIdentity,
   "host-native": hostNative,
   integration,
-  "context-usage": contextUsage,
+  "agent-capabilities": agentCapabilities,
   "git-repository": gitRepository,
   "frame-binding": frameBinding,
   "git-hunks": gitHunks,

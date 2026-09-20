@@ -42,11 +42,9 @@ export function CapabilityInheritance({
   });
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-2">
-      <legend className="text-sm font-medium">
-        {t("context.capabilities")}
-      </legend>
+      <legend className="text-sm font-medium">{t("capability.title")}</legend>
       <p className="max-w-prose text-xs text-muted-foreground">
-        {t("context.capabilityNote")}
+        {t("capability.note")}
       </p>
       <div className="flex flex-col gap-y-1">
         {declared.map((capability) => {
@@ -70,12 +68,12 @@ export function CapabilityInheritance({
                 }
               />
               <span className="min-w-0 flex-1 truncate">
-                {t(`context.capability.${capability}`)}
+                {t(`capability.name.${capability}`)}
               </span>
               {entry && (
                 <span className="shrink-0 text-muted-foreground">
-                  {t(`context.capabilityState.${entry.state}`)} ·{" "}
-                  {t(`context.capabilitySource.${entry.source}`)}
+                  {t(`capability.state.${entry.state}`)} ·{" "}
+                  {t(`capability.source.${entry.source}`)}
                 </span>
               )}
             </label>
@@ -84,7 +82,7 @@ export function CapabilityInheritance({
       </div>
       {probe?.status !== "ok" && (
         <p className="max-w-prose text-xs text-muted-foreground">
-          {t("context.probeUnknown")}
+          {t("capability.probeUnknown")}
         </p>
       )}
     </fieldset>
