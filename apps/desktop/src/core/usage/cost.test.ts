@@ -18,7 +18,7 @@ import {
 
 /** 移植自 `apps/runtime/src/usage/cost/{scan,pricing,mod}.rs` 的用例。 */
 describe("价格表", () => {
-  it("带日期的快照落回它不带日期的 id", () => {
+  it("带日期的快照落回它不带日期的 id", async () => {
     expect(undated("claude-opus-4-5-20251101")).toBe("claude-opus-4-5");
     expect(undated("gpt-5-2026-01-02")).toBe("gpt-5");
     // 一次部分匹配必须落空而不是被截断。
@@ -27,7 +27,7 @@ describe("价格表", () => {
     expect(undated("gpt")).toBeUndefined();
   });
 
-  it("不在表里的模型完全没有成本，而不是从相近的名字估", () => {
+  it("不在表里的模型完全没有成本，而不是从相近的名字估", async () => {
     expect(priceFor(BUILT_IN_PRICES, "claude-opus-5")).toBeDefined();
     expect(priceFor(BUILT_IN_PRICES, "claude-opus-5-20261001")).toBeDefined();
     expect(priceFor(BUILT_IN_PRICES, "some-unknown-model")).toBeUndefined();
@@ -35,13 +35,13 @@ describe("价格表", () => {
     expect(priceFor(BUILT_IN_PRICES, "claude-opus-9")).toBeUndefined();
   });
 
-  it("OpenAI 的行不按缓存写计费", () => {
+  it("OpenAI 的行不按缓存写计费", async () => {
     expect(BUILT_IN_PRICES["gpt-5"]?.cacheWrite).toBe(0);
     // Anthropic 的行是 1.25×。
     expect(BUILT_IN_PRICES["claude-opus-5"]?.cacheWrite).toBe(6.25);
   });
 
-  it("一桶 token 按每百万的价格算", () => {
+  it("一桶 token 按每百万的价格算", async () => {
     const price = BUILT_IN_PRICES["claude-opus-5"];
     expect(price).toBeDefined();
     expect(
@@ -92,7 +92,7 @@ describe("记录扫描", () => {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   };
 
-  it("一个 request id 在整个扫描里只被计一次", () => {
+  it("一个 request id 在整个扫描里只被计一次", async () => {
     const stamp = `${today()}T10:00:00Z`;
     write(".claude/projects/demo/session.jsonl", [
       JSON.stringify({
@@ -120,7 +120,7 @@ describe("记录扫描", () => {
         },
       }),
     ]);
-    const result = new ScanState().scan([
+    const result = await new ScanState().scan([
       ["claude", join(home, ".claude/projects")],
     ]);
     const bucket = [...result.buckets.entries()].find(([key]) =>
@@ -134,7 +134,7 @@ describe("记录扫描", () => {
     });
   });
 
-  it("Codex 记的是每一轮的增量，缓存的那部分从 input 里减掉", () => {
+  it("Codex 记的是每一轮的增量，缓存的那部分从 input 里减掉", async () => {
     write(".codex/sessions/2026/09/20/rollout.jsonl", [
       JSON.stringify({
         timestamp: `${today()}T09:00:00Z`,
@@ -157,7 +157,7 @@ describe("记录扫描", () => {
         },
       }),
     ]);
-    const result = new ScanState().scan([
+    const result = await new ScanState().scan([
       ["codex", join(home, ".codex/sessions")],
     ]);
     const bucket = [...result.buckets.entries()].find(([key]) =>
@@ -171,7 +171,7 @@ describe("记录扫描", () => {
     });
   });
 
-  it("只有追加的字节被重新解析", () => {
+  it("只有追加的字节被重新解析", async () => {
     const path = write(".claude/projects/demo/session.jsonl", [
       JSON.stringify({
         requestId: "req-1",
@@ -184,7 +184,7 @@ describe("记录扫描", () => {
     ]);
     const state = new ScanState();
     const roots = [["claude", join(home, ".claude/projects")]] as const;
-    expect(state.scan(roots).buckets.size).toBe(1);
+    expect((await state.scan(roots)).buckets.size).toBe(1);
     writeFileSync(
       path,
       `${JSON.stringify({
@@ -203,7 +203,7 @@ describe("记录扫描", () => {
         },
       })}\n`,
     );
-    const second = state.scan(roots);
+    const second = await state.scan(roots);
     // 第一行没有被再算一次，第二行进来了。
     expect(second.buckets.size).toBe(2);
     const opus = [...second.buckets].find(([key]) =>
@@ -212,17 +212,17 @@ describe("记录扫描", () => {
     expect(opus?.[1].input).toBe(10);
   });
 
-  it("结尾那条不完整的行留给下一趟", () => {
+  it("结尾那条不完整的行留给下一趟", async () => {
     const path = join(home, ".claude/projects/demo/session.jsonl");
     mkdirSync(join(path, ".."), { recursive: true });
     writeFileSync(path, '{"requestId":"req-1","message":{"usage":{"input');
-    const result = new ScanState().scan([
+    const result = await new ScanState().scan([
       ["claude", join(home, ".claude/projects")],
     ]);
     expect(result.buckets.size).toBe(0);
   });
 
-  it("消失了的文件把它的贡献一起带走", () => {
+  it("消失了的文件把它的贡献一起带走", async () => {
     const path = write(".claude/projects/demo/session.jsonl", [
       JSON.stringify({
         requestId: "req-1",
@@ -235,9 +235,9 @@ describe("记录扫描", () => {
     ]);
     const state = new ScanState();
     const roots = [["claude", join(home, ".claude/projects")]] as const;
-    expect(state.scan(roots).buckets.size).toBe(1);
+    expect((await state.scan(roots)).buckets.size).toBe(1);
     rmSync(path);
-    expect(state.scan(roots).buckets.size).toBe(0);
+    expect((await state.scan(roots)).buckets.size).toBe(0);
   });
 });
 
@@ -267,7 +267,7 @@ describe("汇总", () => {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   }
 
-  it("补齐 30 天的轴，没有活动的那天也在", () => {
+  it("补齐 30 天的轴，没有活动的那天也在", async () => {
     const summary = summarize(scanned([]), BUILT_IN_PRICES, NOW);
     expect(summary.daily).toHaveLength(WINDOW_DAYS);
     expect(summary.daily.at(-1)?.date).toBe(localToday());
@@ -275,7 +275,7 @@ describe("汇总", () => {
     expect(summary.status).toBe("unavailable");
   });
 
-  it("没有价格的模型只贡献 token，并让窗口变成不完整", () => {
+  it("没有价格的模型只贡献 token，并让窗口变成不完整", async () => {
     const summary = summarize(
       scanned([
         [localToday(), "claude-opus-5", 1_000_000],
@@ -295,7 +295,7 @@ describe("汇总", () => {
     expect(unpriced?.tokens.input).toBe(1_000_000);
   });
 
-  it("模型拆分按花费降序，看板自上而下读", () => {
+  it("模型拆分按花费降序，看板自上而下读", async () => {
     const summary = summarize(
       scanned([
         [localToday(), "claude-haiku-4-5", 1_000_000],
@@ -310,7 +310,7 @@ describe("汇总", () => {
     ]);
   });
 
-  it("窗口之外的日期不计入", () => {
+  it("窗口之外的日期不计入", async () => {
     const summary = summarize(
       scanned([["2020-01-01", "claude-opus-5", 1_000_000]]),
       BUILT_IN_PRICES,
@@ -320,7 +320,7 @@ describe("汇总", () => {
     expect(summary.last30Days.models).toHaveLength(0);
   });
 
-  it("关掉的扫描答 disabled，没有读过任何文件", () => {
+  it("关掉的扫描答 disabled，没有读过任何文件", async () => {
     expect(emptySummary("disabled").status).toBe("disabled");
     expect(emptySummary("disabled").daily).toHaveLength(0);
     expect(MANUAL_COOLDOWN_MS).toBe(30_000);

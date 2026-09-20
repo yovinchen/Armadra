@@ -19,7 +19,9 @@
  * 会被请求 id 的去重悄悄吃掉。
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
+import { open } from "node:fs/promises";
+import { setImmediate as yieldToLoop } from "node:timers/promises";
 import { join } from "node:path";
 
 import { homeDir } from "./providers";
@@ -35,6 +37,17 @@ export const MANUAL_COOLDOWN_MS = 30_000;
  * 走完所有的不值得，而看板的 30 天窗口要的是最新的那些。
  */
 export const MAX_FILES = 4_000;
+
+/**
+ * How many transcript lines are parsed before the scanner yields to the event
+ * loop. A machine that has used the CLIs for a while holds a gigabyte of
+ * transcripts, and one file alone can pass eighty megabytes; parsing that in
+ * one synchronous stretch held the core's loop for fifteen seconds — long
+ * enough for the shell's SIGTERM to time out and for every request from the
+ * page to look like a dead service. Yielding this often keeps a single stall
+ * in the low milliseconds.
+ */
+export const LINES_PER_YIELD = 500;
 /** 目录遍历深度。Claude 嵌一层，Codex 三层；六层留了余量又不会走进无关的树。 */
 const MAX_DEPTH = 6;
 
@@ -371,16 +384,43 @@ export function localDate(timestamp: unknown, nowMs: number): string {
  * 增量扫描的状态。一次恢复或者分叉的会话会逐字重复行，所以一个 request id 在**整个
  * 扫描**里只被计一次。
  */
+/** The bytes of `path` from `offset` to `size`, decoded as UTF-8. */
+async function readFrom(
+  path: string,
+  offset: number,
+  size: number,
+): Promise<string> {
+  if (size <= offset) return "";
+  const handle = await open(path, "r");
+  try {
+    const buffer = Buffer.allocUnsafe(size - offset);
+    let filled = 0;
+    while (filled < buffer.length) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        filled,
+        buffer.length - filled,
+        offset + filled,
+      );
+      if (bytesRead === 0) break;
+      filled += bytesRead;
+    }
+    return buffer.subarray(0, filled).toString("utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
 export class ScanState {
   private readonly files = new Map<string, FileState>();
   private readonly seen = new Set<string>();
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
-  /** 对两棵记录树跑一趟。 */
-  scan(
+  /** 对两棵记录树跑一趟。异步，因为文件解析要给事件循环让路。 */
+  async scan(
     roots: readonly (readonly [Provider, string])[] = scanRoots(),
-  ): ScanResult {
+  ): Promise<ScanResult> {
     const result: ScanResult = {
       buckets: new Map(),
       files: {},
@@ -414,7 +454,7 @@ export class ScanState {
     const live = new Set<string>();
     for (const [provider, path] of discovered) {
       live.add(path);
-      this.parse(provider, path);
+      await this.parse(provider, path);
     }
     // 消失了的文件把它的贡献一起带走。
     for (const path of [...this.files.keys()]) {
@@ -450,7 +490,7 @@ export class ScanState {
     return result;
   }
 
-  private parse(provider: Provider, path: string): void {
+  private async parse(provider: Provider, path: string): Promise<void> {
     let info;
     try {
       info = statSync(path);
@@ -482,9 +522,11 @@ export class ScanState {
     state.mtimeMs = mtimeMs;
     state.modifiedMs = mtimeMs;
 
+    // 只读追加的那一段：从记住的偏移量起。读整个文件再切片会让一个八十兆的记录
+    // 每五分钟被完整读一次。
     let appended: string;
     try {
-      appended = readFileSync(path, "utf8").slice(state.offset);
+      appended = await readFrom(path, state.offset, info.size);
     } catch {
       this.files.set(path, state);
       return;
@@ -493,9 +535,11 @@ export class ScanState {
     // 什么都不是。
     const complete = appended.lastIndexOf("\n") + 1;
     state.offset += Buffer.byteLength(appended.slice(0, complete), "utf8");
+    let parsed = 0;
     for (const line of appended.slice(0, complete).split("\n")) {
       const trimmed = line.trim();
       if (trimmed === "") continue;
+      if (++parsed % LINES_PER_YIELD === 0) await yieldToLoop();
       let value: unknown;
       try {
         value = JSON.parse(trimmed);
@@ -719,13 +763,17 @@ export class CostService {
   }
 
   /** 后台那一趟：最多五分钟一次扫描。 */
-  refreshThrottled(): CostSummary {
-    return this.cooling(MIN_SCAN_INTERVAL_MS) ? this.summary() : this.scan();
+  refreshThrottled(): Promise<CostSummary> {
+    return this.cooling(MIN_SCAN_INTERVAL_MS)
+      ? Promise.resolve(this.summary())
+      : this.scan();
   }
 
   /** `POST /api/usage/cost/refresh`：一次用户手势，30 秒冷却。 */
-  refreshManual(): CostSummary {
-    return this.cooling(MANUAL_COOLDOWN_MS) ? this.summary() : this.scan();
+  refreshManual(): Promise<CostSummary> {
+    return this.cooling(MANUAL_COOLDOWN_MS)
+      ? Promise.resolve(this.summary())
+      : this.scan();
   }
 
   private cooling(window: number): boolean {
@@ -734,18 +782,35 @@ export class CostService {
     );
   }
 
-  private scan(): CostSummary {
+  private inFlight: Promise<CostSummary> | undefined;
+
+  /**
+   * One scan at a time: the state's offsets are shared, and two scans reading
+   * the same appended bytes would count them twice. A caller that arrives
+   * while one runs gets that one's result.
+   */
+  private scan(): Promise<CostSummary> {
     if (!this.enabled()) {
       // 把扫描关掉不该为一件没做的事开始冷却，也不该覆盖缓存：重新打开该是即时的。
-      return emptySummary("disabled");
+      return Promise.resolve(emptySummary("disabled"));
     }
+    if (this.inFlight !== undefined) return this.inFlight;
     const nowMs = this.now();
-    const result = this.state.scan();
-    this.lastScanMs = nowMs;
-    this.summaryValue = {
-      ...summarize(result, this.prices, nowMs),
-      refreshAvailableAt: new Date(nowMs + MANUAL_COOLDOWN_MS).toISOString(),
-    };
-    return this.summaryValue;
+    this.inFlight = this.state
+      .scan()
+      .then((result) => {
+        this.lastScanMs = nowMs;
+        this.summaryValue = {
+          ...summarize(result, this.prices, nowMs),
+          refreshAvailableAt: new Date(
+            nowMs + MANUAL_COOLDOWN_MS,
+          ).toISOString(),
+        };
+        return this.summaryValue;
+      })
+      .finally(() => {
+        this.inFlight = undefined;
+      });
+    return this.inFlight;
   }
 }

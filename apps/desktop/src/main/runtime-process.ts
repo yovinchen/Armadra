@@ -172,6 +172,10 @@ export class RuntimeProcess {
       this.exited = true;
     });
     if (child.stdout) this.watchOutput(child.stdout);
+    // stderr is where the core's own log goes. Left unread it would fill the
+    // pipe and then the core's logging would stall; left unforwarded it would
+    // leave "what did the core say before it died?" with no answer.
+    if (child.stderr) this.watchOutput(child.stderr);
     this.child = child;
     this.exited = false;
   }

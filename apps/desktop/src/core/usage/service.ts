@@ -214,7 +214,7 @@ export class UsageService {
       ) {
         this.lastBackgroundMs = this.now();
         void this.refreshThrottled();
-        this.cost.refreshThrottled();
+        void this.cost.refreshThrottled();
       }
       this.timer = setTimeout(tick, TICK_INTERVAL_MS);
       this.timer.unref?.();

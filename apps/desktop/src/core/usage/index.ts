@@ -121,9 +121,9 @@ export function install(context: CoreContext): UsageDomain {
     body: service.cost.summary(),
   }));
 
-  router.handle("POST", "/api/usage/cost/refresh", () => ({
+  router.handle("POST", "/api/usage/cost/refresh", async () => ({
     status: 200,
-    body: service.cost.refreshManual(),
+    body: await service.cost.refreshManual(),
   }));
 
   // 登录标志、令牌在哪儿、以及待处理的设备流提示。从不是令牌或者 device code。
