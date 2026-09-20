@@ -156,6 +156,18 @@ export class Router {
       : requirement;
   }
 
+  /**
+   * 这个构建真的为 `(method, path)` 绑了 handler。
+   *
+   * 路由表里的 `implemented` 是**写下来的说法**，这里是**装配之后的事实**。
+   * 两者由一条用例逐条对着看：一条写着已实现却没人注册的路由会答 501，而
+   * 页面据此以为自己该降级；一条写着未实现却答得出来的路由则让那张表变成
+   * 一份没人信的文档。`path` 要传表里那条带 `{param}` 的模式。
+   */
+  claimed(method: string, path: string): boolean {
+    return this.handlers.has(key(method, path));
+  }
+
   match(path: string): RouteMatch | undefined {
     const wanted = split(path);
     for (const route of this.compiled) {

@@ -113,7 +113,7 @@ describe("the assembled filesystem and import domains", () => {
     }
     // 表里有、还没写的那条答 501，所以上面的 200 是「真的答了」的证据，而不是
     // 「什么都没发生」的证据。
-    const notYet = await send("GET", "/api/power");
+    const notYet = await send("GET", "/api/ssh/askpass/prompts/x");
     expect(notYet.status).toBe(501);
   });
 

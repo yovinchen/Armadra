@@ -2,6 +2,7 @@ import { connect } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { registerCollabDispatcher } from "./collab";
 import { type HookFixture, hookFixture } from "./fixture";
+import { ROUTES } from "../http/routes";
 
 /**
  * The socket is the client's preferred path, and it is served by the same
@@ -184,5 +185,29 @@ describe("the collaboration routes", () => {
       },
     );
     expect(answer.status).toBe(403);
+  });
+});
+
+/**
+ * hook 面的路由表对账，和主监听器那条（`core/main.test.ts`）成对。
+ *
+ * 这一面的 handler 全在 `HookServer` 的构造里注册，所以起一个服务器就够——
+ * 不必装配整个 core。`/automation/*` 那十条今天没有写者，表里也没打标记。
+ */
+describe("hook 面的路由表", () => {
+  it("表里说答得出来的那些，构造之后真的有人接", () => {
+    const { server } = fixture();
+    const missing: string[] = [];
+    const undeclared: string[] = [];
+    for (const entry of ROUTES) {
+      if (entry.surface !== "hook") continue;
+      const has = entry.methods.some((method) =>
+        server.router.claimed(method, entry.path),
+      );
+      if (entry.implemented === true && !has) missing.push(entry.path);
+      if (entry.implemented !== true && has) undeclared.push(entry.path);
+    }
+    expect(missing, "写着已实现却没人注册").toEqual([]);
+    expect(undeclared, "答得出来却没打标记").toEqual([]);
   });
 });

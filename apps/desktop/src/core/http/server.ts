@@ -219,6 +219,11 @@ export class CoreServer {
     this.rawRoutes.sort((a, b) => b.prefix.length - a.prefix.length);
   }
 
+  /** 这条路径落在某个整段接管的前缀里（三张 JSON 面就是这么装的）。 */
+  rawHandled(path: string): boolean {
+    return this.rawRoutes.some((route) => path.startsWith(route.prefix));
+  }
+
   /**
    * The upgrade path. R0 accepts no stream yet — every WebSocket route in the
    * table belongs to R1 and later — so an upgrade is refused with the same
@@ -272,6 +277,11 @@ export class CoreServer {
    */
   stream(path: string, handler: StreamHandler, guard?: StreamGuard): void {
     this.streams.set(path, { open: handler, guard });
+  }
+
+  /** 这条路径有一个真的流在等升级。路由表的对账用例问的就是它。 */
+  streamed(path: string): boolean {
+    return this.streams.has(path);
   }
 
   /**

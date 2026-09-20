@@ -440,6 +440,7 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/api/workspaces/{workspaceId}/sessions",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/workspaces/{workspaceId}/events",
@@ -487,21 +488,25 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/api/power",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/power/leases",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/power/leases/{leaseId}",
     methods: ["DELETE"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/power/leases/{leaseId}/renew",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/control/confirm/{requestId}",
@@ -579,46 +584,55 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/api/terminals",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/terminals/backend",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/terminals/{sessionId}",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/terminals/{sessionId}/capture",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/terminals/{sessionId}/paste",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/terminals/{sessionId}/scroll",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/terminals/{sessionId}/terminate",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/terminals/{sessionId}/recycle",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/terminals/{sessionId}/ws",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/ssh/hosts/{hostId}/test",
@@ -880,11 +894,13 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/context-link/{verb}",
     methods: ["POST"],
     surface: "hook",
+    implemented: true,
   },
   {
     path: "/control/{verb}",
     methods: ["POST"],
     surface: "hook",
+    implemented: true,
   },
   {
     path: "/browser/{verb}",

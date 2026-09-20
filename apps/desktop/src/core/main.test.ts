@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { HelpRequested, type RunningCore, run, runtimeEndpoint } from "./main";
 import { read } from "./endpoints";
+import { ROUTES } from "./http/routes";
 import { parseAnnouncement } from "./instance";
 import { endpointsFile } from "./paths";
 
@@ -208,13 +209,44 @@ describe("what the core answers", () => {
 
   it("answers a route it has not written with 501 naming that path", async () => {
     const { core } = await start(temporary());
-    // 电源租约这一条在表里但还没写，所以它是唯一一处能观察到 501 的地方。
-    const response = await fetch(`${base(core)}/api/power`);
+    // askpass 那两条在表里但**故意**不在 HTTP 面上（助手走它自己的 0600 socket），
+    // 所以主监听器上能观察到 501 的只剩它们。
+    const response = await fetch(`${base(core)}/api/ssh/askpass/prompts/x`);
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
       code: "not_implemented",
-      message: "未实现：/api/power",
+      message: "未实现：/api/ssh/askpass/prompts/{promptId}",
     });
+  });
+
+  /**
+   * 路由表的 `implemented` 与装配之后的事实逐条对账。
+   *
+   * 这张表是页面用来分辨「该等」和「该改」的唯一依据，而它是手写的：一条真
+   * 答得出来却没打标记的路由会让人以为功能没做（打包验收时终端与 hook 面那
+   * 十几条就是这样），反过来一条打了标记却没人注册的路由会让页面撞上 501。
+   * 两种漂移都只在**装配之后**才看得见，所以这条用例起一个真 core。
+   */
+  it("路由表说答得出来的那些，装配之后真的有人接", async () => {
+    const { core } = await start(temporary());
+    // 三种装法都算：普通 handler、等升级的流，以及 GitHub / 自动化 / 身份那
+    // 三张整段接管前缀的 JSON 面。
+    const claimed = (entry: (typeof ROUTES)[number]): boolean =>
+      core.server.streamed(entry.path) ||
+      core.server.rawHandled(entry.path) ||
+      entry.methods.some((method) =>
+        core.server.router.claimed(method, entry.path),
+      );
+    const missing: string[] = [];
+    const undeclared: string[] = [];
+    for (const entry of ROUTES) {
+      if (entry.surface !== "runtime") continue;
+      const has = claimed(entry);
+      if (entry.implemented === true && !has) missing.push(entry.path);
+      if (entry.implemented !== true && has) undeclared.push(entry.path);
+    }
+    expect(missing, "写着已实现却没人注册").toEqual([]);
+    expect(undeclared, "答得出来却没打标记").toEqual([]);
   });
 
   it("answers a path nobody claimed with 404, not 501", async () => {
