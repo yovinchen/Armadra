@@ -103,6 +103,12 @@ export const modals: MessageModule = {
     "settings.autoTitle.label": "为占位标题自动生成名称",
     "settings.autoTitle.note":
       "只在标题仍是默认名时应用；你改过名之后不再覆盖。每个会话代次只生成一次。",
+    "settings.conversations": "会话索引",
+    "settings.conversations.scope": "索引范围",
+    "settings.conversations.scopeNote":
+      "命令面板能搜到哪些历史会话。只索引本应用工作空间下的那些会更快，也不会把别的项目摊在面前。",
+    "settings.conversations.scope.workspaces": "本应用的工作空间",
+    "settings.conversations.scope.all": "全部项目",
     "settings.customAgents": "自定义 Agent", // i18n-exempt
     "settings.customAgent.add": "添加",
     "settings.customAgent.new": "新建自定义 Agent", // i18n-exempt
@@ -381,6 +387,12 @@ export const modals: MessageModule = {
       "Name nodes that still carry a placeholder title",
     "settings.autoTitle.note":
       "Applies only while the title is still the default one, and never after you rename a node. Generated once per session generation.",
+    "settings.conversations": "Conversation index",
+    "settings.conversations.scope": "Index scope",
+    "settings.conversations.scopeNote":
+      "Which past sessions the command palette can find. Indexing only this app's workspaces is faster and keeps unrelated projects out of the list.",
+    "settings.conversations.scope.workspaces": "This app's workspaces",
+    "settings.conversations.scope.all": "All projects",
     "settings.customAgents": "Custom agents",
     "settings.customAgent.add": "Add",
     "settings.customAgent.new": "New custom agent",

@@ -42,6 +42,17 @@ import {
  * （apps/runtime/src/settings.rs），所以这里也用宽松 object：
  * 只校验我们要读的 `terminal` 段，其它键原样留着，免得新旧版本互删配置。
  */
+/**
+ * 命令面板列出多大范围的历史会话。
+ *
+ * `workspaces`（默认）只索引本应用工作空间根目录下跑过的那些；`all` 是磁盘上
+ * 所有项目。默认收着：一台开发机的 `~/.claude/projects` 装着所有仓库的历史，
+ * 把它们和这块画布的会话混在一起列，找起来比不列还慢。
+ */
+export const CONVERSATION_SCOPES = ["workspaces", "all"] as const;
+export const conversationScopeSchema = z.enum(CONVERSATION_SCOPES);
+export type ConversationScope = (typeof CONVERSATION_SCOPES)[number];
+
 export const runtimeSettingsSchema = z.looseObject({
   terminal: z
     .object({
@@ -137,6 +148,10 @@ export const runtimeSettingsSchema = z.looseObject({
     .optional(),
   /** 防休眠策略（T02，终端宿主设计 §9）；哪些来源的租约可以生效。 */
   power: z.looseObject({ policy: powerPolicySchema.optional() }).optional(),
+  /** 命令面板的会话索引扫多大一片。 */
+  conversations: z
+    .looseObject({ scope: conversationScopeSchema.optional() })
+    .optional(),
   /** 资源面板打开时的采样间隔；Runtime 侧会夹在 500ms–60s 之间。 */
   resources: z
     .looseObject({ intervalMs: z.number().int().positive().optional() })
@@ -203,6 +218,8 @@ export interface RuntimeSettingsPatch {
   };
   /** 防休眠策略（T02）。 */
   power?: { policy?: PowerPolicy };
+  /** 会话索引的范围。 */
+  conversations?: { scope?: ConversationScope };
   /** 资源面板采样间隔；Runtime 侧会夹回 500ms–60s。 */
   resources?: { intervalMs?: number };
   /**

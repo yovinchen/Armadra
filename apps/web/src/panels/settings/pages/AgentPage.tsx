@@ -23,6 +23,10 @@ import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
 import { useSubpage } from "../subpage";
 import { useRuntimeSettings } from "../use-runtime-settings";
+import {
+  CONVERSATION_SCOPES,
+  type ConversationScope,
+} from "../../../api/settings";
 import { CONTROL_WIDTH } from "./GeneralPage";
 import {
   AlertDialog,
@@ -260,6 +264,34 @@ export function AgentPage() {
             aria-label={t("settings.autoTitle.label")}
             onCheckedChange={setAutoTitle}
           />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.conversations")}>
+        <SettingsRow
+          label={t("settings.conversations.scope")}
+          footnote={t("settings.conversations.scopeNote")}
+        >
+          <Select
+            value={settings.data?.conversations?.scope ?? "workspaces"}
+            disabled={!settings.data}
+            onValueChange={(value) =>
+              save.mutate({
+                conversations: { scope: value as ConversationScope },
+              })
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {CONVERSATION_SCOPES.map((scope) => (
+                <SelectItem key={scope} value={scope}>
+                  {t(`settings.conversations.scope.${scope}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </SettingsRow>
       </SettingsGroup>
 
