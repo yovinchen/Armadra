@@ -229,11 +229,27 @@ export function WebviewGuest({
     const guest = ref.current;
     if (!guest || discarded) return;
     let release: (() => void) | null = null;
+    let registeredId: number | null = null;
+    /**
+     * 重新登记同一个 `webContentsId` **不能**先注销。
+     *
+     * 主进程那边「同 id 再登记」是幂等的：条目被替换，`GuestSession` 原样留着
+     * （`main/browser/registry.ts` 的注释写了这一条）。而注销是一次撤销——它
+     * 会 detach debugger 并把租约标成 `unregistered`，在途的动词当场收到
+     * `browser_lease_revoked`。
+     *
+     * `dom-ready` 每导航一次就来一发，于是「先注销再登记」的写法意味着
+     * **Agent 每次 `navigate` 都会撤销自己刚拿到的租约**：`Page.navigate` 之
+     * 后那 150 ms 的 settle 里 `dom-ready` 正好落下，紧接着的
+     * `Page.getLayoutMetrics` 就抛 `browser_lease_revoked: unregistered`。
+     * 所以只有 id 真的换了（回收后重挂、标签换 guest）才注销。
+     */
     const announce = () => {
       const webContentsId = guestWebContentsId(guest);
       if (webContentsId === undefined) return;
       const box = guest.getBoundingClientRect();
-      release?.();
+      if (registeredId !== null && registeredId !== webContentsId) release?.();
+      registeredId = webContentsId;
       release = registerGuest({
         webContentsId,
         nodeId,

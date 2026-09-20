@@ -492,3 +492,72 @@ describe("请求落不了地时不再静默", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `dom-ready` 每导航一次就来一发。
+ *
+ * 重新登记同一个 `webContentsId` 在主进程那边是幂等的（条目替换、
+ * `GuestSession` 留着）；**注销不是**——它 detach debugger 并把租约标成
+ * `unregistered`。所以「先注销再登记」意味着 Agent 每次 `navigate` 都会撤销
+ * 自己刚拿到的租约，在途动词收到 `browser_lease_revoked: unregistered`。
+ * 这两条钉住：同 id 不注销，换 id 才注销旧的那个。
+ */
+describe("guest 重新登记", () => {
+  const register = vi.fn(async () => ({ ok: true }));
+  const unregister = vi.fn(async () => ({ ok: true }));
+
+  beforeEach(() => {
+    register.mockClear();
+    unregister.mockClear();
+    (window as unknown as Record<string, unknown>).armadra = {
+      browser: {
+        register,
+        unregister,
+        view: vi.fn(async () => ({ ok: true })),
+        control: vi.fn(async () => ({ ok: true })),
+        onDrive: () => () => {},
+      },
+    };
+  });
+
+  function paintWithGuest(id: () => number): HTMLElement {
+    paint();
+    const guest = guests()[0]!;
+    (guest as unknown as { getWebContentsId: () => number }).getWebContentsId =
+      id;
+    return guest;
+  }
+
+  it("同一个 webContentsId 再次 dom-ready 时只重登记，不注销", () => {
+    const guest = paintWithGuest(() => 7);
+    act(() => {
+      guest.dispatchEvent(new Event("dom-ready"));
+      guest.dispatchEvent(new Event("dom-ready"));
+    });
+    expect(register).toHaveBeenCalled();
+    expect(
+      register.mock.calls.every(
+        ([call]) =>
+          (call as unknown as { webContentsId: number }).webContentsId === 7,
+      ),
+    ).toBe(true);
+    expect(unregister).not.toHaveBeenCalled();
+  });
+
+  it("webContentsId 换了才注销旧的那一个", () => {
+    let current = 7;
+    const guest = paintWithGuest(() => current);
+    act(() => {
+      guest.dispatchEvent(new Event("dom-ready"));
+    });
+    expect(unregister).not.toHaveBeenCalled();
+    current = 9;
+    act(() => {
+      guest.dispatchEvent(new Event("dom-ready"));
+    });
+    expect(unregister).toHaveBeenCalledWith(7);
+    expect(register).toHaveBeenCalledWith(
+      expect.objectContaining({ webContentsId: 9 }),
+    );
+  });
+});
