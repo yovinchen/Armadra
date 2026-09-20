@@ -241,11 +241,17 @@ export function saveBoard(
       throw conflict("Board changed since it was loaded; reload before saving");
     }
 
-    const storedEdgeIds = (
-      database
-        .prepare("SELECT id FROM edges WHERE board_id = ?")
-        .all(board.id) as unknown as { id: string }[]
-    ).map((row) => row.id);
+    const storedEdges = database
+      .prepare("SELECT id, role FROM edges WHERE board_id = ?")
+      .all(board.id) as unknown as { id: string; role: string }[];
+    const storedEdgeIds = storedEdges.map((row) => row.id);
+    // 一条边送上来时**没有** `role`，意思是「这一项我没有意见」，不是「把它
+    // 设回对等」。每一个还不认识这个字段的写者——一张旧的画布文档、一个还没
+    // 跟上的页面——否则都会在一次无关的保存里悄悄把主从关系抹平。同一条规矩
+    // 白板快照已经在用（省略即保留）。
+    const storedRoles = new Map(
+      storedEdges.map((row) => [row.id, row.role] as const),
+    );
     const storedNodeIds = (
       database
         .prepare("SELECT id FROM nodes WHERE board_id = ?")
@@ -324,7 +330,7 @@ export function saveBoard(
         edge.source,
         edge.target,
         edge.kind,
-        edge.role ?? "peer",
+        edge.role ?? storedRoles.get(edge.id) ?? "peer",
         edge.createdAt,
         edge.updatedAt,
       );

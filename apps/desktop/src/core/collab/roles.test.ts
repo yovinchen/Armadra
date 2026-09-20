@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type AgentFixture, agentFixture, callerFor } from "../agent/fixture";
-import { getContextLinks, nodeRole } from "../canvas/context-links";
-import { loadBoard } from "../canvas/documents";
+import {
+  getContextLinks,
+  nodeRole,
+  putContextLinks,
+} from "../canvas/context-links";
+import { loadBoard, saveBoard } from "../canvas/documents";
 import { agentEnvironment } from "../terminal/environment";
 import { freeLease } from "../drive/lease";
 import { controlDispatcher, type ControlOutcome } from "./control";
@@ -220,6 +224,33 @@ describe("what the model sees", () => {
     expect(
       agentEnvironment("n", "claude", "/tmp", "codex-1", "sub"),
     ).toContainEqual(["ARMADRA_NODE_ROLE", "sub"]);
+  });
+});
+
+describe("a writer that has never heard of roles", () => {
+  it("leaves the direction alone instead of flattening it", async () => {
+    ok(await run(main, "link", { from: main, to: sub, role: "supervises" }));
+    const document = loadBoard(
+      fixture.database,
+      fixture.workspaceId,
+      fixture.boardId,
+    );
+    // 页面每挪一次节点就重存整份文档，每动一条边就重推两份链接文档。缺字段是
+    // 「没有意见」，不是「设回对等」——否则一次无关的保存就抹平了主从。
+    saveBoard(fixture.database, fixture.workspaceId, fixture.boardId, {
+      expectedUpdatedAt: document.board.updatedAt,
+      nodes: document.nodes,
+      edges: document.edges.map(({ role: _role, ...rest }) => rest),
+      viewport: document.board.viewport,
+    });
+    putContextLinks(fixture.database, fixture.workspaceId, main, [
+      { id: sub, title: "Codex", kind: "terminal" },
+    ]);
+    expect(
+      loadBoard(fixture.database, fixture.workspaceId, fixture.boardId).edges[0]
+        ?.role,
+    ).toBe("supervises");
+    expect(getContextLinks(fixture.database, main).links[0]?.role).toBe("sub");
   });
 });
 

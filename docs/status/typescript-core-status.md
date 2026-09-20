@@ -1224,3 +1224,78 @@ releaseDrive(sessionId, actor): Lease;
 ### 25.5 一处已知的红，不是这一批的
 
 `packages/shared` 的 `test/usage-dashboard.test.ts` 有一条失败（`costSummarySchema` 现在要求 `ranges`，那条用例的夹具还没跟上），来自基线上的 `2af95490`，与本批无关。其余全绿：`@armadra/web`（264 个文件 2,608 条）、`@armadra/desktop`（core 1,942 条 + 脚本 38 条）、`@armadra/server`、`pnpm -r typecheck`、`pnpm check`。
+
+## 26. Agent 投递阶段 D：收件箱唤醒、带任务启动与连线的主从（2026-09-21）
+
+设计是 [Agent 之间的推式投递与终端驱动](../design/agent-delivery.md) §5、§8 与 §11 的「阶段 D」那张表；连线的主从是这一批追加的需求，设计文档里还没有它。
+
+### 26.1 收件箱唤醒：一条提示，同一条队列
+
+`post` 的失效方式不是「消息丢了」，是**没有人来读**：一个停在空闲提示符上的 CLI 不会自发去调 `inbox`（§1.3）。所以目标进入 `idle` 而信箱里还有未读时，core 往 `agent_send_queue` 里塞一条 `origin = 'mailbox-wake'`。
+
+| 项                          | 落点                                                                                  |
+| --------------------------- | ------------------------------------------------------------------------------------- |
+| 三档 `data.agent.inboxWake` | `off` 不做 / `notify` 投一行提示 / `deliver` 直接投最早那条未读的正文                 |
+| 缺省                        | **`notify`**（设计 §5 写的是 `off`，见 25.5 的偏差一）                                |
+| 同一批未读只提示一次        | 进程内记「已经为哪一批提示过」（那一批里最大的 `sequence`），外加五分钟窗口内的幂等键 |
+| 署名                        | `from: Armadra 收件箱 (<目标 id>)   via: 收件箱`——它不是一次 Agent 之间的对话         |
+| `deliver` 不替人 `ack`      | ack 的意思是「我接下了」；应用替人 ack 会让交接状态变成谎话                           |
+
+三条边界照设计：共用队列、共用容量、共用串行门、共用整条门链（人在打字就等，停在权限提示上就不写）；TTL 一样五分钟；`deliver` 读了不算确认。
+
+唯一加的一条是触发点。设计只说「进入 idle 时」，而一条投进**空闲**节点收件箱的消息不会让那个节点报任何状态——它本来就空着。只听 `agent.status` 的话，唤醒要等到它下一次跑完一轮，而那正是它最不需要被提醒的时刻。所以 `post` 落库即推一下泵（`CollabContext.nudge`，注入而不是 import：泵在 agent 域装配）。
+
+### 26.2 带任务启动：第一条任务与第二条任务是同一条路
+
+`--prompt` 删掉了，不是修好了。它今天整段丢失（§1.4 第一层），而修好它要同时修四处，只为保住一条本来就绕远的路。
+
+`canvas open-agent --agent codex --task '…'` 现在做四件事：建节点（启动行**不带任何提示词**）、从发起者建一条 `supervises` 边与两份链接文档、把任务作为 `origin = 'first-task'` 的排队项入队、等新节点报出第一条真正的 idle 由出队泵投进去。`--prompt` 过渡期等价并带 `warning: "--prompt 已更名为 --task"`。同批补上 `--permission-mode` 与 `--model`：页面用 `agent` 字段重拼启动行，字段不在，拼出来的就是一条什么都没带的裸线。
+
+### 26.3 启动参数表的两处错（§8.2 E1/E2）
+
+`launchCommand` 从原样的 `custom:foo` 查 `PROFILES`，而那张表里没有这个键——于是每一个自定义 Agent 都掉进位置参数分支。base 是 Copilot 的那个本该拿 `--interactive`，拿到的是裸位置参数，也就是 `-p`：非交互，跑完就退出。现在传 `settings`、走 `baseAgent`，与 `planLaunch` 同一条解析。
+
+`promptMode` 此前在 core 的 `CustomAgent` 上根本不存在，settings 读进来时还会把这个字段丢掉（重写设置文件就抹掉它）。补上之后 `stdin-after-start` 有了它唯一的意思：这条提示词不上启动行。六个内置项本身三方一致，由 `launch.test.ts` 的一条用例守着；指南那张表补了 `promptMode` 列。
+
+### 26.4 连线分主从
+
+一条边到 0023 为止只回答「有没有」。有了 `send` 之后这个答案不够用：把一段文字打进别人的终端并回车，在「我是你的主」和「我是你的下级」之间不是同一件事。
+
+| 落点         | 形状                                                                                                                        |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| 画布文档的边 | `edges.role`（迁移 `0024`）：`peer` 缺省、`supervises` 表示 `source` 是主、`target` 是从                                    |
+| 链接文档     | `ContextLink.role`：`peer` / `main`（它管你）/ `sub`（你管它）——同一条边两端互补的视角                                      |
+| `link`       | `--role peer\|supervises`，建边也改已有边的角色                                                                             |
+| `open-agent` | 建出来的节点是创建者的**从**：`--task` 本来就是一次自上而下的指派                                                           |
+| 从 → 主      | `send` / `interrupt` 回 `UPWARD_SEND_REFUSED`(403)；`post` 那条路一直开着                                                   |
+| 主自己开门   | 节点设置 `data.agent.acceptSubDelivery`，默认关                                                                             |
+| 模型看得见   | `context list` / `canvas list` 每行 `角色=`，收件箱每条 `fromRole`，`ARMADRA_NODE_ROLE` 给 `main` / `sub`（全对等时不注入） |
+| 主没了       | 边随节点级联删除，从的会话一动不动，残留的链接文档照旧被拒而不是崩                                                          |
+
+一条实现上的规矩值得记：**缺 `role` 是「没有意见」，不是「设回对等」。** 画布每挪一次节点就重存整份文档、每动一条边就重推两份链接文档，而页面那一半还没有这个字段——真机上第一次跑，`supervises` 在页面回存的一瞬间就被抹成了 `peer`。`saveBoard` 与 `putContextLinks` 现在对缺席的 `role` 保留库里那个（与白板快照「省略即保留」同一条规矩），重跑后主从活了下来。
+
+### 26.5 三处与设计的偏差
+
+1. **收件箱唤醒的缺省是 `notify` 而不是 `off`。** 设计 §5 那张表写的是 `off`。`post` 今天的失效方式不是「提示太吵」而是「没有人来读」，一个默认关掉、因而没有人会去打开的开关不解决那件事。关掉它仍然是一次设置的事。
+2. **「还没报过第一条」与「这个 CLI 没有状态通道」分开了。** 两者在 `stateSource` 上长得一模一样（都是空的），而 `attempt` 先问的是后者——真机第一次跑，新节点刚起 PTY、一行 `agent_status` 都还没有，第一条任务当场被 `TARGET_STATE_UNVERIFIED` 取消，而三秒后同一个节点报出了完好的 `hook` 状态。现在问的是注册表（这个 provider 有没有状态通道），有就排队等它的第一条上报；`TARGET_STATE_UNVERIFIED` 只留给真的没有适配的节点。
+3. **界面那一半没做。** 收件箱唤醒的三档开关、主从徽标、连线上的箭头都是 §10 / 阶段 E 的活；core 这一批只把字段与事件备好（边上的字段名就是 `role`，值 `peer` / `supervises`）。
+
+### 26.6 验收：真 Claude Code 2.1.260、真 Codex 0.155.1、真 PTY
+
+自己的一份实例，跑完按 PID 关掉并删干净：`ARMADRA_DATA_DIR=/tmp/armadra-phase-d`、`CLAUDE_CONFIG_DIR` / `CODEX_HOME` 各指一份 `/tmp` 下的副本（**不碰操作员的 `~/.claude` 与 `~/.codex`**，两个 CLI 的凭据是拷过去的）、`--remote-debugging-port=9498`、`--user-data-dir=/tmp/armadra-phase-d-electron`。库里 `migrations` 24 条。
+
+| 步骤 | 结果                                                                                                                                                                                                 |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ①    | Claude 自己执行 `canvas open-agent --agent codex --title codex-1 --task '在 /tmp 建 b.txt 写 hi'` → 新节点出现、`edges.role = supervises`、两份链接文档一个 `sub` 一个 `main`、队列一条 `first-task` |
+| ②    | 那条排队项停在 `TARGET_STARTING` 等着；Codex 报出第一条真正的 idle 的瞬间自动出队，信封 `from: planner … via: planner` 投进去，Codex 开了一轮并写出 `/tmp/b.txt`（内容 `hi`）                        |
+| ③    | Claude 的 `context list` 读回 `- codex-1 类型=terminal 角色=从（你管它） id=… `                                                                                                                      |
+| ④    | Claude `canvas post --to codex-1` → 空闲的 Codex 终端里当场出现 `from: Armadra 收件箱 … 收件箱有 1 条新消息，运行 armadra-hook canvas inbox 查看。最早一条来自 planner。`，它读了 inbox 并自己 ack   |
+| ⑤    | Codex 反过来 `canvas send --to planner` → `「planner」是你的主，下级不能把文字打进上级的终端；用 canvas post 留一条消息… (403)`                                                                      |
+
+两处真机才看得见的事都已经修进代码：25.5 的第 2 条（第一条任务被当场取消）与 25.4 最后一段（页面回存抹平主从）。
+
+一处等的时间比看起来长：④ 里唤醒先答了 `LEASE_HELD_BY_AGENT`——①投完之后 planner 的 Agent 租约还按 `AGENT_IDLE_SECONDS = 120` 压着那个终端，两分钟后租约自己过期、`terminal.lease` 的 `free` 推了泵一下，提示才投进去。这是对的（同一时刻只有一个驱动者），只是设计里没说唤醒也要排在它后面。
+
+### 26.7 一处已知的红
+
+`packages/shared` 的 `test/usage-dashboard.test.ts` 有一条 `ZodError`（`ranges` 缺失），在**未改动的基线上同样失败**，与本批无关。其余全绿：`@armadra/desktop`（2754 通过 / 6 跳过）、`@armadra/web`（2570）、`pnpm -r typecheck`、`pnpm check`。

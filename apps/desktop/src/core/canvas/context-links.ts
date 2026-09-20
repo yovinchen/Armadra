@@ -93,6 +93,20 @@ export function putContextLinks(
       }
     }
   }
+  // 一条链接送上来时**没有** `role`，意思是「这一项我没有意见」，不是「把它
+  // 设回对等」。画布每次动一条边都会重推这份文档，而还不认识这个字段的写者
+  // 否则会在一次无关的重推里悄悄把主从关系抹平（与 `saveBoard` 对边上那一列
+  // 的同一条规矩）。
+  const stored = new Map(
+    getContextLinks(database, nodeId).links.map(
+      (link) => [link.id, link.role] as const,
+    ),
+  );
+  const merged = links.map((link) => {
+    if (link.role !== undefined) return link;
+    const kept = stored.get(link.id);
+    return kept === undefined ? link : { ...link, role: kept };
+  });
   const now = rfc3339();
   database
     .prepare(
@@ -100,7 +114,7 @@ export function putContextLinks(
         "ON CONFLICT(node_id) DO UPDATE SET workspace_id = excluded.workspace_id, " +
         "links_json = excluded.links_json, updated_at = excluded.updated_at",
     )
-    .run(nodeId, workspaceId, JSON.stringify(links), now);
+    .run(nodeId, workspaceId, JSON.stringify(merged), now);
   return getContextLinks(database, nodeId);
 }
 
