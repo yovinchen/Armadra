@@ -533,6 +533,14 @@ export interface SessionSummary {
  * come from the database — a row can say `running` while the process behind it
  * belongs to a core that is no longer here, and only the manager knows which.
  *
+ * **One row per node.** A node accumulates a `terminal_sessions` row every
+ * time it is restarted, recycled or reclaimed after a crash, and the packaged
+ * build showed what listing all of them looks like: a Sessions panel where the
+ * same node appears four times and three of them are dead. The panel's
+ * question is "what is this node running *now*", which has exactly one answer
+ * — so each node keeps the session that is alive, and failing that the newest
+ * row, which is the one a reattach would pick up.
+ *
  * `agent_status` is R3's table but exists in the schema from migration 0001
  * onwards, so the join is written now and simply finds nothing until then.
  */
@@ -556,7 +564,21 @@ export function listSessions(
         ORDER BY s.created_at DESC LIMIT 500`,
     )
     .all(workspaceId) as Record<string, unknown>[];
-  return rows.map((row) => {
+  // 行按 `created_at DESC` 来，所以每个节点第一次见到的就是最新那行；后面的只
+  // 有在它活着而先前留下的那行已经死了的时候才顶掉它。
+  const perNode = new Map<string, Record<string, unknown>>();
+  for (const row of rows) {
+    const nodeId = String(row.node_id);
+    const kept = perNode.get(nodeId);
+    if (kept === undefined) {
+      perNode.set(nodeId, row);
+      continue;
+    }
+    if (!alive(String(kept.session_id)) && alive(String(row.session_id))) {
+      perNode.set(nodeId, row);
+    }
+  }
+  return [...perNode.values()].map((row) => {
     const sessionId = String(row.session_id);
     const agentId =
       (row.status_agent_id as string | null) ??
