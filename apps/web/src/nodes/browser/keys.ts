@@ -1,5 +1,7 @@
+import { commandKeys, matchKeyboardEvent } from "@/keybindings";
+
 /**
- * 从 guest 里回来的那一下按键，在宿主页面上重放。
+ * 从 guest 里回来的那一下按键，谁来接。
  *
  * guest 是另一个渲染进程，所以焦点在网页里时，`use-keybindings.ts` 里那个
  * 全应用唯一的捕获阶段 `keydown` 监听器**根本不会运行**——⌘K / ⌘P / ⌘T 在
@@ -75,4 +77,41 @@ export function replayChord(
   if (!target) return false;
   target.dispatchEvent(chordEvent(chord));
   return true;
+}
+
+/* ----------------------------- 节点内的那几条 ----------------------------- */
+
+/**
+ * `scope: "browser"` 的四条命令。
+ *
+ * 它们**不能**靠重放来触发，原因在 `apps/web/src/app/use-app-keybindings.ts:69-75`：
+ * 那个全应用唯一的派发器给 `COMMANDS` 里**每一条** id 都装了处理函数，装在
+ * `window` 上。捕获阶段从外往里走，于是它先命中、`preventDefault` +
+ * `stopPropagation`，再调 `dispatch.run("browser.reload")`——而那条 id 不在
+ * 画布命令注册表里，`runCanvasCommand` 静默返回 false。节点自己那个装在子树
+ * 根上的监听器**永远收不到这一下**。
+ *
+ * 所以转发回来的和弦先在这里对一次键位表：命中 `browser.*` 的直接交给节点的
+ * 处理函数，其余的才重放给上面那个派发器。对的是**生效中的**键位
+ * （`commandKeys` 读的是 `setActiveKeymap` 推进去的那一份），所以用户在设置
+ * 里改过键，这里跟着改。
+ */
+export const BROWSER_NODE_COMMANDS = [
+  "browser.reload",
+  "browser.back",
+  "browser.forward",
+  "browser.focusAddress",
+] as const;
+
+export type BrowserNodeCommand = (typeof BROWSER_NODE_COMMANDS)[number];
+
+/** 这一下和弦是哪一条节点内命令，都不是就 `null`。 */
+export function browserCommandFor(
+  chord: ForwardedChord,
+): BrowserNodeCommand | null {
+  const event = chordEvent(chord);
+  for (const id of BROWSER_NODE_COMMANDS) {
+    if (matchKeyboardEvent(event, commandKeys(id))) return id;
+  }
+  return null;
 }

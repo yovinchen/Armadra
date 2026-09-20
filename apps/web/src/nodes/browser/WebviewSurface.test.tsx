@@ -626,6 +626,40 @@ describe("guest 回来的事件", () => {
     }
   });
 
+  it("节点自己的那四条直接调，不走重放", () => {
+    /*
+      重放到不了它们：应用那个派发器在 window 上给每一条 id 都装了处理函数，
+      捕获阶段先命中、stopPropagation，节点自己的监听器收不到（`./keys`）。
+      所以这一条断言的是「没有重放，但事情做了」。
+    */
+    paint();
+    const guest = guests()[0]!;
+    const reload = vi.fn();
+    (guest as unknown as { reload: () => void }).reload = reload;
+    act(() => {
+      guest.dispatchEvent(new Event("did-stop-loading"));
+    });
+    const seen: Event[] = [];
+    const listener = (event: Event) => seen.push(event);
+    window.addEventListener("keydown", listener, true);
+    try {
+      act(() => {
+        // jsdom 不是 mac，所以 `Mod+R` 在这里是 Ctrl+R。
+        drive!({
+          kind: "key",
+          nodeId: "b1",
+          key: "r",
+          code: "KeyR",
+          control: true,
+        });
+      });
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(seen).toHaveLength(0);
+    } finally {
+      window.removeEventListener("keydown", listener, true);
+    }
+  });
+
   it("别的节点的和弦不在这里重放", () => {
     paint();
     const seen: Event[] = [];

@@ -31,7 +31,12 @@ import {
   humanBytes,
   parseDownloadNotice,
 } from "./downloads";
-import { parseForwardedChord, replayChord } from "./keys";
+import {
+  browserCommandFor,
+  parseForwardedChord,
+  replayChord,
+  type BrowserNodeCommand,
+} from "./keys";
 import { browserPartition, searchOrUrl } from "./webview";
 import type { WebviewElement } from "./webview";
 import { MAX_TABS, useWebviewTabs } from "./webview-tabs";
@@ -67,6 +72,13 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
    * 次渲染之后才挂上的。
    */
   const keyboardRootRef = React.useRef<HTMLElement | null>(null);
+  /**
+   * 本节点那四条命令的处理函数。用 ref 出于和上面一样的理由：`useDrive` 的
+   * 回调在订阅那一刻被捕获，而这几个闭包每次渲染都是新的。
+   */
+  const nodeCommandsRef = React.useRef<
+    Partial<Record<BrowserNodeCommand, () => void>>
+  >({});
   const guestRefs = React.useRef(new Map<string, WebviewElement | null>());
 
   /* ------------------------------ 驱动通道 ------------------------------- */
@@ -133,13 +145,21 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
       tabs.close(tabId);
     },
     /*
-      guest 里按下的一个属于 Armadra 的和弦。重放在**节点自己的键盘根**上，
-      于是 `when` 上下文就是「焦点在一个浏览器节点里」——那本来就是事实
-      （`./keys`）。
+      guest 里按下的一个属于 Armadra 的和弦。
+
+      两条路，顺序不能换：本节点自己的那四条（刷新 / 前进 / 后退 / 地址栏）
+      **直接调**，因为重放它们到不了这里——`./keys` 的注释写了那个派发器为什
+      么会先把它们吃掉。其余的重放在节点的键盘根上，交给应用那一层。
     */
     onKey: (raw) => {
       const chord = parseForwardedChord(raw);
-      if (chord) replayChord(keyboardRootRef.current, chord);
+      if (!chord) return;
+      const command = browserCommandFor(chord);
+      if (command) {
+        nodeCommandsRef.current[command]?.();
+        return;
+      }
+      replayChord(keyboardRootRef.current, chord);
     },
     /*
       人自己点下来的一个下载，主进程已经存好了。这里只负责说一声，并给出
@@ -221,12 +241,11 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
   const [keyboardRoot, setKeyboardRoot] = React.useState<HTMLElement | null>(
     null,
   );
-  useKeybindings(
-    {
-      "browser.reload": () => reloadOrStop(),
-      "browser.back": () => step(-1),
-      "browser.forward": () => step(1),
-      /*
+  const nodeCommands = {
+    "browser.reload": () => reloadOrStop(),
+    "browser.back": () => step(-1),
+    "browser.forward": () => step(1),
+    /*
         三步，一步都不能少。真机上 ⌘L 从 guest 转发回来时：
 
         1. `blur()` 那个 `<webview>`。宿主文档的 `activeElement` 就是这个元
@@ -236,14 +255,23 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
         2. `focus()`，因为 `select()` 在一个没有焦点的 input 上只选中文字。
         3. `select()`，这样直接打字就是换地址，而不是在旧地址中间插字。
       */
-      "browser.focusAddress": () => {
-        guestOf(tabs.activeId)?.blur();
-        addressRef.current?.focus();
-        addressRef.current?.select();
-      },
+    "browser.focusAddress": () => {
+      guestOf(tabs.activeId)?.blur();
+      addressRef.current?.focus();
+      addressRef.current?.select();
     },
-    { scopes: ["browser"], target: keyboardRoot },
-  );
+  };
+  nodeCommandsRef.current = nodeCommands;
+  /*
+    键盘焦点已经在宿主里时（人点过工具栏或地址栏）走这一条。它在真机上
+    多半接不到东西——`./keys` 里那段注释说的那个派发器会先吃掉这几个和弦
+    ——留着是因为它是这几条命令**唯一**与键位表对上号的声明，而且焦点从
+    guest 回来之后的行为不应该依赖转发那条路还在。
+  */
+  useKeybindings(nodeCommands, {
+    scopes: ["browser"],
+    target: keyboardRoot,
+  });
 
   /**
    * Stop 一路走到 Runtime 的租约状态机，不在这里停。
