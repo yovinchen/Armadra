@@ -432,7 +432,17 @@ export function install(
         "action 只能是 takeover 或 release",
       );
     }
-    const actor = humanActor("local", "");
+    // 「谁在交还」不是「谁按了按钮」。人的抢占是**敲键那一侧**记下的，持有者
+    // 于是是那条 socket 的设备 id，而按钮来自同一个人的另一条路（HTTP）。按
+    // `local` 去交还会被状态机当成「放别人的租约」而拒绝，于是按钮一按什么都
+    // 不发生——真机上就是这么撞出来的。所以这里认的是**当前持有者**：这台壳
+    // 前面只有一个人，他敲键与他按钮是同一个人。Agent 的租约不在此列，它仍然
+    // 只能由 Agent 自己放掉，或者由人「接管」撤销。
+    const held = manager.driveLease(sessionId).holder;
+    const actor =
+      held?.kind === "human"
+        ? humanActor(held.id, held.displayName)
+        : humanActor("local", "");
     const lease =
       action === "takeover"
         ? manager.takeoverDrive(sessionId, actor)

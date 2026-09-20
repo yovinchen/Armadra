@@ -262,6 +262,21 @@ describeUnix("the terminal routes", () => {
       (await core_.call("POST", `/api/terminals/${id}/drive`, { action: "x" }))
         .status,
     ).toBe(400);
+
+    // 人敲键抢占的那把租约记在**那条 socket 的设备 id** 上，而按钮来自同一个
+    // 人的另一条路。按 `local` 去交还会被当成「放别人的租约」，按钮就成了一个
+    // 什么都不做的按钮——真机上撞出来的那一条。
+    await core_.call("POST", `/api/terminals/${id}/paste`, {
+      text: "半行",
+      enter: false,
+    });
+    const preempted = await core_.call("GET", `/api/terminals/${id}`);
+    expect(preempted.status).toBe(200);
+    const handedBack = await core_.call("POST", `/api/terminals/${id}/drive`, {
+      action: "release",
+    });
+    expect(handedBack.status).toBe(200);
+    expect((handedBack.body as { state: string }).state).toBe("free");
     expect(
       (
         await core_.call("POST", "/api/terminals/nobody/drive", {
