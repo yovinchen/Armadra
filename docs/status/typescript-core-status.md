@@ -1091,3 +1091,85 @@ releaseDrive(sessionId, actor): Lease;
 | `ARMADRA_NODE_NAME`             | 改名后新起的会话里 `echo "NODE_NAME=[$ARMADRA_NODE_NAME]"` 回显 `NODE_NAME=[codex-1]` |
 
 **没验到的一条：从把手拖一条线出来。** 这套 CDP 夹具里拖拽落不成边，而仓库自带的 `tools/probes/connection-drag.mjs` 在**未改动的代码**上同样 0/3（按下那一刻指针确实在把手上，松手在目标节点内，边数仍是 0）——是夹具或 Chrome 侧的既有问题，不是本批引入的。所以验收里那条边改用 `canvas link` 建，命名对话框走节点菜单里的「名字…」——它与拉线落点是同一条 `requestNodeNames` 通道，只是入口不同。拉线那条入口由 `canvas/flow/use-flow-nodes.test.ts` 的用例守。
+
+## 24. Agent 投递阶段 C：`send` 与投递队列（2026-09-21）
+
+设计是 [Agent 之间的推式投递与终端驱动](../design/agent-delivery.md) §3、§4.6、§7 与 §11 的「阶段 C」那张表。阶段 B 留下的三个接口（`driveTarget` / `writeSubmit` / 租约）这一批第一次有了调用者。
+
+### 24.1 三个动词，一条门链
+
+`VERBS` 从 14 个变成 17 个：`send` / `outbox` / `cancel`。HTTP 面不用改——`/control/{verb}` 是一条通配路由，动词表在协作域，`armadra-hook canvas <verb>` 的客户端也从不校验动词名。
+
+门链在 `core/collab/control/send.ts`，顺序是「从便宜且与此刻无关，走到贵且只在此刻成立」：
+
+| 段         | 判什么                                | 拒绝码                                                           |
+| ---------- | ------------------------------------- | ---------------------------------------------------------------- |
+| 连线       | 目标在调用者自己的链接文档里          | `NOT_LINKED`                                                     |
+| 资格       | 同工作空间、双方 `contextLink`、scope | `NOT_LINKED` / `TARGET_NOT_TERMINAL` / `DRIVE_DENIED`            |
+| 正文       | 控制字符、2000 字符、幂等键           | `BODY_TOO_LONG` / `KEY_CONFLICT`                                 |
+| 失控闸     | 环、跳数、每边 10 秒、一轮四个目标    | `LOOP_DETECTED` / `RATE_LIMITED`                                 |
+| 会话与前台 | 有活着的会话，前台仍是它声称的 Agent  | `TARGET_GONE` / `TARGET_NOT_AGENT_PANE`                          |
+| 五态       | `idle` 投，其余排队或拒绝             | `TARGET_BUSY` / `TARGET_STARTING` / `TARGET_AWAITING_APPROVAL`   |
+| 状态来源   | `observed` 与空不满足空闲门           | `TARGET_STATE_UNVERIFIED`（`--unverified` 才走 `observedQuiet`） |
+| 租约       | 人在打字、人接管、别的 Agent 在驱动   | `LEASE_HELD_BY_HUMAN` / `LEASE_REVOKED` / `LEASE_HELD_BY_AGENT`  |
+
+前五条之外的那几条**出队时重跑一遍**，而且是同一段代码：`attempt()` 既是 `send` 的后半段，也是出队泵唯一调用的东西。一条排了两分钟的指令，投出去时世界早就不是它入队时的样子了——连线可以被删掉，能力位可以被关掉。环与跳数不重跑：那是消息自己的属性，入队时是什么出队时还是什么。
+
+回执按 `outcome` 分支，不解析文案：
+
+```json
+{"ok":true,"protocol":"armadra.delivery.v1","outcome":"delivered","id":"…","traceId":"…","traced":"file","targetState":"idle","bodyChars":24,"hops":1}
+{"ok":true,"protocol":"armadra.delivery.v1","outcome":"queued","id":"…","queuePosition":1,"expiresAt":…,"reason":"LEASE_HELD_BY_HUMAN","targetState":"idle"}
+{"code":"TARGET_AWAITING_APPROVAL","message":"…","retryable":false}
+```
+
+`reason` 是排队回执里新增的一项：设计给了「忙就排队」，但**为什么**排队是调用者唯一能据以决定「等还是改用 post」的信息，而它正好就是 `agent_send_queue.last_reason` 那一列。拒绝体里的 `retryable` / `retryAfterMs` 走 `Refused.detail`，由 hook 桥摊平在 `{code, message}` 旁边——一个要靠解析中文句子才能知道该退避多久的调用者，没有退避，只有猜测。
+
+### 24.2 队列是一张表，容量与插入是同一条 SQL
+
+迁移 `0023_agent_send_queue.sql`，字节记进 `migrations.lock`。
+
+一条 `send` 不管投没投出去都在这张表里留一行：直接投出去的落 `done`，排队的落 `queued`。不是记账癖——`--key` 的幂等要对**两种**结果都成立，而「已经投过了」的证据只能来自一张表；出队重跑门链时走的也是同一行。幂等在速率闸**之前**回答：一次重发不是一次新的投递，撞上 `RATE_LIMITED` 的话「同 key 同正文重发是安全的」这句话就不成立了。
+
+两处并发只能靠 SQL：
+
+- **容量**：`INSERT OR IGNORE … SELECT … WHERE (SELECT COUNT(*) …) < 16`，与 `mailbox.ts` 同一手法。用例并发投二十条，十六条进队、四条 `QUEUE_FULL`。
+- **串行**：`UPDATE … SET state='delivering' WHERE state='queued' AND NOT EXISTS (… state='delivering' …)`。同一目标同时只有一条在投。
+
+速率、扇出与来源链都**不落盘**（`core/collab/send-limits.ts`）。重启后窗口重来、链清空，最坏是多放行一条；而一个能活过重启的环，第二跳一样会被拦下。
+
+### 24.3 出队由事件驱动，两种事件
+
+不轮询队列。触发有两个，第二个是真机上撞出来的：
+
+1. `agent.status` —— 目标报了一条状态。同一条事件同时回答「谁的一轮结束了」（发起者的扇出计数清零）与「谁空出来了」。
+2. `terminal.lease` 的 `free` —— 人抢占之后停手十秒，租约自己过期。**目标那一侧此时什么都不会报**（它本来就空闲着，没有新的一轮），只听状态事件的话「停手十秒后自动投进去」会等一个永远不来的事件。这条是验收第三步当场卡住才发现的，有一条同名用例守着。
+
+唯一的定时器是每 60 秒一次的过期清扫，它做的是相反的事：让一条永远等不到 idle 的排队项有明确的死亡时刻。
+
+`agent_deliveries`（迁移 0006）重新有了写者，`agent.delivery` 事件同批发出去。同一个理由的重复等待只记一次：一条排了两分钟的指令会被每一次 `agent.status` 试一遍，每次都记一行的话，连线上那一下闪动说的就不再是「发生了一件事」而是「泵跑了一圈」。
+
+### 24.4 验收：真 Claude Code、真 Codex、真 PTY
+
+`ARMADRA_DATA_DIR=/tmp/armadra-phase-c`、`--listen tcp:127.0.0.1:60916`，画布上一个 `planner`（真 Claude Code）与两个 `codex-1` / `codex-2`（真 Codex 0.155.1），三条连线。跑完按 PID 关掉并删掉数据目录。
+
+| 步骤 | 结果                                                                                                                                                                                                                                                  |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ①    | Claude 自己执行 `armadra-hook canvas send --to codex-1 --body "在当前目录建一个 a.txt，内容写 hello"`，回执是 `queued`（那一刻 `codex-1` 还没报过第一条状态）；它报出第一条 `done` 的瞬间队列自动出队，Codex 开了一轮并写出了 `a.txt`（内容 `hello`） |
+| ②    | 同一条走完了「忙→排队→空闲→自动投」的整条路；重启 core 之后排队项还在，但 `restored` 的 `done` 不算新鲜 idle，等到一条真上报才投——与 §4.1、Q4 一致                                                                                                    |
+| ③    | 人在 `codex-2` 里敲半行（走 WebSocket 的 `input` 帧，页面用的那条路）→ 回执 `queued` + `reason: LEASE_HELD_BY_HUMAN`；停手十秒后租约过期，正文自动投进去并开了一轮                                                                                    |
+| ④    | `codex-2` 停在 `blocked` 上，三种参数组合各试一次：默认 `queued/TARGET_AWAITING_APPROVAL`、`--no-queue` 409、`--interrupt` 409（连 `ESC` 都没发）。终端上那个问题**没有被回答**，composer 一个字节没变                                                |
+| ⑤    | `planner → codex-2` 投成之后，`codex-2 → planner` 当场 `LOOP_DETECTED`：「已经在这条消息的来源链里（planner → codex-2）」                                                                                                                             |
+| 附   | 紧接着再投同一条边 → `RATE_LIMITED`「3 秒后再来」；`canvas outbox` / `cancel --id` 都答得对                                                                                                                                                           |
+
+三处与设计脚本的偏差，都记在这里：
+
+1. **④ 的权限提示是上报出来的，不是 Codex 自己弹的。** 手上这台机器的 Codex 在几种写法下都没有弹出权限对话（它直接跑或直接用散文反问），所以那一条 `PermissionRequest` 是用**真的 `armadra-hook` 客户端**、真的 hook socket、真的归一化路径送进去的——除了「谁触发了它」之外每一段都是真的。屏幕上那个未被回答的提问是真的。
+2. **⑤ 在第二跳就被拦下，不是第四跳。** 设计 §7 写明「环……这比跳数更早生效」，而两个节点互投的环在第二跳就闭合了。规则没变，脚本那句话描述的是一条更长的链。
+3. **界面那一半没做。** 节点头的「排队 N」、连线上的闪动、顶部通知条都是 §10 / 阶段 E 的活；这一批只发事件（`agent.delivery`）。
+
+一处已知的糙：③ 里人的半行还留在 composer 里，Agent 的正文接在它后面粘了进去（`我在打半行--- ARMADRA MESSAGE …`）。租约只回答「现在轮到谁」，不回答「那一行清干净了没有」；`InputSafety.pending` 知道这件事，但设计没有把它接到 `send` 的门链上，这里也就没接。
+
+### 24.5 两处已知的红
+
+`0021` 归并行的另一条线（阶段 A 的名字表），本分支里没有它，所以 `pnpm repo:check` 报「迁移编号不连续」，`db/migrations.test.ts` 与 `db/unified.test.ts` 里那两条「连续序列」断言同因失败。两条线合到一起即消失。其余全绿：`@armadra/desktop`（2691 通过 / 2 失败即上述两条）、`@armadra/web`（2553）、`pnpm -r typecheck`、`format:check`。
