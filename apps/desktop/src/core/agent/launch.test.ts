@@ -12,6 +12,7 @@ import {
   launchCommand,
   paneRunsAgent,
   planLaunch,
+  promptModeFor,
   supportedPermissionModes,
 } from "./launch";
 import { AGENT_REGISTRY } from "./registry";
@@ -113,18 +114,74 @@ describe("launch parameters", () => {
   });
 
   it("quotes the shell line `open-agent` writes into a node", () => {
-    expect(launchCommand("claude", undefined)).toBe("claude");
-    expect(launchCommand("claude", "  ")).toBe("claude");
-    expect(launchCommand("claude", "build it")).toBe("claude 'build it'");
-    expect(launchCommand("opencode", "build it")).toBe(
+    expect(launchCommand(NO_CUSTOM, "claude", undefined)).toBe("claude");
+    expect(launchCommand(NO_CUSTOM, "claude", "  ")).toBe("claude");
+    expect(launchCommand(NO_CUSTOM, "claude", "build it")).toBe(
+      "claude 'build it'",
+    );
+    expect(launchCommand(NO_CUSTOM, "opencode", "build it")).toBe(
       "opencode --prompt 'build it'",
     );
-    expect(launchCommand("copilot", "build it")).toBe(
+    expect(launchCommand(NO_CUSTOM, "copilot", "build it")).toBe(
       "copilot --interactive 'build it'",
     );
-    expect(launchCommand("custom:wrapper", "x")).toBe("wrapper 'x'");
+    // A `custom:` id with no settings row has no base, and therefore no known
+    // prompt shape. It still starts — the program name is all the id carries —
+    // but nothing is guessed onto its line, the same rule `hasCapability`
+    // applies to an entry whose base is unknown.
+    expect(launchCommand(NO_CUSTOM, "custom:wrapper", "x")).toBe("wrapper");
     // A quote in the prompt closes and reopens rather than escaping the line.
-    expect(launchCommand("claude", "it's")).toBe("claude 'it'\\''s'");
+    expect(launchCommand(NO_CUSTOM, "claude", "it's")).toBe(
+      "claude 'it'\\''s'",
+    );
+  });
+
+  // 设计 agent-delivery.md §8.2 E1：`custom:` 的 id 在 `PROFILES` 里没有行，
+  // 从原样的 id 解析提示词形状会把每一个自定义 Agent 都丢进位置参数分支——而
+  // base 是 Copilot 的那个，裸位置参数就是 `-p`：非交互，跑完就退出。
+  it("gives a custom entry its base's prompt shape, not a bare positional", () => {
+    const settings = withCustom({
+      id: "custom:cop",
+      label: "Cop",
+      launchCmd: "/opt/cop",
+      baseAgent: "copilot",
+      args: [],
+    });
+    expect(launchCommand(settings, "custom:cop", "do it")).toBe(
+      "/opt/cop --interactive 'do it'",
+    );
+    expect(
+      planLaunch(settings, { agentId: "custom:cop", prompt: "do it" }).args,
+    ).toEqual(["--interactive", "do it"]);
+  });
+
+  // E2：`stdin-after-start` 是一句「这条命令行不是投递通道」的声明。
+  it("keeps a stdin-after-start entry's prompt off the launch line", () => {
+    const settings = withCustom({
+      id: "custom:tui",
+      label: "Tui",
+      launchCmd: "tui",
+      baseAgent: "claude",
+      args: [],
+      promptMode: "stdin-after-start",
+    });
+    expect(launchCommand(settings, "custom:tui", "do it")).toBe("tui");
+    const plan = planLaunch(settings, {
+      agentId: "custom:tui",
+      prompt: "do it",
+    });
+    expect(plan.args).toEqual([]);
+    expect(plan.omitted).toContain("promptNotOnLaunchLine");
+  });
+
+  // 三份表对「第一条提示词」的说法必须一致（§8.2 的那张核对表）。
+  it("agrees with the registry on every built-in's prompt shape", () => {
+    for (const agent of AGENT_REGISTRY) {
+      expect(promptModeFor(NO_CUSTOM, agent.id)).toBe(agent.promptMode);
+      const line = launchCommand(NO_CUSTOM, agent.id, "x");
+      expect(line.startsWith(`${agent.launchCmd} `)).toBe(true);
+      expect(line.endsWith("'x'")).toBe(true);
+    }
   });
 
   it("names the program a pane must still be running", () => {

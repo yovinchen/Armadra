@@ -42,6 +42,19 @@ export const AGENT_CAPABILITIES = [
   "supportsModelSelection",
 ] as const;
 
+/**
+ * How the first prompt reaches a custom entry's CLI, mirroring
+ * `customAgentSchema.promptMode` in `packages/shared`. An entry that declares
+ * `stdin-after-start` must never see its prompt on the launch line.
+ */
+export const PROMPT_MODES = [
+  "argv",
+  "flag-prompt",
+  "stdin-after-start",
+] as const;
+
+export type PromptMode = (typeof PROMPT_MODES)[number];
+
 /** How many custom agents a settings file may hold. */
 export const MAX_CUSTOM_AGENTS = 64;
 const MAX_CUSTOM_LABEL = 80;
@@ -65,6 +78,8 @@ export interface CustomAgent {
   readonly env: Readonly<Record<string, string>>;
   readonly baseAgent: string;
   readonly disabledCapabilities: readonly string[];
+  /** Overrides the base adapter's prompt shape; absent means "inherit". */
+  readonly promptMode?: PromptMode;
 }
 
 /**
@@ -164,6 +179,16 @@ export function sanitizeCustomAgent(raw: JsonValue): CustomAgent | undefined {
         .slice(0, AGENT_CAPABILITIES.length)
     : [];
 
+  // An unreadable value inherits the base's shape rather than dropping the
+  // agent: "I do not understand this field" is not a reason to make the CLI
+  // unstartable.
+  const rawPromptMode = trimmed(raw, "promptMode");
+  const promptMode = (PROMPT_MODES as readonly string[]).includes(
+    rawPromptMode ?? "",
+  )
+    ? (rawPromptMode as PromptMode)
+    : undefined;
+
   return {
     id,
     label,
@@ -173,6 +198,7 @@ export function sanitizeCustomAgent(raw: JsonValue): CustomAgent | undefined {
     env,
     baseAgent,
     disabledCapabilities,
+    ...(promptMode === undefined ? {} : { promptMode }),
   };
 }
 
@@ -214,6 +240,7 @@ export function customAgentToJson(agent: CustomAgent): JsonObject {
   if (agent.disabledCapabilities.length > 0) {
     json.disabledCapabilities = [...agent.disabledCapabilities];
   }
+  if (agent.promptMode !== undefined) json.promptMode = agent.promptMode;
   return json;
 }
 

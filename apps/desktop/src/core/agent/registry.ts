@@ -254,6 +254,15 @@ export interface CustomAgent {
   readonly env?: Readonly<Record<string, string>>;
   readonly baseAgent: string;
   readonly disabledCapabilities?: readonly string[];
+  /**
+   * How this entry's first prompt reaches it, overriding its base's shape.
+   *
+   * `packages/shared` has carried this field since custom agents existed
+   * (`customAgentSchema`); the core did not, so an entry that declared
+   * `stdin-after-start` — "never put it on the launch line" — got its prompt
+   * put on the launch line (设计 `agent-delivery.md` §8.2 E2).
+   */
+  readonly promptMode?: "argv" | "flag-prompt" | "stdin-after-start";
 }
 
 /** The settings this domain reads. Injected, so a test can pass a literal. */

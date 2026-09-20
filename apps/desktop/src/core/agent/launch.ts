@@ -42,6 +42,22 @@ export const PERMISSION_MODES = [
 
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
+/**
+ * How the first prompt reaches a CLI, mirroring `packages/shared`'s
+ * `PROMPT_MODES`:
+ *
+ *   * `argv`               positional argument on the launch line;
+ *   * `flag-prompt`        behind a dedicated flag ({@link LaunchProfile.promptFlag});
+ *   * `stdin-after-start`  typed into the TUI once it is up, never on the line.
+ */
+export const PROMPT_MODES = [
+  "argv",
+  "flag-prompt",
+  "stdin-after-start",
+] as const;
+
+export type PromptMode = (typeof PROMPT_MODES)[number];
+
 /** How a CLI is told to continue an existing session. */
 export type ResumeStyle =
   /** `claude --resume <id>` — a flag anywhere after the program. */
@@ -268,8 +284,20 @@ export function planLaunch(
 
   const prompt = request.prompt?.trim();
   if (prompt !== undefined && prompt !== "") {
-    if (profile.promptFlag !== undefined) args.push(profile.promptFlag);
-    args.push(prompt);
+    // The same three shapes `launchCommand` uses, for the same reason: a CLI
+    // that declares `stdin-after-start` is saying the launch line is the one
+    // place this text must not go (§8.2 E2).
+    switch (promptModeFor(settings, request.agentId)) {
+      case "flag-prompt":
+        args.push(profile.promptFlag ?? "--prompt", prompt);
+        break;
+      case "argv":
+        args.push(prompt);
+        break;
+      default:
+        omitted.push("promptNotOnLaunchLine");
+        break;
+    }
   }
 
   return { program, args, omitted };
@@ -280,23 +308,61 @@ export function planLaunch(
  *
  * A shell line rather than argv, because the terminal node types it into a
  * shell rather than exec'ing it — which is also why the prompt is single
- * quoted. The core only knows the program and the prompt flag here; the model
+ * quoted. The core only knows the program and the prompt shape here; the model
  * and the permission mode are the canvas's business and arrive through
  * {@link planLaunch} when the user starts the session.
+ *
+ * `settings` is not decoration (设计 `agent-delivery.md` §8.2 E1/E2). A
+ * `custom:` id has no row in {@link PROFILES}, so resolving the prompt shape
+ * from the raw id used to drop every custom entry into the positional branch:
+ * an entry whose base is Copilot got a bare positional argument, which on that
+ * CLI means `-p` — non-interactive, and gone as soon as it finishes. The base
+ * is resolved the same way {@link planLaunch} resolves it, and the entry's own
+ * `promptMode` wins over the base's, exactly as `packages/shared` reads it.
+ *
+ * `stdin-after-start` produces **no prompt on the line at all**: that mode is
+ * a declaration that this CLI can only be told things after its TUI is up, so
+ * putting the text on the launch line is the one thing it says not to do.
  */
 export function launchCommand(
+  settings: AgentSettings,
   agentId: string,
-  prompt: string | undefined,
+  prompt?: string,
 ): string {
-  const program = agentId.startsWith("custom:")
-    ? agentId.slice("custom:".length)
-    : (definition(agentId)?.launchCmd ?? agentId);
+  const custom = customAgent(settings, agentId);
+  const base = baseAgent(settings, agentId);
+  const program =
+    custom?.launchCmd ??
+    (agentId.startsWith("custom:")
+      ? agentId.slice("custom:".length)
+      : (definition(agentId)?.launchCmd ?? agentId));
   const text = prompt?.trim();
   if (text === undefined || text === "") return program;
-  const flag = PROFILES[agentId]?.promptFlag;
-  return flag === undefined
+  const mode = promptModeFor(settings, agentId);
+  if (mode === "stdin-after-start") return program;
+  const flag = PROFILES[base]?.promptFlag;
+  return flag === undefined || mode !== "flag-prompt"
     ? `${program} ${quote(text)}`
     : `${program} ${flag} ${quote(text)}`;
+}
+
+/**
+ * How the first prompt reaches this id's CLI, custom entries included.
+ *
+ * Mirrors `packages/shared`'s `custom?.promptMode ?? base.promptMode`; a
+ * custom entry whose base is unknown has no shape at all, and an unknown shape
+ * is treated as "nothing on the line" rather than guessed into a positional.
+ */
+export function promptModeFor(
+  settings: AgentSettings,
+  agentId: string,
+): PromptMode {
+  const custom = customAgent(settings, agentId);
+  if (custom?.promptMode !== undefined) return custom.promptMode;
+  const mode = definition(baseAgent(settings, agentId))?.promptMode;
+  return (PROMPT_MODES as readonly string[]).includes(mode ?? "")
+    ? (mode as PromptMode)
+    : "stdin-after-start";
 }
 
 /** Single quotes, because the line is typed into a shell rather than exec'd. */
