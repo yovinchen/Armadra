@@ -142,8 +142,19 @@ describe("the import routes", () => {
       { "content-type": "multipart/form-data; boundary=b" },
     );
     expect(created.status).toBe(200);
-    const workspace = created.body as { name: string; rootPath: string };
+    const workspace = created.body as {
+      name: string;
+      rootPath: string;
+      permissions: { read: boolean; write: boolean; execute: boolean };
+    };
     expect(workspace.name).toBe("Dropped");
+    // The same grants "open this folder" gives: a project that arrived by
+    // drag must not be one whose Git panel and terminals answer 403.
+    expect(workspace.permissions).toEqual({
+      read: true,
+      write: true,
+      execute: true,
+    });
     // The copies land in the core's own data directory, never at a path the
     // browser named.
     expect(

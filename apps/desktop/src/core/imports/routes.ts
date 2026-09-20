@@ -67,7 +67,16 @@ export function install(context: CoreContext): void {
         throw error;
       }
       created = batch.commitWorkspace((path) =>
-        createWorkspace(database, { name, rootPath: path }),
+        createWorkspace(database, {
+          name,
+          rootPath: path,
+          // The same grants "open this folder" gives. This row is minted here
+          // rather than by the browser, and leaving the table's defaults
+          // meant a project that arrived by drag had no execute grant: its
+          // Git panel, its terminals and its agents all answered 403, while
+          // the same project opened by path worked.
+          permissions: { read: true, write: true, execute: true },
+        }),
       );
       return { status: 200, body: created };
     }),
