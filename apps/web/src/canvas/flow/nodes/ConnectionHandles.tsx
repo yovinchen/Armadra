@@ -1,5 +1,11 @@
-import type { CSSProperties } from "react";
-import { Handle, Position, useConnection } from "@xyflow/react";
+import { type CSSProperties, useEffect } from "react";
+import {
+  Handle,
+  Position,
+  useConnection,
+  useNodeId,
+  useUpdateNodeInternals,
+} from "@xyflow/react";
 
 import { useT } from "@/app/preferences-store";
 
@@ -16,6 +22,13 @@ import { useT } from "@/app/preferences-store";
  *     完全透明，**只在有连线正在进行时**才接指针事件。这样拖过来的线可以
  *     落在节点身上的任何位置（不必精确瞄准 6px 的圆点），而平时它不存在，
  *     终端的点击、编辑器的选区、按钮全都照常。
+ *
+ * **挂上以后要让 RF 重新量一次把手。** RF 只在节点第一次量尺寸、以及尺寸变了
+ * 的时候记录 `handleBounds`；而节点体按种类懒加载（`ArmadraNode` 的
+ * Suspense），终端、编辑器这些自己渲染 `NodeShell` 的类型，把手随节点体一起
+ * 晚到——第一个该种类的节点被量的时候一个把手都还没有，`handleBounds` 空着，
+ * 从它身上起笔时 `XYHandle.onPointerDown` 找不到把手就静默返回：圆点看得见、
+ * 拖不出线。`useUpdateNodeInternals` 在把手挂上那一刻补量一次。
  *
  * 落点把手为什么不能只靠 `connectionRadius`：那是按把手**中心**算距离的，
  * 24px 之外就吸不上；一个 800×400 的终端，从右边拖过来时最近的左把手中心
@@ -61,6 +74,11 @@ export function ConnectionHandles({
   // 只订阅「有没有连线在进行中」这一个布尔量：连线过程中指针每动一下
   // `ConnectionState` 都在变，整份订阅会让画布上每个节点跟着重渲。
   const connecting = useConnection((connection) => connection.inProgress);
+  const nodeId = useNodeId();
+  const updateNodeInternals = useUpdateNodeInternals();
+  useEffect(() => {
+    if (nodeId !== null) updateNodeInternals(nodeId);
+  }, [nodeId, dropOnly, updateNodeInternals]);
 
   return (
     <>

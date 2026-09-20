@@ -1,9 +1,15 @@
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 
 import { installDomPolyfills } from "@/app/test-harness";
 import { renderFlow } from "@/canvas/test-support";
 import { ConnectionHandles } from "./ConnectionHandles";
+
+const updateNodeInternals = vi.fn();
+vi.mock("@xyflow/react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@xyflow/react")>()),
+  useUpdateNodeInternals: () => updateNodeInternals,
+}));
 
 /**
  * 节点的连线端口（React Flow 计划 §2.5 / F06）。
@@ -97,5 +103,17 @@ describe("分组（只有落点）", () => {
     expect(anchor.style.pointerEvents).toBe("none");
     expect(anchor.classList.contains("connectablestart")).toBe(false);
     expect(anchor.classList.contains("connectableend")).toBe(false);
+  });
+});
+
+describe("挂上以后补量一次", () => {
+  /**
+   * 节点体懒加载，把手随它晚到；RF 只在节点第一次量尺寸时记 `handleBounds`。
+   * 不补量，第一个该种类的节点圆点看得见、拖不出线。
+   */
+  it("把手挂上那一刻让 RF 重新量这个节点", () => {
+    updateNodeInternals.mockClear();
+    renderFlow(<ConnectionHandles />, { nodeId: "late-node" });
+    expect(updateNodeInternals).toHaveBeenCalledWith("late-node");
   });
 });
