@@ -9,6 +9,11 @@ import {
   guestContextMenu,
   inspectElementPoint,
 } from "../../shell-core/browser/context-menu";
+import {
+  forwardedChord,
+  guestKeyRoute,
+} from "../../shell-core/browser/guest-keys";
+import { claimKeyIntent } from "../menu";
 import { publishEvent, setPublisher } from "./bus";
 import { attachCount, sentMethods } from "./cdp";
 import { startDriveServer, type DriveServer } from "./drive-server";
@@ -206,8 +211,24 @@ function wireGuest(contents: WebContents, nodeId: string): void {
   // frame stream's upstream input as the source of "a human did something
   // here": it fires in the main process for real keyboard and mouse input into
   // the guest, which no longer travels through the Runtime at all.
-  contents.on("before-input-event", () => {
+  //
+  // It is also the ONLY place an application chord typed inside a guest can be
+  // caught. A guest is its own renderer, so the host page's capture-phase
+  // `keydown` listener never runs for it: ⌘K, ⌘P and ⌘T did nothing until you
+  // clicked back onto the canvas, and ⌘W did nothing at all. `guestKeyRoute`
+  // decides, and everything it does not claim stays with the web page
+  // untouched — no `preventDefault`, so typing and the page's own clipboard,
+  // find and zoom chords are unaffected.
+  contents.on("before-input-event", (event, input) => {
     publishEvent({ type: "event", event: "humanInput", nodeId });
+    const route = guestKeyRoute(input, process.platform);
+    if (route === "page") return;
+    event.preventDefault();
+    if (route === "intent") {
+      claimKeyIntent("close-window");
+      return;
+    }
+    tellRenderer({ kind: "key", ...forwardedChord(input, nodeId) });
   });
   contents.on("focus", () => {
     publishEvent({ type: "event", event: "humanFocus", nodeId });
@@ -235,6 +256,12 @@ function wireGuest(contents: WebContents, nodeId: string): void {
         suggestedFilename: download.suggestedFilename,
         bytes: download.bytes,
       });
+    },
+    // The person's own download goes to the PAGE, not to the Runtime: nobody
+    // asked for it on the agent surface, and the only thing to do about it is
+    // to say so on the canvas and offer to open the folder.
+    (notice) => {
+      tellRenderer({ kind: "download", ...notice });
     },
   );
 }

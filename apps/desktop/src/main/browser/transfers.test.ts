@@ -55,6 +55,9 @@ class FakeItem {
   getTotalBytes() {
     return 7;
   }
+  getReceivedBytes() {
+    return 7;
+  }
   setSavePath(path: string) {
     this.savePath = path;
   }
@@ -97,6 +100,7 @@ let root = "";
 let dataDir = "";
 let downloads = "";
 const announced: { id: string; state: string }[] = [];
+const toPerson: { state: string; filename: string; path: string }[] = [];
 
 /** webContents 1 is driven by an agent; 2 is a person's own tab. */
 const AGENT_CONTENTS = 1;
@@ -108,6 +112,12 @@ function watch(session: FakeSession): void {
     () => "node-1",
     (id) => id === AGENT_CONTENTS,
     (record) => announced.push({ id: record.id, state: record.state }),
+    (notice) =>
+      toPerson.push({
+        state: notice.state,
+        filename: notice.filename,
+        path: notice.path,
+      }),
   );
 }
 
@@ -118,6 +128,7 @@ beforeEach(() => {
   mkdirSync(dataDir, { recursive: true });
   mkdirSync(downloads, { recursive: true });
   announced.length = 0;
+  toPerson.length = 0;
   configureStaging(dataDir, downloads);
 });
 
@@ -150,6 +161,42 @@ describe("a download a person started", () => {
 
     expect(item.savePath).toBe(join(downloads, "report (1).pdf"));
     expect(existsSync(join(downloads, "report.pdf"))).toBe(true);
+  });
+
+  it("is announced to the PAGE when it lands, with the path to reveal", () => {
+    // Without this the file arrives somewhere nobody mentioned: this path had
+    // no announcement at all, and the product has no downloads list to look in.
+    const session = new FakeSession();
+    watch(session);
+    const item = new FakeItem("report.pdf");
+    session.start(item, HUMAN_CONTENTS);
+    expect(toPerson).toEqual([]);
+
+    item.finish();
+    expect(toPerson).toEqual([
+      {
+        state: "completed",
+        filename: "report.pdf",
+        path: join(downloads, "report.pdf"),
+      },
+    ]);
+    // And never onto the agent surface: nobody asked for it there.
+    expect(announced).toEqual([]);
+  });
+
+  it("reports an interrupted download without a path", () => {
+    // There is nothing to reveal, so offering "show in folder" would open a
+    // window on a file that does not exist.
+    const session = new FakeSession();
+    watch(session);
+    const item = new FakeItem("report.pdf");
+    session.start(item, HUMAN_CONTENTS);
+    item.finish("interrupted");
+    expect(toPerson[0]).toEqual({
+      state: "interrupted",
+      filename: "report.pdf",
+      path: "",
+    });
   });
 
   it("never enters the agent's queue", () => {

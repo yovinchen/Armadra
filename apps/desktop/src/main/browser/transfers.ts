@@ -44,6 +44,17 @@ import { CdpRefusal } from "./cdp";
  *     `STAGING_MAX_AGE_MS` is swept at startup.
  */
 
+/** What the renderer is told about a download a PERSON started. */
+export interface UserDownloadNotice {
+  readonly nodeId: string;
+  /** Electron's own word: `completed` / `cancelled` / `interrupted`. */
+  readonly state: string;
+  readonly filename: string;
+  /** Absolute path, or `""` when nothing was written. */
+  readonly path: string;
+  readonly bytes: number;
+}
+
 export interface StagedDownload {
   readonly id: string;
   readonly nodeId: string;
@@ -111,6 +122,18 @@ export function watchDownloads(
   nodeIdFor: (webContentsId: number) => string | null,
   agentDriven: (webContentsId: number) => boolean,
   announce: (download: StagedDownload) => void,
+  /**
+   * A PERSON'S download reached its end. Separate from `announce`, which
+   * carries an agent's staged one to the Runtime: these two downloads differ
+   * in who started them, where the bytes went and who may be told, so one
+   * callback for both would have to re-derive that distinction downstream
+   * from a flag — and getting that flag backwards would announce an unapproved
+   * file as saved.
+   *
+   * Optional so the existing tests, which are about staging, keep calling this
+   * with four arguments.
+   */
+  announceUserDownload?: (notice: UserDownloadNotice) => void,
 ): void {
   if (watched.has(guestSession)) return;
   watched.add(guestSession);
@@ -127,13 +150,25 @@ export function watchDownloads(
     // attaches to a guest. No lease means the keyboard and the mouse in front
     // of the window are the only thing that could have started this.
     if (contents && downloadsDirectory !== "" && !agentDriven(contents.id)) {
-      item.setSavePath(
-        uniqueDownloadPath(
-          downloadsDirectory,
-          userDownloadName(item.getFilename()),
-          existsSync,
-        ),
+      const savePath = uniqueDownloadPath(
+        downloadsDirectory,
+        userDownloadName(item.getFilename()),
+        existsSync,
       );
+      item.setSavePath(savePath);
+      // Say so when it lands. A file that arrived somewhere nobody mentioned
+      // is, from where the person is sitting, a download that did not happen:
+      // this path had no announcement at all, and the product has no downloads
+      // list to go and look in.
+      item.once("done", (_done, state) => {
+        announceUserDownload?.({
+          nodeId,
+          state,
+          filename: basename(savePath),
+          path: state === "completed" ? savePath : "",
+          bytes: item.getReceivedBytes(),
+        });
+      });
       return;
     }
     const id = randomUUID();
