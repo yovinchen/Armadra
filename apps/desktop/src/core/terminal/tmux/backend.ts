@@ -35,6 +35,7 @@ import {
   TmuxControl,
   coreFingerprint,
   parseAliveLine,
+  enterOnly,
   pastePlan,
 } from "./control";
 import { detect, ensureConf } from "./config";
@@ -347,11 +348,20 @@ export class TmuxBackend implements TerminalBackend, AdoptableBackend {
     pressEnter: boolean,
   ): Promise<void> {
     const session = this.require(key);
+    const payload = sanitizePaste(text);
+    // Nothing to load. `load-buffer` of an empty file creates no buffer at
+    // all, and the `paste-buffer -b` that follows then fails with "no buffer"
+    // — a 500 for a request whose only real instruction was "press Enter".
+    // The direct backend has always accepted this, so the two agree here.
+    if (payload === "") {
+      if (pressEnter) await this.control.run(enterOnly(session.name));
+      return;
+    }
     const buffer = `armadra-${randomUUID().replaceAll("-", "")}`;
     const file = join(tmpdir(), `${buffer}.txt`);
     // 0600 at open time: the text is the user's, and the temporary directory
     // is world-readable.
-    writeSecret(file, sanitizePaste(text));
+    writeSecret(file, payload);
     hardenFile(file);
     try {
       for (const args of pastePlan(buffer, file, session.name, pressEnter)) {

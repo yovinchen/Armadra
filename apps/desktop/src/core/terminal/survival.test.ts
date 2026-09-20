@@ -166,6 +166,39 @@ describeTmux("a tmux session outliving the core", () => {
   }, 60_000);
 
   /**
+   * A paste whose text is empty, against a real tmux server.
+   *
+   * `load-buffer` of an empty file creates no buffer, so the `paste-buffer -b`
+   * behind it failed with "no buffer" and the route answered 500 — for a
+   * request whose only real instruction was "press Enter". An empty clipboard
+   * and a bare confirmation both produce exactly this call, and the direct
+   * backend has always accepted it.
+   */
+  it("presses Enter for an empty paste instead of failing", async () => {
+    const one = core();
+    const session = await one.manager.spawn({
+      workspaceId: "ws",
+      cwd: one.directory,
+      command: "/bin/sh",
+      args: ["-c", "read line; printf 'read-[%s]\\n' \"$line\"; sleep 120"],
+    });
+
+    await one.manager.paste(session.id, "typed-first", false);
+    // No text, Enter only: this is what submits the line above.
+    await expect(
+      one.manager.paste(session.id, "", true),
+    ).resolves.toBeUndefined();
+    await until(
+      async () =>
+        (await one.manager.capture(session.id, 200, false)).data.includes(
+          "read-[typed-first]",
+        ),
+      "the shell to see the line the empty paste submitted",
+    );
+    await one.manager.terminate(session.id, "session");
+  }, 60_000);
+
+  /**
    * The other half of §15.2: a row whose tmux session is gone is settled, and
    * an `armadra-*` session no row points at is destroyed. Nothing else would
    * ever reclaim the second one — only its own name can address it.

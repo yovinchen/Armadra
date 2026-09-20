@@ -20,7 +20,12 @@ import {
   parseVersion,
   renderedConf,
 } from "./config";
-import { LIST_ALIVE_FORMAT, parseAliveLine, pastePlan } from "./control";
+import {
+  LIST_ALIVE_FORMAT,
+  enterOnly,
+  parseAliveLine,
+  pastePlan,
+} from "./control";
 import { TmuxBackend } from "./backend";
 
 /**
@@ -198,6 +203,20 @@ describe("the paste plan", () => {
     expect(
       pastePlan("armadra-buf", "/tmp/armadra-buf.txt", "s", false),
     ).toHaveLength(2);
+  });
+
+  /**
+   * The Enter of an empty paste is the whole request. `load-buffer` of an
+   * empty file creates no buffer, so the `paste-buffer -b` behind it used to
+   * fail with "no buffer" and the route answered 500 — for "press Enter".
+   */
+  it("presses Enter on its own, with no buffer to load", () => {
+    expect(enterOnly("armadra-session")).toEqual([
+      "send-keys",
+      "-t",
+      "armadra-session",
+      "Enter",
+    ]);
   });
 });
 

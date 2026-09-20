@@ -72,8 +72,19 @@ export function pastePlan(
       session,
     ],
   ];
-  if (pressEnter) plan.push(["send-keys", "-t", session, "Enter"]);
+  if (pressEnter) plan.push(enterOnly(session));
   return plan;
+}
+
+/**
+ * The Enter of a paste, on its own.
+ *
+ * A paste whose text is empty still has to press the key: "submit what is
+ * already on the line" is a real request, and it is the one an empty clipboard
+ * or a bare confirmation makes. There is no buffer to load for it.
+ */
+export function enterOnly(session: string): string[] {
+  return ["send-keys", "-t", session, "Enter"];
 }
 
 /** One `list-sessions -F LIST_ALIVE_FORMAT` line. */
