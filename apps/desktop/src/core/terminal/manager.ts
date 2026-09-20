@@ -15,6 +15,9 @@ import {
   notFound,
   persistent,
   sessionKey,
+  PASTE_END,
+  PASTE_START,
+  sanitizePaste,
   TerminalError,
 } from "./backend";
 import { AttachmentBook } from "./attachments";
@@ -37,6 +40,15 @@ import {
   reconcile,
 } from "./gc";
 import { audit } from "../identity/audit";
+import { type Actor, type Lease, freeLease } from "../drive/lease";
+import { loadSession } from "../collab/nodes";
+import {
+  DRIVE_SWEEP_INTERVAL_MS,
+  TerminalDriveBook,
+  type DriveSessionRef,
+} from "./drive";
+import { getAgentStatus } from "../agent/status";
+import { type TargetState, targetState } from "../agent/target-state";
 import { allows } from "../identity/gate";
 import { scope } from "../identity/scopes";
 import {
@@ -98,6 +110,22 @@ export interface TerminalSession {
   readonly generation: number;
   readonly attachState: string;
   readonly lastOutputAt: string | null;
+}
+
+/**
+ * 一次投递要知道的全部（设计 `agent-delivery.md` §4 / §6）：目标在五态里的
+ * 哪一个、租约在谁手里、代次是几。留给阶段 C 的 `send`。
+ */
+export interface DriveTarget {
+  readonly nodeId: string;
+  /** 这个节点当前那个终端会话；没有会话时缺席，此时 `state` 是 `exited`。 */
+  readonly sessionId?: string;
+  readonly state: TargetState;
+  /** 状态是从哪条通道学来的；`observed` 与缺席都不满足空闲门（§4.3）。 */
+  readonly stateSource?: string;
+  readonly lease: Lease;
+  /** `terminal_sessions.drive_generation`，乐观并发用的那个数。 */
+  readonly driveGeneration: number;
 }
 
 export interface SpawnRequest {
@@ -170,6 +198,16 @@ export interface TerminalManagerOptions {
     nodeId: string | null;
     exitCode: number | null;
   }) => void;
+  /**
+   * 驱动租约换手了（设计 `agent-delivery.md` §6）。抢占、接管、自然过期各一
+   * 帧，节点头的徽标从这里同步。
+   */
+  readonly onLease?: (event: {
+    workspaceId: string;
+    sessionId: string;
+    nodeId: string | null;
+    lease: Lease;
+  }) => void;
 }
 
 const DEFAULT_POLICY = {
@@ -188,6 +226,8 @@ export class TerminalManager {
   private readonly inputs = new InputLedger();
   /** 会话的创建者，`terminal:drive` 判定的另一半。 */
   private readonly drive = new DriveBook();
+  /** 现在谁在驱动这块屏幕（设计 `agent-delivery.md` §6）。 */
+  private readonly drives: TerminalDriveBook;
   private readonly timers: NodeJS.Timeout[] = [];
   private readonly lastRowWrite = new Map<string, number>();
   private readonly now: () => string;
@@ -213,6 +253,18 @@ export class TerminalManager {
     this.policy = options.policy ?? (() => DEFAULT_POLICY);
     this.onExit = options.onExit;
     this.attachments = new AttachmentBook(this.clock);
+    this.drives = new TerminalDriveBook({
+      database: this.database,
+      now: () => new Date(this.clock()),
+      onChange: (session, lease) => {
+        options.onLease?.({
+          workspaceId: session.workspaceId,
+          sessionId: session.sessionId,
+          nodeId: session.nodeId,
+          lease,
+        });
+      },
+    });
     for (const [kind, backend] of this.backends) {
       backend.notices((notice) => {
         void this.noticed(kind, notice);
@@ -348,6 +400,11 @@ export class TerminalManager {
       }
     });
     every(DORMANCY_INTERVAL_MS, () => this.applyDormancy());
+    // 「停手十秒自动恢复」要在没有任何输入的情况下发生，所以租约得有人来看
+    // 一眼；显式接管没有窗口，扫不到它。
+    every(DRIVE_SWEEP_INTERVAL_MS, async () => {
+      this.sweepDrives();
+    });
   }
 
   /* -------------------------------- lifecycle ------------------------------ */
@@ -511,6 +568,7 @@ export class TerminalManager {
       // half-typed line and what the previous process was doing all belong to
       // a pty that no longer exists.
       this.inputs.forget(sessionId);
+      this.drives.forget(sessionId);
       this.remember({
         ...record,
         kind,
@@ -531,6 +589,7 @@ export class TerminalManager {
     // 创建者今天恒为本机 owner（空串）。会话与工作空间的这一对是 drive 判定
     // 的输入：向别人开的终端写入要 `terminal:drive@那块画布`。
     this.drive.remember(record.id, record.workspaceId);
+    this.drives.remember(record.id, driveRef(record));
     this.attachments.register(record.id);
     this.records.set(record.id, record);
   }
@@ -542,6 +601,8 @@ export class TerminalManager {
     this.attachments.forget(sessionId);
     this.lastRowWrite.delete(sessionId);
     this.drive.forget(sessionId);
+    // 租约的对象是一个 PTY 会话：那个进程没了，谁在驱动它这个问题就不存在了。
+    this.drives.forget(sessionId);
     // The marks describe a pty that no longer exists. Keeping them would let a
     // later session with the same id claim input it never wrote.
     this.inputs.forget(sessionId);
@@ -670,6 +731,7 @@ export class TerminalManager {
     generation: number,
     data: string,
     writer?: TerminalWriter,
+    driver?: Actor,
   ): Promise<void> {
     const first = this.checked(sessionId, generation);
     // `terminal:drive` 的判定入口（设计 §4.4）：写入者 ≠ 会话创建者时才要这条
@@ -700,6 +762,7 @@ export class TerminalManager {
         detail: { creator: this.drive.creator(sessionId) ?? "" },
       });
     }
+    this.noteDrive(sessionId, driver);
     return this.withKey(first.key, async () => {
       const record = this.checked(sessionId, generation);
       const bytes = Buffer.from(data, "utf8");
@@ -736,8 +799,10 @@ export class TerminalManager {
     sessionId: string,
     text: string,
     pressEnter: boolean,
+    driver?: Actor,
   ): Promise<void> {
     const first = this.require(sessionId);
+    this.noteDrive(sessionId, driver);
     return this.withKey(first.key, async () => {
       const record = this.require(sessionId);
       this.noteInput(record, Buffer.from(text, "utf8"));
@@ -771,6 +836,115 @@ export class TerminalManager {
   async foreground(sessionId: string): Promise<ForegroundInfo> {
     const record = this.require(sessionId);
     return this.backend(record.kind).getForeground(record.key);
+  }
+
+  /**
+   * 驱动租约，挂在输入这条路上（设计 `agent-delivery.md` §6.1）。
+   *
+   * 「敲了一个键」的判据用的就是终端域已有的那条输入路径——`noteInput` 本来
+   * 就在每次按键时更新 `lastActivity`，租约的抢占挂在同一处，不新增一条观测。
+   *
+   * 人与 Agent 在这里分叉，而且只在这里：
+   *
+   *   * 人敲键是**抢占**，永不失败。人在自己的终端前面打字是他自己的事，因为
+   *     一把软租约而把一次按键弹回去，是给用户造一个他无法解释的故障；
+   *     Agent 的下一次动作会从状态机那里被告知为什么（`LEASE_HELD_BY_HUMAN`）。
+   *   * Agent 被拒就是被拒，立刻抛，且**在写入之前**。
+   *
+   * `driver` 缺席表示调用方没说自己是谁（今天的 `bridge.write` 就是这样）：
+   * 不碰租约，行为与本阶段之前一字不差。阶段 C 的 `send` 会显式带上它自己的
+   * Agent 身份。
+   */
+  private noteDrive(sessionId: string, driver: Actor | undefined): void {
+    if (driver === undefined) return;
+    const grant = this.drives.request(sessionId, driver);
+    if (driver.kind === "human") return;
+    const code = this.drives.code(grant);
+    if (code === undefined) return;
+    throw new TerminalError(409, "conflict", this.drives.refusal(code));
+  }
+
+  /**
+   * 放掉空闲窗口已经过去的租约，返回放掉了几把。
+   *
+   * 定时跑一遍，因为「人停手十秒自动恢复」必须在没有任何输入的情况下发生：
+   * 没有这一遍，徽标要等下一次有人写入才翻得回去。
+   */
+  sweepDrives(): number {
+    return this.drives.expire();
+  }
+
+  /** 现在谁在驱动这个会话。没记过的会话答一个空闲的租约。 */
+  driveLease(sessionId: string): Lease {
+    return this.drives.lease(sessionId);
+  }
+
+  /**
+   * 人按「接管」：Agent 一律被拒直到交还，不自动恢复（§6.1）。写一条
+   * `terminal.takeover` 审计。
+   */
+  takeoverDrive(sessionId: string, actor: Actor, principalId = ""): Lease {
+    this.drives.takeover(sessionId, actor, principalId);
+    return this.drives.lease(sessionId);
+  }
+
+  /** 交还，或者 Agent 放掉自己的。 */
+  releaseDrive(sessionId: string, actor: Actor): Lease {
+    this.drives.release(sessionId, actor);
+    return this.drives.lease(sessionId);
+  }
+
+  /* ----------------------------- 留给阶段 C 的 ----------------------------- */
+
+  /**
+   * 一次投递要知道的全部：目标现在是五态里的哪一个、租约在谁手里、代次是几。
+   *
+   * 本阶段只提供，不调用（§11 阶段 B）。`send` 的门链在阶段 C 落地，它要的就是
+   * 这一个对象——把它放在这里，是为了让「现在谁在驱动、能不能投」只有一个答案。
+   */
+  driveTarget(nodeId: string): DriveTarget {
+    const session = loadSession(this.database, nodeId);
+    const sessionId = session?.sessionId;
+    const live =
+      sessionId === undefined ? undefined : this.generation(sessionId);
+    const status = getAgentStatus(this.database, nodeId);
+    return {
+      nodeId,
+      ...(sessionId === undefined ? {} : { sessionId }),
+      state: targetState(status, live),
+      ...(status?.stateSource === undefined
+        ? {}
+        : { stateSource: status.stateSource }),
+      lease:
+        sessionId === undefined ? freeLease(0) : this.drives.lease(sessionId),
+      driveGeneration:
+        sessionId === undefined ? 0 : this.drives.generation(sessionId),
+    };
+  }
+
+  /**
+   * 写进去**并回车**，一次 `write`。
+   *
+   * 括号粘贴的包裹与 `\r` 必须是同一次写：分两次写的话，CLI 会在收到回车之前
+   * 先看到一个没有结尾的粘贴，多行正文会一行一行地自己提交出去
+   * （`schedule/dispatch.ts` 记着这个坑，设计 §3.6 与 §11 阶段 C 的风险项）。
+   * 所以这条原语存在的全部意义，就是那个拼接**只有一处**。
+   *
+   * 本阶段只提供，不调用。
+   */
+  async writeSubmit(
+    sessionId: string,
+    generation: number,
+    text: string,
+    driver?: Actor,
+  ): Promise<void> {
+    await this.input(
+      sessionId,
+      generation,
+      `${PASTE_START}${sanitizePaste(text)}${PASTE_END}\r`,
+      undefined,
+      driver,
+    );
   }
 
   private noteInput(record: SessionRecord, bytes: Buffer): void {
@@ -1149,4 +1323,9 @@ export class TerminalManager {
     );
     return next;
   }
+}
+
+/** 事件要带的那点身份：租约属于会话，徽标画在节点上。 */
+function driveRef(record: SessionRecord): DriveSessionRef {
+  return { workspaceId: record.workspaceId, nodeId: record.ownerNodeId };
 }

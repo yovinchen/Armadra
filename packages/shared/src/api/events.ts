@@ -11,6 +11,7 @@ import {
   browserSessionSchema,
   browserTabListSchema,
 } from "./browser.js";
+import { driveLeaseSchema } from "./drive.js";
 import { fileChangeKindSchema } from "./files.js";
 import {
   languageServerEventSchema,
@@ -47,6 +48,19 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     sessionId: z.string(),
     nodeId: z.string().optional(),
     exitCode: z.number().int().nullable().optional(),
+  }),
+  /**
+   * 终端的驱动权换手了（`agent-delivery.md` §6）。
+   *
+   * 与 `browser.lease` 同形状、同四个错误码：节点头的徽标从这里同步，而不是
+   * 各自根据「我刚才敲过」推断谁在驱动。`nodeId` 在会话属于一个画布节点时才
+   * 有——一个不属于任何节点的终端没有节点头可画。
+   */
+  z.object({
+    type: z.literal("terminal.lease"),
+    sessionId: z.string(),
+    nodeId: z.string().optional(),
+    lease: driveLeaseSchema,
   }),
   z.object({
     type: z.literal("board.changed"),
@@ -194,6 +208,10 @@ export type LanguageServerWorkspaceEvent = Extract<
 export type ResourceSampleEvent = Extract<
   WorkspaceEvent,
   { type: "resource.sample" }
+>;
+export type TerminalLeaseEvent = Extract<
+  WorkspaceEvent,
+  { type: "terminal.lease" }
 >;
 export type BrowserLeaseEvent = Extract<
   WorkspaceEvent,

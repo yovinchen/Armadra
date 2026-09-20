@@ -69,6 +69,17 @@ export interface WorkspaceEventPayloads {
     readonly nodeId?: string;
     readonly exitCode?: number;
   };
+  /**
+   * 终端的驱动权换手了（`agent-delivery.md` §6）。
+   *
+   * 与 `browser.lease` 同形状：节点头的徽标从这里同步，而不是各自根据「我刚才
+   * 敲过」推断谁在驱动。人按一个键就抢占，停手十秒自然到期，两次都是一帧。
+   */
+  "terminal.lease": {
+    readonly sessionId: string;
+    readonly nodeId?: string;
+    readonly lease: OpaquePayload;
+  };
   "board.changed": { readonly boardId: string; readonly updatedAt: string };
   /**
    * A control verb added a node to a board on behalf of `originNodeId`.
@@ -181,6 +192,7 @@ export const WORKSPACE_EVENT_TYPES = [
   "agent.approval",
   "agent.delivery",
   "terminal.exit",
+  "terminal.lease",
   "board.changed",
   "node.created",
   "ssh.prompt",

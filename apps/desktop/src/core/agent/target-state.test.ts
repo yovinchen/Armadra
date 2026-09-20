@@ -70,10 +70,12 @@ describe("投递目标的五态", () => {
     expect(
       targetState(status({ state: "done", stateSource: "observed" }), 1),
     ).toBe("starting");
-    const noSource = status({ state: "done" });
-    const stripped = { ...noSource } as Record<string, unknown>;
+    const stripped = { ...status({ state: "done" }) } as Record<
+      string,
+      unknown
+    >;
     delete stripped.stateSource;
-    expect(targetState(stripped as AgentStatus, 1)).toBe("starting");
+    expect(targetState(stripped as unknown as AgentStatus, 1)).toBe("starting");
     expect(stateSourceIsReported("hook")).toBe(true);
     expect(stateSourceIsReported("extension")).toBe(true);
     expect(stateSourceIsReported("observed")).toBe(false);

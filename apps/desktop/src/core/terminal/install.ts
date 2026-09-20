@@ -18,6 +18,7 @@ import { SshBackend } from "./ssh/backend";
 import { permissionWaitEnvironment } from "../hook/approvals";
 import { issueNodeToken } from "../hook/tokens";
 import { TerminalManager } from "./manager";
+import { humanActor } from "../drive/lease";
 import {
   type BackendChoice,
   type BackendInfo,
@@ -143,6 +144,17 @@ export function install(
           },
         }),
     log: (message, fields) => context.log.info(message, fields),
+    onLease: (event) => {
+      context.bus.emit("workspace.event", {
+        workspaceId: event.workspaceId,
+        event: {
+          type: "terminal.lease",
+          sessionId: event.sessionId,
+          ...(event.nodeId === null ? {} : { nodeId: event.nodeId }),
+          lease: event.lease as unknown as Record<string, unknown>,
+        },
+      });
+    },
     onExit: (event) => {
       context.bus.emit("workspace.event", {
         workspaceId: event.workspaceId,
@@ -330,7 +342,13 @@ export function install(
     if ([...body.text].length > MAX_PASTE_CHARACTERS) {
       throw new TerminalError(400, "bad_request", "Pasted text is too large");
     }
-    await manager.paste(sessionId, body.text, body.enter === true);
+    // 页面上的「粘贴」是人在驱动，与键盘上来的字节同一条语义。
+    await manager.paste(
+      sessionId,
+      body.text,
+      body.enter === true,
+      humanActor("local", ""),
+    );
     return { status: 200, body: manager.session(sessionId) };
   });
 

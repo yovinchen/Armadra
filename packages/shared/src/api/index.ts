@@ -22,6 +22,7 @@ export * from "./assets.js";
 export * from "./git.js";
 export * from "./git-clone.js";
 export * from "./resources.js";
+export * from "./drive.js";
 export * from "./browser.js";
 export * from "./events.js";
 export * from "./usage.js";

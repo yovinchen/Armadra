@@ -6,6 +6,7 @@ import {
   Utf8Decoder,
 } from "./backend";
 import { DEFAULT_COLS, DEFAULT_ROWS, type TerminalManager } from "./manager";
+import { deviceOrLocal, humanActor } from "../drive/lease";
 
 /**
  * `/api/terminals/{id}/ws` — contract §15.5.
@@ -300,7 +301,16 @@ export async function serveTerminalSocket(
         if (frame === undefined) return;
         try {
           if (frame.type === "input") {
-            await manager.input(sessionId, generation, frame.data);
+            // 键盘上来的字节就是「人在驱动」（设计 `agent-delivery.md`
+            // §6.1）：它抢占 Agent 的租约，而 Agent 的下一次投递会被告知
+            // `LEASE_HELD_BY_HUMAN`。人停手十秒，租约自己过期。
+            await manager.input(
+              sessionId,
+              generation,
+              frame.data,
+              undefined,
+              humanActor(deviceOrLocal(writer), ""),
+            );
             // The mark moves only after the bytes reached the pty: an
             // acknowledged input is one this session will never accept again
             // from the same writer.

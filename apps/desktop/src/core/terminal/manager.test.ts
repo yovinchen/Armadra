@@ -18,6 +18,11 @@ import {
   sessionName,
 } from "./backend";
 import { TerminalManager } from "./manager";
+import { type Lease, agentActor, humanActor } from "../drive/lease";
+import {
+  TERMINAL_AGENT_IDLE_SECONDS,
+  TERMINAL_HUMAN_IDLE_SECONDS,
+} from "./drive";
 import { fixture, type Fixture } from "../workspaces/fixture";
 
 /**
@@ -171,6 +176,14 @@ interface Harness {
   backend: FakeBackend;
   database: DatabaseSync;
   advance: (ms: number) => void;
+  /** 每一次租约换手，按发生顺序。 */
+  leases: LeaseEvent[];
+}
+
+interface LeaseEvent {
+  sessionId: string;
+  nodeId: string | null;
+  lease: Lease;
 }
 
 function harness(policy?: {
@@ -187,10 +200,18 @@ function harness(policy?: {
     .run(`${open.directory}/ws`);
   let now = Date.parse("2026-09-20T12:00:00.000Z");
   const backend = new FakeBackend();
+  const leases: LeaseEvent[] = [];
   const manager = new TerminalManager({
     database,
     backends: new Map([["tmux", backend]]),
     effective: "tmux",
+    onLease: (event) => {
+      leases.push({
+        sessionId: event.sessionId,
+        nodeId: event.nodeId,
+        lease: event.lease,
+      });
+    },
     policy: () =>
       policy ?? { detachedGraceMinutes: 1440, dormantAfterSeconds: 120 },
     now: () => new Date(now).toISOString(),
@@ -200,6 +221,7 @@ function harness(policy?: {
     manager,
     backend,
     database,
+    leases,
     advance: (ms) => {
       now += ms;
     },
@@ -608,5 +630,181 @@ describe("shutdown", () => {
       .get(session.id) as { status: string; attach_state: string };
     expect(row).toEqual({ status: "running", attach_state: "detached" });
     expect(backend.calls).toContain("detachAll");
+  });
+});
+
+/**
+ * 驱动租约（设计 `agent-delivery.md` §6）。
+ *
+ * 状态机本身由 `drive/lease.test.ts` 与 `browser/lease.test.ts` 守着；这里测的
+ * 是它挂在终端上的那几处：人敲键抢占、停手十秒自然恢复、显式接管不恢复、代次
+ * 落 `drive_generation`。
+ */
+describe("驱动租约", () => {
+  const human = () => humanActor("device-a", "");
+  const agent = () => agentActor("node-b", "sess-b", "Claude");
+
+  it("人敲键就夺走 Agent 的租约，并广播一帧", async () => {
+    const { manager, leases } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.input(session.id, 1, "ls", undefined, agent());
+    expect(manager.driveLease(session.id)).toMatchObject({
+      state: "agent",
+      holder: { kind: "agent", id: "node-b" },
+    });
+    await manager.input(session.id, 1, "x", undefined, human());
+    expect(manager.driveLease(session.id)).toMatchObject({
+      state: "human",
+      holder: { kind: "human", id: "device-a" },
+    });
+    expect(leases.at(-1)).toMatchObject({
+      sessionId: session.id,
+      nodeId: "node-a",
+      lease: { state: "human" },
+    });
+  });
+
+  it("人在打字时 Agent 的写入被拒，码是 LEASE_HELD_BY_HUMAN", async () => {
+    const { manager } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.input(session.id, 1, "half a line", undefined, human());
+    await expect(
+      manager.input(session.id, 1, "ls", undefined, agent()),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining("LEASE_HELD_BY_HUMAN"),
+    });
+  });
+
+  it("抢占之后停手十秒自动恢复，Agent 又能驱动", async () => {
+    const { manager, advance, leases } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.input(session.id, 1, "x", undefined, human());
+    advance((TERMINAL_HUMAN_IDLE_SECONDS - 1) * 1_000);
+    expect(manager.sweepDrives()).toBe(0);
+    advance(1_000);
+    expect(manager.sweepDrives()).toBe(1);
+    expect(manager.driveLease(session.id).state).toBe("free");
+    expect(leases.at(-1)?.lease.state).toBe("free");
+    await expect(
+      manager.input(session.id, 1, "ls", undefined, agent()),
+    ).resolves.toBeUndefined();
+  });
+
+  it("显式接管不自动恢复，Agent 一律收 LEASE_REVOKED", async () => {
+    const { manager, advance } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.input(session.id, 1, "ls", undefined, agent());
+    expect(manager.takeoverDrive(session.id, human()).state).toBe(
+      "humanTakeover",
+    );
+    advance(TERMINAL_HUMAN_IDLE_SECONDS * 10 * 1_000);
+    expect(manager.sweepDrives()).toBe(0);
+    await expect(
+      manager.input(session.id, 1, "ls", undefined, agent()),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("LEASE_REVOKED"),
+    });
+    // 交还之后 Agent 又能驱动。
+    manager.releaseDrive(session.id, human());
+    expect(manager.driveLease(session.id).state).toBe("free");
+  });
+
+  it("Agent 的租约比人长得多，一轮里不会被另一个 Agent 插进来", async () => {
+    const { manager, advance } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.input(session.id, 1, "ls", undefined, agent());
+    advance((TERMINAL_AGENT_IDLE_SECONDS - 1) * 1_000);
+    expect(manager.sweepDrives()).toBe(0);
+    await expect(
+      manager.input(
+        session.id,
+        1,
+        "ls",
+        undefined,
+        agentActor("node-c", "sess-c", "Codex"),
+      ),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("LEASE_HELD_BY_AGENT"),
+    });
+    advance(1_000);
+    expect(manager.sweepDrives()).toBe(1);
+  });
+
+  it("代次落在 drive_generation，回收之后不回头", async () => {
+    const { manager, database } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.input(session.id, 1, "x", undefined, human());
+    const stored = () =>
+      (
+        database
+          .prepare(
+            "SELECT drive_generation FROM terminal_sessions WHERE id = ?",
+          )
+          .get(session.id) as { drive_generation: number }
+      ).drive_generation;
+    expect(stored()).toBe(1);
+    expect(manager.driveLease(session.id).generation).toBe(1);
+    // 回收换的是 PTY，驱动权跟着那个进程一起消失，代次不回头。
+    await manager.recycle(session.id);
+    expect(manager.driveLease(session.id)).toMatchObject({
+      state: "free",
+      generation: 1,
+    });
+    await manager.input(session.id, 2, "x", undefined, human());
+    expect(stored()).toBe(2);
+  });
+
+  it("没说自己是谁的写入不碰租约", async () => {
+    const { manager } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.input(session.id, 1, "ls");
+    expect(manager.driveLease(session.id).state).toBe("free");
+  });
+
+  it("一次写完括号粘贴与回车", async () => {
+    const { manager, backend } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.writeSubmit(
+      session.id,
+      1,
+      "\u4f60\u597d\n\u4e16\u754c",
+      agent(),
+    );
+    const written = backend.calls.at(-1) ?? "";
+    expect(written).toBe(
+      `input:${session.sessionKey}:\u001b[200~\u4f60\u597d\n\u4e16\u754c\u001b[201~\r`,
+    );
+  });
+
+  it("driveTarget 把五态、持有者与代次放在一个答案里", async () => {
+    const { manager, database } = harness();
+    const session = await spawn(manager, "node-a");
+    expect(manager.driveTarget("node-a")).toMatchObject({
+      nodeId: "node-a",
+      sessionId: session.id,
+      state: "starting",
+      driveGeneration: 0,
+      lease: { state: "free" },
+    });
+    database
+      .prepare(
+        `INSERT INTO agent_status
+           (node_id, workspace_id, agent_id, state, state_source, unread, verified,
+            restored, updated_at)
+         VALUES ('node-a', 'ws', 'codex', 'done', 'hook', 0, 1, 0,
+                 '2026-09-20T12:00:00Z')`,
+      )
+      .run();
+    await manager.input(session.id, 1, "x", undefined, human());
+    expect(manager.driveTarget("node-a")).toMatchObject({
+      state: "idle",
+      stateSource: "hook",
+      driveGeneration: 1,
+      lease: { state: "human", holder: { id: "device-a" } },
+    });
+    expect(manager.driveTarget("node-missing")).toMatchObject({
+      state: "exited",
+    });
   });
 });

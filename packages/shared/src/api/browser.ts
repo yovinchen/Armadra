@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { DRIVE_LEASE_STATES, driveLeaseSchema } from "./drive.js";
+
 /**
  * 受控内嵌浏览器（B01，editor-browser-design.md §5–§9）。
  *
@@ -140,28 +142,12 @@ export const browserCloseTabRequestSchema = z.object({
 /* ------------------------------ 控制租约（§2.6） ----------------------------- */
 
 /**
- * 一个 session 一个持有者。读永远不需要租约，输入类动作需要。人点「接管」
- * 立即撤销 Agent 租约，`generation` 随之 +1，旧世代的请求一律被拒。
+ * 租约的形状在 `drive.ts`：终端节点用的是同一份（设计 `agent-delivery.md`
+ * §6.2）。这里只把它按浏览器这一域原来的名字转出去，所以已有的导入路径与
+ * 类型名一个字都不用改，而定义只有一份。
  */
-export const BROWSER_LEASE_STATES = [
-  "free",
-  "human",
-  "humanTakeover",
-  "agent",
-] as const;
-export const browserLeaseSchema = z.object({
-  state: z.enum(BROWSER_LEASE_STATES),
-  generation: z.number().int().nonnegative(),
-  expiresAt: z.string().default(""),
-  holder: z
-    .object({
-      kind: z.enum(["human", "agent"]),
-      /** 人是 deviceId，Agent 是节点 id。 */
-      id: z.string(),
-      displayName: z.string().default(""),
-    })
-    .optional(),
-});
+export const BROWSER_LEASE_STATES = DRIVE_LEASE_STATES;
+export const browserLeaseSchema = driveLeaseSchema;
 
 export const BROWSER_LEASE_ACTIONS = ["status", "takeover", "release"] as const;
 export const browserLeaseRequestSchema = z.object({
