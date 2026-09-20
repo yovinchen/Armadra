@@ -1,14 +1,14 @@
-# Agent 能力、上下文、对话交接与后台自动化
+# Agent 能力、对话交接与后台自动化
 
 > 状态：目标设计，部分实施。下文「实现状态」一节写于 Rust Runtime / Go Host 尚分进程的年代（2026-09-05 前后）；二者已于 R7d 合并进统一的 TS core（`apps/desktop/src/core/`，见 [typescript-core.md](typescript-core.md)），下文的 Runtime/Host/Worker 提法是彼时的实现分工，读作 core 内的对应模块即可。协议边界的历史记录见[服务端设计](../history/host-protocol-design.md)。
 
 ## 实现状态（截至 2026-09-05，实现分工已并入 core）
 
-§1 能力交集已落地：能力表新增 `nativeRecurrence`、`structuredInputAck`、`supportsModelSelection`；求交集顺序为基础适配器 → 自定义配置 → CLI 版本探测 → 执行主机，实现在 `packages/shared/src/agent-capabilities.ts`，设置页的能力清单逐项显示裁决它的那一级。版本探测跑 `<launchCmd> --version` 并缓存到 `settings.agents.probes[<agentId>]`（core 的对应域模块，24 小时过期，换启动程序即重探）；探不到就是 `failed`，对应能力显示 unknown，界面不画按钮。`CAPABILITY_MIN_VERSION` 目前是空表——没有可引用的发行说明就不编版本门槛，探测眼下只提供「问不出来 → 不承诺」这一半。`nativeRecurrence` 仍无内置适配器声明：六种 CLI 都没有可读的任务列表。但**读得到规则的时候**有一层适配：活动卡片可以带一条 `nativeRecurrence { dialect, rule, timezone }`（`packages/shared/src/domain/node-data.ts`，原文逐字保存、不做规范化），`apps/web/src/panels/automation/native-recurrence.ts` 把 cron 表达式与 launchd 的 `StartCalendarInterval` / `StartInterval` 翻成平台计划的 recurrence 预填进向导。翻不动的一律返回机器码并把原文摆出来：`@reboot`（是事件不是周期）、带秒的六字段、`L`/`W`/`#` 扩展、只有事件触发的 launchd 任务、`StartCalendarInterval` 数组里的多个时刻（一份计划只有一条重复规则）、以及超出 Host 上下限的 interval。时区不猜——crontab 行不带时区、launchd 用本机时区，源头没写就留空由人选。执行主机方面，SSH 终端不带 `contextUsage` 与 `usage`（转录和账号都在对面机器上）。
+§1 能力交集已落地：能力表新增 `nativeRecurrence`、`structuredInputAck`、`supportsModelSelection`；求交集顺序为基础适配器 → 自定义配置 → CLI 版本探测 → 执行主机，实现在 `packages/shared/src/agent-capabilities.ts`，设置页的能力清单逐项显示裁决它的那一级。版本探测跑 `<launchCmd> --version` 并缓存到 `settings.agents.probes[<agentId>]`（core 的对应域模块，24 小时过期，换启动程序即重探）；探不到就是 `failed`，对应能力显示 unknown，界面不画按钮。`CAPABILITY_MIN_VERSION` 目前是空表——没有可引用的发行说明就不编版本门槛，探测眼下只提供「问不出来 → 不承诺」这一半。`nativeRecurrence` 仍无内置适配器声明：六种 CLI 都没有可读的任务列表。但**读得到规则的时候**有一层适配：活动卡片可以带一条 `nativeRecurrence { dialect, rule, timezone }`（`packages/shared/src/domain/node-data.ts`，原文逐字保存、不做规范化），`apps/web/src/panels/automation/native-recurrence.ts` 把 cron 表达式与 launchd 的 `StartCalendarInterval` / `StartInterval` 翻成平台计划的 recurrence 预填进向导。翻不动的一律返回机器码并把原文摆出来：`@reboot`（是事件不是周期）、带秒的六字段、`L`/`W`/`#` 扩展、只有事件触发的 launchd 任务、`StartCalendarInterval` 数组里的多个时刻（一份计划只有一条重复规则）、以及超出 Host 上下限的 interval。时区不猜——crontab 行不带时区、launchd 用本机时区，源头没写就留空由人选。执行主机方面，SSH 终端不带 `usage`（账号在对面机器上）。
 
-§2 上下文用量：Claude 仍是 `provider_hook` / `reported` 精确来源。Codex 走 `structured_transcript` / `estimated`——读其结构化转录，用可解释的字符启发式 `chars-v1`（ASCII 每四字符 1 token，非 ASCII 每字符 1 token）求和，附带置信、已统计消息数与是否截断（core 的对应域模块）。转录读不出内容时返回 unknown，不返回 0%。分母来自模型上下文窗口表（`packages/shared/src/model-context.ts` 与 core 的对应域模块），转录里报出的模型优先于启动时选的模型，表里没有的模型 capacity 为 null。opencode / Pi / OMP / Copilot 不声明 `contextUsage`：它们的历史不在本地结构化文件里。80/95 阈值进了设置页并持久化，只改徽标措辞，不自动压缩或打断。
+§2 单会话上下文占用已于 2026-09-21 整条移除，不再是目标：读数、能力位、路由、Claude 状态行与 CLI 子命令都已删除，详见 §2。
 
-§8 自动命名：Hook 报出本会话第一个回合后调一次 `suggest-title`，仅在标题仍是占位名时应用，用户改名即锁定，按 (节点, 会话, 代次) 缓存，请求期间被改名则丢弃结果；OSC 标题不覆盖自动命名写入的语义标题（`apps/web/src/meta/auto-title.ts`）。设置页有开关。普通终端不参与：`suggest-title` 需要 Agent 状态行，没有 Agent 的终端仍只跟随 OSC 标题。提交信息草稿新增语言（zh/en）与 Conventional Commits 选项，二者只追加固定的风格子句，不改变读取范围、文件排除、敏感行处理与 digest 复核。
+§8 自动命名：Hook 报出本会话第一个回合后调一次 `suggest-title`，仅在标题仍是占位名时应用，用户改名即锁定，按 (节点, 会话, 代次) 缓存，请求期间被改名则丢弃结果；OSC 标题不覆盖自动命名写入的语义标题（`apps/web/src/meta/auto-title.ts`）。设置页有开关。普通终端不参与：`suggest-title` 要有 Agent 报来的会话身份，没有 Agent 的终端仍只跟随 OSC 标题。提交信息草稿新增语言（zh/en）与 Conventional Commits 选项，二者只追加固定的风格子句，不改变读取范围、文件排除、敏感行处理与 digest 复核。
 
 §3 的两种卡片、§4 的平台计划与 §5 的投递已经能写进 Agent 终端，逐节的实施状态见下面各小节。§6 依赖编排与 §9 的 Host 侧表与事件仍未实施。
 
@@ -19,7 +19,6 @@
 ```ts
 interface AgentCapabilities {
   status: "hook" | "structured" | "unsupported";
-  contextUsage: "reported" | "estimated" | "unsupported";
   transcript: "structured" | "text" | "unsupported";
   resume: boolean;
   nativeFork: boolean;
@@ -39,29 +38,15 @@ interface AgentCapabilities {
 
 预留部分已落地的：core 的 `AccountRef { accountId, providerId, label }` 与 `CredentialBinding { credentialRef, scope, authorizationId }` 类型；节点数据的 `agent.account`（`packages/shared/src/domain.ts`，可选、默认缺省，core 侧逐字段限长）。`agentSessionRequest`（`apps/web/src/agent/launch.ts`）只在字段存在时透传 `accountId`，`credentialRef` 不上行；命令会话对非 `default` 账号仍然显式拒绝。节点头部的 `AccountBindingBadge` 只在字段存在时出现，设置页没有绑定入口，core 把 `accountBinding` 报为 unsupported。账号的创建、列举与切换都未实现。
 
-## 2. 单会话上下文占用
+## 2. 单会话上下文占用（已移除）
 
-### 2.1 数据模型与来源
+2026-09-21 整条移除，不再是目标设计的一部分。移除的是：终端节点 `···` 里的「会话上下文」条目与诊断表、
+`ContextUsage` 读数与其缓存、`contextUsage` 能力位、`GET …/nodes/{nodeId}/context-usage` 与
+`/automation/session-context-usage` 两条路由、Pi / OMP 扩展里的 `ctx.getContextUsage()` 上报、
+以及 Claude 的 `statusLine` 接入。
 
-`ContextUsage`：sessionId、generation、providerSessionId、modelId、usedTokens、capacityTokens、reservedOutputTokens、observedAt、source、quality、sourceRevision、compactionEpoch。
-
-- source 为 provider_hook / structured_transcript / tokenizer_estimate / unavailable。
-- quality 为 reported / estimated / stale / unknown。
-- 分子是当前有效上下文占用，不是累计账单 token，不把缓存命中 token 再加一次。
-- 分母来自该会话实际模型与配置的上下文上限；无法确认模型或上限时显示未知。
-- 估算使用对应 tokenizer 或有依据的模型适配；不把“字符数/4”标成精确值。
-- compaction、clear、resume、模型切换和 providerSessionId 改变时重置/更新来源，旧会话事件按 generation 丢弃。
-- 来源异步到达时按 sourceRevision/observedAt 去重；未收到用量事件不能显示 0%。
-
-### 2.2 界面
-
-终端头部 `ContextUsageBadge` 显示模型简写、迷你进度与百分比；小尺寸只保留图标和数值。Popover 显示已用/上限、输出预留、采集时间、是否估算、压缩事件和来源。
-
-80%/95% 为初始提醒阈值，可设置；只提示，不自动清理上下文或打断 CLI。达到阈值可以“准备交接”或调用适配器明确支持的压缩动作。额度面板仍独立显示账号限额，二者不能混用。
-
-运行会话优先由 Hook/结构化事件更新，必要时节流读取转录；静止会话停止高频解析。手机焦点页使用相同数据与图例。
-
-验收：长对话、压缩、模型切换、恢复旧会话、CLI 版本不支持、未知上限、延迟乱序事件、不同账号均显示正确来源；不存在精度不足却显示精确百分比的状态。
+`armadra-hook context-usage` 保留为静默无操作并退出 0：老 `settings.json` 在修复跑到之前仍可能每次状态刷新
+都调它，报错会刷屏。安装、修复与卸载都会把**认得出是我们写的**那条 `statusLine` 摘掉，别人自己的一律不动。
 
 ## 3. 原生活动卡片与平台计划节点
 
@@ -221,15 +206,15 @@ Agent 目标冻结的是**节点** + 一份 `AgentLaunchSpec`（agentId、目录
 
 ## 9. API 与持久化
 
-| 服务       | 主要命令                                          | 事件                                                    |
-| ---------- | ------------------------------------------------- | ------------------------------------------------------- |
-| Agent      | ResolveCapabilities、GetContextUsage、SuggestName | CapabilitiesChanged、ContextUsageChanged、NameSuggested |
-| Activity   | List、Observe、Hide、NativePause/Cancel           | ActivityDiscovered、IterationChanged、ActivityStale     |
-| Automation | Create、Update、Activate、Pause、RunNow、ListRuns | AutomationChanged、RunChanged、NextRunChanged           |
-| Dependency | CreateGraph、Release、Cancel、Repair              | Waiting、Satisfied、Missing、Launched                   |
-| Handoff    | Prepare、Preview、Accept、Get、Retry              | Prepared、Transferred、TargetStarted、Failed            |
+| 服务       | 主要命令                                          | 事件                                                |
+| ---------- | ------------------------------------------------- | --------------------------------------------------- |
+| Agent      | ResolveCapabilities、SuggestName                  | CapabilitiesChanged、NameSuggested                  |
+| Activity   | List、Observe、Hide、NativePause/Cancel           | ActivityDiscovered、IterationChanged、ActivityStale |
+| Automation | Create、Update、Activate、Pause、RunNow、ListRuns | AutomationChanged、RunChanged、NextRunChanged       |
+| Dependency | CreateGraph、Release、Cancel、Repair              | Waiting、Satisfied、Missing、Launched               |
+| Handoff    | Prepare、Preview、Accept、Get、Retry              | Prepared、Transferred、TargetStarted、Failed        |
 
-core 表（同一份数据库）：agent_capability_cache、context_usage、agent_activities、automations、automation_activations、automation_runs、dependencies、handoffs、suggestions、dispatch_receipts、hook_outbox。大量转录/附件落资产存储；数据库存引用、hash、权限和保留期。
+core 表（同一份数据库）：agent_capability_cache、agent_activities、automations、automation_activations、automation_runs、dependencies、handoffs、suggestions、dispatch_receipts、hook_outbox。大量转录/附件落资产存储；数据库存引用、hash、权限和保留期。
 
 ## 10. 验收要点
 
@@ -237,6 +222,6 @@ core 表（同一份数据库）：agent_capability_cache、context_usage、agen
 - 刷新页面能找回原生活动和平台运行历史，隐藏活动不取消循环。
 - 零客户端依赖启动与定时运行通过；UI 不再是启动权威。
 - 多个计划发往同一终端不会交错粘贴；未知投递结果能定位且不会自动重复。
-- 上下文占用、账号额度、累计 token 三者分离；更新事件按 SessionRun 对齐。
+- 账号额度与累计 token 分开；更新事件按 SessionRun 对齐。
 - 跨 Agent/跨执行主机交接有完整包、预算和缺失材料报告；原会话不被意外结束。
 - 自动命名、摘要和提交信息都标识生成来源，人工编辑优先级最高。

@@ -309,14 +309,3 @@ core 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mise N
 - **自动更新**：electron-updater 已接通（`apps/desktop/src/main/updates/`），但未
   签名的构建里更新器是关闭的——「没签名 = 什么也验证不了 = `notConfigured`」，
   它绝不会报 `upToDate`（`shell-core/updates/availability.ts`）。
-
-## 9. 会话上下文来源
-
-上下文统计与账号额度分离。读数按真实 PTY 会话 / generation 与单调序号更新运行期缓存；
-模型或会话变化、压缩后的空报告、断连都会清除不再可信的显示。源时间仅展示，陈旧年龄使用单调时间。
-未知容量与预留量不填 0。
-
-来源分三档：Claude 的状态行与 Pi / Oh My Pi 扩展里的 `ctx.getContextUsage()` 都是提供方**实测**的当前窗口
-（`provider_hook` / `reported`）；Codex 按需读本地结构化转录尾部**估算**（`structured_transcript`）；
-OpenCode 与 Copilot 没有可信的本地读数，界面留空——Copilot 的会话事件文件只在压缩开始与退出时写占用数字，
-晚于描述一个活着的会话所需的时刻。自定义 Agent 能力可收窄，既有用户状态栏不会被安装器覆盖。

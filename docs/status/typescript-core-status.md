@@ -1358,3 +1358,40 @@ releaseDrive(sessionId, actor): Lease;
 `pnpm libs:build` 之后：`@armadra/desktop` 全绿（新增 `redact` 17、`transcript-summary` 17、`read-budget` 15、`context-budget` 28 条用例）、`@armadra/web` typecheck、`pnpm -r typecheck`、`pnpm check` 全绿。迁移 `0025_context_reads.sql` 已记进 `migrations.lock`，库里 `migrations` 25 条。
 
 `packages/shared` 的 `test/usage-dashboard.test.ts` 那条红在 26.7 记过，本批未触及。
+
+## 29. 拆掉「会话上下文」整条链路（2026-09-21）
+
+分支 `feature/host-protocol-foundation`。用户的决定：终端节点 `···` 里的「会话上下文」以及它背后那整套遥测不要了，整体移除，不留死代码。
+
+### 29.1 删了什么
+
+| 层     | 删掉的东西                                                                                                                                                                                                                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| web    | `agent/context-usage/`（菜单、hook、诊断表）、`i18n/context-usage.ts`、`api/agents.ts` 的 `contextUsage`、设置页的 80/95 阈值与 `preferences-store` 里那两个键、`TerminalNode` 的读数接线                                                                                                  |
+| shared | `context-usage.ts`、`model-context.ts`（随之全无引用）、`contextUsage` 能力位、SSH 主机排除表里的那一项                                                                                                                                                                                    |
+| core   | `usage/context-usage.ts`、`GET …/nodes/{nodeId}/context-usage` 与 `/automation/session-context-usage` 两条路由、`ContextUsageCache` 及其装配、`hook/ingest.ts` 的 `armadraContextUsage` 分支、扩展模板里的 `armadraReportContextUsage` / `ctx.getContextUsage()` 与三份 `*_CONTEXT_EVENTS` |
+| CLI    | `armadra-hook/context-usage.ts`；其中 `loadBinding` / `nextRevision` 是**普通 hook 报告**的 `terminalBinding` 在用的，搬到新的 `armadra-hook/binding.ts`                                                                                                                                   |
+
+`ARMADRA_SESSION_ID` / `ARMADRA_SESSION_GENERATION` 两个环境变量**留着**：`canvas handoff-read` / `ack` 要用它们证明会话身份，hook 报告的 `terminalBinding` 也要。只把注释里「给上下文读数用」的说法改成现状。
+
+### 29.2 statusLine：装 / 修 / 卸都要摘
+
+这是已装机器升级后不残留的关键。以前 `hook/install/claude.ts` 会往用户自己的 `~/.claude/settings.json` 写 `statusLine: { command: "<armadra-hook> context-usage" }`。现在：
+
+- 安装不再写；
+- 安装、卸载（`retireGlobalEntries`）与设置页的「修复」（`repair.ts`，判据从「只认旧名字」扩成 `isRetiredStatusLine` = 旧名字 ∪ `managedContextCommand`）都会把**认得出是我们写的**那条摘掉；
+- 别人自己的状态行一个字节不动，认不出来的一律保留——`managedContextCommand` 这一半本来就是保守的。
+
+因此 `install` 不再产生 `context_statusline_preserved` 警告，界面上那句提示也一起去掉了。
+
+### 29.3 `armadra-hook context-usage` 保留为 no-op
+
+子命令保留，静默、退出码 0。理由写在 `cli/armadra-hook/main.ts` 的注释里：老的 `settings.json` 在修复跑到之前还会每次状态刷新调它一次，报错会刷屏。`--help` 里不再列出它。
+
+### 29.4 顺带：终端节点的 `···` 只剩三样
+
+用户同一轮的要求。终端自己那一段现在只有：顶部的 Agent / SSH 说明标签、「交接到…」、「模型 ›」。删掉的是会话上下文、搜索（⌘F 与头部搜索框仍在）、中断、打断这一轮、结束进程、销毁会话、回收会话、重新运行；`surfaceRef.terminate/recycle` 在这个组件里随之没有调用点（`TerminalSurface` 的方法本身仍被右键菜单用着），五个只有这些菜单项在用的 i18n 键中英一起删掉——`i18n.test.ts` 的「每个键都得有人用」那条守卫把它们逐个点了出来。
+
+### 29.5 验证
+
+`pnpm libs:build` 之后：`@armadra/shared`、`@armadra/web`、`@armadra/desktop`、`@armadra/server` 全绿，`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。新增用例两条：`claude.test.ts` 断言装与卸都会摘掉我们自己那条旧 statusLine、`repair.test.ts` 断言修复认得当前名字的那条而不动陌生的那条；`wire.test.ts` 的 `context-usage` 一节改成断言它静默且退出 0。

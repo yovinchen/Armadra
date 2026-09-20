@@ -49,8 +49,7 @@ Armadra 是 local-first 的 AI Coding 画布：把真实 CLI Agent（Claude Code
 | `armadra.mailbox.v1`：`post/inbox/ack` 拉取消息箱；`send/reply/notify` 主动投递                                         | ✅   |
 | 按连线读取转录 / 摘要 / 终端画面                                                                                        | ✅   |
 | 对话交接：prepare → 预览 → accept/cancel → 后台投递，状态可追溯（A04）                                                  | ✅   |
-| Claude 单会话上下文占用 Badge；`disabledCapabilities` 能力继承（A03）                                                   | 🔶   |
-| 其他 Provider 上下文来源、tokenizer 估算器、80%/95% 阈值设置（A03）                                                     | ⬜   |
+| `disabledCapabilities` 能力继承（A03；单会话上下文占用已于 2026-09-21 整条移除）                                        | ✅   |
 | 交接历史面板（按工作空间、含投递尝试次数）、真实 Agent 端 `handoff-read` 端到端（A04）；跨执行主机仍只在 prepare 处拒绝 | 🔶   |
 | 自动命名：占位标题才应用、人工改名锁定、可预览（A05）                                                                   | ⬜   |
 | 原生 Loop/Cron 观察卡片 AgentActivityNode（A01）                                                                        | ✅   |

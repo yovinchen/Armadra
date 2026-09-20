@@ -94,7 +94,7 @@ z-index 栈固定为：画布内容 0 → pills 5 → sessions 12 → dock 20 �
 
 通用外壳 `.node-shell`：`bg-panel`，1px 边框且**顶边 3px 由节点色着色**，圆角 10，`shadow 0 8px 28px rgba(0,0,0,.4)`；选中边框变强调色。三种状态光晕用包裹层伪元素做 opacity 动画（不动画 box-shadow）：`unread` 蓝 2s、`working` 陶土色 `#d97757` 2.6s、`attention` 红 1.8s。
 
-头部 `padding 6px 8px; gap 8px; bg-panel-header; cursor grab`，从左到右：折叠三角 → 12px 色点（点击弹 7 色调色板 Popover）→ 标题（点击变 input，`max-w-[220px]` 省略）→ 会话名 chip → Agent chip（品牌色）→ 上下文占用小胶囊（模型缩写 + 迷你进度条 + %）→ 状态胶囊 → spacer → 右侧图标钮：刷新 ⟳ / 搜索 / 最大化 / 关闭 ×。
+头部 `padding 6px 8px; gap 8px; bg-panel-header; cursor grab`，从左到右：折叠三角 → 12px 色点（点击弹 7 色调色板 Popover）→ 标题（点击变 input，`max-w-[220px]` 省略）→ 会话名 chip → Agent chip（品牌色）→ 状态胶囊 → spacer → 右侧图标钮：刷新 ⟳ / 搜索 / 最大化 / 关闭 ×。
 
 状态胶囊：9.5px / 700 / `tracking-[.06em]` 全大写 + 前置 7px 圆点：`RUNNING`（陶土色，点脉冲）· `NEEDS YOU`（红，脉冲）· `TURN FAILED`（红，不脉冲）· `QUEUED`（灰，尾随 ▶）· `PAUSED`（灰）。`blocked` 且有 `pendingId` 时头部直接出现 `✓ 允许` / `✕ 拒绝` 两个内联按钮。
 
@@ -563,7 +563,7 @@ export interface NodeShellProps {
   selected: boolean;
   status?: { tone: StatusTone; label: string; pulse?: boolean };
   glow?: "working" | "attention" | "unread";
-  headerChips?: ReactNode; // 会话名 / Agent chip / 上下文占用
+  headerChips?: ReactNode; // 会话名 / Agent chip
   headerActions?: ReactNode; // 右侧图标钮，在"最大化 / 关闭"之前
   approval?: { pendingId: string; onAnswer: (d: "allow" | "deny") => void };
   children: ReactNode;

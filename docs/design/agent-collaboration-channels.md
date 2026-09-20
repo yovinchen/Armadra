@@ -2,6 +2,7 @@
 
 > 状态：部分已实施（2026-09-07）——B0–B5 通道全部落地（状态来源、Copilot Hook、Pi/OMP 与 OpenCode 进程内直连、界面与 `observed` 兜底、冒烟脚本）；此后按用户方案重构了协作模型：C6 主动投递整段移除、交接改走信箱、技能与 Hook 解耦、按名字寻址、新增 `interrupt`，见 [协作指南](../guides/agent-collaboration.md)。§1 仍描述设计时的基线 `b3516e5d`。本文回答三个问题——Pi / Oh My Pi / GitHub Copilot 是否需要 Hook 适配；Agent 之间的交流方式是否已定、是否经 Hook；能否用更省资源的通道完成消息、状态 / 上下文采集与交接。现状以基线 `b3516e5d`（2026-09-06）的源码为准，三种 CLI 的接入点以其公开文档为准（§2 附来源）；不改 [Agent 协作](../guides/agent-collaboration.md)与[架构](../guides/architecture.md)已描述的既有行为。
 > 范围：`crates/hook`、`apps/runtime/src/{hook,collab,handoff,context_usage.rs,context_estimate.rs,agent.rs}`、`packages/shared/src/{agents,hook-events}.ts`、设置页「Hook 与 Skills」、`proto/armadra/v1/agent.proto` 的注释与枚举。不含自动化调度、用量看板。
+> 2026-09-21：本文多处把「单会话上下文占用」与状态来源并列为通道的用途之一。该功能已整条移除（读数、能力位、路由、Claude `statusLine`、Pi / OMP 扩展里的 `ctx.getContextUsage()` 上报、CLI 子命令），见 [Agent 自动化设计 §2](agent-automation-design.md)。下文凡涉及上下文占用的结论、表格行与工作量估算只作当时的决策记录，通道本身（状态、空闲门、信箱、交接）不变。
 > 2026-09-20：下文所有 `.rs` / `.proto` 路径与 `cargo` 命令都是写这份文档那天（Rust Runtime + Go Host 分进程时代）的落点；此后 Runtime 与 Host 已合并重写为 TS core（`apps/desktop/src/core/`），这些路径不再存在，仅作实施批次的历史记录保留，通道设计与验收标准本身仍按本文为准，当前落点以源码与[协作指南](../guides/agent-collaboration.md)为准。
 
 ## 0. 结论
