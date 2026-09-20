@@ -18,6 +18,9 @@ export const usage: MessageModule = {
     "usage.cooldown": "{seconds} 秒后可刷新",
     "usage.cadence": "每 5 分钟自动更新",
     "usage.status.unavailable": "未找到可用的登录凭据",
+    "usage.status.unavailableHint": "在 {provider} 的 CLI 里登录一次，然后回来刷新",
+    "usage.status.unavailableHint.copilot":
+      "在「设置 → 账号与用量」里登录 Copilot，然后回来刷新",
     "usage.recoveryHint": "请稍后刷新，或在对应 CLI 中查看",
     "usage.reason.expired_credentials":
       "登录已过期。在 {provider} 的 CLI 里跑一次任何命令，它会自动续期，然后再刷新",
@@ -92,6 +95,10 @@ export const usage: MessageModule = {
     "usage.cooldown": "Refresh in {seconds}s",
     "usage.cadence": "Updates automatically every 5 minutes",
     "usage.status.unavailable": "No usable sign-in credentials found",
+    "usage.status.unavailableHint":
+      "Sign in once in the {provider} CLI, then refresh here",
+    "usage.status.unavailableHint.copilot":
+      "Sign in to Copilot under Settings → Account & usage, then refresh here",
     "usage.recoveryHint": "Refresh later, or check usage in the CLI",
     "usage.reason.expired_credentials":
       "Sign-in has expired. Run any command in the {provider} CLI and it renews itself; then refresh",

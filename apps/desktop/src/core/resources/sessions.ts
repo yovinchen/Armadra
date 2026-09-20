@@ -8,7 +8,8 @@
  * 交给装配方，`main.ts` 并不保存它），所以这里走两个都能独立核对的来源：
  *
  *   * `terminal_sessions` 表给身份——工作空间、节点、代次、cwd、后端句柄；
- *   * `tmux list-panes -a` 给**当前**的 pane pid。
+ *   * `tmux -S <dataDir>/tmux.sock list-panes -a` 给**当前**的 pane pid。问的必须是
+ *     core 自己那台服务器，不是用户默认的那台（见 `tmuxServerArgs`）。
  *
  * 这比缓存一个 pid 更不容易说谎：一个被重建过的 pane 会带着新的 pid 回来，而一个
  * 内存里的副本会继续指着一个已经不在的号码。tmux 不在或者没有服务器在跑时那张表
@@ -16,6 +17,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 import { isRemoteExecutable, type SessionTarget } from "./sample";
@@ -73,15 +75,38 @@ function toRow(row: Record<string, unknown>): SessionRow {
   };
 }
 
+/**
+ * core 自己那台 tmux 服务器的寻址参数。
+ *
+ * 少了它，`tmux list-panes -a` 问的是**用户默认的**那台服务器
+ * （`/tmp/tmux-<uid>/default`），而 core 的会话全部活在
+ * `-S <dataDir>/tmux.sock` 上（`terminal/tmux/control.ts`）。两台服务器互不
+ * 知情，于是每个会话都报 `no-pid`：面板里没有进程号、没有 CPU、没有内存、
+ * 没有进程树，`no-row` 孤立会话也永远扫不出来。
+ *
+ * 数据目录取不到时退回裸 `tmux`——单测与移植期的调用方还这么用，而一个问错
+ * 服务器的空表和今天的行为一模一样，不会更糟。
+ */
+export function tmuxServerArgs(dataDir: string | undefined): string[] {
+  if (dataDir === undefined) return [];
+  return ["-S", join(dataDir, "tmux.sock"), "-f", join(dataDir, "tmux.conf")];
+}
+
 /** tmux 会话名 → pane pid。tmux 不在就是空表。 */
-export function panePids(): Map<string, number> {
+export function panePids(dataDir?: string): Map<string, number> {
   const pids = new Map<string, number>();
   if (process.platform === "win32") return pids;
   let output: string;
   try {
     output = execFileSync(
       "tmux",
-      ["list-panes", "-a", "-F", "#{session_name} #{pane_pid}"],
+      [
+        ...tmuxServerArgs(dataDir),
+        "list-panes",
+        "-a",
+        "-F",
+        "#{session_name} #{pane_pid}",
+      ],
       {
         encoding: "utf8",
         maxBuffer: 4 * 1024 * 1024,

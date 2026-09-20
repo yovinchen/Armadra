@@ -11,6 +11,8 @@
  * 会话。一个任意的 pid 根本不能通过这条路寻址。
  */
 
+import { join } from "node:path";
+
 import { terminateTree } from "../terminal/process";
 import { badRequest, coreError } from "../http/errors";
 import type { ErrorResponse } from "../http/errors";
@@ -142,10 +144,12 @@ export function install(context: CoreContext): ResourceDomain {
       if (target.kind === "ref") {
         // 没有行的会话按它的后端句柄销毁——tmux 知道那个名字指的是它自己的哪个
         // 会话，别的一律拒绝。
-        await terminateBackend(target.reference);
+        await terminateBackend(target.reference, context.dataDir);
         return { status: 204 };
       }
-      const pid = panePids().get(backendRefOf(context, target.sessionId) ?? "");
+      const pid = panePids(context.dataDir).get(
+        backendRefOf(context, target.sessionId) ?? "",
+      );
       if (pid !== undefined) await terminateTree(pid);
       context.db.database
         .prepare(
@@ -180,13 +184,28 @@ function backendRefOf(
   return typeof row?.backend_ref === "string" ? row.backend_ref : undefined;
 }
 
-async function terminateBackend(reference: string): Promise<void> {
+async function terminateBackend(
+  reference: string,
+  dataDir: string,
+): Promise<void> {
   // 只接受这个 core 自己的会话名。一个任意的名字不能通过这条路寻址。
   if (!reference.startsWith("armadra-")) return;
-  const pid = panePids().get(reference);
+  const pid = panePids(dataDir).get(reference);
   if (pid !== undefined) await terminateTree(pid);
   const { execFile } = await import("node:child_process");
   await new Promise<void>((done) => {
-    execFile("tmux", ["kill-session", "-t", reference], () => done());
+    execFile(
+      "tmux",
+      [
+        "-S",
+        join(dataDir, "tmux.sock"),
+        "-f",
+        join(dataDir, "tmux.conf"),
+        "kill-session",
+        "-t",
+        reference,
+      ],
+      () => done(),
+    );
   });
 }

@@ -240,7 +240,7 @@ export class ResourceService {
   /** 一个工作空间的一次采样。 */
   snapshot(workspaceId: string): ResourceSnapshot {
     const refresh = this.sampler.refresh();
-    const pids = panePids();
+    const pids = panePids(this.options.dataDir);
     const targets = sessionTargets(this.options.database, workspaceId, pids);
     const children = childrenByParent(refresh.table);
     const sessions = targets

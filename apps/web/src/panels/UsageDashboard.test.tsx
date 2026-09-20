@@ -171,6 +171,42 @@ describe("UsageDashboard", () => {
     expect(stale?.textContent).toBe("");
   });
 
+  /**
+   * 「没有凭据」过去只有一句陈述。登录入口不在这块面板里——Copilot 在设置
+   * 页，其余在各自的 CLI——所以这一行必须说清楚去哪儿登。
+   */
+  it("没有凭据的 provider 也要说清楚去哪儿登录", async () => {
+    getUsage.mockResolvedValue({
+      providers: [
+        {
+          id: "copilot",
+          status: "unavailable",
+          credentialSource: "none",
+          windows: [],
+          fetchedAt: null,
+        },
+        {
+          id: "codex",
+          status: "unavailable",
+          credentialSource: "none",
+          windows: [],
+          fetchedAt: null,
+        },
+      ],
+    });
+    render(
+      <TestProviders>
+        <UsageDashboard />
+      </TestProviders>,
+    );
+    await screen.findByText(
+      "在「设置 → 账号与用量」里登录 Copilot，然后回来刷新",
+    );
+    expect(
+      screen.getByText("在 Codex 的 CLI 里登录一次，然后回来刷新"),
+    ).toBeTruthy();
+  });
+
   it("关掉成本统计时说明原因，不显示 $0.00", async () => {
     getSettings.mockResolvedValue({
       usage: { enabled: true, cost: { enabled: false } },

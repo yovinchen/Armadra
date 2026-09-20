@@ -65,6 +65,21 @@ export function ProviderCard({
               {t(usageReasonKey(provider.reason), { provider: name })}
             </span>
           )}
+          {/*
+            「没有凭据」也要说怎么办。`error` 那一行有原因句，
+            `unavailable` 过去只有一句陈述，而登录入口恰好不在这块面板里：
+            Copilot 在设置页，其余在各自的 CLI。
+          */}
+          {provider.status !== "error" && (
+            <span className="block">
+              {t(
+                provider.id === "copilot"
+                  ? "usage.status.unavailableHint.copilot"
+                  : "usage.status.unavailableHint",
+                { provider: name },
+              )}
+            </span>
+          )}
         </p>
       ) : (
         <>
