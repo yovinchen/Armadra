@@ -37,7 +37,8 @@ async function run(
 }
 
 function ok(outcome: ControlOutcome): Record<string, unknown> {
-  if (!outcome.ok) throw new Error(`refused: ${outcome.code} ${outcome.message}`);
+  if (!outcome.ok)
+    throw new Error(`refused: ${outcome.code} ${outcome.message}`);
   return outcome.body;
 }
 

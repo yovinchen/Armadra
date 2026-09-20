@@ -18,7 +18,12 @@ import { audit } from "../../identity/audit";
 import { allows } from "../../identity/gate";
 import { scope } from "../../identity/scopes";
 import { uuidV7 } from "../../workspaces/support";
-import { AddressError, handleOf, loadHandles, resolveLink } from "../addressing";
+import {
+  AddressError,
+  handleOf,
+  loadHandles,
+  resolveLink,
+} from "../addressing";
 import { recordDelivery } from "../deliveries";
 import { MAX_BODY_CHARS } from "../mailbox";
 import {
@@ -789,10 +794,7 @@ export function displayName(
  * `via:` 行。链里最早的一跳在前，所以人看到
  * `via: planner → reviewer → codex-1` 就知道这条指令是从哪里来的。
  */
-function renderTrail(
-  context: CollabContext,
-  trail: readonly string[],
-): string {
+function renderTrail(context: CollabContext, trail: readonly string[]): string {
   return [...trail]
     .reverse()
     .map((id) => displayName(loadNode(context.database, id), id))
@@ -821,7 +823,11 @@ async function interruptAndSettle(
   const wait = context.delay ?? defaultDelay;
   const started = nowDate(context).getTime();
   let state: TargetState = "busy";
-  for (let waited = 0; waited < INTERRUPT_SETTLE_MS; waited += INTERRUPT_POLL_MS) {
+  for (
+    let waited = 0;
+    waited < INTERRUPT_SETTLE_MS;
+    waited += INTERRUPT_POLL_MS
+  ) {
     await wait(INTERRUPT_POLL_MS);
     state = drive(nodeId).state;
     if (state !== "busy") return state;

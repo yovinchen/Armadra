@@ -79,7 +79,9 @@ function itemOf(row: QueueRow): QueueItem {
   try {
     const parsed = JSON.parse(row.trail) as unknown;
     if (Array.isArray(parsed)) {
-      trail = parsed.filter((entry): entry is string => typeof entry === "string");
+      trail = parsed.filter(
+        (entry): entry is string => typeof entry === "string",
+      );
     }
   } catch {
     trail = [];
