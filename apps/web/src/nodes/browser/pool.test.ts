@@ -7,6 +7,7 @@ import { useCanvasStore } from "@/store/canvas-store";
 
 import {
   BACKGROUND_WEBVIEW_MAX,
+  GHOST_ENTRY_HEADROOM,
   applyWebviewPool,
   resetWebviewPool,
   webviewPoolOrder,
@@ -150,12 +151,11 @@ describe("applyWebviewPool", () => {
     expect((revived as ArmadraFlowNode).style?.display).toBeUndefined();
   });
 
-  it(`ghost 超过 ${BACKGROUND_WEBVIEW_MAX} 个时逐出最久退休的那个`, () => {
-    const all = Array.from({ length: BACKGROUND_WEBVIEW_MAX + 2 }, (_, i) =>
-      browser(`b${i}`),
-    );
+  it(`ghost 超过上限（backgroundMax + ${GHOST_ENTRY_HEADROOM}）时逐出最久退休的那个`, () => {
+    const max = BACKGROUND_WEBVIEW_MAX + GHOST_ENTRY_HEADROOM;
+    const all = Array.from({ length: max + 2 }, (_, i) => browser(`b${i}`));
     applyWebviewPool(all, 1_000);
-    expect(webviewPoolOrder()).toHaveLength(BACKGROUND_WEBVIEW_MAX + 2);
+    expect(webviewPoolOrder()).toHaveLength(max + 2);
 
     // b0 最先退休，b1 第二个，其余仍然活着。
     applyWebviewPool(all.slice(1), 2_000);
@@ -165,23 +165,39 @@ describe("applyWebviewPool", () => {
     // 再把剩下的全部退休：ghost 数量超过上限，最久的 b0 先走。
     applyWebviewPool([], 4_000);
     const order = webviewPoolOrder();
-    expect(order).toHaveLength(BACKGROUND_WEBVIEW_MAX);
+    expect(order).toHaveLength(max);
     expect(order).not.toContain("b0");
     expect(order).not.toContain("b1");
     // 活着的永远不被逐出，逐出只发生在 ghost 上。
     expect(order[0]).toBe("b2");
   });
 
-  it("上限跟着设置走，调小之后下一帧就把多出来的逐掉", () => {
-    usePreferencesStore.getState().setBrowserPreference("backgroundMax", 3);
-    const all = Array.from({ length: 6 }, (_, i) => browser(`b${i}`));
+  it("条目上限比 guest 预算宽，先放进程再放条目", () => {
+    /*
+      两层用同一个设置项但管的不是一件事：`./background` 超出预算的释放**进
+      程**（节点还在），这里超出的摘掉**条目**（回来是一张白纸）。一样大的
+      时候池总是先动手——逐出在每一次投影时判，回收的定时器十五秒才醒一次
+      ——于是温和的那一步永远轮不到。这一条钉住那段余量。
+    */
+    usePreferencesStore.getState().setBrowserPreference("backgroundMax", 2);
+    const all = Array.from({ length: 5 }, (_, i) => browser(`b${i}`));
     applyWebviewPool(all, 1_000);
     applyWebviewPool([], 2_000);
-    expect(webviewPoolOrder()).toHaveLength(3);
+    // 预算是 2，但五个条目一个都没被摘掉：它们的进程由 discard 去放。
+    expect(webviewPoolOrder()).toHaveLength(5);
+  });
+
+  it("上限跟着设置走，调小之后下一帧就把多出来的逐掉", () => {
+    usePreferencesStore.getState().setBrowserPreference("backgroundMax", 3);
+    const count = 3 + GHOST_ENTRY_HEADROOM + 3;
+    const all = Array.from({ length: count }, (_, i) => browser(`b${i}`));
+    applyWebviewPool(all, 1_000);
+    applyWebviewPool([], 2_000);
+    expect(webviewPoolOrder()).toHaveLength(3 + GHOST_ENTRY_HEADROOM);
 
     usePreferencesStore.getState().setBrowserPreference("backgroundMax", 2);
     applyWebviewPool([], 3_000);
-    expect(webviewPoolOrder()).toHaveLength(2);
+    expect(webviewPoolOrder()).toHaveLength(2 + GHOST_ENTRY_HEADROOM);
   });
 
   it("没有浏览器节点时什么都不做", () => {

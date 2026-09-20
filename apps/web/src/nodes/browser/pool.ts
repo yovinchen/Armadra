@@ -59,8 +59,29 @@ import { useCanvasStore } from "@/store/canvas-store";
  */
 export const BACKGROUND_WEBVIEW_MAX = BROWSER_DEFAULT_BACKGROUND_MAX;
 
-function backgroundMax(): number {
-  return usePreferencesStore.getState().browser.backgroundMax;
+/**
+ * 池比 guest 预算多留几个**条目**。
+ *
+ * 两层用的是同一个设置项，但管的不是同一样东西：`./background` 管的是「几
+ * 个后台页面还装着」（超出的释放进程，节点、标签、地址与缩略图都留着），这
+ * 里管的是「几个后台节点还在池里」（超出的条目直接消失，回来是一个全新的组
+ * 件，标签与地址从文档重新长出来）。
+ *
+ * 两者一样大的时候，池那一侧**总是先动手**——逐出在每一次投影时判，而回收
+ * 的定时器十五秒才醒一次。实测：切走一块有五个浏览器节点的画布，上限 2，
+ * 瞬间少掉三个 `<webview>`，而三个「已释放」占位一个都没出现。于是更狠的
+ * 那一步永远先发生，温和的那一步形同虚设。
+ *
+ * 留出余量之后顺序就对了：先释放进程（便宜、可逆、看得见），条目要等到多
+ * 出这么些个才离开池。余量是常数而不是比例——它回答的是「一个人在几块画布
+ * 之间来回切时，手边大概有多少个浏览器节点」，那个数不随内存预算缩放。
+ */
+export const GHOST_ENTRY_HEADROOM = 8;
+
+function ghostEntryMax(): number {
+  return (
+    usePreferencesStore.getState().browser.backgroundMax + GHOST_ENTRY_HEADROOM
+  );
 }
 
 /**
@@ -222,7 +243,7 @@ export function applyWebviewPool(
 /** 逐出最久退休者，直到 ghost 数量落回上限。活着的永远不动。 */
 function evictGhosts(): void {
   let retired = entries.filter((entry) => entry.retiredAt !== null);
-  const max = backgroundMax();
+  const max = ghostEntryMax();
   while (retired.length > max) {
     let oldest = retired[0]!;
     for (const entry of retired) {
