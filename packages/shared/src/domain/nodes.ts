@@ -5,6 +5,7 @@ import { canvasNodeDataSchema } from "./node-data.js";
 import {
   DEFAULT_NODE_COLOR,
   edgeKindSchema,
+  edgeRoleSchema,
   nodeTypeSchema,
 } from "./primitives.js";
 
@@ -74,6 +75,13 @@ export const canvasEdgeSchema = z.object({
   source: z.string().uuid(),
   target: z.string().uuid(),
   kind: edgeKindSchema.default("link"),
+  /**
+   * 对等还是主从（`source` 是主，`target` 是从）。
+   *
+   * 可选而不是默认 `peer`：写这个字段的是 core 的连线记录，页面只读它。缺省
+   * 与 `peer` 同义，但不由页面替一块老画布把这个字段补上。
+   */
+  role: edgeRoleSchema.optional(),
   createdAt: timestampSchema,
   updatedAt: timestampSchema,
 });

@@ -37,7 +37,9 @@ import {
   zoomCanvasByWheel,
 } from "@/canvas/interaction/wheel-zoom";
 import { NodeAnnotationHost, NodeMetaMenuItems } from "@/meta/NodeMeta";
+import { HeaderChips } from "./HeaderChips";
 import { NodeNameBadge } from "./NodeNameBadge";
+import { SupervisionBadge } from "./SupervisionBadge";
 import { requestNodeNames } from "./node-names";
 import { COLLAPSED_HEIGHT, DRAG_HANDLE_CLASS, nodeMeta } from "./registry";
 import { HEADER_HEIGHT } from "./geometry";
@@ -318,9 +320,10 @@ export function NodeHeader({
           节点的头部；有名字时它排在类型自己的徽标之前，因为它是「这是谁」。 */}
       <NodeNameBadge node={node} />
 
-      <span className="node-header-chips flex min-w-0 items-center gap-1">
-        {headerChips}
-      </span>
+      {/* 主从关系紧跟名字：两枚合起来才是「这是谁、他归谁」。 */}
+      <SupervisionBadge node={node} />
+
+      <HeaderChips>{headerChips}</HeaderChips>
 
       {status && (
         <span className="node-header-status">

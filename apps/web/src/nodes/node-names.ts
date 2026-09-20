@@ -90,13 +90,30 @@ function agentOf(node: CanvasNode): string | undefined {
  * 「名字…」用同一条：两个入口只有一个对话框，所以「连线时跳过了、回头再起」
  * 与「一开始就起」落在同一段代码上。
  */
-export type NodeNamesListener = (nodeIds: readonly string[]) => void;
+export interface NodeNamesRequest {
+  /**
+   * 这次请求来自刚建立的那条边。
+   *
+   * 有它才问角色：对等还是主从是**一条边**的属性，从节点菜单点「名字…」时没
+   * 有边可问，`open-agent` 建的边也不弹框——那条边是 Agent 自己拉的，人不在
+   * 场，没有人可以回答这个问题。
+   */
+  readonly edgeId?: string;
+}
+
+export type NodeNamesListener = (
+  nodeIds: readonly string[],
+  request: NodeNamesRequest,
+) => void;
 
 const listeners = new Set<NodeNamesListener>();
 
-export function requestNodeNames(nodeIds: readonly string[]): void {
+export function requestNodeNames(
+  nodeIds: readonly string[],
+  request: NodeNamesRequest = {},
+): void {
   if (nodeIds.length === 0) return;
-  for (const listener of [...listeners]) listener(nodeIds);
+  for (const listener of [...listeners]) listener(nodeIds, request);
 }
 
 export function onNodeNamesRequest(listener: NodeNamesListener): () => void {

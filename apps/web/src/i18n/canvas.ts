@@ -144,6 +144,15 @@ const zh = {
   "edge.selfLink": "不能连到自己",
   "edge.duplicate": "这两个节点已经连过了",
 
+  /* 连线的角色：对等还是主从（`source` 是主）。 */
+  "edge.role.title": "这条线的关系",
+  "edge.role.peer": "对等",
+  "edge.role.supervisesOption": "主 → 从",
+  "edge.role.supervises": "主 @{supervisor} → 从 @{subordinate}",
+  "edge.role.supervisorBadge": "主 · {count} 从",
+  "edge.role.subordinateBadge": "从 @{name}",
+  "edge.role.orphanBadge": "主已离开",
+
   /* 白板超过上限时的保存失败提示（React Flow 计划 F34） */
   "canvas.whiteboardTooLarge": "白板内容超出上限，未保存",
 
@@ -333,6 +342,14 @@ const en: Record<keyof typeof zh, string> = {
   "edge.remove": "Remove link",
   "edge.selfLink": "A node cannot link to itself",
   "edge.duplicate": "These two nodes are already linked",
+
+  "edge.role.title": "How these two relate",
+  "edge.role.peer": "Peers",
+  "edge.role.supervisesOption": "Lead → report",
+  "edge.role.supervises": "Lead @{supervisor} → report @{subordinate}",
+  "edge.role.supervisorBadge": "Lead · {count} reports",
+  "edge.role.subordinateBadge": "Reports to @{name}",
+  "edge.role.orphanBadge": "Lead is gone",
 
   "canvas.whiteboardTooLarge": "Whiteboard is too large to save",
 

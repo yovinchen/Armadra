@@ -711,6 +711,21 @@ describe("addEdge", () => {
     });
   });
 
+  it("角色默认不写；写了之后那条边才是主从", () => {
+    const a = makeNode("terminal");
+    const b = makeNode("terminal");
+    load([a, b]);
+    const id = state().addEdge(a.id, b.id) as string;
+    // 缺省与「对等」同义，但不由页面替一块老画布补上这个字段。
+    expect(edges()[0]?.role).toBeUndefined();
+    state().setEdgeRole(id, "supervises");
+    expect(edges()[0]).toMatchObject({
+      source: a.id,
+      target: b.id,
+      role: "supervises",
+    });
+  });
+
   it("自连返回 null", () => {
     const a = makeNode("terminal");
     load([a]);

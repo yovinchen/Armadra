@@ -291,10 +291,11 @@ export function useFlowNodes(): FlowBindings {
       return;
     }
     if (verdict.kind !== "link") return;
-    if (state.addEdge(verdict.source, verdict.target) === null) return;
+    const edgeId = state.addEdge(verdict.source, verdict.target);
+    if (edgeId === null) return;
     // 一条边建立的那一刻，两端才第一次需要互相称呼（设计 §2.2）。两端各自
     // 缺名字的才会被问，可以跳过——跳过之后连线照样成立。
-    requestNodeNames([verdict.source, verdict.target]);
+    requestNodeNames([verdict.source, verdict.target], { edgeId });
   }, []);
 
   /**

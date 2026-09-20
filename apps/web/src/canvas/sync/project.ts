@@ -1,6 +1,11 @@
 import { Position } from "@xyflow/react";
 import type { Edge, Node, NodeHandle } from "@xyflow/react";
-import type { BoardDocument, CanvasEdge, CanvasNode } from "@armadra/shared";
+import type {
+  BoardDocument,
+  CanvasEdge,
+  CanvasEdgeRole,
+  CanvasNode,
+} from "@armadra/shared";
 
 import { COLLAPSED_HEIGHT, defaultNodeSize } from "../../store/defaults";
 import { NODE_DRAG_HANDLE, nodeMeta } from "../../nodes/registry";
@@ -52,7 +57,13 @@ export type ArmadraFlowNode = Node<CanvasNode, ArmadraNodeType>;
 export type WhiteboardFlowNode = Node<Item, WhiteboardNodeType>;
 export type CanvasFlowNode = ArmadraFlowNode | WhiteboardFlowNode;
 
-export type LinkFlowEdge = Edge<Record<string, never>, "link">;
+/**
+ * 连线携带的唯一一样东西：两端是对等还是主从（`source` 是主）。
+ *
+ * 只带这一个字段是有意的——边的样子由两端的矩形与类型算出来，多带一份数据就
+ * 会有第二个答案。角色不一样：它不是画出来的，是**记下来的**。
+ */
+export type LinkFlowEdge = Edge<{ role?: CanvasEdgeRole }, "link">;
 export type ReferenceFlowEdge = Edge<Record<string, never>, "reference">;
 export type CanvasFlowEdge = LinkFlowEdge | ReferenceFlowEdge;
 
@@ -307,6 +318,7 @@ function projectEdge(edge: CanvasEdge, selected: boolean): CanvasFlowEdge {
     source: edge.source,
     target: edge.target,
     selected,
+    data: { ...(edge.role === undefined ? {} : { role: edge.role }) },
   } as LinkFlowEdge;
 }
 

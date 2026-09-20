@@ -1,10 +1,11 @@
 import * as React from "react";
 import { BaseEdge, useInternalNode, useStore } from "@xyflow/react";
 import type { EdgeProps, InternalNode, Node } from "@xyflow/react";
-import type { CanvasNode } from "@armadra/shared";
+import type { CanvasEdgeRole, CanvasNode } from "@armadra/shared";
 
 import { useDeliveryEdge, type DeliveryMark } from "@/agent/delivery-store";
 import { useT } from "@/app/preferences-store";
+import { displayNameOf } from "@/canvas/supervision";
 import { formatRelativeTime } from "@/lib/format";
 import type { Box } from "../../geometry";
 import type { LinkFlowEdge } from "../../sync/project";
@@ -52,6 +53,14 @@ function typeOf(node: InternalNode<Node> | undefined): string | undefined {
   return data?.type;
 }
 
+/** 一端在提示里的称呼：名字优先，其次标题。 */
+function nameOf(
+  node: InternalNode<Node> | undefined,
+  fallback: string,
+): string {
+  return displayNameOf(node?.data as CanvasNode | undefined, fallback);
+}
+
 /**
  * 边上那句悬停提示：最近一次投递的结果与时刻。
  *
@@ -73,11 +82,28 @@ export function deliveryTooltip(
     : `${line} · ${t(`error.delivery.${mark.code}`)}`;
 }
 
+/**
+ * 主从边的那句提示：「主 @a → 从 @b」。
+ *
+ * 箭头已经说了方向，这句话说的是**谁是谁**：一条线两端的圆角矩形长得一样，
+ * 而「planner 盯着 codex-1」与反过来是两件事。对等边没有这句话。
+ */
+export function supervisionTooltip(
+  role: CanvasEdgeRole | undefined,
+  supervisor: string,
+  subordinate: string,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string | null {
+  if (role !== "supervises") return null;
+  return t("edge.role.supervises", { supervisor, subordinate });
+}
+
 export function LinkEdge({
   source,
   target,
   selected = false,
   style,
+  data,
 }: EdgeProps<LinkFlowEdge>) {
   const t = useT();
   const sourceNode = useInternalNode(source);
@@ -88,7 +114,17 @@ export function LinkEdge({
   // 这条边上最近一次投递（设计 §10）。两个方向取较新的那一次：画布上的一条线
   // 是无向的，投递不是。
   const { mark, flashing } = useDeliveryEdge(source, target);
-  const tooltip = deliveryTooltip(mark, t);
+  // 主从边多一句「主 @a → 从 @b」。两句话叠在同一个 `<title>` 里：一条边只有
+  // 一处可以停下鼠标。
+  const role = data?.role;
+  const supervision = supervisionTooltip(
+    role,
+    nameOf(sourceNode, source),
+    nameOf(targetNode, target),
+    t,
+  );
+  const tooltip =
+    [supervision, deliveryTooltip(mark, t)].filter(Boolean).join("\n") || null;
 
   const sourceBox = boxOf(sourceNode);
   const targetBox = boxOf(targetNode);
@@ -102,11 +138,16 @@ export function LinkEdge({
   );
   const { curve } = view;
   const width = selected ? STROKE_WIDTH_SELECTED : STROKE_WIDTH;
-  const color = flashing
-    ? "var(--brand)"
-    : selected
+  // 主从边一律用品牌色并且**只画一个箭头**（指向从）：它是画布上唯一一条有
+  // 方向的关系，读者要能在不悬停的情况下看出方向。对等边照旧按两端的类型决定
+  // 箭头，颜色也照旧中性——大多数边都是对等的，全画成高亮就等于没有高亮。
+  const supervises = role === "supervises";
+  const color =
+    flashing || selected || supervises
       ? "var(--brand)"
       : "var(--muted-foreground)";
+  const arrowStart = supervises ? false : view.arrowStart;
+  const arrowEnd = supervises ? true : view.arrowEnd;
   const label = zoom >= LABEL_MIN_ZOOM ? t(view.labelKey) : "";
 
   return (
@@ -114,6 +155,7 @@ export function LinkEdge({
       style={{ color }}
       data-slot="link-edge"
       data-delivery={flashing ? "true" : undefined}
+      data-role={supervises ? "supervises" : undefined}
     >
       {/*
         最近一次投递（设计 §10）。原生 `<title>` 而不是一个浮层：一条边不该
@@ -148,7 +190,7 @@ export function LinkEdge({
           pointerEvents="none"
         />
       ) : null}
-      {view.arrowStart ? (
+      {arrowStart ? (
         <path
           d={arrowHead({ x: curve.sourceX, y: curve.sourceY }, curve.c1)}
           fill="none"
@@ -158,7 +200,7 @@ export function LinkEdge({
           strokeLinejoin="round"
         />
       ) : null}
-      {view.arrowEnd ? (
+      {arrowEnd ? (
         <path
           d={arrowHead({ x: curve.targetX, y: curve.targetY }, curve.c2)}
           fill="none"

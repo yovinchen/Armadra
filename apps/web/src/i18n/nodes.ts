@@ -25,6 +25,8 @@ const zh = {
   "node.restore": "还原",
   "node.close": "关闭",
   "node.more": "更多",
+  /* 头部徽标多到一行放不下时折起来的那一枚。 */
+  "node.chips.more": "···{count}",
   "node.rename": "重命名",
   /* 名字（handle）：Agent 之间互相称呼用的短词，与标题是两件事 */
   "node.name.edit": "名字…",
@@ -166,6 +168,7 @@ const en: Record<keyof typeof zh, string> = {
   "node.restore": "Restore",
   "node.close": "Close",
   "node.more": "More",
+  "node.chips.more": "···{count}",
   "node.rename": "Rename",
   "node.name.edit": "Name…",
   "node.name.title": "Give it a name",

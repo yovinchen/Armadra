@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { CanvasNode } from "@armadra/shared";
+import type { CanvasEdgeRole, CanvasNode } from "@armadra/shared";
 
 import { useT } from "@/app/preferences-store";
 import { Button } from "@/ui/button";
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/ui/dialog";
 import { Input } from "@/ui/input";
+import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import { useCanvasStore } from "@/store/canvas-store";
 import {
   holderOf,
@@ -34,13 +35,18 @@ import {
 export function NodeNameDialog() {
   const t = useT();
   const [asking, setAsking] = React.useState<readonly string[]>([]);
+  // 这次是不是「刚拉完一条线」。只有那时才问角色——对等还是主从是一条边的
+  // 属性，从节点菜单点开时没有边可问。
+  const [edgeId, setEdgeId] = React.useState<string | undefined>();
+  const [role, setRole] = React.useState<CanvasEdgeRole>("peer");
+  const setEdgeRole = useCanvasStore((state) => state.setEdgeRole);
   const nodes = useCanvasStore((state) => state.document?.nodes);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const [draft, setDraft] = React.useState<Record<string, string>>({});
 
   React.useEffect(
     () =>
-      onNodeNamesRequest((nodeIds) => {
+      onNodeNamesRequest((nodeIds, request) => {
         const board = useCanvasStore.getState().document?.nodes ?? [];
         // 一次请求里已经有名字的那些：只有被单独点开时才编辑它，连线时跳过。
         const wanted = nodeIds.filter((id) =>
@@ -62,6 +68,9 @@ export function NodeNameDialog() {
         }
         setDraft(seeded);
         setAsking(fresh);
+        setEdgeId(request.edgeId);
+        // 默认对等：主从是一句更强的话，要人自己说出口。
+        setRole("peer");
       }),
     [],
   );
@@ -74,6 +83,8 @@ export function NodeNameDialog() {
   const close = (): void => {
     setAsking([]);
     setDraft({});
+    setEdgeId(undefined);
+    setRole("peer");
   };
 
   /** 每一端各自的判定：空=清掉名字，形状不合法或撞名=不能确认。 */
@@ -105,6 +116,11 @@ export function NodeNameDialog() {
 
   const confirm = (): void => {
     if (!ready) return;
+    // 角色先落，名字后落：两者在同一次确认里，但角色属于那条边，与某一端的
+    // 名字合法与否无关。
+    if (edgeId !== undefined && role === "supervises") {
+      setEdgeRole(edgeId, "supervises");
+    }
     for (const entry of verdicts) {
       const current = nodeName(entry.node);
       if (current === entry.handle) continue;
@@ -161,6 +177,34 @@ export function NodeNameDialog() {
               )}
             </div>
           ))}
+          {/*
+            这条线是对等还是主从（`source` 是主）。只在刚拉完一条线时出现，
+            默认对等——主从是一句更强的话，要人自己说出口。
+          */}
+          {edgeId === undefined ? null : (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-[var(--muted-foreground)]">
+                {t("edge.role.title")}
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={role}
+                onValueChange={(next) => {
+                  if (next === "peer" || next === "supervises") setRole(next);
+                }}
+                aria-label={t("edge.role.title")}
+              >
+                <ToggleGroupItem value="peer">
+                  {t("edge.role.peer")}
+                </ToggleGroupItem>
+                <ToggleGroupItem value="supervises">
+                  {t("edge.role.supervisesOption")}
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          )}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={close}>
               {t("node.name.skip")}

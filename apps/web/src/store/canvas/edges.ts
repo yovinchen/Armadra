@@ -5,7 +5,7 @@ import { type CanvasGet, type CanvasSet, type CanvasStore } from "./types";
 export function createEdgesSlice(
   set: CanvasSet,
   get: CanvasGet,
-): Pick<CanvasStore, "addEdge" | "removeEdges"> {
+): Pick<CanvasStore, "addEdge" | "removeEdges" | "setEdgeRole"> {
   return {
     addEdge: (source, target) => {
       const state = get();
@@ -40,6 +40,29 @@ export function createEdgesSlice(
       if (!patch) return null;
       set(patch);
       return edge.id;
+    },
+
+    /**
+     * 对等还是主从（`source` 是主）。
+     *
+     * 单独一个动作而不是 `addEdge` 的第三个参数：角色是人在命名对话框里回答的
+     * 第二个问题，而边在那之前就已经建立了——连线不该等一个可以跳过的对话框。
+     */
+    setEdgeRole: (id, role) => {
+      set((state) => {
+        const patch = commit(state, (document) => {
+          const edge = document.edges.find((entry) => entry.id === id);
+          if (!edge || edge.role === role) return null;
+          const stamp = now();
+          return {
+            ...document,
+            edges: document.edges.map((entry) =>
+              entry.id === id ? { ...entry, role, updatedAt: stamp } : entry,
+            ),
+          };
+        });
+        return patch ?? state;
+      });
     },
 
     removeEdges: (ids) => {

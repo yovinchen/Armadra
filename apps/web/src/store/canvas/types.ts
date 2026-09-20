@@ -1,5 +1,6 @@
 import {
   type BoardDocument,
+  type CanvasEdgeRole,
   type CanvasNode,
   type CanvasNodeData,
   type CanvasNodeType,
@@ -167,6 +168,8 @@ export interface CanvasActions {
   removeNodes: (ids: string[]) => void;
   duplicateNodes: (ids: string[]) => string[];
   addEdge: (source: string, target: string) => string | null;
+  /** 一条边是对等还是主从（`source` 是主，设计续作 §10）。 */
+  setEdgeRole: (id: string, role: CanvasEdgeRole) => void;
   removeEdges: (ids: string[]) => void;
   setViewport: (viewport: Viewport) => void;
   /** 白板文档（React Flow 计划 §3.1）；跟着画布文档一起保存。 */

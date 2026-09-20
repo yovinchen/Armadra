@@ -64,7 +64,12 @@ const HANDLES: NodeHandle[] = [
   { id: "body", type: "target", position: Position.Left, x: 0, y: 0 },
 ];
 
-function flowNode(id: string, type: CanvasNode["type"], x: number): Node {
+function flowNode(
+  id: string,
+  type: CanvasNode["type"],
+  x: number,
+  title?: string,
+): Node {
   return {
     id,
     type: "armadra",
@@ -72,14 +77,17 @@ function flowNode(id: string, type: CanvasNode["type"], x: number): Node {
     width: 100,
     height: 100,
     handles: HANDLES,
-    data: makeNode(type, { id }) as unknown as Record<string, unknown>,
+    data: makeNode(type, {
+      id,
+      ...(title === undefined ? {} : { title }),
+    }) as unknown as Record<string, unknown>,
   };
 }
 
 function renderEdge(
   sourceType: CanvasNode["type"],
   targetType: CanvasNode["type"],
-  options: { selected?: boolean; zoom?: number } = {},
+  options: { selected?: boolean; zoom?: number; role?: string } = {},
 ) {
   const edge: Edge = {
     id: "e1",
@@ -87,6 +95,7 @@ function renderEdge(
     source: A,
     target: B,
     selected: options.selected ?? false,
+    data: options.role === undefined ? {} : { role: options.role },
   };
   return render(
     <ReactFlowProvider>
@@ -95,7 +104,10 @@ function renderEdge(
         height={600}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        nodes={[flowNode(A, sourceType, 0), flowNode(B, targetType, 300)]}
+        nodes={[
+          flowNode(A, sourceType, 0, "planner"),
+          flowNode(B, targetType, 300, "codex-1"),
+        ]}
         edges={[edge]}
         viewport={{ x: 0, y: 0, zoom: options.zoom ?? 1 }}
         onViewportChange={() => undefined}
@@ -194,6 +206,28 @@ describe("LinkEdge", () => {
     expect(
       edgeGroup(container).querySelector(".anim-delivery-flow"),
     ).toBeNull();
+  });
+
+  /**
+   * 主从边（连线角色）。它是画布上唯一一条有方向的关系，所以方向不能只写在
+   * 悬停提示里：一个箭头指向从，颜色用品牌色。
+   */
+  it("主从边只画一个指向从的箭头并用品牌色", () => {
+    const peer = renderEdge("terminal", "terminal");
+    // 对等的终端 ↔ 终端是两个箭头，颜色中性。
+    expect(edgeGroup(peer.container).querySelectorAll("path")).toHaveLength(4);
+    expect(edgeGroup(peer.container).dataset.role).toBeUndefined();
+    cleanup();
+
+    const lead = renderEdge("terminal", "terminal", { role: "supervises" });
+    const group = edgeGroup(lead.container);
+    expect(group.dataset.role).toBe("supervises");
+    expect(group.style.color).toBe("var(--brand)");
+    // 主路径 + 命中路径 + 一个箭头。
+    expect(group.querySelectorAll("path")).toHaveLength(3);
+    expect(group.querySelector("title")?.textContent).toContain(
+      "主 @planner → 从 @codex-1",
+    );
   });
 
   it("悬停提示说最近一次的结果与时刻，被拒的多说一句为什么", () => {

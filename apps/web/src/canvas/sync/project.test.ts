@@ -292,9 +292,31 @@ describe("projectEdges", () => {
       board([node(NODE), node(OTHER)], [edge(NODE, OTHER)]),
       EMPTY,
     );
+    // `data` 里只带角色；缺省不带，所以一块老画布上的边投出来是空的。
     expect(edges).toEqual([
-      { id: EDGE, type: "link", source: NODE, target: OTHER, selected: false },
+      {
+        id: EDGE,
+        type: "link",
+        source: NODE,
+        target: OTHER,
+        selected: false,
+        data: {},
+      },
     ]);
+  });
+
+  it("主从的角色跟着投出去：边的样子由它决定", () => {
+    const rows = board([node(NODE), node(OTHER)], [edge(NODE, OTHER)]);
+    const supervises = {
+      ...rows,
+      edges: rows.edges.map((entry) => ({
+        ...entry,
+        role: "supervises" as const,
+      })),
+    };
+    expect(projectEdges(supervises, EMPTY)[0]?.data).toEqual({
+      role: "supervises",
+    });
   });
 
   it("两端有一个不在画布上就投不出来（远端刚删掉那个节点）", () => {
