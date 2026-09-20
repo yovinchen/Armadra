@@ -15,8 +15,10 @@ import { canonicalDirectory } from "../workspaces/roots";
 import { badRequest, conflict, notFound } from "../workspaces/support";
 import {
   type EntryKind,
+  MANAGED_DIRECTORY,
   baseName,
   join,
+  markManagedDirectory,
   refuseReserved,
   resolveExisting,
   resolveTarget,
@@ -145,6 +147,7 @@ export function trashEntry(root: string, requested: string): TrashEntry {
   const id = randomUUID();
   const slot = pathJoin(base, TRASH_DIRECTORY, id);
   mkdirSync(pathJoin(slot, PAYLOAD), { recursive: true });
+  markManagedDirectory(pathJoin(base, MANAGED_DIRECTORY));
   const entry: TrashEntry = {
     id,
     originalPath: relative,

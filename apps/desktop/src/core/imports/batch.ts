@@ -20,7 +20,7 @@ import {
 } from "../workspaces/roots";
 import { badRequest, conflict, forbidden } from "../workspaces/support";
 import { mimeOrOctetStream } from "../files/mime";
-import { relativeToRoot } from "../files/paths";
+import { markManagedDirectory, relativeToRoot } from "../files/paths";
 import { metadata, symlinkMetadata } from "../files/stat";
 import {
   IMPORTS_DIRECTORY,
@@ -157,6 +157,7 @@ export class ImportBatch {
   static into(root: string): ImportBatch {
     const base = canonicalDirectory(root);
     ensureDirectory(join(base, MANAGED_DIRECTORY));
+    markManagedDirectory(join(base, MANAGED_DIRECTORY));
     ensureDirectory(join(base, MANAGED_DIRECTORY, "imports"));
     return new ImportBatch(
       join(base, MANAGED_DIRECTORY, "imports"),

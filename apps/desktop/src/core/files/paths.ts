@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { relative as relativePath, resolve, sep } from "node:path";
 import { metadata, symlinkMetadata } from "./stat";
 import {
@@ -142,6 +143,32 @@ export function validEntryName(name: string): void {
 
 /** The directory our own bookkeeping lives in. */
 export const MANAGED_DIRECTORY = ".armadra";
+
+/**
+ * Keep `.armadra` out of the workspace's Git status.
+ *
+ * The trash, the imports and the assets all land inside the user's working
+ * tree, so deleting one file in the file tree used to add three untracked
+ * entries to `git status` — noise the Git tool window shows and a commit can
+ * pick up by accident. A self-ignoring `.gitignore` (`*` also matches the
+ * `.gitignore` itself) is the one marker that works for every repository
+ * shape: the workspace being the repository root, a sub-directory of one, or
+ * no repository at all. Nothing outside `.armadra` is touched — neither the
+ * user's own `.gitignore` nor `.git/info/exclude`.
+ *
+ * Best effort: a read-only workspace must not fail an import or a delete just
+ * because the marker could not be written.
+ */
+export function markManagedDirectory(directory: string): void {
+  const marker = join(directory, ".gitignore");
+  if (symlinkMetadata(marker) !== undefined) return;
+  try {
+    writeFileSync(marker, "*\n", { flag: "wx" });
+  } catch {
+    // Already there, or the workspace is not writable. Either way the caller's
+    // own work is what matters.
+  }
+}
 
 /**
  * `file_ops::refuse_reserved`: the `.armadra` folder is ours.

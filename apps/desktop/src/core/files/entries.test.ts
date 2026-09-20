@@ -158,6 +158,23 @@ describe("managing workspace entries", () => {
     ).toBe(true);
   });
 
+  it("keeps the trash out of the workspace's Git status", () => {
+    writeFileSync(join(root.path, "gone.txt"), "bytes");
+    trashEntry(root.path, "gone.txt");
+    // `*` also matches the marker itself, so the whole managed folder — trash,
+    // imports, assets — stays invisible to `git status`.
+    expect(readFileSync(join(root.path, ".armadra", ".gitignore"), "utf8")).toBe(
+      "*\n",
+    );
+    // A marker the user edited is theirs; a second delete leaves it alone.
+    writeFileSync(join(root.path, ".armadra", ".gitignore"), "*\n!keep\n");
+    writeFileSync(join(root.path, "gone-too.txt"), "bytes");
+    trashEntry(root.path, "gone-too.txt");
+    expect(readFileSync(join(root.path, ".armadra", ".gitignore"), "utf8")).toBe(
+      "*\n!keep\n",
+    );
+  });
+
   it("refuses unknown trash ids without touching the filesystem", () => {
     expect(refusal(() => restoreTrash(root.path, "../../etc")).status).toBe(
       400,

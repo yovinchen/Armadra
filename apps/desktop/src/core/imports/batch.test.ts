@@ -93,6 +93,14 @@ describe("import batches", () => {
     expect(result.path.startsWith(`${IMPORTS_DIRECTORY}/`)).toBe(true);
   });
 
+  it("keeps imported copies out of the workspace's Git status", () => {
+    const root = temp();
+    ImportBatch.into(root.path).commit(root.path);
+    expect(readFileSync(join(root.path, ".armadra", ".gitignore"), "utf8")).toBe(
+      "*\n",
+    );
+  });
+
   it("preserves every desktop copy with the same basename", () => {
     const root = temp();
     const sources = temp();
