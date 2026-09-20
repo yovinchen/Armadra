@@ -13,6 +13,8 @@ import {
   count,
   currentScope,
   inScope,
+  ensureIndexed,
+  forgetIndexed,
   listConversations,
   refresh,
   transcriptTitle,
@@ -382,5 +384,63 @@ describe("索引的范围", () => {
     expect(inScope({ mode: "workspaces", roots: ["/a/bc"] }, "/a/bcd")).toBe(
       false,
     );
+describe("the index is built on demand", () => {
+  // 装配时无条件扫一遍的代价量过：启动 RSS 88 MB → 141 MB、1.1 s，而一块空画布
+  // 从来不开命令面板。这两条盯的是「谁触发了扫描」这件结构上的事。
+  it("indexes nothing until someone asks", () => {
+    forgetIndexed();
+    const root = claudeRoot();
+    writeClaude("s-lazy", [
+      { type: "user", cwd: "/Users/me/project", message: { content: "hi" } },
+    ]);
+    // 建库、写记录，没有人读：表还是空的。
+    expect(count(database)).toBe(0);
+    refresh(database, [["claude", root]]);
+    expect(count(database)).toBe(1);
+  });
+
+  it("only pays for the walk once", () => {
+    forgetIndexed();
+    const root = claudeRoot();
+    writeClaude("s-once", [
+      { type: "user", cwd: "/Users/me/project", message: { content: "hi" } },
+    ]);
+    refresh(database, [["claude", root]]);
+    expect(count(database)).toBe(1);
+    // `refresh` 自己记下「扫过了」，所以后面的 `ensureIndexed` 不再走第二趟——
+    // 它要是走了，默认 roots 下的真实 HOME 会把这一行挤掉。
+    ensureIndexed(database, () => undefined);
+    expect(count(database)).toBe(1);
+  });
+});
+
+describe("the head reader", () => {
+  // 一千多个文件各自 `Buffer.alloc(512 KiB)` 是半个 G 的外部分配，走完一趟进程
+  // 也拿不回那些页。现在共用一个缓冲区——共用就得证明上一个文件的字节不会漏到
+  // 下一个里。
+  it("does not leak one file's bytes into the next", () => {
+    const root = claudeRoot();
+    const long = join(root, "-Users-me-project", "long.jsonl");
+    const short = join(root, "-Users-me-project", "short.jsonl");
+    writeFileSync(long, `${"A".repeat(4_000)}\n${"B".repeat(4_000)}\n`);
+    writeFileSync(short, "tiny\n");
+    expect(readLines(long, 64 * 1024, 200)).toEqual([
+      "A".repeat(4_000),
+      "B".repeat(4_000),
+    ]);
+    // 同一个缓冲区，第二个文件只该看到自己那五个字节。
+    expect(readLines(short, 64 * 1024, 200)).toEqual(["tiny"]);
+    // 反过来也一样：小的在前、大的在后。
+    expect(readLines(short, 64 * 1024, 200)).toEqual(["tiny"]);
+    expect(readLines(long, 64 * 1024, 200)).toHaveLength(2);
+  });
+
+  it("keeps the byte budget and the line budget", () => {
+    const root = claudeRoot();
+    const path = join(root, "-Users-me-project", "budget.jsonl");
+    writeFileSync(path, `${["one", "two", "three", "four"].join("\n")}\n`);
+    expect(readLines(path, 64 * 1024, 2)).toEqual(["one", "two"]);
+    // 预算切在半行上：那半行被丢掉而不是半解析。
+    expect(readLines(path, 5, 200)).toEqual(["one"]);
   });
 });

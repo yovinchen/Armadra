@@ -117,22 +117,25 @@ export function readLines(
   }
   try {
     const size = Math.min(statSync(path).size, maxBytes);
-    const buffer = Buffer.alloc(size);
+    const buffer = scratch(size);
     let filled = 0;
     while (filled < size) {
       const read = readSync(handle, buffer, filled, size - filled, filled);
       if (read === 0) break;
       filled += read;
     }
-    const text = buffer.subarray(0, filled).toString("utf8");
+    const view = buffer.subarray(0, filled);
     const lines: string[] = [];
     let start = 0;
     while (lines.length < maxLines) {
-      const newline = text.indexOf("\n", start);
+      const newline = view.indexOf(10, start);
       // Ran out of budget (or hit EOF) mid-line. A fragment of JSON is not
       // worth handing to the parser, so it is dropped.
       if (newline === -1) break;
-      lines.push(text.slice(start, newline).trim());
+      // Decoding line by line instead of the whole head at once: a newline
+      // byte never occurs inside a UTF-8 sequence, so the boundaries are safe,
+      // and the transient is one line rather than the whole budget.
+      lines.push(view.toString("utf8", start, newline).trim());
       start = newline + 1;
     }
     return lines;
@@ -141,6 +144,25 @@ export function readLines(
   } finally {
     closeSync(handle);
   }
+}
+
+/**
+ * The one read buffer, grown on demand and never released.
+ *
+ * A startup scan opens on the order of a thousand transcripts back to back, and
+ * `Buffer.alloc(512 KiB)` per file is half a gigabyte of external allocations
+ * in one synchronous stretch — nothing keeps a reference to them, but the
+ * process never gets those pages back either. Measured: the boot RSS of a core
+ * with 1,378 transcripts on disk was 143 MB against a `heapUsed` of 7.5 MB.
+ *
+ * Reusing one buffer is safe because {@link readLines} is synchronous: it is
+ * filled, decoded and finished with before any other code can run.
+ */
+let buffer: Buffer = Buffer.alloc(0);
+
+function scratch(size: number): Buffer {
+  if (buffer.length < size) buffer = Buffer.alloc(size);
+  return buffer;
 }
 
 /** Collapses every run of whitespace to one space and trims. */
