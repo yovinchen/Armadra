@@ -1049,3 +1049,45 @@ releaseDrive(sessionId, actor): Lease;
 ### 22.7 一处已知的红
 
 `0021` 归并行的另一条线（阶段 A 的名字表），本分支里没有它，所以 `pnpm repo:check` 报「迁移编号不连续：第 21 个为 22」，`db/migrations.test.ts` 与 `db/unified.test.ts` 里那两条「连续序列」断言同因失败。两条线合到一起即消失，本批没有为它改任何编号。其余全绿：`pnpm --filter @armadra/web test`（2553）、`@armadra/shared test`（163）、`@armadra/desktop test`（2641 通过 / 2 失败即上述两条）、`pnpm -r typecheck`、`format:check`、`ci:workflows`、`release:check`。
+
+## 23. 推式投递阶段 A：Agent 的名字（2026-09-20）
+
+[Agent 之间的推式投递与终端驱动](../design/agent-delivery.md) 分五阶段，A 独立于其余四阶段。本节记 A 的实测结果；B–E 未实施。
+
+### 23.1 名字从一个隐藏字段抬成产品概念
+
+名字（`handle`）此前只有 `canvas rename --handle` 能写，界面上看不见，唯一性由改名动词自己扫一遍全画布保证。现在：
+
+| 项       | 之前                               | 之后                                                                           |
+| -------- | ---------------------------------- | ------------------------------------------------------------------------------ |
+| 存哪     | `nodes.data_json` 的 `handle` 字段 | `node_handles(board_id, handle)`，`node_id` 唯一；`data.handle` 降为渲染副本   |
+| 唯一性   | 一次读-判-写                       | 主键；撞名时整次保存回滚                                                       |
+| 谁写     | 只有 `rename --handle`             | `rename --handle`、`link --name-from/--name-to/--name`、页面的命名对话框       |
+| 界面     | 看不见                             | 节点头 `@名字` 徽标（没起名就不画）、`···` 菜单的「名字…」、连线落点弹一次命名 |
+| Agent 看 | 看不见                             | `ARMADRA_NODE_NAME`、技能文本、`context list` / `canvas list` / 收件箱的每一行 |
+| 审计     | 不写                               | `canvas.handle.set`，`{from, to}`                                              |
+
+### 23.2 与设计的两处偏差
+
+1. **表与副本不是两次写，是一次。** 设计 §2.5 第 1 条说「副本与表不一致时以表为准，由一个用例守」。实现里 `saveBoard` 的同一个事务按刚写进 `nodes` 的文档重建这块画布的 `node_handles` 行（`canvas/handles.ts::syncHandles`），所以两者只有一个写入点，不一致这件事不会发生——比「发生了以表为准」更强。`canvas/handles.test.ts` 的最后两条守的是这个。
+2. **跨画布移动今天走「删掉再建」。** `saveBoard` 的 upsert 带 `WHERE nodes.board_id = excluded.board_id`，不让一行被另一块画布抢走，所以设计 §2.5 第 3 条的「换 `board_id`」在这套装配里是两次保存。名字仍然跟着节点走，落点已经有人叫这个名字时拒绝而不是静默改名。
+
+回填的日志那一条没做：迁移是 SQL，没有 logger。撞名的输家由用例断言（`db/names-migration.test.ts`），不靠日志追溯。
+
+### 23.3 验证
+
+- `pnpm --filter @armadra/desktop test`：172 个文件、1,906 条，全过。
+- `pnpm --filter @armadra/web test`：256 个文件、2,560 条，全过。
+- `pnpm -r typecheck`、`pnpm check` 全绿。
+  真机验收跑在一个独立实例上（`ARMADRA_DATA_DIR=/tmp/armadra-phase-a`、临时工作空间、自己的 Chrome profile 与 `--remote-debugging-port=9495`，跑完按 PID 清理，不碰操作员自己的数据目录）。页面是应用自己的首页，两个 Agent 节点真的起了 Claude 与 Codex 的 CLI。逐条结果：
+
+| 步骤                            | 结果                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------- |
+| 命名对话框，默认值是最小空位    | `source=claude-1` / `target=codex-1`                                                  |
+| 节点头徽标                      | `source@claude-1` / `target@codex-1`                                                  |
+| `context list` 看得见对方的名字 | `- target 类型=terminal 名字=codex-1 id=… 可读：转录与终端画面`                       |
+| `canvas list`                   | 两行都带 `名字=`                                                                      |
+| `canvas post --to codex-1`      | 命中；收件人 `inbox` 的那条带 `fromHandle: "claude-1"`                                |
+| `ARMADRA_NODE_NAME`             | 改名后新起的会话里 `echo "NODE_NAME=[$ARMADRA_NODE_NAME]"` 回显 `NODE_NAME=[codex-1]` |
+
+**没验到的一条：从把手拖一条线出来。** 这套 CDP 夹具里拖拽落不成边，而仓库自带的 `tools/probes/connection-drag.mjs` 在**未改动的代码**上同样 0/3（按下那一刻指针确实在把手上，松手在目标节点内，边数仍是 0）——是夹具或 Chrome 侧的既有问题，不是本批引入的。所以验收里那条边改用 `canvas link` 建，命名对话框走节点菜单里的「名字…」——它与拉线落点是同一条 `requestNodeNames` 通道，只是入口不同。拉线那条入口由 `canvas/flow/use-flow-nodes.test.ts` 的用例守。
