@@ -1,4 +1,6 @@
 import { create } from "zustand";
+
+import { requestOverlay } from "@/app/overlay-gates";
 import type { ApplyLanguageEditResult } from "@armadra/shared";
 
 import type { EditPreview } from "./edit-preview";
@@ -32,9 +34,19 @@ export const useEditPreviewStore = create<EditPreviewState>()((set) => ({
   result: null,
   error: null,
   applying: false,
-  begin: () => set({ loading: true, preview: null, result: null, error: null }),
-  show: (preview) => set({ preview, loading: false }),
-  fail: (message) => set({ loading: false, applying: false, error: message }),
+  begin: () => {
+    // 对话框本身是 `React.lazy` 的，只有被渲染才会去取 chunk；闸门在这里开。
+    requestOverlay("editPreview");
+    set({ loading: true, preview: null, result: null, error: null });
+  },
+  show: (preview) => {
+    requestOverlay("editPreview");
+    set({ preview, loading: false });
+  },
+  fail: (message) => {
+    requestOverlay("editPreview");
+    set({ loading: false, applying: false, error: message });
+  },
   setApplying: (applying) => set({ applying }),
   finish: (result) => set({ result, applying: false }),
   close: () =>

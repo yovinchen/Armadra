@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -8,27 +8,9 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { useAgentStatusHydration } from "../agent/hydration";
 import { useWorkspaceEvents } from "../api/events";
 import { FlowWorkspace } from "../canvas/FlowWorkspace";
-// 浮层都在 `./lazy` 里 `React.lazy` 包过，走各自的 chunk（§17 代码分割）。
-import {
-  AutomationDrawer,
-  CommandPalette,
-  ControlConfirmDialog,
-  ExplorerDrawer,
-  GithubDrawer,
-  HandoffDialog,
-  HandoffHistoryDrawer,
-  CodeActionMenu,
-  EditPreviewDialog,
-  MergeDialog,
-  ProblemsPanel,
-  ReferencesPanel,
-  ResourceDrawer,
-  QuickOpen,
-  SettingsDialog,
-  GitToolWindow,
-  SshPromptDialog,
-  UsageDashboard,
-} from "./lazy";
+// 浮层都在 `./lazy` 里 `React.lazy` 包过，走各自的 chunk（§17 代码分割）；
+// `./Overlays` 是它们的挂载点，也是决定 chunk 什么时候才被取回来的闸门。
+import { Overlays } from "./Overlays";
 import { useMinimapPreferences } from "./minimap-preferences";
 import { Banners } from "../shell/Banners";
 import { ControlsCluster } from "../shell/ControlsCluster";
@@ -129,26 +111,7 @@ function AppShell() {
       <MobileBottomNav />
       <MobileFocusPage />
       <Banners />
-      <Suspense fallback={null}>
-        <ExplorerDrawer />
-        <GitToolWindow />
-        <ProblemsPanel />
-        <ReferencesPanel />
-        <EditPreviewDialog />
-        <CodeActionMenu />
-        <MergeDialog />
-        <ResourceDrawer />
-        <AutomationDrawer />
-        <UsageDashboard />
-        <GithubDrawer />
-        <SettingsDialog />
-        <CommandPalette />
-        <QuickOpen />
-        <ControlConfirmDialog />
-        <SshPromptDialog />
-        <HandoffDialog />
-        <HandoffHistoryDrawer />
-      </Suspense>
+      <Overlays />
       <Toaster position="bottom-right" />
     </div>
   );

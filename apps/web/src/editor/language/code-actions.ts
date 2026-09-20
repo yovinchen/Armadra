@@ -2,6 +2,7 @@ import { LSPPlugin } from "@codemirror/lsp-client";
 import type { Command } from "@codemirror/view";
 import { create } from "zustand";
 
+import { requestOverlay } from "@/app/overlay-gates";
 import { t } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { buildEditPreview } from "./edit-preview";
@@ -59,7 +60,9 @@ export const useCodeActionStore = create<CodeActionState>()((set) => ({
   workspaceId: null,
   sessionId: null,
   uri: null,
-  begin: ({ workspaceId, uri }) =>
+  begin: ({ workspaceId, uri }) => {
+    // 菜单是 `React.lazy` 的：闸门要和 `open` 同时翻，不然第一帧没人渲染它。
+    requestOverlay("codeAction");
     set({
       open: true,
       loading: true,
@@ -68,7 +71,8 @@ export const useCodeActionStore = create<CodeActionState>()((set) => ({
       workspaceId,
       uri,
       sessionId: null,
-    }),
+    });
+  },
   show: (actions, sessionId) => set({ actions, sessionId, loading: false }),
   fail: (message) => set({ loading: false, error: message, actions: [] }),
   close: () =>

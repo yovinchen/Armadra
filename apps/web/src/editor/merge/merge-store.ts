@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { requestOverlay } from "@/app/overlay-gates";
+
 import type { Choice, MergeRegion } from "@/lib/merge3";
 
 /**
@@ -86,7 +88,8 @@ function empty(): MergeData {
 
 export const useMergeStore = create<MergeState>()((set) => ({
   ...empty(),
-  begin: ({ workspaceId, path, repositoryPath }) =>
+  begin: ({ workspaceId, path, repositoryPath }) => {
+    requestOverlay("merge");
     set({
       ...empty(),
       open: true,
@@ -94,7 +97,8 @@ export const useMergeStore = create<MergeState>()((set) => ({
       workspaceId,
       path,
       repositoryPath,
-    }),
+    });
+  },
   ready: ({ regions, expectedSha256, bom, trailingNewline }) =>
     set({
       loading: false,
