@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { handlesFor } from "../canvas/handles";
 import type { ContextLink } from "../canvas/context-links";
 import { Refusal } from "./refusals";
 
@@ -15,43 +16,26 @@ import { Refusal } from "./refusals";
  * The order is deliberate, most specific first:
  *
  *   1. the node id, exactly;
- *   2. `data.handle`, exactly — a short alias the user assigned;
+ *   2. the node's **name** (`handle`), exactly — the short, stable word an
+ *      agent calls a peer by;
  *   3. the title, exactly, case-insensitively;
  *   4. the title, as a substring, when exactly one link contains it.
  *
  * Ambiguity is refused rather than guessed at every stage. Writing to the
  * wrong agent is worse than not writing at all.
- */
-
-/**
- * The longest a handle may be. Short on purpose: a handle exists so an agent
- * can type a peer's name without quoting a title.
- */
-export const MAX_HANDLE_CHARS = 24;
-
-/**
- * Normalizes `raw` into a handle, or `undefined` when it is not one.
  *
- * 1–{@link MAX_HANDLE_CHARS} ASCII characters, starting with a letter or a
- * digit and continuing with letters, digits, `-` or `_`. Case is folded, so
- * `Review` and `review` are the same handle and neither can shadow the other.
+ * The shape of a name and the table it lives in belong to the canvas domain
+ * (`canvas/handles.ts`) — this module re-exports them so the callers that only
+ * ever needed "what is a handle" keep their one import.
  */
-export function normalizeHandle(raw: string): string | undefined {
-  const handle = raw.trim().toLowerCase();
-  if (handle.length === 0 || handle.length > MAX_HANDLE_CHARS) return undefined;
-  if (!/^[a-z0-9][a-z0-9_-]*$/.test(handle)) return undefined;
-  return handle;
-}
 
-/**
- * `node.data.handle`, re-validated rather than trusted: a board written by an
- * older client — or by hand — must not be able to register a handle the rename
- * verb would have refused.
- */
-export function handleOf(data: Record<string, unknown>): string | undefined {
-  const raw = data.handle;
-  return typeof raw === "string" ? normalizeHandle(raw) : undefined;
-}
+export {
+  MAX_HANDLE_CHARS,
+  handleOf,
+  handleOfNode,
+  normalizeHandle,
+} from "../canvas/handles";
+import { normalizeHandle } from "../canvas/handles";
 
 /** node id → handle, for the nodes one link document points at. */
 export type Handles = ReadonlyMap<string, string>;
@@ -59,44 +43,21 @@ export type Handles = ReadonlyMap<string, string>;
 export const NO_HANDLES: Handles = new Map();
 
 /**
- * Reads the handles of every node a link document points at, in one query.
+ * Reads the names of every node a link document points at, in one query.
  *
- * Handles live in `node.data`, not in the link document: the canvas rewrites
- * links whenever an edge changes, so a copy there would go stale the moment a
- * node was renamed. `shape` links are skipped — a whiteboard shape has no node
- * row, so it has no handle either.
+ * The source is `node_handles`, not `node.data`: uniqueness on a board is that
+ * table's primary key, and a copy in the document is only what the page draws
+ * a badge from (`canvas/handles.ts`). `shape` links are skipped — a whiteboard
+ * shape has no node row, so it has no name either.
  */
 export function loadHandles(
   database: DatabaseSync,
   links: readonly ContextLink[],
 ): Handles {
-  const ids = links.filter((link) => link.kind !== "shape").map(({ id }) => id);
-  const handles = new Map<string, string>();
-  if (ids.length === 0) return handles;
-  // Only the placeholder count varies; every id is still bound, so nothing a
-  // link document carries reaches the statement text.
-  const placeholders = ids.map(() => "?").join(",");
-  const rows = database
-    .prepare(`SELECT id, data_json FROM nodes WHERE id IN (${placeholders})`)
-    .all(...ids) as { id: string; data_json: string }[];
-  for (const row of rows) {
-    let data: Record<string, unknown>;
-    try {
-      const parsed = JSON.parse(row.data_json) as unknown;
-      if (
-        parsed === null ||
-        typeof parsed !== "object" ||
-        Array.isArray(parsed)
-      )
-        continue;
-      data = parsed as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-    const handle = handleOf(data);
-    if (handle !== undefined) handles.set(row.id, handle);
-  }
-  return handles;
+  return handlesFor(
+    database,
+    links.filter((link) => link.kind !== "shape").map(({ id }) => id),
+  );
 }
 
 /* ------------------------------- resolution ------------------------------- */

@@ -7,6 +7,7 @@ import type {
   CanvasNode,
   SaveBoardRequest,
 } from "./document-types";
+import { syncHandles } from "./handles";
 import { forgetNodes } from "./orphans";
 import {
   validateDocument,
@@ -327,6 +328,10 @@ export function saveBoard(
         );
       }
     }
+    // Agent 的名字（`docs/design/agent-delivery.md` §2.5）：`node_handles` 是
+    // 唯一来源，`data.handle` 是它的渲染副本，两者只有这一个写入点，所以不会
+    // 各自漂移。撞名在这里被拒绝——事务回滚，整次保存不落库。
+    syncHandles(database, board.id, request.nodes);
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");

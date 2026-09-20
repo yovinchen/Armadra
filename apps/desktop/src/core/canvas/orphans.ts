@@ -32,6 +32,7 @@ import type { DatabaseSync } from "node:sqlite";
  * | `agent_approvals` (open)     | **deleted** — nobody can answer for a node that is gone  |
  * | `agent_approvals` (answered) | kept — somebody did answer it                            |
  * | `context_links`              | **deleted** — an authorisation answer with no edges      |
+ * | `node_handles`               | **deleted** — the name is released for the next node     |
  * | `agent_handoff_outbox`       | **deleted** — a pending dispatch nobody can complete     |
  * | `browser_sessions`           | **deleted** — the node *was* the session                 |
  * | `agent_handoffs`             | kept — receipts, by the migration's own statement        |
@@ -68,6 +69,10 @@ export function forgetNodes(
     // Only the questions still open. An answered one is a receipt.
     `DELETE FROM agent_approvals WHERE node_id IN (${list}) AND answer IS NULL`,
     `DELETE FROM context_links WHERE node_id IN (${list})`,
+    // A name is a claim on a board, so it goes with the thing claiming it —
+    // `saveBoard` rebuilds the board's rows from the document anyway, but a
+    // released name must not depend on which of the two ran.
+    `DELETE FROM node_handles WHERE node_id IN (${list})`,
     `DELETE FROM browser_sessions WHERE node_id IN (${list})`,
   ];
   for (const statement of statements) {

@@ -59,7 +59,7 @@
   },
   "migrations": {
     "lock": "migrations.lock",
-    "$comment": "迁移只有一个来源：core 的 db/migrations。0001–0020 是一条连续序列，lock 守住它们的字节。",
+    "$comment": "迁移只有一个来源：core 的 db/migrations。0001–0021 是一条连续序列，lock 守住它们的字节。",
     "sources": [
       {
         "path": "apps/desktop/src/core/db/migrations",

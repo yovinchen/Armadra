@@ -20,6 +20,7 @@
     "0018_github.sql": "e400ff0c175c886fa7a81973a9ecba5ffc136d038713f8ab14f2052e54fb6086",
     "0019_accounts.sql": "6fc29a329451dec03f7e935b859a6c52baa1971d70184680eeb1166a1b109461",
     "0020_automation_json.sql": "a87ebb45a28edbce094e421703ab6da6e57fffe77a2993d341fda98743deca4c",
-    "0022_terminal_drive.sql": "f8c6c8bbe06e93f43cfc7bfb1118ef57722e1f1d6dd0da088936679b48a9e2d7"
+    "0022_terminal_drive.sql": "f8c6c8bbe06e93f43cfc7bfb1118ef57722e1f1d6dd0da088936679b48a9e2d7",
+    "0021_agent_names.sql": "a8bfea748e7089ad67cc0c2ad3ad0150391ca592f25e6a7406dcf12912fb6423"
   }
 }
