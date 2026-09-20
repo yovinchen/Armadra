@@ -24,7 +24,36 @@ import { open } from "node:fs/promises";
 import { setImmediate as yieldToLoop } from "node:timers/promises";
 import { join } from "node:path";
 
-import { homeDir } from "./providers";
+import { AGENT_IDS, type AgentId } from "../agent/registry";
+import {
+  addToBucket,
+  addTokens,
+  dateAt,
+  emptyTokens,
+  hourAt,
+  isEmptyTokens,
+  pruneHours,
+  splitKey,
+  totalTokens,
+  type FileState,
+  type TokenTotals,
+} from "./cost-buckets";
+import { COST_SOURCES, costSource, type AbsorbContext } from "./cost-sources";
+
+export {
+  addTokens,
+  bucketKey,
+  digest,
+  emptyTokens,
+  isEmptyTokens,
+  localDate,
+  localHour,
+  splitKey,
+  totalTokens,
+} from "./cost-buckets";
+export type { FileState, TokenTotals } from "./cost-buckets";
+export { COST_SOURCES, costSource } from "./cost-sources";
+export type { AgentCostSource } from "./cost-sources";
 
 /** 看板的滚动窗口，含当天。 */
 export const WINDOW_DAYS = 30;
@@ -50,33 +79,6 @@ export const MAX_FILES = 4_000;
 export const LINES_PER_YIELD = 500;
 /** 目录遍历深度。Claude 嵌一层，Codex 三层；六层留了余量又不会走进无关的树。 */
 const MAX_DEPTH = 6;
-
-/** Token 计数。`input` 在两家都**不含**缓存读，所以四个桶永远不重复计。 */
-export interface TokenTotals {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheCreation: number;
-}
-
-export function emptyTokens(): TokenTotals {
-  return { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
-}
-
-export function addTokens(target: TokenTotals, other: TokenTotals): void {
-  target.input += other.input;
-  target.output += other.output;
-  target.cacheRead += other.cacheRead;
-  target.cacheCreation += other.cacheCreation;
-}
-
-export function totalTokens(tokens: TokenTotals): number {
-  return tokens.input + tokens.output + tokens.cacheRead + tokens.cacheCreation;
-}
-
-export function isEmptyTokens(tokens: TokenTotals): boolean {
-  return totalTokens(tokens) === 0;
-}
 
 export interface ModelCost {
   readonly model: string;
@@ -109,6 +111,45 @@ export interface SessionCost {
 
 export type CostStatus = "ok" | "disabled" | "unavailable";
 
+/** `none` = 这家 agent 目前没有任何本地来源，token 一律是零而不是一个估数。 */
+export type CostAgentSource = "local" | "none";
+
+export interface AgentCost {
+  readonly agent: AgentId;
+  readonly tokens: TokenTotals;
+  readonly costUsd: number;
+  readonly complete: boolean;
+  readonly source: CostAgentSource;
+}
+
+/** 时间轴上的一个点。`key` 是本地 `YYYY-MM-DDTHH` 或本地 `YYYY-MM-DD`。 */
+export interface CostPoint extends CostWindow {
+  readonly key: string;
+  /** 只有这个点里真有 token 的 agent，按注册表顺序。 */
+  readonly agents: readonly AgentCost[];
+}
+
+export type CostRangeKey = "24h" | "7d" | "30d" | "all";
+
+export interface CostRange {
+  readonly granularity: "hour" | "day";
+  /** 由旧到新、连续、零填充。 */
+  readonly points: readonly CostPoint[];
+  readonly totals: CostWindow;
+  readonly byModel: readonly ModelCost[];
+  /** 注册表里的每个 agent，按注册表顺序，没有本地来源的也在。 */
+  readonly byAgent: readonly AgentCost[];
+  readonly peak: {
+    readonly key: string;
+    readonly tokens: TokenTotals;
+    readonly costUsd: number;
+  } | null;
+  readonly activeIntervals: number;
+  readonly longestStreak: number;
+}
+
+export type CostRanges = Readonly<Record<CostRangeKey, CostRange>>;
+
 export interface CostSummary {
   readonly status: CostStatus;
   readonly today: CostWindow;
@@ -116,6 +157,8 @@ export interface CostSummary {
   readonly currentSession?: SessionCost;
   /** 最旧的在前，含今天共 {@link WINDOW_DAYS} 条。没有活动的那天也在，带零。 */
   readonly daily: readonly DailyCost[];
+  /** 同一批桶的四种切法。`daily` 之外的维度都在这里。 */
+  readonly ranges: CostRanges;
   /** 窗口里见过但没有价格的模型。报出来好让看板解释一个看起来偏低的总数。 */
   readonly unpricedModels: readonly string[];
   /** 每家供应商贡献了几个记录文件。 */
@@ -130,12 +173,45 @@ function emptyWindow(): CostWindow {
   return { tokens: emptyTokens(), costUsd: 0, complete: true, models: [] };
 }
 
+function sourceOf(agent: AgentId): CostAgentSource {
+  return costSource(agent) === undefined ? "none" : "local";
+}
+
+function emptyRange(granularity: "hour" | "day"): CostRange {
+  return {
+    granularity,
+    points: [],
+    totals: emptyWindow(),
+    byModel: [],
+    byAgent: AGENT_IDS.map((agent) => ({
+      agent,
+      tokens: emptyTokens(),
+      costUsd: 0,
+      complete: true,
+      source: sourceOf(agent),
+    })),
+    peak: null,
+    activeIntervals: 0,
+    longestStreak: 0,
+  };
+}
+
+export function emptyRanges(): CostRanges {
+  return {
+    "24h": emptyRange("hour"),
+    "7d": emptyRange("day"),
+    "30d": emptyRange("day"),
+    all: emptyRange("day"),
+  };
+}
+
 export function emptySummary(status: CostStatus): CostSummary {
   return {
     status,
     today: emptyWindow(),
     last30Days: emptyWindow(),
     daily: [],
+    ranges: emptyRanges(),
     unpricedModels: [],
     files: {},
     truncated: false,
@@ -287,16 +363,16 @@ function roundCents(value: number): number {
 
 /* --------------------------------- 扫描 ---------------------------------- */
 
-export type Provider = "claude" | "codex";
-
 export interface ScanResult {
-  /** `${date} ${model}` → token 数。 */
+  /** `bucketKey(日期, agent, 模型)` → token 数。全部历史，不切窗口。 */
   readonly buckets: Map<string, TokenTotals>;
+  /** 同一个形状，第一段是本地小时，只有最近 48 小时。 */
+  readonly hourBuckets: Map<string, TokenTotals>;
   readonly files: Record<string, number>;
   truncated: boolean;
   current:
     | {
-        provider: Provider;
+        agent: AgentId;
         tokens: TokenTotals;
         models: string[];
         updatedMs: number;
@@ -304,55 +380,12 @@ export interface ScanResult {
     | undefined;
 }
 
-/**
- * 桶的键是 `日期 + NUL + 模型`。分隔符用 NUL 而不是空格或冒号：模型 id 里可以有
- * 那些字符，用它们分隔会让两组不同的 (日期, 模型) 拼出同一个键。
- */
-const KEY_SEPARATOR = "\u0000";
-
-export function bucketKey(date: string, model: string): string {
-  return `${date}${KEY_SEPARATOR}${model}`;
-}
-
-export function splitKey(key: string): { date: string; model: string } {
-  const index = key.indexOf(KEY_SEPARATOR);
-  return {
-    date: key.slice(0, index),
-    model: key.slice(index + KEY_SEPARATOR.length),
-  };
-}
-
-interface FileState {
-  provider: Provider;
-  len: number;
-  mtimeMs: number;
-  offset: number;
-  modifiedMs: number;
-  model: string | undefined;
-  buckets: Map<string, TokenTotals>;
-}
-
-/**
- * `${CLAUDE_CONFIG_DIR:-~/.claude}/projects` 与
- * `${CODEX_HOME:-~/.codex}/sessions`。两个都尊重 CLI 自己的覆盖。
- */
-export function scanRoots(): [Provider, string][] {
-  const home = homeDir();
-  const roots: [Provider, string][] = [];
-  const claude =
-    (process.env.CLAUDE_CONFIG_DIR ?? "") !== ""
-      ? (process.env.CLAUDE_CONFIG_DIR as string)
-      : home === undefined
-        ? undefined
-        : join(home, ".claude");
-  const codex =
-    (process.env.CODEX_HOME ?? "") !== ""
-      ? (process.env.CODEX_HOME as string)
-      : home === undefined
-        ? undefined
-        : join(home, ".codex");
-  if (claude !== undefined) roots.push(["claude", join(claude, "projects")]);
-  if (codex !== undefined) roots.push(["codex", join(codex, "sessions")]);
+/** 每个有本地来源的 agent 要扫的根目录，见 {@link COST_SOURCES}。 */
+export function scanRoots(): [AgentId, string][] {
+  const roots: [AgentId, string][] = [];
+  for (const source of Object.values(COST_SOURCES)) {
+    for (const root of source.roots()) roots.push([source.agentId, root]);
+  }
   return roots;
 }
 
@@ -379,30 +412,6 @@ export function collectTranscripts(
     }
   }
   return out;
-}
-
-function number(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? value
-    : 0;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-/**
- * 一个 RFC 3339 时间戳 → 它落在的本地 `YYYY-MM-DD`。一行读不出时间戳就算今天：
- * 它是一个正在跑的会话写的。
- */
-export function localDate(timestamp: unknown, nowMs: number): string {
-  const parsed =
-    typeof timestamp === "string" ? Date.parse(timestamp) : Number.NaN;
-  const date = new Date(Number.isFinite(parsed) ? parsed : nowMs);
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 /**
@@ -446,25 +455,8 @@ function returnChunk(leased: Buffer): void {
   if (chunk === undefined) chunk = leased;
 }
 
-/**
- * 一行**有可能**贡献点什么吗。在字节上判，判错的方向只能是「放过一行其实没用的」。
- *
- * * claude：{@link ScanState.absorbClaude} 第一件事就是要 `message.usage` 是个对
- *   象；没有 `usage` 这个键的行一个 token 都出不来。
- * * codex：要么是 `token_count` 的 payload，要么是某一处 `model` 声明——后者会被
- *   记进 `state.model` 给后面的事件用，所以不能只看 `token_count`。
- *
- * 判据是 JSON 里那个键**字面的**样子。理论上 `"usage"` 是同一个键而这里会漏
- * 掉它；两家 CLI 的序列化器都不会那么写，而代价（漏算）比反过来（把整份记录全解
- * 析一遍）小得多。
- */
+/** `NeedleCursor` 还没被指到任何一块时的空视图。 */
 const EMPTY_VIEW = Buffer.alloc(0);
-
-const CLAUDE_NEEDLES = [Buffer.from('"usage"')] as const;
-const CODEX_NEEDLES = [
-  Buffer.from('"model"'),
-  Buffer.from('"token_count"'),
-] as const;
 
 /**
  * 一条行（`view` 的 `[from, to)` 那一段）里有没有任何一个 needle。
@@ -589,55 +581,30 @@ async function eachAppendedLine(
   return consumed;
 }
 
-/**
- * 一个 request id 的 53 位摘要。
- *
- * 去重集合存的是这个数字而不是那个字符串。重度用户一趟扫描见到七万多个 id，每个
- * 三十多个字符——留着原文是二十多兆，留摘要是两三兆，而集合被问的问题只有「见过
- * 没有」。
- *
- * 代价是碰撞：两个不同的 id 撞到同一个数字时，后来那一行被当成重复丢掉。七万个
- * 值落在 2^53 上，生日问题给出的概率约 4×10⁻⁷——比「记录文件在扫描中途被轮转」
- * 之类的事件低好几个数量级，而它换来的是二十兆常驻内存。
- *
- * FNV-1a 的 32 位变体跑两遍（正序与反序、不同的种子），拼成 53 位里的高低两半。
- */
-export function digest(value: string): number {
-  let forward = 0x811c9dc5;
-  let backward = 0x01000193;
-  for (let i = 0; i < value.length; i += 1) {
-    forward = Math.imul(forward ^ value.charCodeAt(i), 0x01000193);
-    backward = Math.imul(
-      backward ^ value.charCodeAt(value.length - 1 - i),
-      0x85ebca6b,
-    );
-  }
-  // 两个 32 位拼成 53 位以内的一个安全整数：高 21 位 + 低 32 位。
-  return (forward >>> 11) * 0x100000000 + (backward >>> 0);
-}
-
 export class ScanState {
   private readonly files = new Map<string, FileState>();
   private readonly seen = new Set<number>();
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
-  /** 对两棵记录树跑一趟。异步，因为文件解析要给事件循环让路。 */
+  /** 对每个注册了来源的 agent 的记录树跑一趟。异步，因为文件解析要给事件循环让路。 */
   async scan(
-    roots: readonly (readonly [Provider, string])[] = scanRoots(),
+    roots: readonly (readonly [AgentId, string])[] = scanRoots(),
   ): Promise<ScanResult> {
+    const nowMs = this.now();
     const result: ScanResult = {
       buckets: new Map(),
+      hourBuckets: new Map(),
       files: {},
       truncated: false,
       current: undefined,
     };
-    const discovered: [Provider, string][] = [];
-    for (const [provider, root] of roots) {
+    const discovered: [AgentId, string][] = [];
+    for (const [agent, root] of roots) {
       const paths = collectTranscripts(root);
       result.truncated ||= paths.length >= MAX_FILES;
-      result.files[provider] = (result.files[provider] ?? 0) + paths.length;
-      for (const path of paths) discovered.push([provider, path]);
+      result.files[agent] = (result.files[agent] ?? 0) + paths.length;
+      for (const path of paths) discovered.push([agent, path]);
     }
 
     // 一个变短的文件意味着记录被重写过。单独重解析它加不了任何东西（它的 request
@@ -657,9 +624,9 @@ export class ScanState {
     }
 
     const live = new Set<string>();
-    for (const [provider, path] of discovered) {
+    for (const [agent, path] of discovered) {
       live.add(path);
-      await this.parse(provider, path);
+      await this.parse(agent, path);
     }
     // 消失了的文件把它的贡献一起带走。
     for (const path of [...this.files.keys()]) {
@@ -668,10 +635,14 @@ export class ScanState {
 
     let current: FileState | undefined;
     for (const state of this.files.values()) {
+      // 这里清，而不是在 `parse()` 里：一个什么都没被追加的文件早退，它的小时桶也
+      // 得跟着时间往前走。
+      pruneHours(state, nowMs);
       for (const [key, tokens] of state.buckets) {
-        const bucket = result.buckets.get(key) ?? emptyTokens();
-        addTokens(bucket, tokens);
-        result.buckets.set(key, bucket);
+        addToBucket(result.buckets, key, tokens);
+      }
+      for (const [key, tokens] of state.hourBuckets) {
+        addToBucket(result.hourBuckets, key, tokens);
       }
       if (state.buckets.size === 0) continue;
       if (current === undefined || state.modifiedMs > current.modifiedMs) {
@@ -686,7 +657,7 @@ export class ScanState {
         models.add(splitKey(key).model);
       }
       result.current = {
-        provider: current.provider,
+        agent: current.agent,
         tokens,
         models: [...models].sort(),
         updatedMs: current.modifiedMs,
@@ -695,7 +666,9 @@ export class ScanState {
     return result;
   }
 
-  private async parse(provider: Provider, path: string): Promise<void> {
+  private async parse(agent: AgentId, path: string): Promise<void> {
+    const source = costSource(agent);
+    if (source === undefined) return;
     let info;
     try {
       info = statSync(path);
@@ -704,13 +677,14 @@ export class ScanState {
     }
     const mtimeMs = Math.round(info.mtimeMs);
     const state: FileState = this.files.get(path) ?? {
-      provider,
+      agent,
       len: 0,
       mtimeMs: 0,
       offset: 0,
       modifiedMs: 0,
       model: undefined,
       buckets: new Map(),
+      hourBuckets: new Map(),
     };
     this.files.delete(path);
     // 同样的长度和同样的 mtime 意味着什么都没被追加。
@@ -729,12 +703,13 @@ export class ScanState {
 
     // 只读追加的那一段：从记住的偏移量起。读整个文件再切片会让一个八十兆的记录
     // 每五分钟被完整读一次；按块读还让任一时刻常驻的只有一个 256 KiB 的缓冲区。
+    const context: AbsorbContext = { nowMs: this.now(), seen: this.seen };
     let parsed = 0;
     const consumed = await eachAppendedLine(
       path,
       state.offset,
       info.size,
-      provider === "claude" ? CLAUDE_NEEDLES : CODEX_NEEDLES,
+      source.needles,
       async (line) => {
         const trimmed = line.trim();
         if (trimmed === "") return;
@@ -745,94 +720,12 @@ export class ScanState {
         } catch {
           return;
         }
-        if (provider === "claude") this.absorbClaude(state, value);
-        else this.absorbCodex(state, value);
+        source.absorb(state, value, context);
       },
     );
     // 结尾那条不完整的行留给下一趟。
     state.offset += consumed;
     this.files.set(path, state);
-  }
-
-  private absorbClaude(state: FileState, value: unknown): void {
-    const line = asRecord(value);
-    const message = asRecord(line?.message);
-    const usage = asRecord(message?.usage);
-    if (usage === undefined) return;
-    // `requestId` 是 CLI 自己的字段；`message.id` 是更老记录的兜底。两个都没有的
-    // 行被计入——丢掉它比重复计更常见地少报。
-    const identity =
-      typeof line?.requestId === "string"
-        ? line.requestId
-        : typeof message?.id === "string"
-          ? message.id
-          : undefined;
-    if (identity !== undefined) {
-      const key = digest(identity);
-      if (this.seen.has(key)) return;
-      this.seen.add(key);
-    }
-    const tokens: TokenTotals = {
-      input: number(usage.input_tokens),
-      output: number(usage.output_tokens),
-      cacheRead: number(usage.cache_read_input_tokens),
-      cacheCreation: number(usage.cache_creation_input_tokens),
-    };
-    if (isEmptyTokens(tokens)) return;
-    const model =
-      typeof message?.model === "string" && message.model !== ""
-        ? message.model
-        : "unknown";
-    const key = bucketKey(localDate(line?.timestamp, this.now()), model);
-    const bucket = state.buckets.get(key) ?? emptyTokens();
-    addTokens(bucket, tokens);
-    state.buckets.set(key, bucket);
-  }
-
-  private absorbCodex(state: FileState, value: unknown): void {
-    const line = asRecord(value);
-    if (line === undefined) return;
-    // 模型由会话元数据和每一轮的上下文宣布；先到的那个被记住，给后面的事件用。
-    for (const path of [
-      ["payload", "model"],
-      ["payload", "info", "model"],
-      ["payload", "turn_context", "model"],
-      ["model"],
-    ]) {
-      let node: unknown = line;
-      for (const key of path) node = asRecord(node)?.[key];
-      if (typeof node === "string" && node !== "") {
-        state.model = node;
-        break;
-      }
-    }
-    const payload = asRecord(line.payload);
-    if (payload?.type !== "token_count") return;
-    // `last_token_usage` 是这一轮的增量；`total_token_usage` 是累计的，用它会把这个
-    // 会话的成本乘上它的轮数。
-    const info = asRecord(payload.info) ?? payload;
-    const last =
-      asRecord(info.last_token_usage) ?? asRecord(info.lastTokenUsage);
-    if (last === undefined) return;
-    const cached =
-      number(last.cached_input_tokens) + number(last.cachedInputTokens);
-    const rawInput = number(last.input_tokens) + number(last.inputTokens);
-    const tokens: TokenTotals = {
-      // Codex 把缓存的 token 报在 input **里面**，和 Claude 那边分成两个桶不一样。
-      // 减掉它让 input 仍然表示「按输入价计费的那部分」。
-      input: Math.max(rawInput - cached, 0),
-      output: number(last.output_tokens) + number(last.outputTokens),
-      cacheRead: cached,
-      cacheCreation: 0,
-    };
-    if (isEmptyTokens(tokens)) return;
-    const key = bucketKey(
-      localDate(line.timestamp, this.now()),
-      state.model ?? "unknown",
-    );
-    const bucket = state.buckets.get(key) ?? emptyTokens();
-    addTokens(bucket, tokens);
-    state.buckets.set(key, bucket);
   }
 }
 
@@ -873,44 +766,200 @@ function windowFrom(
   return { tokens: total, costUsd: roundCents(cost), complete, models };
 }
 
+/** 一个桶对一个点的贡献：谁、哪个模型、多少 token。 */
+interface Cell {
+  readonly agent: string;
+  readonly model: string;
+  readonly tokens: TokenTotals;
+}
+
+/**
+ * 桶按键的第一段（日期或小时）归成组，顺带记下最早的那一段。
+ *
+ * 一趟线性遍历：`buckets` 可能有几千个键，而每条轴只按键查表，不再各自走一遍。
+ */
+function groupCells(buckets: ReadonlyMap<string, TokenTotals>): {
+  readonly cells: Map<string, Cell[]>;
+  readonly earliest: string | undefined;
+} {
+  const cells = new Map<string, Cell[]>();
+  let earliest: string | undefined;
+  for (const [key, tokens] of buckets) {
+    const { date, agent, model } = splitKey(key);
+    const cell: Cell = { agent, model, tokens };
+    const list = cells.get(date);
+    if (list === undefined) cells.set(date, [cell]);
+    else list.push(cell);
+    if (earliest === undefined || date < earliest) earliest = date;
+  }
+  return { cells, earliest };
+}
+
+function modelEntries(cells: readonly Cell[]): [string, TokenTotals][] {
+  return cells.map((cell) => [cell.model, cell.tokens]);
+}
+
+/**
+ * {@link windowFrom} 的同一套定价规则，按 agent 归并。
+ *
+ * `everyAgent` 为真时列出注册表里的全部 agent（没有本地来源的是零），为假时只列出
+ * 真有 token 的那些——一条 30 天的轴不必为六家各带一个空对象。
+ */
+function agentCosts(
+  cells: readonly Cell[],
+  prices: PriceLookup,
+  everyAgent: boolean,
+): AgentCost[] {
+  const perAgent = new Map<string, [string, TokenTotals][]>();
+  for (const cell of cells) {
+    const entry: [string, TokenTotals] = [cell.model, cell.tokens];
+    const list = perAgent.get(cell.agent);
+    if (list === undefined) perAgent.set(cell.agent, [entry]);
+    else list.push(entry);
+  }
+  const out: AgentCost[] = [];
+  for (const agent of AGENT_IDS) {
+    const entries = perAgent.get(agent);
+    if (entries === undefined && !everyAgent) continue;
+    const window = windowFrom(entries ?? [], prices);
+    out.push({
+      agent,
+      tokens: window.tokens,
+      costUsd: window.costUsd,
+      complete: window.complete,
+      source: sourceOf(agent),
+    });
+  }
+  return out;
+}
+
+function rangeOf(
+  granularity: "hour" | "day",
+  keys: readonly string[],
+  cells: ReadonlyMap<string, Cell[]>,
+  prices: PriceLookup,
+): CostRange {
+  const points: CostPoint[] = [];
+  const every: Cell[] = [];
+  const counted = new Set<string>();
+  let peak: CostRange["peak"] = null;
+  let activeIntervals = 0;
+  let longestStreak = 0;
+  let streak = 0;
+  for (const key of keys) {
+    const own = cells.get(key) ?? [];
+    // 夏令时回拨的那天两个槽位会拼出同一个键；总计只吃一次。
+    if (!counted.has(key)) {
+      counted.add(key);
+      for (const cell of own) every.push(cell);
+    }
+    const window = windowFrom(modelEntries(own), prices);
+    points.push({ key, ...window, agents: agentCosts(own, prices, false) });
+    const total = totalTokens(window.tokens);
+    if (total === 0) {
+      streak = 0;
+      continue;
+    }
+    activeIntervals += 1;
+    streak += 1;
+    if (streak > longestStreak) longestStreak = streak;
+    if (peak === null || total > totalTokens(peak.tokens)) {
+      peak = { key, tokens: window.tokens, costUsd: window.costUsd };
+    }
+  }
+  const totals = windowFrom(modelEntries(every), prices);
+  return {
+    granularity,
+    points,
+    totals,
+    byModel: totals.models,
+    byAgent: agentCosts(every, prices, true),
+    peak,
+    activeIntervals,
+    longestStreak,
+  };
+}
+
+/** 由旧到新的 `count` 个本地日期，含今天。 */
+function dayKeys(nowMs: number, count: number): string[] {
+  const keys: string[] = [];
+  for (let back = count - 1; back >= 0; back -= 1) {
+    const date = new Date(nowMs);
+    date.setDate(date.getDate() - back);
+    keys.push(dateAt(date.getTime()));
+  }
+  return keys;
+}
+
+/** 由旧到新的 24 个本地小时，含当前这个整点。 */
+function hourKeys(nowMs: number): string[] {
+  const keys: string[] = [];
+  for (let back = 23; back >= 0; back -= 1) {
+    keys.push(hourAt(nowMs - back * 60 * 60_000));
+  }
+  return keys;
+}
+
+/** `from` 到 `to` 之间每一天，连续。 */
+function spanKeys(from: string, to: string): string[] {
+  if (from > to) return [to];
+  const parts = from.split("-").map(Number);
+  const cursor = new Date(
+    parts[0] ?? 1970,
+    (parts[1] ?? 1) - 1,
+    parts[2] ?? 1,
+    12,
+  );
+  const keys: string[] = [];
+  for (let key = dateAt(cursor.getTime()); key <= to; ) {
+    keys.push(key);
+    cursor.setDate(cursor.getDate() + 1);
+    key = dateAt(cursor.getTime());
+  }
+  return keys;
+}
+
 /** 把一次原始扫描变成线上形状：切窗口、定价、补齐 30 天的轴。 */
 export function summarize(
   result: ScanResult,
   prices: PriceLookup,
   nowMs: number,
 ): CostSummary {
-  const now = new Date(nowMs);
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  const dateOf = (value: Date): string =>
-    `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
-  const today = dateOf(now);
-  const dates: string[] = [];
-  for (let back = WINDOW_DAYS - 1; back >= 0; back -= 1) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - back);
-    dates.push(dateOf(date));
-  }
+  const dates = dayKeys(nowMs, WINDOW_DAYS);
+  const today = dates[dates.length - 1] ?? dateAt(nowMs);
   const oldest = dates[0] ?? today;
 
+  const { cells: dayCells, earliest } = groupCells(result.buckets);
+  const { cells: hourCells } = groupCells(result.hourBuckets);
+
   const unpriced = new Set<string>();
-  const perDay = new Map<string, [string, TokenTotals][]>();
   const windowModels: [string, TokenTotals][] = [];
   const todayModels: [string, TokenTotals][] = [];
-  for (const [key, tokens] of result.buckets) {
-    const { date, model } = splitKey(key);
+  for (const [date, cells] of dayCells) {
     if (date < oldest) continue;
-    const day = perDay.get(date) ?? [];
-    day.push([model, tokens]);
-    perDay.set(date, day);
-    windowModels.push([model, tokens]);
-    if (date === today) todayModels.push([model, tokens]);
-    if (priceFor(prices, model) === undefined) unpriced.add(model);
+    for (const cell of cells) {
+      windowModels.push([cell.model, cell.tokens]);
+      if (date === today) todayModels.push([cell.model, cell.tokens]);
+      if (priceFor(prices, cell.model) === undefined) unpriced.add(cell.model);
+    }
   }
 
   const daily: DailyCost[] = dates.map((date) => ({
     date,
-    ...windowFrom(perDay.get(date) ?? [], prices),
+    ...windowFrom(modelEntries(dayCells.get(date) ?? []), prices),
   }));
+
+  const ranges: CostRanges = {
+    "24h": rangeOf("hour", hourKeys(nowMs), hourCells, prices),
+    "7d": rangeOf("day", dayKeys(nowMs, 7), dayCells, prices),
+    "30d": rangeOf("day", dates, dayCells, prices),
+    all: rangeOf(
+      "day",
+      earliest === undefined ? [] : spanKeys(earliest, today),
+      dayCells,
+      prices,
+    ),
+  };
 
   let currentSession: SessionCost | undefined;
   if (result.current !== undefined) {
@@ -922,7 +971,7 @@ export function summarize(
         ? priceFor(prices, session.models[0] as string)
         : undefined;
     currentSession = {
-      provider: session.provider,
+      provider: session.agent,
       models: session.models,
       tokens: session.tokens,
       costUsd:
@@ -938,6 +987,7 @@ export function summarize(
     last30Days: windowFrom(windowModels, prices),
     ...(currentSession === undefined ? {} : { currentSession }),
     daily,
+    ranges,
     unpricedModels: [...unpriced].sort(),
     files: result.files,
     truncated: result.truncated,

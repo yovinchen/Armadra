@@ -77,6 +77,13 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 重置时间。数据采集时间与额度重置时间分开显示；后台刷新和手动刷新共用串行化
 与冷却时间，前端只轮询缓存，不把缓存轮询时间当成数据更新时间。
 
+本地成本按 agent 采集：`core/usage/cost-sources.ts` 里每个 `AgentCostSource` 声明
+自己的转录根目录、字节预筛与逐行解析，`COST_SOURCES` 按注册表 id 登记（目前
+claude、codex）。扫描器只认这张表——没有本地来源的 agent 不在表里，`byAgent`
+里标 `source: "none"`，界面显示「暂无本地用量数据」而不是零。接入一家新 agent
+就是写一个适配器并登记，聚合（`summarize()` 的 `ranges`：24h / 7d / 30d / 全部）、
+契约与界面都不用改。
+
 **工作面板一次只开一个**（`panels/WorkPanelSheet.tsx`）：资源管理器、资源、
 问题、用量、GitHub、自动化、交接停在右侧，宽度来自一张表——右上工具簇也读
 那张表，好让开着抽屉时它自己让开。Git 是唯一停在**底部**的一块

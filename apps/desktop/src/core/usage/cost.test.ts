@@ -3,19 +3,23 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { AGENT_IDS } from "../agent/registry";
 import {
   BUILT_IN_PRICES,
   CHUNK_BYTES,
   bucketKey,
   digest,
+  localHour,
   MANUAL_COOLDOWN_MS,
   ScanState,
+  splitKey,
   WINDOW_DAYS,
   costOf,
   emptySummary,
   priceFor,
   summarize,
   undated,
+  type TokenTotals,
 } from "./cost";
 
 /** 移植自 合并前实现的用例。 */
@@ -361,18 +365,99 @@ describe("记录扫描", () => {
     rmSync(path);
     expect((await state.scan(roots)).buckets.size).toBe(0);
   });
+
+  it("每个桶记着它是哪家 agent 的", async () => {
+    write(".claude/projects/demo/session.jsonl", [
+      JSON.stringify({
+        requestId: "req-1",
+        timestamp: `${today()}T10:00:00Z`,
+        message: {
+          model: "gpt-5",
+          usage: { input_tokens: 10, output_tokens: 1 },
+        },
+      }),
+    ]);
+    write(".codex/sessions/2026/09/20/rollout.jsonl", [
+      JSON.stringify({
+        timestamp: `${today()}T09:00:00Z`,
+        payload: { id: "s1", model: "gpt-5" },
+      }),
+      JSON.stringify({
+        timestamp: `${today()}T09:01:00Z`,
+        payload: {
+          type: "token_count",
+          info: { last_token_usage: { input_tokens: 7, output_tokens: 3 } },
+        },
+      }),
+    ]);
+    const result = await new ScanState().scan([
+      ["claude", join(home, ".claude/projects")],
+      ["codex", join(home, ".codex/sessions")],
+    ]);
+    // 同一天、同一个模型 id、两家 agent：两个桶，而不是一个。
+    expect(result.buckets.size).toBe(2);
+    const parts = [...result.buckets.keys()].map((key) => splitKey(key));
+    expect(parts.map((one) => one.agent).sort()).toEqual(["claude", "codex"]);
+    for (const one of parts) {
+      expect(one.date).toBe(today());
+      expect(one.model).toBe("gpt-5");
+    }
+  });
+
+  it("小时桶只收最近 48 小时，时间走过去之后过期的键被清掉", async () => {
+    let nowMs = Date.now();
+    const at = (backHours: number): string =>
+      new Date(nowMs - backHours * 60 * 60_000).toISOString();
+    const row = (id: string, stamp: string): string =>
+      JSON.stringify({
+        requestId: id,
+        timestamp: stamp,
+        message: {
+          model: "claude-opus-5",
+          usage: { input_tokens: 10, output_tokens: 1 },
+        },
+      });
+    write(".claude/projects/demo/session.jsonl", [
+      row("req-fresh", at(1)),
+      // 三天前：进日桶，但进不了小时桶。
+      row("req-stale", at(72)),
+    ]);
+    const state = new ScanState(() => nowMs);
+    const roots = [["claude", join(home, ".claude/projects")]] as const;
+    const first = await state.scan(roots);
+    expect(first.buckets.size).toBe(2);
+    expect(first.hourBuckets.size).toBe(1);
+    const [key] = [...first.hourBuckets.keys()];
+    expect(splitKey(key as string).date).toBe(localHour(at(1), nowMs));
+    expect(splitKey(key as string).agent).toBe("claude");
+
+    // 文件一个字节都没变（走的是早退那条路），但时间往前走了三天。
+    nowMs += 72 * 60 * 60_000;
+    const later = await state.scan(roots);
+    expect(later.hourBuckets.size).toBe(0);
+    // 日桶不跟着掉：看板的 30 天轴要它们。
+    expect(later.buckets.size).toBe(2);
+  });
 });
 
 describe("汇总", () => {
   const NOW = Date.parse("2026-09-20T12:00:00Z");
 
-  function scanned(entries: readonly (readonly [string, string, number])[]) {
-    const buckets = new Map<string, ReturnType<typeof tokensOf>>();
-    for (const [date, model, input] of entries) {
-      buckets.set(bucketKey(date, model), tokensOf(input));
+  /** `[日期或小时, 模型, input, agent?]`；agent 默认 claude。 */
+  type Row = readonly [string, string, number, string?];
+
+  function bucketsOf(rows: readonly Row[]): Map<string, TokenTotals> {
+    const buckets = new Map<string, TokenTotals>();
+    for (const [key, model, input, agent] of rows) {
+      buckets.set(bucketKey(key, agent ?? "claude", model), tokensOf(input));
     }
+    return buckets;
+  }
+
+  function scanned(rows: readonly Row[], hourRows: readonly Row[] = []) {
     return {
-      buckets,
+      buckets: bucketsOf(rows),
+      hourBuckets: bucketsOf(hourRows),
       files: { claude: 1 },
       truncated: false,
       current: undefined,
@@ -383,10 +468,21 @@ describe("汇总", () => {
     return { input, output: 0, cacheRead: 0, cacheCreation: 0 };
   }
 
-  function localToday(): string {
-    const now = new Date(NOW);
+  /** `NOW` 往前 `back` 天的本地日期。 */
+  function localDay(back: number): string {
+    const date = new Date(NOW);
+    date.setDate(date.getDate() - back);
     const pad = (value: number): string => String(value).padStart(2, "0");
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  function localToday(): string {
+    return localDay(0);
+  }
+
+  /** `NOW` 往前 `back` 小时的本地小时键。 */
+  function localHourKey(back: number): string {
+    return localHour(new Date(NOW - back * 60 * 60_000).toISOString(), NOW);
   }
 
   it("目录里的价格让 unpricedModels 变短", async () => {
@@ -475,6 +571,203 @@ describe("汇总", () => {
     expect(emptySummary("disabled").status).toBe("disabled");
     expect(emptySummary("disabled").daily).toHaveLength(0);
     expect(MANUAL_COOLDOWN_MS).toBe(30_000);
+  });
+
+  it("空汇总也带四条轴，只是每条都没有点", async () => {
+    const ranges = emptySummary("disabled").ranges;
+    expect(Object.keys(ranges)).toEqual(["24h", "7d", "30d", "all"]);
+    expect(ranges["24h"].granularity).toBe("hour");
+    expect(ranges["7d"].granularity).toBe("day");
+    for (const key of ["24h", "7d", "30d", "all"] as const) {
+      expect(ranges[key].points).toEqual([]);
+      expect(ranges[key].totals.tokens.input).toBe(0);
+      expect(ranges[key].peak).toBeNull();
+      expect(ranges[key].activeIntervals).toBe(0);
+      expect(ranges[key].longestStreak).toBe(0);
+      // 六家都在，哪怕一趟扫描都没跑过。
+      expect(ranges[key].byAgent.map((one) => one.agent)).toEqual([
+        ...AGENT_IDS,
+      ]);
+    }
+  });
+
+  it("四条轴的点数固定：24 个小时、7 天、30 天，all 到今天为止", async () => {
+    const summary = summarize(
+      scanned([[localToday(), "claude-opus-5", 1_000_000]]),
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    expect(summary.ranges["24h"].granularity).toBe("hour");
+    expect(summary.ranges["24h"].points).toHaveLength(24);
+    expect(summary.ranges["7d"].points).toHaveLength(7);
+    expect(summary.ranges["30d"].points).toHaveLength(WINDOW_DAYS);
+    expect(summary.ranges["30d"].points.at(-1)?.key).toBe(localToday());
+    expect(summary.ranges["7d"].points.at(-1)?.key).toBe(localToday());
+    expect(summary.ranges["30d"].points[0]?.key).toBe(
+      localDay(WINDOW_DAYS - 1),
+    );
+    // 只有今天有记录，all 就只有今天这一个点。
+    expect(summary.ranges.all.points.map((one) => one.key)).toEqual([
+      localToday(),
+    ]);
+    // 一次什么都没扫到的扫描，all 连一个点都没有。
+    expect(
+      summarize(scanned([]), BUILT_IN_PRICES, NOW).ranges.all.points,
+    ).toEqual([]);
+  });
+
+  it("all 从最早有记录的那天连续排到今天，中间没活动的那天补零", async () => {
+    const summary = summarize(
+      scanned([
+        [localDay(2), "claude-opus-5", 1_000_000],
+        [localToday(), "claude-opus-5", 1_000_000],
+      ]),
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    const all = summary.ranges.all;
+    expect(all.points.map((one) => one.key)).toEqual([
+      localDay(2),
+      localDay(1),
+      localDay(0),
+    ]);
+    expect(all.points[1]?.tokens.input).toBe(0);
+    expect(all.points[1]?.agents).toEqual([]);
+    expect(all.totals.costUsd).toBe(10);
+    expect(all.byModel.map((one) => one.model)).toEqual(["claude-opus-5"]);
+    expect(all.activeIntervals).toBe(2);
+    // 两个活跃点被中间那天隔开，所以最长连续只有 1。
+    expect(all.longestStreak).toBe(1);
+  });
+
+  it("peak 是 token 最多的那个点，全零的轴没有 peak", async () => {
+    const summary = summarize(
+      scanned([
+        [localDay(3), "claude-opus-5", 1_000],
+        [localDay(1), "claude-opus-5", 5_000],
+        [localDay(0), "claude-opus-5", 2_000],
+      ]),
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    const week = summary.ranges["7d"];
+    expect(week.peak?.key).toBe(localDay(1));
+    expect(week.peak?.tokens.input).toBe(5_000);
+    expect(week.activeIntervals).toBe(3);
+    expect(week.longestStreak).toBe(2);
+    expect(
+      summarize(scanned([]), BUILT_IN_PRICES, NOW).ranges["7d"].peak,
+    ).toBeNull();
+  });
+
+  it("24h 的点来自小时桶，日轴一个 token 都不借给它", async () => {
+    const summary = summarize(
+      scanned([], [[localHourKey(2), "claude-opus-5", 1_000_000]]),
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    const day = summary.ranges["24h"];
+    expect(day.points).toHaveLength(24);
+    expect(day.points[0]?.key).toBe(localHourKey(23));
+    expect(day.points.at(-1)?.key).toBe(localHourKey(0));
+    expect(day.totals.costUsd).toBe(5);
+    expect(day.peak?.key).toBe(localHourKey(2));
+    expect(day.activeIntervals).toBe(1);
+    // 日桶是空的：两套桶互不借用。
+    expect(summary.ranges["30d"].totals.tokens.input).toBe(0);
+  });
+
+  it("byAgent 固定列出注册表里的六家，没有本地来源的是零加 none", async () => {
+    const summary = summarize(
+      scanned([
+        [localToday(), "claude-opus-5", 1_000_000],
+        [localToday(), "gpt-5", 1_000_000, "codex"],
+      ]),
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    const byAgent = summary.ranges["30d"].byAgent;
+    expect(byAgent.map((one) => one.agent)).toEqual([...AGENT_IDS]);
+    expect(
+      byAgent.filter((one) => one.source === "local").map((one) => one.agent),
+    ).toEqual(["claude", "codex"]);
+    expect(byAgent.find((one) => one.agent === "codex")?.costUsd).toBe(1.25);
+    expect(byAgent.find((one) => one.agent === "claude")?.costUsd).toBe(5);
+    for (const one of byAgent.filter((entry) => entry.source === "none")) {
+      expect(one.tokens).toEqual({
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheCreation: 0,
+      });
+      expect(one.costUsd).toBe(0);
+      expect(one.complete).toBe(true);
+    }
+    // 点上只列出真有 token 的那几家，顺序仍然是注册表的。
+    expect(
+      summary.ranges["30d"].points.at(-1)?.agents.map((one) => one.agent),
+    ).toEqual(["claude", "codex"]);
+  });
+
+  it("agent 的 complete 和窗口是同一套规则：有没价格的模型就不完整", async () => {
+    const summary = summarize(
+      scanned([
+        [localToday(), "claude-opus-5", 1_000_000],
+        [localToday(), "a-model-nobody-priced", 1_000_000, "codex"],
+      ]),
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    const byAgent = summary.ranges["7d"].byAgent;
+    expect(byAgent.find((one) => one.agent === "claude")?.complete).toBe(true);
+    const codex = byAgent.find((one) => one.agent === "codex");
+    expect(codex?.complete).toBe(false);
+    expect(codex?.costUsd).toBe(0);
+    expect(codex?.tokens.input).toBe(1_000_000);
+  });
+
+  it("桶键带上 agent，两家报同一个模型不会混成一个桶", async () => {
+    const summary = summarize(
+      scanned([
+        [localToday(), "gpt-5", 1_000_000],
+        [localToday(), "gpt-5", 1_000_000, "codex"],
+      ]),
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    // 模型拆分把两家合起来（同一个模型一行），agent 拆分把它们分开。
+    expect(summary.today.models).toHaveLength(1);
+    expect(summary.today.tokens.input).toBe(2_000_000);
+    const byAgent = summary.ranges["30d"].byAgent;
+    expect(byAgent.find((one) => one.agent === "claude")?.tokens.input).toBe(
+      1_000_000,
+    );
+    expect(byAgent.find((one) => one.agent === "codex")?.tokens.input).toBe(
+      1_000_000,
+    );
+  });
+
+  it("会话的 agent 被当成 provider 报出去", async () => {
+    const summary = summarize(
+      {
+        ...scanned([[localToday(), "claude-opus-5", 1_000_000]]),
+        current: {
+          agent: "codex" as const,
+          tokens: {
+            input: 1_000_000,
+            output: 0,
+            cacheRead: 0,
+            cacheCreation: 0,
+          },
+          models: ["gpt-5"],
+          updatedMs: NOW,
+        },
+      },
+      BUILT_IN_PRICES,
+      NOW,
+    );
+    expect(summary.currentSession?.provider).toBe("codex");
+    expect(summary.currentSession?.costUsd).toBe(1.25);
   });
 });
 
