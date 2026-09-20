@@ -87,7 +87,9 @@ CANVAS:
                                       node, link it, and give it a first task
                                       once it reports idle
   rename --node ID --handle NAME       set this node's name on the board
-  link --from ID --to ID [--name-from A --name-to B]  link two nodes, naming either end
+  link --from ID --to ID [--role peer|supervises] [--name-from A --name-to B]
+                                      link two nodes; supervises means --from
+                                      is the main and --to the sub
   send --to ID --body TEXT [--key KEY]  type a message into a linked agent's
                                       terminal and press Enter
   send --to ID --body TEXT --no-queue   refuse instead of queueing when busy
@@ -136,6 +138,7 @@ ENVIRONMENT:
   ARMADRA_NODE_ID          canvas node id; when unset hook mode is a no-op
   ARMADRA_AGENT_ID         provider id of the CLI running in this terminal
   ARMADRA_NODE_NAME        this node's name on the board; unset when unnamed
+  ARMADRA_NODE_ROLE        main (has subs) / sub (has a main); unset among peers
   ARMADRA_SESSION_ID       terminal session binding for context observations
   ARMADRA_SESSION_GENERATION  terminal generation for context observations
   ARMADRA_ENDPOINT_FILE    path to the 0600 endpoint file
@@ -154,7 +157,11 @@ SEND:
   A node that goes idle with unread canvas mail is sent one short notice
   through the same queue, signed \`Armadra 收件箱\`. Reading it is not an ack.
   \`open-agent --task\` is the same road for a node's first job: the node is
-  created and linked, and the task goes in the first time it reports idle.
+  created and linked as your sub, and the task goes in the first time it
+  reports idle.
+  Direction counts: you may send to and interrupt your subs and your peers,
+  never your main — that answers UPWARD_SEND_REFUSED, and \`post\` is the way
+  up. A main can open its own node setting to allow it.
 
 Hook mode always exits 0. \`context\`, \`canvas\` and \`doctor\` exit 1 on failure.
 `;

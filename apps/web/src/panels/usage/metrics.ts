@@ -50,3 +50,15 @@ export function pointLabel(key: string): string {
   const hour = key.slice(11, 13);
   return key.includes("T") && hour ? hour : shortDate(key);
 }
+
+/** 相对峰值分 4 档，柱子与热力格之间有轻重但不至于让小值消失。 */
+export function intensity(value: number, peak: number): number {
+  if (value <= 0) return 0;
+  const ratio = peak > 0 ? value / peak : 0;
+  if (ratio > 0.75) return 1;
+  if (ratio > 0.5) return 0.78;
+  if (ratio > 0.25) return 0.56;
+  return 0.36;
+}
+
+export const INTENSITY_STEPS: readonly number[] = [0, 0.36, 0.56, 0.78, 1];

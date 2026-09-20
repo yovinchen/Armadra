@@ -24,10 +24,24 @@ export interface ContextLinkContent {
   readonly pngPath?: string;
 }
 
+/**
+ * 对方相对于**本节点**是什么（迁移 0024 的边角色，投影到链接文档上）。
+ *
+ * 边上的 `role` 是有方向的一条事实（`supervises` = source 是主）；链接文档是
+ * 一个节点自己的视角，所以同一条边在两端读出来是互补的两个值：主那一侧看见
+ * `sub`，从那一侧看见 `main`。授权问的是这个——「我能不能把文字打进它的终端」
+ * 是一个只在「我」这一侧成立的问题。
+ */
+export const LINK_ROLES = ["peer", "main", "sub"] as const;
+
+export type LinkRole = (typeof LINK_ROLES)[number];
+
 export interface ContextLink {
   readonly id: string;
   readonly title: string;
   readonly kind: string;
+  /** 缺省按 `peer` 读：0024 之前写下的每一份链接文档都没有这个字段。 */
+  readonly role?: LinkRole;
   readonly content?: ContextLinkContent;
 }
 
@@ -60,6 +74,12 @@ export function putContextLinks(
       }
     }
     if (!isUuid(link.id) || link.title.length > 160 || link.kind.length > 40) {
+      throw badRequest("Context link is invalid");
+    }
+    if (
+      link.role !== undefined &&
+      !(LINK_ROLES as readonly string[]).includes(link.role)
+    ) {
       throw badRequest("Context link is invalid");
     }
     if (content !== undefined && content !== null) {
@@ -135,6 +155,10 @@ export function parseContextLinks(
       id: link.id,
       title: link.title,
       kind: link.kind,
+      ...(typeof link.role === "string" &&
+      (LINK_ROLES as readonly string[]).includes(link.role)
+        ? { role: link.role as LinkRole }
+        : {}),
     };
     if (link.content === undefined || link.content === null) return parsed;
     if (typeof link.content !== "object") {
@@ -142,4 +166,21 @@ export function parseContextLinks(
     }
     return { ...parsed, content: link.content as ContextLinkContent };
   });
+}
+
+/**
+ * 这个节点在主从结构里的位置，供 `ARMADRA_NODE_ROLE` 用（迁移 0024）。
+ *
+ * 头上有主就是 `sub`：那是约束它的那一条。只有从、没有主才是 `main`。两者都
+ * 没有就什么都不是——`undefined`，而不是一个写成 `"peer"` 的第三种身份：一块
+ * 只有对等连线的画布上，「角色」这个概念本身不适用。
+ */
+export function nodeRole(
+  database: DatabaseSync,
+  nodeId: string,
+): "main" | "sub" | undefined {
+  const links = getContextLinks(database, nodeId).links;
+  if (links.some((link) => link.role === "main")) return "sub";
+  if (links.some((link) => link.role === "sub")) return "main";
+  return undefined;
 }

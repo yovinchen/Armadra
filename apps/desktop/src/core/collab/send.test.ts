@@ -159,21 +159,49 @@ describe("the gate chain", () => {
     expect(fixture.terminal.submits).toHaveLength(0);
   });
 
-  it("refuses a peer whose state nobody reported, unless the caller insists", async () => {
-    target({ stateSource: "observed" });
-    const refused = refusal(await send());
+  it("refuses a peer with no adapter at all, unless the caller insists", async () => {
+    // 「没有状态适配」是这个 CLI 的属性，不是此刻的观测：这里的目标是一个裸
+    // 终端节点，注册表说它根本没有状态通道。
+    const bare = fixture.agentNode("Bare", null);
+    const bareSession = fixture.session(bare, "");
+    fixture.link(me, bare);
+    fixture.terminal.drive.set(bare, {
+      nodeId: bare,
+      sessionId: bareSession,
+      state: "idle",
+      stateSource: "observed",
+      lease: freeLease(0),
+      driveGeneration: 0,
+    } as never);
+    const refused = refusal(await run(me, "send", { to: bare, body: "做" }));
     expect(refused.code).toBe("TARGET_STATE_UNVERIFIED");
     // --unverified 要求终端域真的说它安静了；说不出来就排队，不投。
-    fixture.terminal.activity.set(peerSession, {
+    fixture.terminal.activity.set(bareSession, {
       pending: false,
       lastInputAt: 0,
       lastOutputAt: 0,
     });
-    const body = ok(await send({ unverified: true, key: "k2" }));
+    const body = ok(
+      await run(me, "send", { to: bare, body: "做", unverified: true }),
+    );
     expect(body).toMatchObject({
       outcome: "delivered",
       targetState: "observed-quiet",
     });
+  });
+
+  // 「还没报过第一条」与「这个 CLI 没有状态通道」在 `stateSource` 上长得一样。
+  // 分不开的代价是一条真实的失败：`open-agent --task` 建的节点刚起 PTY 时一行
+  // `agent_status` 都还没有，按「没有适配」处理就是把它的第一条任务当场取消，
+  // 而三秒之后同一个节点会报出一条完好的 `hook` 状态。
+  it("waits for a hook-capable peer's first report instead of calling it unverified", async () => {
+    target({ stateSource: undefined, state: "starting" });
+    const body = ok(await send());
+    expect(body).toMatchObject({
+      outcome: "queued",
+      reason: "TARGET_STARTING",
+    });
+    expect(fixture.terminal.submits).toHaveLength(0);
   });
 
   it("refuses a body over the limit", async () => {

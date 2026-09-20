@@ -16,7 +16,6 @@ import { useUsage } from "../app/use-usage";
 import { useRuntimeSettings } from "./settings/use-runtime-settings";
 import { useCanvasStore } from "../store/canvas-store";
 import { formatRelativeTime } from "../lib/format";
-import { formatTokens, formatUsd, totalTokens } from "../lib/cost";
 import { ProviderCard } from "./usage/ProviderCard";
 import { UsagePanel } from "./usage/UsagePanel";
 import { IconButton } from "../ui/icon-button";
@@ -161,24 +160,6 @@ function DashboardBody() {
           </p>
         ) : (
           <>
-            {summary.currentSession && (
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-xs">
-                <span className="text-muted-foreground">
-                  {t("usage.cost.session", {
-                    value: t(
-                      `usage.provider.${summary.currentSession.provider}`,
-                    ),
-                  })}
-                </span>
-                <span className="tabular-nums">
-                  {formatTokens(totalTokens(summary.currentSession.tokens))} ·{" "}
-                  {summary.currentSession.complete
-                    ? formatUsd(summary.currentSession.costUsd)
-                    : t("usage.cost.unpricedShort")}
-                </span>
-              </div>
-            )}
-
             <UsagePanel summary={summary} />
 
             {summary.unpricedModels.length > 0 && (

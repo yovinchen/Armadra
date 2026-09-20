@@ -295,6 +295,14 @@ function inbox(
       after,
       limit + 1,
     ) as unknown as InboxRow[];
+  // 署名带角色（迁移 0024）：一条来自上级的「请处理」与一条来自同级的「供参
+  // 考」读起来不该一样，而这条信息只在收件人这一侧成立——角色是相对的。
+  const roles = new Map(
+    getContextLinks(context.database, caller.node.id).links.map((link) => [
+      link.id,
+      link.role ?? "peer",
+    ]),
+  );
   const hasMore = rows.length > limit;
   let cursor = after;
   const messages = rows.slice(0, limit).map((row) => {
@@ -307,6 +315,8 @@ function inbox(
       // 署名优先用名字（设计 §2.4）：标题会被自动命名改写，名字不会，所以
       // 「回给 reviewer」在第二次自动命名之后仍然指向同一个节点。
       fromHandle: row.from_handle ?? null,
+      /** 发信者相对于你是什么：`main` 你的主、`sub` 你的从、`peer` 对等。 */
+      fromRole: roles.get(row.source_node_id) ?? "peer",
       key: row.message_key,
       // Bodies stay JSON strings, preserving the data boundary even if they
       // contain Markdown fences or forged message headers.

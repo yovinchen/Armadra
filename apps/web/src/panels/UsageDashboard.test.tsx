@@ -146,15 +146,14 @@ describe("UsageDashboard", () => {
     refreshUsageCost.mockResolvedValue(summary);
   });
 
-  it("本地成本走新面板：合计不完整时照实说，没有价格的模型进脚注", async () => {
+  it("本地成本走新面板：金额不带后缀，没有价格的模型进脚注", async () => {
     render(
       <TestProviders>
         <UsageDashboard />
       </TestProviders>,
     );
     await screen.findByRole("heading", { name: "用量分布" });
-    // 总额不完整时不能装作是全部花费。
-    expect(screen.getAllByText("$5.00（不完整）").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$5.00").length).toBeGreaterThan(0);
     // 模型在「按模型」的图例里，加上下方「没有价格的模型」那句提示。
     expect(screen.getAllByText(/gpt-5-codex/).length).toBe(2);
     expect(screen.getByText(/没有价格的模型只统计 token/)).toBeTruthy();
@@ -171,7 +170,7 @@ describe("UsageDashboard", () => {
     expect(
       screen.getByRole("radio", { name: "24 小时" }).getAttribute("data-state"),
     ).toBe("on");
-    expect(screen.getAllByText("$5.00（不完整）").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$5.00").length).toBeGreaterThan(0);
   });
 
   it("provider 卡上的错误与过期状态不会显示成 0%", async () => {

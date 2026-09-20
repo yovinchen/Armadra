@@ -58,6 +58,7 @@ interface EdgeRow {
   source_node_id: string;
   target_node_id: string;
   kind: string;
+  role: string;
   created_at: string;
   updated_at: string;
 }
@@ -77,7 +78,7 @@ export function loadBoard(
     .all(board.id) as unknown as NodeRow[];
   const edgeRows = database
     .prepare(
-      "SELECT id, board_id, source_node_id, target_node_id, kind, created_at, updated_at " +
+      "SELECT id, board_id, source_node_id, target_node_id, kind, role, created_at, updated_at " +
         "FROM edges WHERE board_id = ? ORDER BY created_at",
     )
     .all(board.id) as unknown as EdgeRow[];
@@ -90,6 +91,9 @@ export function loadBoard(
       source: row.source_node_id,
       target: row.target_node_id,
       kind: row.kind,
+      // 对等还是主从（迁移 0024）。已有的边一条都没有变含义：列的缺省是
+      // `peer`，而它们本来就是对等的。
+      role: row.role,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     })),
@@ -304,11 +308,12 @@ export function saveBoard(
       }
     }
     const upsertEdge = database.prepare(
-      "INSERT INTO edges (id, board_id, source_node_id, target_node_id, kind, created_at, updated_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?) " +
+      "INSERT INTO edges (id, board_id, source_node_id, target_node_id, kind, role, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT(id) DO UPDATE SET " +
         "source_node_id = excluded.source_node_id, " +
         "target_node_id = excluded.target_node_id, kind = excluded.kind, " +
+        "role = excluded.role, " +
         "created_at = excluded.created_at, updated_at = excluded.updated_at " +
         "WHERE edges.board_id = excluded.board_id",
     );
@@ -319,6 +324,7 @@ export function saveBoard(
         edge.source,
         edge.target,
         edge.kind,
+        edge.role ?? "peer",
         edge.createdAt,
         edge.updatedAt,
       );

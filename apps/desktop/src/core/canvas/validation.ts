@@ -34,6 +34,14 @@ export const NODE_TYPES = [
 ] as const;
 
 export const EDGE_KINDS = ["link"] as const;
+
+/**
+ * 一条边的角色（迁移 0024）。
+ *
+ * `peer` 是两端对等，也是缺省；`supervises` 有方向——`source` 是主，`target`
+ * 是从。授权读它：主能把文字打进从的终端，从对主默认只能 `post`。
+ */
+export const EDGE_ROLES = ["peer", "supervises"] as const;
 export const PERMISSION_MODES = [
   "default",
   "auto-edit",
@@ -173,6 +181,8 @@ export function validateDocument(
     if (
       edge.boardId !== boardId ||
       !(EDGE_KINDS as readonly string[]).includes(edge.kind) ||
+      (edge.role !== undefined &&
+        !(EDGE_ROLES as readonly string[]).includes(edge.role)) ||
       !nodeIds.has(edge.source) ||
       !nodeIds.has(edge.target) ||
       !validIdentity
@@ -329,12 +339,19 @@ function validAgentBlock(agent: unknown): boolean {
   const validWake = isAbsentOr(agent, "inboxWake", (value) =>
     (INBOX_WAKE_MODES as readonly string[]).includes(value as string),
   );
+  // 「允许从向我投递」（迁移 0024）。默认关，所以缺席与 `false` 是同一件事。
+  const validUpward = isAbsentOr(
+    agent,
+    "acceptSubDelivery",
+    (value) => typeof value === "boolean",
+  );
   return (
     validId &&
     validPermission &&
     validPending &&
     validAccount &&
     validWake &&
+    validUpward &&
     optionalBoundedString(agent, "accountId", 120) &&
     optionalBoundedString(agent, "model", 120) &&
     optionalBoundedString(agent, "sessionId", 200) &&

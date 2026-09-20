@@ -6,7 +6,9 @@ import {
 import { baseAgent, validAgentId } from "../../agent/registry";
 import { getAgentStatus } from "../../agent/status";
 import type { CanvasEdge, CanvasNode } from "../../canvas/document-types";
+import { getContextLinks } from "../../canvas/context-links";
 import { handlesFor } from "../../canvas/handles";
+import { roleLabel } from "../context-link";
 import { rfc3339, uuidV7 } from "../../workspaces/support";
 import type { Caller } from "../nodes";
 import { type Args, Refusal, collapseNewlines } from "../refusals";
@@ -36,6 +38,15 @@ export function list(context: CollabContext, caller: Caller): Outcome {
     context.database,
     document.nodes.map((node) => node.id),
   );
+  // 角色是**相对调用者**的：同一块画布上的同一个节点，对它的主是「从」，对它
+  // 的从是「主」。所以这一列读的是调用者自己的链接文档，与 `context list` 同
+  // 一份事实（迁移 0024）。
+  const roles = new Map(
+    getContextLinks(context.database, caller.node.id).links.map((link) => [
+      link.id,
+      link.role ?? "peer",
+    ]),
+  );
   const rows: Record<string, unknown>[] = [];
   const lines: string[] = [];
   for (const node of document.nodes) {
@@ -43,11 +54,13 @@ export function list(context: CollabContext, caller: Caller): Outcome {
     const agent = agentOf(node);
     const state = status?.state;
     const handle = handles.get(node.id);
+    const role = roles.get(node.id);
     lines.push(
       `- ${node.title} [${node.type}]` +
         (agent === null ? "" : ` ${agent}`) +
         (state === undefined ? "" : ` · ${state}`) +
         (handle === undefined ? "" : `  名字=${handle}`) +
+        (role === undefined ? "" : `  角色=${roleLabel(role)}`) +
         `  id=${node.id}` +
         (node.id === caller.node.id ? "  ← 你" : ""),
     );
@@ -57,6 +70,7 @@ export function list(context: CollabContext, caller: Caller): Outcome {
       title: node.title,
       agent,
       handle: handle ?? null,
+      role: role ?? null,
       state: state ?? null,
       self: node.id === caller.node.id,
     });
@@ -211,6 +225,10 @@ export function openAgent(
       source: caller.node.id,
       target: node.id,
       kind: "link",
+      // 建它的那个节点是它的主（迁移 0024）。这不是一条礼貌的默认：`--task`
+      // 就是一次自上而下的指派，而一个刚被建出来的节点回头去驱动建它的那个，
+      // 是环最短的那条路。
+      role: "supervises",
       createdAt: now,
       updatedAt: now,
     },
@@ -223,7 +241,15 @@ export function openAgent(
   );
   // 边与两份链接文档必须同呼吸：画布上看得见一条线，而动词仍然答「没连线」，
   // 是这两处不同步唯一会有的样子（`edits.ts::link` 的同一条规矩）。
-  addLink(context, caller, caller.node.id, node.id, node.title, node.type);
+  addLink(
+    context,
+    caller,
+    caller.node.id,
+    node.id,
+    node.title,
+    node.type,
+    "sub",
+  );
   addLink(
     context,
     caller,
@@ -231,6 +257,7 @@ export function openAgent(
     caller.node.id,
     caller.node.title,
     "terminal",
+    "main",
   );
 
   const queued =

@@ -29,12 +29,14 @@ import { TestProviders, installDomPolyfills } from "../../app/test-harness";
 import { formatTokens, formatUsd, totalTokens } from "../../lib/cost";
 
 /**
- * 用量面板的四条验收：
+ * 用量面板的验收：
  *
  *  1. 卡片跟着范围走（默认 7 天，点 30 天换成 30 天的合计）；
- *  2. 指标开关切到费用时卡片给美元；
+ *  2. 指标开关切到费用时卡片给美元，且不再有「不完整」后缀；
  *  3. 没有本地来源的 Agent 走脚注，不画成空面积；
- *  4. 图例点一下聚焦那一条，其余变淡。
+ *  4. 图例点一下聚焦那一条，其余变淡；
+ *  5. 点柱子/热力格选中一个时间点，清除按钮与再点一次都能取消；
+ *  6. 换范围时图表原地换数据，不重挂载。
  *
  * jsdom 量不出尺寸，recharts 的 `ResponsiveContainer` 会渲染空；这里把
  * `ResizeObserver` 换成一个立刻回报固定尺寸的桩，图形才有 DOM 可断言。
@@ -123,6 +125,14 @@ function card(metric: "tokens" | "cost"): HTMLElement {
   return node;
 }
 
+function skylineWrapper(): Element {
+  const node = document.querySelector(
+    '[data-slot="usage-timeline"] .recharts-wrapper',
+  );
+  if (!node) throw new Error("no timeline wrapper");
+  return node;
+}
+
 describe("用量面板", () => {
   it("默认 7 天，切到 30 天后卡片换成那一段的合计", async () => {
     const summary = renderPanel();
@@ -156,6 +166,8 @@ describe("用量面板", () => {
         formatUsd(summary.ranges["7d"].totals.costUsd),
       ),
     );
+    expect(summary.ranges["7d"].totals.complete).toBe(false);
+    expect(card("cost").textContent).not.toContain("不完整");
   });
 
   it("没有本地来源的 Agent 只出现在脚注里", async () => {
@@ -192,5 +204,98 @@ describe("用量面板", () => {
     await waitFor(() =>
       expect(items.every((item) => item.dataset.dimmed === "false")).toBe(true),
     );
+  });
+
+  it("点柱子选中那个时间点，清除按钮与再点一次都能取消", async () => {
+    const summary = renderPanel();
+    const seven = summary.ranges["7d"];
+    const target = seven.points[2];
+    if (!target) throw new Error("no point");
+
+    const bars = document.querySelectorAll(".recharts-bar-rectangle");
+    expect(bars.length).toBe(seven.points.length);
+    fireEvent.click(bars[2] as Element);
+
+    const clear = await screen.findByRole("button", { name: "清除选中" });
+    await waitFor(() =>
+      expect(card("tokens").textContent).toContain(
+        formatTokens(totalTokens(target.tokens)),
+      ),
+    );
+    expect(card("cost").textContent).toContain(formatUsd(target.costUsd));
+
+    fireEvent.click(clear);
+    await waitFor(() =>
+      expect(card("tokens").textContent).toContain(
+        formatTokens(totalTokens(seven.totals.tokens)),
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "清除选中" })).toBeNull();
+
+    fireEvent.click(document.querySelectorAll(".recharts-bar-rectangle")[2]!);
+    await screen.findByRole("button", { name: "清除选中" });
+    fireEvent.click(document.querySelectorAll(".recharts-bar-rectangle")[2]!);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "清除选中" })).toBeNull(),
+    );
+  });
+
+  it("全部档画热力图，点格子选中那一天", async () => {
+    const summary = renderPanel();
+    fireEvent.click(screen.getByRole("radio", { name: "全部" }));
+
+    const heatmap = await waitFor(() => {
+      const node = document.querySelector('[data-slot="usage-heatmap"]');
+      if (!node) throw new Error("no heatmap");
+      return node;
+    });
+    expect(document.querySelector('[data-slot="usage-timeline"]')).toBeNull();
+    expect(document.querySelector('[data-slot="usage-donut"]')).toBeTruthy();
+
+    const cells = heatmap.querySelectorAll<HTMLElement>(
+      '[data-slot="usage-heatmap-cell"]',
+    );
+    expect(cells.length).toBe(summary.ranges.all.points.length);
+
+    const last = summary.ranges.all.points.at(-1);
+    if (!last) throw new Error("no point");
+    const cell = cells[cells.length - 1] as HTMLElement;
+    expect(cell.dataset.key).toBe(last.key);
+    expect(cell.getAttribute("aria-label")).toContain(last.key);
+
+    fireEvent.click(cell);
+    await waitFor(() => expect(cell.dataset.selected).toBe("true"));
+    await waitFor(() =>
+      expect(card("tokens").textContent).toContain(
+        formatTokens(totalTokens(last.tokens)),
+      ),
+    );
+    expect(card("tokens").textContent).toContain("9/20");
+
+    fireEvent.click(cell);
+    await waitFor(() => expect(cell.dataset.selected).toBe("false"));
+  });
+
+  it("换范围时图表原地换数据，不重挂载", async () => {
+    const summary = renderPanel();
+    const before = skylineWrapper();
+    const areas = document.querySelectorAll('[data-slot="chart"]').length;
+
+    fireEvent.click(screen.getByRole("radio", { name: "30 天" }));
+    await waitFor(() =>
+      expect(document.querySelectorAll(".recharts-bar-rectangle").length).toBe(
+        summary.ranges["30d"].points.length,
+      ),
+    );
+    expect(skylineWrapper()).toBe(before);
+
+    fireEvent.click(screen.getByRole("radio", { name: "24 小时" }));
+    await waitFor(() =>
+      expect(document.querySelectorAll(".recharts-bar-rectangle").length).toBe(
+        summary.ranges["24h"].points.length,
+      ),
+    );
+    expect(skylineWrapper()).toBe(before);
+    expect(document.querySelectorAll('[data-slot="chart"]').length).toBe(areas);
   });
 });

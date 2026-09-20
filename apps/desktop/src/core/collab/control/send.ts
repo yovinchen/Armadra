@@ -1,5 +1,5 @@
 import { expectedProcesses, paneRunsAgent } from "../../agent/launch";
-import { baseAgent, hasCapability } from "../../agent/registry";
+import { baseAgent, hasCapability, stateSourceFor } from "../../agent/registry";
 import {
   OBSERVED_QUIET,
   type TargetState,
@@ -136,6 +136,14 @@ export const SEND_CODES = {
   BODY_TOO_LONG: 400,
   KEY_CONFLICT: 409,
   DRIVE_DENIED: 403,
+  /**
+   * 从想把文字打进主的终端（迁移 0024 的边角色）。
+   *
+   * 不是权限缺失，是方向不对：一条 `supervises` 边说的就是「谁给谁派活」。下
+   * 级要说话仍然有 `post`——留言不打断人，而打断上级正在做的事是它该请求而不
+   * 是该执行的。主可以在自己的节点设置里显式打开这条路。
+   */
+  UPWARD_SEND_REFUSED: 403,
 } as const satisfies Record<string, number>;
 
 export type SendCode = keyof typeof SEND_CODES;
@@ -421,6 +429,22 @@ export async function attempt(
   // 没有状态适配的通道（§4.3）。默认拒绝而不是默认放行：这种节点上「在等人」
   // 这个事实根本不存在，放行就没法保证不替人回答权限提示。
   if (!stateSourceIsReported(live.stateSource)) {
+    // 「还没报过第一条」与「这个 CLI 根本没有状态通道」是两件事，而它们在
+    // `stateSource` 上长得一模一样：都是空的。分不开的代价是一条真实的失败——
+    // `open-agent --task` 建的节点刚起 PTY 时还没有任何一行 `agent_status`，
+    // 按「没有适配」处理就是把它的第一条任务当场取消掉，而三秒之后同一个节点
+    // 会报出一条完好的 `hook` 状态。所以问的是**这个 provider 有没有状态通道**
+    // （注册表的事实，与此刻无关），有就排队等第一条上报（§4.1 的 `starting`）。
+    if (hasStateChannel(context, target)) {
+      return queueOrRefuse(
+        context,
+        item,
+        target,
+        "TARGET_STARTING",
+        options,
+        now,
+      );
+    }
     if (options.unverified !== true) {
       settle(context.database, item.id, "cancelled", "TARGET_STATE_UNVERIFIED");
       throw refuse(
@@ -697,6 +721,17 @@ function authorize(
   if (target.workspaceId !== source.workspaceId) {
     throw refuse("NOT_LINKED", "这个链接指向的节点不在当前工作空间，已拒绝。");
   }
+  // 方向（迁移 0024）。放在能力位之前：一条不该存在的投递，理由应该是「方向
+  // 不对」而不是「某个开关关着」。
+  const link = getContextLinks(context.database, source.id).links.find(
+    (entry) => entry.id === target.id,
+  );
+  if ((link?.role ?? "peer") === "main" && !acceptsFromSubs(target)) {
+    throw refuse(
+      "UPWARD_SEND_REFUSED",
+      `「${target.title}」是你的主，下级不能把文字打进上级的终端；用 canvas post 留一条消息，由对方自己决定什么时候读。`,
+    );
+  }
   if (target.nodeType !== "terminal") {
     throw refuse(
       "TARGET_NOT_TERMINAL",
@@ -794,6 +829,32 @@ async function observe(
     leaseState: answer.lease.state,
     leaseHolderId: answer.lease.holder?.id ?? "",
   };
+}
+
+/**
+ * 主有没有在自己的节点设置里打开「允许从向我投递」。
+ *
+ * 默认关：一个上级的终端不该因为它带了一个下级就多出一条别人能写进来的路。
+ */
+export function acceptsFromSubs(target: NodeRef): boolean {
+  const data = target.data;
+  if (data === null || typeof data !== "object") return false;
+  const agent = (data as Record<string, unknown>).agent;
+  if (agent === null || typeof agent !== "object") return false;
+  return (agent as Record<string, unknown>).acceptSubDelivery === true;
+}
+
+/**
+ * 这个节点跑的 CLI 有没有状态通道——注册表的事实，不是此刻的观测。
+ *
+ * 自定义 Agent 按 base 问，与门链上其它几条一致；没有 agent 的裸终端没有通道，
+ * 它永远走 §4.3 的 `--unverified` 那条路。
+ */
+function hasStateChannel(context: CollabContext, target: NodeRef): boolean {
+  if (target.agentId === null) return false;
+  return (
+    stateSourceFor(baseAgent(context.settings, target.agentId)) !== undefined
+  );
 }
 
 /** 演练用：门链跑不过就当作「看不见」，不抛。 */

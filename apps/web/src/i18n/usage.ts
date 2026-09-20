@@ -51,9 +51,7 @@ export const usage: MessageModule = {
     "usage.dashboard.unpin": "取消固定",
 
     "usage.cost.title": "本地成本",
-    "usage.cost.session": "当前会话（{value}）",
     "usage.cost.tokenCount": "{value} token",
-    "usage.cost.partial": "{value}（不完整）",
 
     "usage.range.24h": "24 小时",
     "usage.range.7d": "7 天",
@@ -65,6 +63,13 @@ export const usage: MessageModule = {
     "usage.skyline.peak": "峰值 {value} · {key}",
     "usage.skyline.active": "活跃 {value}/{total}",
     "usage.skyline.streak": "最长连续 {value}",
+    "usage.heatmap.less": "少",
+    "usage.heatmap.more": "多",
+    "usage.heatmap.cell": "{date} · {value}",
+    "usage.heatmap.weekday.mon": "周一",
+    "usage.heatmap.weekday.wed": "周三",
+    "usage.heatmap.weekday.fri": "周五",
+    "usage.selection.clear": "清除选中",
     "usage.breakdown.byModel": "按模型",
     "usage.breakdown.byAgent": "按 Agent",
     "usage.breakdown.other": "其他",
@@ -74,7 +79,6 @@ export const usage: MessageModule = {
     "usage.tokens.cacheRead": "缓存读",
     "usage.tokens.cacheCreation": "缓存写",
 
-    "usage.cost.unpricedShort": "仅 token",
     "usage.cost.separator": "、",
     "usage.cost.unpriced": "没有价格的模型只统计 token：{value}",
     "usage.cost.truncated": "转录文件过多，较旧的没有统计",
@@ -146,9 +150,7 @@ export const usage: MessageModule = {
     "usage.dashboard.unpin": "Unpin",
 
     "usage.cost.title": "Local cost",
-    "usage.cost.session": "Current session ({value})",
     "usage.cost.tokenCount": "{value} tokens",
-    "usage.cost.partial": "{value} (incomplete)",
 
     "usage.range.24h": "24 hours",
     "usage.range.7d": "7 days",
@@ -160,6 +162,13 @@ export const usage: MessageModule = {
     "usage.skyline.peak": "Peak {value} · {key}",
     "usage.skyline.active": "Active {value}/{total}",
     "usage.skyline.streak": "Longest streak {value}",
+    "usage.heatmap.less": "Less",
+    "usage.heatmap.more": "More",
+    "usage.heatmap.cell": "{date} · {value}",
+    "usage.heatmap.weekday.mon": "Mon",
+    "usage.heatmap.weekday.wed": "Wed",
+    "usage.heatmap.weekday.fri": "Fri",
+    "usage.selection.clear": "Clear selection",
     "usage.breakdown.byModel": "By model",
     "usage.breakdown.byAgent": "By agent",
     "usage.breakdown.other": "Other",
@@ -169,7 +178,6 @@ export const usage: MessageModule = {
     "usage.tokens.cacheRead": "Cache read",
     "usage.tokens.cacheCreation": "Cache write",
 
-    "usage.cost.unpricedShort": "tokens only",
     "usage.cost.separator": ", ",
     "usage.cost.unpriced": "Models with no price count tokens only: {value}",
     "usage.cost.truncated": "Too many transcripts; older ones were skipped",

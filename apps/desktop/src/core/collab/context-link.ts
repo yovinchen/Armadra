@@ -177,6 +177,19 @@ export function kindLabel(kind: string): string {
 }
 
 /**
+ * 对方相对于本节点是什么（迁移 0024）。
+ *
+ * 用中文的「主 / 从 / 对等」而不是机器码，因为这一行是给模型读的散文，而它在
+ * 同一行里已经有 `名字=` 和 `id=` 两个机器可用的字段了。缺省是对等：0024 之前
+ * 写下的每一份链接文档都没有这个字段。
+ */
+export function roleLabel(role: string | undefined): string {
+  if (role === "main") return "主（它管你）";
+  if (role === "sub") return "从（你管它）";
+  return "对等";
+}
+
+/**
  * `list` 是 Agent 唯一一处「我连着谁、各自叫什么」的答案（设计 §2.3），所以名
  * 字排在 id 前面：有名字的那些，`--node`、`post --to` 都该用名字而不是 id。
  */
@@ -190,6 +203,7 @@ function renderList(links: readonly ContextLink[], handles: Handles): string {
     out +=
       `- ${link.title}  类型=${kindLabel(link.kind)}` +
       (handle === undefined ? "" : `  名字=${handle}`) +
+      `  角色=${roleLabel(link.role)}` +
       `  id=${link.id}  可读：${readableAs(link.kind)}\n`;
     const status = link.content?.status;
     if (status !== undefined) {

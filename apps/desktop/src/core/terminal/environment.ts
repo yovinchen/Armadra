@@ -224,6 +224,13 @@ export function asRecord(env: EnvPairs): Record<string, string> {
  * rename — the variable is the name this session started under, and the live
  * answer is always `context list`.
  *
+ * `ARMADRA_NODE_ROLE` is the same shape of answer for the other question a
+ * model asks itself once links have a direction (迁移 0024): `sub` when this
+ * node has a main above it, `main` when it has subs and no main, and **unset**
+ * when every link is a peer. A node that is both answers `sub`, because the
+ * fact that constrains what it may do is the one above it. Like the name, it
+ * is the answer this session started with; the live one is `context list`.
+ *
  * Addresses only. The per-node token is deliberately absent.
  */
 export function agentEnvironment(
@@ -231,6 +238,7 @@ export function agentEnvironment(
   agentId: string,
   dataDir: string,
   nodeName?: string | undefined,
+  nodeRole?: string | undefined,
 ): EnvPairs {
   return [
     ["ARMADRA_NODE_ID", nodeId],
@@ -238,6 +246,9 @@ export function agentEnvironment(
     ...(nodeName === undefined || nodeName === ""
       ? []
       : ([["ARMADRA_NODE_NAME", nodeName]] as EnvPairs)),
+    ...(nodeRole === undefined || nodeRole === ""
+      ? []
+      : ([["ARMADRA_NODE_ROLE", nodeRole]] as EnvPairs)),
     ["ARMADRA_ENDPOINT_FILE", hookEndpointFile(dataDir)],
     ["ARMADRA_CANVAS_CONTROL", "1"],
   ];

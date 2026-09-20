@@ -4,6 +4,7 @@ import { getContextLinks } from "../../canvas/context-links";
 import { AddressError, loadHandles, resolveLink } from "../addressing";
 import { type Caller, loadNode, loadSession, workspaceRoot } from "../nodes";
 import { type Args, Refused, nonce } from "../refusals";
+import { acceptsFromSubs } from "./send";
 import type { CollabContext } from "../service";
 import { type Outcome, result } from "./outcome";
 
@@ -83,6 +84,16 @@ export async function interrupt(
       400,
       "target_not_terminal",
       `「${target.title}」不是终端节点，没有可以打断的东西。`,
+    );
+  }
+  // 方向（迁移 0024）。打断是 `send` 之外另一次替对方按键，所以它答的是同一个
+  // 问题：下级不能停掉上级正在做的事，除非上级自己开了那条路。
+  if ((link.role ?? "peer") === "main" && !acceptsFromSubs(target)) {
+    throw new Refused(
+      403,
+      "UPWARD_SEND_REFUSED",
+      `「${target.title}」是你的主，下级不能打断上级这一轮；用 canvas post 说明情况。`,
+      { retryable: false },
     );
   }
 

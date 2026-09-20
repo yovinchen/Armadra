@@ -100,6 +100,12 @@ export const terminalAgentSchema = z.object({
    * earliest unread message itself. Absent means the core's default.
    */
   inboxWake: z.enum(INBOX_WAKE_MODES).optional(),
+  /**
+   * Whether a sub may type into this node's terminal (migration 0024).
+   * Off by default: a link that says "I supervise you" is not a request for
+   * the other direction.
+   */
+  acceptSubDelivery: z.boolean().optional(),
 });
 
 /**

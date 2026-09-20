@@ -1,7 +1,7 @@
 import { type ReactNode, useMemo, useState } from "react";
 import type { CostPoint } from "@armadra/shared";
 import { useReducedMotion } from "motion/react";
-import { Area, AreaChart, XAxis } from "recharts";
+import { Area, AreaChart, ReferenceLine, XAxis } from "recharts";
 
 import { useT } from "../../app/preferences-store";
 import { ColorDot } from "@/ui/color-dot";
@@ -27,12 +27,14 @@ export function DimensionChart({
   points,
   series,
   metric,
+  selected,
   noteBelow,
 }: {
   title: string;
   points: CostPoint[];
   series: DimensionSeries[];
   metric: UsageMetric;
+  selected: CostPoint | null;
   noteBelow?: ReactNode;
 }) {
   const t = useT();
@@ -60,7 +62,9 @@ export function DimensionChart({
     [series],
   );
 
-  const sum = series.reduce((acc, item) => acc + item.total, 0);
+  const share = (item: DimensionSeries) =>
+    selected ? item.value(selected) : item.total;
+  const sum = series.reduce((acc, item) => acc + share(item), 0);
   const tick = Math.max(0, Math.ceil(points.length / 6) - 1);
 
   return (
@@ -81,6 +85,13 @@ export function DimensionChart({
               tick={{ fontSize: 10 }}
               tickFormatter={pointLabel}
             />
+            {selected && (
+              <ReferenceLine
+                x={selected.key}
+                stroke="var(--muted-foreground)"
+                strokeDasharray="2 2"
+              />
+            )}
             <ChartTooltip
               cursor={false}
               content={
@@ -143,7 +154,7 @@ export function DimensionChart({
             </span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
               {t("usage.percent", {
-                value: sum > 0 ? Math.round((item.total / sum) * 100) : 0,
+                value: sum > 0 ? Math.round((share(item) / sum) * 100) : 0,
               })}
             </span>
           </button>

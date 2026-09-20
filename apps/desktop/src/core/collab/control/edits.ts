@@ -1,8 +1,10 @@
 import {
   type ContextLink,
+  type LinkRole,
   getContextLinks,
   putContextLinks,
 } from "../../canvas/context-links";
+import { EDGE_ROLES } from "../../canvas/validation";
 import type { CanvasEdge, CanvasNode } from "../../canvas/document-types";
 import {
   MAX_HANDLE_CHARS,
@@ -50,9 +52,14 @@ export function link(
   if (from.id === to.id) {
     throw Refusal.badRequest("不能把节点连到它自己。");
   }
-  const exists = document.edges.some(
+  const existing = document.edges.find(
     (edge) => edge.source === from.id && edge.target === to.id,
   );
+  const exists = existing !== undefined;
+  // 主从还是对等（迁移 0024）。不给 `--role` 时：新边是 `peer`（人拉一条线的
+  // 意思就是「这两个放在一起」，不是「这个归那个管」），已有边保持原样——改角
+  // 色要说出口，不该是一次重连的副作用。
+  const role = readRole(args) ?? existing?.role ?? "peer";
   // 连线是起名的入口（设计 §2.2）：一条边建立的那一刻，两端才第一次需要互相
   // 称呼。不给就不起名，也不替调用者编一个——一块只有一个 Agent 的画布不需要
   // 名字。`--name` 是 `--name-to` 的别名：只有一个名字要起时，起的是对面那个。
@@ -62,7 +69,7 @@ export function link(
   ].filter((entry): entry is NamedEnd => entry !== undefined);
   if (args.flag("dry-run")) {
     return result(
-      `（演练）会建立「${from.title}」→「${to.title}」的上下文链接${exists ? "（已存在）" : ""}${
+      `（演练）会建立「${from.title}」→「${to.title}」的上下文链接（${roleWord(role, from.title, to.title)}）${exists ? "（已存在）" : ""}${
         names.length === 0
           ? ""
           : `，并起名 ${names.map((entry) => `${entry.title}=${entry.handle}`).join("、")}`
@@ -72,19 +79,23 @@ export function link(
         from: from.id,
         to: to.id,
         exists,
+        role,
         ...handleFields(from.id, to.id, names),
       },
     );
   }
-  const edges: CanvasEdge[] = [...document.edges];
-  if (!exists) {
-    const now = rfc3339();
+  const now = rfc3339();
+  const edges: CanvasEdge[] = document.edges.map((edge) =>
+    edge.id === existing?.id ? { ...edge, role, updatedAt: now } : edge,
+  );
+  if (existing === undefined) {
     edges.push({
       id: uuidV7(),
       boardId: document.board.id,
       source: from.id,
       target: to.id,
       kind: "link",
+      role,
       createdAt: now,
       updatedAt: now,
     });
@@ -95,15 +106,52 @@ export function link(
     noteHandle(caller, entry.id, entry.previous, entry.handle);
   }
 
-  addLink(context, caller, from.id, to.id, to.title, to.type);
-  addLink(context, caller, to.id, from.id, from.title, from.type);
+  // 两份链接文档是互补的两个视角：主那一侧记 `sub`，从那一侧记 `main`。
+  addLink(context, caller, from.id, to.id, to.title, to.type, forward(role));
+  addLink(
+    context,
+    caller,
+    to.id,
+    from.id,
+    from.title,
+    from.type,
+    backward(role),
+  );
   return result(
-    `已连接「${from.title}」↔「${to.title}」，两边都能读对方的上下文了。` +
+    `已连接「${from.title}」↔「${to.title}」（${roleWord(role, from.title, to.title)}），两边都能读对方的上下文了。` +
       (names.length === 0
         ? ""
         : `名字：${names.map((entry) => `${entry.title}=${entry.handle}`).join("、")}。`),
-    { from: from.id, to: to.id, ...handleFields(from.id, to.id, names) },
+    { from: from.id, to: to.id, role, ...handleFields(from.id, to.id, names) },
   );
+}
+
+/** `--role peer|supervises`；别的值当场拒绝，不猜。 */
+function readRole(args: Args): string | undefined {
+  const wanted = args.text("role");
+  if (wanted === undefined) return undefined;
+  if (!(EDGE_ROLES as readonly string[]).includes(wanted)) {
+    throw Refusal.badRequest(
+      `--role 只能是 ${EDGE_ROLES.join(" / ")}：peer 是对等，supervises 是 --from 管 --to。`,
+    );
+  }
+  return wanted;
+}
+
+/** 边的角色 → `from` 那一侧的链接文档里记什么。 */
+function forward(role: string): LinkRole {
+  return role === "supervises" ? "sub" : "peer";
+}
+
+/** 边的角色 → `to` 那一侧记什么。同一条边，互补的视角。 */
+function backward(role: string): LinkRole {
+  return role === "supervises" ? "main" : "peer";
+}
+
+function roleWord(role: string, fromTitle: string, toTitle: string): string {
+  return role === "supervises"
+    ? `「${fromTitle}」是主、「${toTitle}」是从`
+    : "对等";
 }
 
 /** 一端要起的名字：形状校验过，也确认过这块画布上没有别人占着。 */
@@ -159,12 +207,32 @@ export function addLink(
   other: string,
   title: string,
   kind: string,
+  role: LinkRole = "peer",
 ): void {
   const links = getContextLinks(context.database, owner).links;
-  if (links.some((entry) => entry.id === other)) return;
+  const already = links.find((entry) => entry.id === other);
+  // 已经连着的那一条：只有角色变了才重写。`link` 对一条已有的边是幂等的，而
+  // 「顺手把角色改回默认」不是幂等，是一次没人要求的降级。
+  if (already !== undefined) {
+    if ((already.role ?? "peer") === role) return;
+    const updated: ContextLink[] = links.map((entry) =>
+      entry.id === other ? { ...entry, role } : entry,
+    );
+    try {
+      putContextLinks(
+        context.database,
+        caller.node.workspaceId,
+        owner,
+        updated,
+      );
+    } catch (error) {
+      throw asRefusal(error);
+    }
+    return;
+  }
   // `link` always joins two nodes; only the canvas mints shape links, which is
   // why this one carries no content.
-  const next: ContextLink[] = [...links, { id: other, title, kind }];
+  const next: ContextLink[] = [...links, { id: other, title, kind, role }];
   try {
     putContextLinks(context.database, caller.node.workspaceId, owner, next);
   } catch (error) {

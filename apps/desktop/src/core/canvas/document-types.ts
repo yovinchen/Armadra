@@ -58,6 +58,17 @@ export interface CanvasEdge {
   readonly source: string;
   readonly target: string;
   readonly kind: string;
+  /**
+   * 对等还是主从（迁移 0024）。
+   *
+   *   * `peer` —— 两端对等。人在画布上拉一条线的默认，也是 `canvas link` 的
+   *     默认，以及**所有 0024 之前已经存在的边**的含义。
+   *   * `supervises` —— 有方向：`source` 是主，`target` 是从。
+   *
+   * 授权读这个字段：主可以把文字打进从的终端（`send` / `interrupt`），从对主
+   * 默认只能 `post`（`UPWARD_SEND_REFUSED`）。缺省当 `peer` 读。
+   */
+  readonly role?: string;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

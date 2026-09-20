@@ -59,8 +59,8 @@ description: 在 Armadra 画布上读取相连节点的上下文、收发信箱�
 
 # Armadra 协作 / Collaborate on the Armadra board
 
-本终端跑在 Armadra 画布的一个节点里。协作是**拉取式**的：你给对方留一条交接，对方在自己方便的时候来读；没有任何命令会把文字打进别人的终端。画布改动会立刻显示在用户屏幕上，所以只做用户要求的事。
-This terminal runs inside an Armadra node. Collaboration is pull-only: you leave a handoff, the peer reads it when it suits them. Nothing here injects text into another terminal.
+本终端跑在 Armadra 画布的一个节点里。协作有两条路：\`post\` 是留言，对方方便时自己来读；\`send\` 是把正文打进对方终端并回车，让对方**现在**开一轮。两条都需要画布上已经有一条连线。画布改动会立刻显示在用户屏幕上，所以只做用户要求的事。
+This terminal runs inside an Armadra node. Two roads: \`post\` leaves a note the peer reads when it suits them, \`send\` types into their terminal and presses Enter. Both need a link on the board.
 
 \`armadra-hook\` 随 Armadra 一起安装，画布里开的终端已经把它放进 PATH；如果 shell 配置重写了 PATH 而找不到它，用 \`"$ARMADRA_HOOK_BIN"\` 代替命令名。The \`armadra-hook\` command ships with Armadra and is on PATH in terminals opened from the board; if a shell profile rewrote PATH, run \`"$ARMADRA_HOOK_BIN"\` instead.
 
@@ -73,6 +73,17 @@ Each node can carry a **name**: short, stable, unique on the board. Titles get r
 - \`context list\` 会列出你连着谁、各自叫什么（\`名字=<handle>\`）。
 - 凡是接受 \`--to\` / \`--node\` 的命令都收名字：\`--to reviewer\` 和 \`--to <节点 id>\` 等价，而且名字不会因为标题变了就指向别人。
 - 改名：\`armadra-hook canvas rename --node <id> --handle reviewer\`；连线的同时起名：\`canvas link --from <id> --to <id> --name-from planner --name-to reviewer\`。名字撞了会当场拒绝并告诉你是谁占着，不会静默改写。
+
+## 主从与对等 / Who is above whom
+
+一条连线要么是**对等**，要么是**主从**（主管从）。这决定了谁能把文字打进谁的终端：
+
+- 你自己的位置在环境变量 \`ARMADRA_NODE_ROLE\` 里：\`main\` 你手下有从、\`sub\` 你有一个主、没有这个变量就是这块画布上全是对等连线。
+- \`context list\` 与 \`canvas list\` 的每一行都写明对方是**主（它管你）**、**从（你管它）**还是**对等**。
+- 你可以 \`send\` / \`interrupt\` 你的**从**和你的**对等**。
+- 你**不能** \`send\` 或 \`interrupt\` 你的**主**：会回 \`UPWARD_SEND_REFUSED\`。要跟主说话就 \`post\`，由对方自己决定什么时候读——除非对方在自己的节点设置里打开了「允许从向我投递」。
+- \`canvas open-agent\` 建出来的节点是**你的从**；\`canvas link\` 默认建对等边，要建主从加 \`--role supervises\`（\`--from\` 是主）。
+- 收件箱每条消息带 \`fromRole\`：一条来自主的消息和一条来自对等的消息，轻重不一样。
 
 ## 读相连节点 / Read linked context
 
@@ -125,7 +136,7 @@ armadra-hook canvas open-terminal --title "构建"            # 新终端节点
 armadra-hook canvas open-agent --agent claude --title "审阅" --task "复查 src/ 的改动，结论写进便签"
 armadra-hook canvas open-agent --agent codex --after <id> --after <id>   # 等这些节点完成后再启动
 armadra-hook canvas sticky --title "结论" --content "..."   # 便签
-armadra-hook canvas link --from <id> --to <id> [--name-from A --name-to B]   # 建立上下文链接（双向可读），可顺手起名
+armadra-hook canvas link --from <id> --to <id> [--role peer|supervises] [--name-from A --name-to B]   # 建立上下文链接（双向可读），可定主从、可顺手起名
 armadra-hook canvas rename --node <id> --title "新标题" [--handle <名字>]
 armadra-hook canvas interrupt --to <已连线节点>             # 打断对方当前这一轮（只发一个 Escape，不带正文）
 \`\`\`
