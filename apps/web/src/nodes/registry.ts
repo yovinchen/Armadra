@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import { lazy, type ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -18,14 +18,31 @@ import {
   type Size,
 } from "@armadra/shared";
 
-import { AgentActivityNode } from "./AgentActivityNode";
-import { AutomationNode } from "./AutomationNode";
-import { BrowserNode } from "./browser";
-import { DiffNode } from "./DiffNode";
-import { EditorNode } from "./EditorNode";
-import { FilesNode } from "./FilesNode";
-import { StickyNode } from "./StickyNode";
-import { TerminalNode } from "./TerminalNode";
+/**
+ * 节点体按种类懒加载（§17「代码分割」）。
+ *
+ * 这张表以前是八条顶层 import，于是一块空画布也要把八种节点体全部加载：
+ * 终端拖着 xterm（443 kB）、编辑器拖着 CodeMirror（862 kB）与语言服务
+ * （153 kB）、对比拖着三方合并（834 kB）、便签拖着 react-markdown
+ * （544 kB）——实测空闲时页面已加载 6.17 MB JS，其中这一段占 2.8 MB，而画
+ * 布上一个节点都没有。
+ *
+ * `NODE_BODY[type]` 只在画布上真的有那一种节点时才被渲染，所以懒加载的边界
+ * 就落在这里最自然。两个渲染点（`ArmadraNode`、`MobileFocusPage`）各自包了
+ * `<Suspense fallback={null}>`：节点壳、头部、尺寸都是外面画的，等的只是壳
+ * 里那一块，而它本来就要等自己的数据。
+ *
+ * `NODE_META` 不动：图标与尺寸是同步读的（新建节点要立刻知道默认大小），
+ * 而 lucide 图标本来就在入口 chunk 里。
+ */
+function body<T extends string>(
+  name: T,
+  load: () => Promise<Record<T, ComponentType<NodeBodyProps>>>,
+): ComponentType<NodeBodyProps> {
+  return lazy<ComponentType<NodeBodyProps>>(() =>
+    load().then((module) => ({ default: module[name] })),
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /* 契约（计划书 §13.2 / React Flow 计划 §2.2）                                  */
@@ -159,15 +176,15 @@ export const NODE_META: Record<CanvasNodeType, NodeMeta> = {
 };
 
 export const NODE_BODY: Record<CanvasNodeType, ComponentType<NodeBodyProps>> = {
-  terminal: TerminalNode,
-  sticky: StickyNode,
+  terminal: body("TerminalNode", () => import("./TerminalNode")),
+  sticky: body("StickyNode", () => import("./StickyNode")),
   group: GroupNodeBody,
-  editor: EditorNode,
-  diff: DiffNode,
-  files: FilesNode,
-  browser: BrowserNode,
-  automation: AutomationNode,
-  agentActivity: AgentActivityNode,
+  editor: body("EditorNode", () => import("./EditorNode")),
+  diff: body("DiffNode", () => import("./DiffNode")),
+  files: body("FilesNode", () => import("./FilesNode")),
+  browser: body("BrowserNode", () => import("./browser")),
+  automation: body("AutomationNode", () => import("./AutomationNode")),
+  agentActivity: body("AgentActivityNode", () => import("./AgentActivityNode")),
 };
 
 /**

@@ -92,11 +92,19 @@ export function ArmadraNode({
       />
       {/* 头部插槽住在节点体里的类型（终端、编辑器、变更、文件、浏览器、
           两张自动化卡）自己渲染 `NodeShell`；其余（便签）走通用包壳。 */}
+      {/* 节点体按种类懒加载（`nodes/registry.ts`）。边界在 `NodeShell`
+          **里面**：壳、头部、边框是这一层画的，不该跟着节点体一起等。
+          `fallback={null}` 而不是一个骨架——节点体本来就要等自己的数据
+          （终端等第一帧输出，编辑器等文件），多画一个骨架只是多一次闪。 */}
       {NODE_SHELL_SELF.has(node.type) ? (
-        <Body {...bodyProps} />
+        <React.Suspense fallback={null}>
+          <Body {...bodyProps} />
+        </React.Suspense>
       ) : (
         <NodeShell node={node} selected={selected}>
-          <Body {...bodyProps} />
+          <React.Suspense fallback={null}>
+            <Body {...bodyProps} />
+          </React.Suspense>
         </NodeShell>
       )}
     </>

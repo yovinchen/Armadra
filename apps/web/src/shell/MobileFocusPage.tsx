@@ -109,7 +109,11 @@ export function MobileFocusPage() {
         data-node-type={node.type}
         data-min-width={meta.minSize.width}
       >
-        <Body id={node.id} node={node} selected collapsed={false} focused />
+        {/* 节点体是懒加载的（`nodes/registry.ts`）；焦点页只是它的另一个
+            挂载点，所以这里也要有自己的边界。 */}
+        <React.Suspense fallback={null}>
+          <Body id={node.id} node={node} selected collapsed={false} focused />
+        </React.Suspense>
       </div>
 
       {node.type === "terminal" && <TerminalKeyBar nodeId={node.id} />}
