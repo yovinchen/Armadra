@@ -10,6 +10,17 @@ import {
 describe("usage dashboard contracts", () => {
   const tokens = { input: 1, output: 2, cacheRead: 3, cacheCreation: 4 };
   const window = { tokens, costUsd: 1.5, complete: true, models: [] };
+  const range = {
+    granularity: "day",
+    points: [],
+    totals: window,
+    byModel: [],
+    byAgent: [],
+    peak: null,
+    activeIntervals: 0,
+    longestStreak: 0,
+  };
+  const ranges = { "24h": range, "7d": range, "30d": range, all: range };
 
   it("accepts Copilot as a provider and carries unlimited buckets and credits", () => {
     const parsed = usageSchema.parse({
@@ -72,6 +83,7 @@ describe("usage dashboard contracts", () => {
       },
       last30Days: window,
       daily: [{ date: "2026-09-05", ...window }],
+      ranges,
       unpricedModels: ["gpt-5-codex"],
       files: { claude: 2, codex: 1 },
       truncated: false,
