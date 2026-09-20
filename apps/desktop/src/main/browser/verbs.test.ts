@@ -478,6 +478,64 @@ describe("the verbs", () => {
     }
   });
 
+  /**
+   * `describeElement` takes an index into the element enumeration, and a
+   * `--selector` used to carry none: the verb sent `-1`, the page answered
+   * `{ found: false }`, and `select --selector` refused every real dropdown
+   * with «that is not a dropdown». The stub answers by script name rather than
+   * by index, which is why only the ARGUMENT can prove this.
+   */
+  it("select by selector looks the dropdown up at the index the selector resolved to", async () => {
+    scriptAnswers.resolveSelector = {
+      found: true,
+      index: 7,
+      role: "select",
+      name: "Pick",
+      x: 10,
+      y: 40,
+      w: 100,
+      h: 24,
+      visible: true,
+      disabled: false,
+    };
+    await run("select", { selector: "#pick", values: ["a"] });
+    const detail = sent.find(
+      (each) =>
+        each.method === "Runtime.callFunctionOn" &&
+        each.params.functionDeclaration === SCRIPTS.describeElement,
+    );
+    expect(detail).toBeDefined();
+    expect(
+      (detail!.params.arguments as Array<{ value: unknown }>)[0]?.value,
+    ).toBe(7);
+  });
+
+  /**
+   * An element scrolled out of view used to be refused by the allowlist's
+   * coordinate clamp, whose sentence is about a CDP method not being permitted
+   * for agent control — it reads like a verdict on the agent rather than
+   * «scroll to it first».
+   */
+  it("an element below the fold is refused by its real reason", async () => {
+    scriptAnswers.resolveSelector = {
+      found: true,
+      index: 3,
+      role: "button",
+      name: "Send",
+      x: 10,
+      y: 4_000,
+      w: 80,
+      h: 24,
+      visible: true,
+      disabled: false,
+      viewportWidth: 1_280,
+      viewportHeight: 800,
+    };
+    await expect(run("click", { selector: "#send" })).rejects.toThrow(
+      /outside the visible area/,
+    );
+  });
+
   it("scroll reports the measured displacement, not the requested one", async () => {
     const at = (top: number) => ({
       top,

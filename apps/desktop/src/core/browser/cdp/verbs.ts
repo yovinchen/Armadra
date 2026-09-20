@@ -133,6 +133,10 @@ interface Located {
 interface Resolved {
   found: boolean;
   invalid?: boolean;
+  /** Position in {@link ELEMENT_QUERY}'s enumeration, or `-1` when the element
+   * is not one of the interactive kinds that enumeration covers. Only
+   * `resolveSelector` reports it; `resolveRef` was given the index already. */
+  index?: number;
   role: string;
   name: string;
   x: number;
@@ -141,6 +145,8 @@ interface Resolved {
   h: number;
   visible: boolean;
   disabled: boolean;
+  viewportWidth?: number;
+  viewportHeight?: number;
 }
 
 function center(box: Resolved): { x: number; y: number } {
@@ -197,13 +203,41 @@ async function locate(session: CdpSession, args: Args): Promise<Located> {
   }
   if (!box.visible)
     refuse(DRIVE_CODES.notFound, `${selector} is on the page but not visible`);
+  offViewport(box, selector);
   return {
     ...center(box),
     role: box.role,
     name: box.name,
     visible: true,
     disabled: box.disabled,
+    // `-1` means the element is not one of the interactive kinds the element
+    // query enumerates; the detail scripts take an index into exactly that
+    // list, so anything else must stay `undefined`.
+    ...(box.index !== undefined && box.index >= 0 ? { index: box.index } : {}),
   };
+}
+
+/**
+ * Refuses an element that is on the page but scrolled out of the viewport.
+ *
+ * Without this the refusal comes from the allowlist's coordinate bound
+ * (`cdp/allowlist.ts`, the `Input.dispatchMouseEvent` clamp) and reads
+ * «the command Input.dispatchMouseEvent is not permitted for agent control» —
+ * which sounds like a permission verdict about the agent, not «scroll to it
+ * first». The clamp stays where it is; this only says the true reason before
+ * the caller reaches it.
+ */
+function offViewport(box: Resolved, what: string): void {
+  const width = box.viewportWidth;
+  const height = box.viewportHeight;
+  if (width === undefined || height === undefined) return;
+  const point = center(box);
+  if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) {
+    refuse(
+      DRIVE_CODES.refused,
+      `${what} is outside the visible area; scroll to it first`,
+    );
+  }
 }
 
 async function locateRef(
@@ -220,6 +254,7 @@ async function locateRef(
       `@${record.ordinal} is on the page but not visible`,
     );
   }
+  offViewport(box, `@${record.ordinal}`);
   return {
     ...center(box),
     role: box.role,
