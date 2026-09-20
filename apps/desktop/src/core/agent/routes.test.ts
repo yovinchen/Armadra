@@ -200,6 +200,93 @@ describe("GET /api/workspaces/{id}/deliveries", () => {
   });
 });
 
+/**
+ * 同一条路径的第二个切片（设计 §4.6 的可见性、§10 的「排队 N」）：目标那一侧
+ * 的人要看得见排在自己终端前面的是什么，并且能拒收一条。
+ */
+describe("GET /api/workspaces/{id}/deliveries?node=", () => {
+  function queueRow(
+    id: string,
+    target: string,
+    patch: Partial<{ source: string; state: string; reason: string }> = {},
+  ): void {
+    const now = Math.floor(Date.now() / 1000);
+    fixture.database
+      .prepare(
+        "INSERT INTO agent_send_queue (id, workspace_id, source_node_id, target_node_id, origin, " +
+          "message_key, body, hops, trail, created_at, expires_at, attempts, state, last_reason) " +
+          "VALUES (?, ?, ?, ?, 'send', NULL, ?, 1, '[]', ?, ?, 0, ?, ?)",
+      )
+      .run(
+        id,
+        fixture.workspaceId,
+        patch.source ?? "planner",
+        target,
+        "请你看一眼",
+        now,
+        now + 300,
+        patch.state ?? "queued",
+        patch.reason ?? null,
+      );
+  }
+
+  it("列出排在这个目标前面的那些，带位置与理由，不带正文", async () => {
+    const target = fixture.agentNode("Codex", "codex");
+    queueRow("q-1", target, { reason: "LEASE_HELD_BY_HUMAN" });
+    queueRow("q-2", target);
+    queueRow("q-other", "somebody-else");
+    const answer = await fixture.call(
+      "GET",
+      `/api/workspaces/${fixture.workspaceId}/deliveries?node=${target}`,
+    );
+    expect(answer.status).toBe(200);
+    const rows = answer.body as Record<string, unknown>[];
+    expect(rows.map((row) => row.id)).toEqual(["q-1", "q-2"]);
+    expect(rows[0]).toMatchObject({
+      position: 1,
+      bodyChars: 5,
+      reason: "LEASE_HELD_BY_HUMAN",
+    });
+    expect(JSON.stringify(rows)).not.toContain("请你看一眼");
+  });
+
+  it("人拒收一条还排着的；已经在投的那条收不回来", async () => {
+    const target = fixture.agentNode("Codex", "codex");
+    queueRow("q-1", target);
+    queueRow("q-2", target, { state: "delivering" });
+    const cancelled = await fixture.call(
+      "DELETE",
+      `/api/workspaces/${fixture.workspaceId}/deliveries/q-1`,
+    );
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body).toEqual({ cancelled: true });
+
+    const late = await fixture.call(
+      "DELETE",
+      `/api/workspaces/${fixture.workspaceId}/deliveries/q-2`,
+    );
+    expect(late.body).toEqual({ cancelled: false });
+
+    const rest = await fixture.call(
+      "GET",
+      `/api/workspaces/${fixture.workspaceId}/deliveries?node=${target}`,
+    );
+    expect((rest.body as { id: string }[]).map((row) => row.id)).toEqual([
+      "q-2",
+    ]);
+  });
+
+  it("别的工作空间的 id 删不掉这一条", async () => {
+    const target = fixture.agentNode("Codex", "codex");
+    queueRow("q-1", target);
+    const answer = await fixture.call(
+      "DELETE",
+      "/api/workspaces/nope/deliveries/q-1",
+    );
+    expect(answer.status).toBe(404);
+  });
+});
+
 describe("POST /api/control/confirm/{requestId}", () => {
   it("says the dialog was too late rather than failing", async () => {
     const answer = await fixture.call(

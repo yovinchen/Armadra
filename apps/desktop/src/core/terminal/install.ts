@@ -411,6 +411,35 @@ export function install(
     return { status: 200, body: await manager.recycle(sessionId) };
   });
 
+  /**
+   * 人按节点头的「接管」/「交还」（设计 `agent-delivery.md` §6.1、§10）。
+   *
+   * 接管与抢占不是一回事，所以它需要一条自己的门而不是一次空写入：抢占是人
+   * 敲键的副作用、十秒后自然过期；接管是一句明确的「现在归我」，Agent 一律
+   * 收 `LEASE_REVOKED` 直到有人按「交还」。租约的变化由 `TerminalDriveBook`
+   * 的 `onChange` 广播成一帧 `terminal.lease`，所以按下之后每台看着这块画布
+   * 的设备都会同时翻徽标——不靠各自按「我刚点过」推断。
+   */
+  route("POST", "/api/terminals/{sessionId}/drive", (params, request) => {
+    const sessionId = params.sessionId as string;
+    manager.session(sessionId);
+    const body = json<{ action?: unknown }>(request);
+    const action = body?.action;
+    if (action !== "takeover" && action !== "release") {
+      throw new TerminalError(
+        400,
+        "bad_request",
+        "action 只能是 takeover 或 release",
+      );
+    }
+    const actor = humanActor("local", "");
+    const lease =
+      action === "takeover"
+        ? manager.takeoverDrive(sessionId, actor)
+        : manager.releaseDrive(sessionId, actor);
+    return { status: 200, body: lease };
+  });
+
   /* ---------------------------------- socket ------------------------------- */
 
   context.server.stream(

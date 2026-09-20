@@ -455,6 +455,12 @@ export const ROUTES: readonly RouteEntry[] = [
     implemented: true,
   },
   {
+    path: "/api/workspaces/{workspaceId}/deliveries/{deliveryId}",
+    methods: ["DELETE"],
+    surface: "runtime",
+    implemented: true,
+  },
+  {
     path: "/api/workspaces/{workspaceId}/resources",
     methods: ["GET"],
     surface: "runtime",
@@ -618,6 +624,12 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/api/terminals/{sessionId}/terminate",
+    methods: ["POST"],
+    surface: "runtime",
+    implemented: true,
+  },
+  {
+    path: "/api/terminals/{sessionId}/drive",
     methods: ["POST"],
     surface: "runtime",
     implemented: true,

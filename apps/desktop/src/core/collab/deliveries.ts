@@ -1,6 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 import { getWorkspace } from "../workspaces/table";
 import { rfc3339 } from "../workspaces/support";
+import { loadNode } from "./nodes";
+import { pendingFor, positionOf } from "./send-queue";
+import { displayName } from "./control/send";
 import type { CollabContext } from "./service";
 
 /**
@@ -107,4 +110,86 @@ export function recordDelivery(
   } catch {
     // 见上：记录写不进去不是投递失败。
   }
+}
+
+/* --------------------------- 排在目标前面的那些 --------------------------- */
+
+/**
+ * 同一条路径上的第二个切片：`?node=` 给的是那个**目标节点**还排着的队
+ * （`agent_send_queue`），而不是已经发生过的投递记录。
+ *
+ * 为什么不新开一条路径：两个答案是同一个问题的两半——「这条边上发生过什么」
+ * 与「这条边上还压着什么」，而节点头的「排队 N」要的正是后者。设计 §4.6 的
+ * 可见性一行把它写给了目标那一侧的人：排在别人终端前面的东西，被排队的那个
+ * 人要能看见，并且能删掉（等于拒收）。
+ *
+ * 与 `outbox` 的分工是**谁在看**：`outbox` 按发起者切，这里按目标切。两个切片
+ * 都不带正文——列表是「有什么排着」，不是「排着的东西说了什么」。
+ */
+export interface QueuedDelivery {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly sourceNodeId: string;
+  /** 发起者的名字（handle），没起名退回标题，再退回 id。 */
+  readonly sourceName: string;
+  readonly targetNodeId: string;
+  readonly origin: string;
+  readonly queuedAt: number;
+  readonly expiresAt: number;
+  readonly position: number;
+  readonly bodyChars: number;
+  readonly attempts: number;
+  /** 上一次没投出去的 code。页面按码取文案，不显示 core 的中文句子。 */
+  readonly reason?: string;
+}
+
+export function listQueued(
+  context: CollabContext,
+  workspaceId: string,
+  targetNodeId: string,
+  now: number,
+): QueuedDelivery[] {
+  getWorkspace(context.database, workspaceId);
+  return pendingFor(context.database, targetNodeId, now)
+    .filter((item) => item.workspaceId === workspaceId)
+    .map((item) => ({
+      id: item.id,
+      workspaceId: item.workspaceId,
+      sourceNodeId: item.sourceNodeId,
+      sourceName: displayName(
+        loadNode(context.database, item.sourceNodeId),
+        item.sourceNodeId,
+      ),
+      targetNodeId: item.targetNodeId,
+      origin: item.origin,
+      queuedAt: item.createdAt,
+      expiresAt: item.expiresAt,
+      position: positionOf(context.database, item, now),
+      bodyChars: [...item.body].length,
+      attempts: item.attempts,
+      ...(item.lastReason === undefined ? {} : { reason: item.lastReason }),
+    }));
+}
+
+/**
+ * 目标那一侧的人删掉一条排队项——等于拒收（设计 §4.6 的取消一行：人对自己的
+ * 终端有最终决定权）。
+ *
+ * 只删还在排的那些。已经写进 PTY 的那条收不回来，对它说「取消了」就是撒谎，
+ * 所以 `delivering` 不在条件里——与 `cancelOwn` 同一条规矩，只是这里按工作空间
+ * 而不是按发起者收窄：按下这个按钮的是人，他管的是自己的那块画布。
+ */
+export function cancelQueued(
+  context: CollabContext,
+  workspaceId: string,
+  id: string,
+): boolean {
+  getWorkspace(context.database, workspaceId);
+  const changes = context.database
+    .prepare(
+      "UPDATE agent_send_queue SET state = 'cancelled' WHERE id = ? " +
+        "AND workspace_id = ? AND state = 'queued'",
+    )
+    .run(id, workspaceId);
+  return Number(changes.changes) > 0;
 }

@@ -1,7 +1,7 @@
 import type { CoreServer } from "../http/server";
 import { answerConfirm } from "../collab/control";
-import { listDeliveries } from "../collab/deliveries";
-import type { CollabContext } from "../collab/service";
+import { cancelQueued, listDeliveries, listQueued } from "../collab/deliveries";
+import { nowSeconds, type CollabContext } from "../collab/service";
 import { getAgentStatus, markAgentStatusRead } from "./status";
 import {
   MAX_TAIL_BYTES,
@@ -240,20 +240,48 @@ export function installRoutes(deps: AgentRouteDeps): void {
 
   /* ------------------------------- deliveries ----------------------------- */
 
+  // 两个切片，一条路径（设计 §10 的节点头「排队 N」）：不带 `node=` answers
+  // 投递**记录**，带上它答的是那个目标还排着的**队**。页面上这两件事挨在
+  // 一起——一条边上发生过什么，和这条边上还压着什么。
   server.router.handle(
     "GET",
     "/api/workspaces/{workspaceId}/deliveries",
     answered((match, request) => {
+      const workspaceId = param(match, "workspaceId");
+      const node = request.query.get("node") ?? "";
+      if (node !== "") {
+        return {
+          status: 200,
+          body: listQueued(collab, workspaceId, node, nowSeconds(collab)),
+        };
+      }
       const limit = Number.parseInt(request.query.get("limit") ?? "", 10);
       return {
         status: 200,
         body: listDeliveries(
           collab,
-          param(match, "workspaceId"),
+          workspaceId,
           Number.isFinite(limit) ? limit : 200,
         ),
       };
     }),
+  );
+
+  // 目标那一侧的人拒收一条还排着的投递（设计 §4.6 的取消一行）。发起者那一侧
+  // 的入口是 `canvas cancel --id`，走的是同一张表的同一列。
+  server.router.handle(
+    "DELETE",
+    "/api/workspaces/{workspaceId}/deliveries/{deliveryId}",
+    answered((match) => ({
+      status: 200,
+      body: {
+        cancelled: cancelQueued(
+          collab,
+          param(match, "workspaceId"),
+          param(match, "deliveryId"),
+        ),
+      },
+    })),
   );
 
   /* ---------------------------- control confirm --------------------------- */

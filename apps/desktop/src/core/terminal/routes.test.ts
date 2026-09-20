@@ -227,6 +227,50 @@ describeUnix("the terminal routes", () => {
     ).toBe(400);
   });
 
+  /**
+   * 接管与交还（设计 `agent-delivery.md` §6.1、§10 的节点头入口）。
+   *
+   * 接管之后**不会**自己恢复——那正是它与抢占的区别，所以用例断言的是状态本身
+   * 而不是一个时间窗口。
+   */
+  it("人接管之后一直持有，直到他自己交还", async () => {
+    const { fixture: core_, workspaceId } = await core();
+    const created = await core_.call("POST", "/api/terminals", {
+      workspaceId,
+      cwd: core_.directory,
+      command: "/bin/sh",
+      args: ["-c", "sleep 30"],
+    });
+    const id = String((created.body as { id: string }).id);
+
+    const taken = await core_.call("POST", `/api/terminals/${id}/drive`, {
+      action: "takeover",
+    });
+    expect(taken.status).toBe(200);
+    expect(taken.body).toMatchObject({
+      state: "humanTakeover",
+      holder: { kind: "human" },
+    });
+
+    const given = await core_.call("POST", `/api/terminals/${id}/drive`, {
+      action: "release",
+    });
+    expect(given.status).toBe(200);
+    expect((given.body as { state: string }).state).toBe("free");
+
+    expect(
+      (await core_.call("POST", `/api/terminals/${id}/drive`, { action: "x" }))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await core_.call("POST", "/api/terminals/nobody/drive", {
+          action: "takeover",
+        })
+      ).status,
+    ).toBe(404);
+  });
+
   it("refuses a paste that is too large before writing anything", async () => {
     const { fixture: core_, workspaceId } = await core();
     const created = await core_.call("POST", "/api/terminals", {

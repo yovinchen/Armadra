@@ -97,6 +97,18 @@ export const terminalPasteRequestSchema = z.object({
   enter: z.boolean().default(false),
 });
 
+/**
+ * `POST /api/terminals/{id}/drive` — 人显式接管或交还这块屏幕
+ * （设计 `agent-delivery.md` §6.1）。
+ *
+ * 只有两个动词，因为只有两件事：接管是「现在归我」，Agent 一律被拒直到交还；
+ * 抢占（人敲一个键）不在这里，它是输入路径的副作用，十秒后自己过期。
+ */
+export const TERMINAL_DRIVE_ACTIONS = ["takeover", "release"] as const;
+export const terminalDriveRequestSchema = z.object({
+  action: z.enum(TERMINAL_DRIVE_ACTIONS),
+});
+
 export const TERMINATE_MODES = ["interrupt", "process", "session"] as const;
 export const terminateModeSchema = z.enum(TERMINATE_MODES);
 /** `POST /api/terminals/{id}/terminate` */
@@ -214,4 +226,5 @@ export type TerminalCaptureResponse = z.infer<
 >;
 export type TerminalPasteRequest = z.infer<typeof terminalPasteRequestSchema>;
 export type TerminateMode = z.infer<typeof terminateModeSchema>;
+export type TerminalDriveAction = (typeof TERMINAL_DRIVE_ACTIONS)[number];
 export type TerminalServerMessage = z.infer<typeof terminalServerMessageSchema>;
