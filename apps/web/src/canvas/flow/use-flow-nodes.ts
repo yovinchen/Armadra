@@ -5,10 +5,8 @@ import type {
   FinalConnectionState,
   IsValidConnection,
   NodeChange,
-  OnSelectionChangeParams,
 } from "@xyflow/react";
 import { toast } from "sonner";
-import { useShallow } from "zustand/react/shallow";
 
 import { t } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
@@ -51,7 +49,6 @@ export interface FlowBindings {
     node: CanvasFlowNode,
     nodes: CanvasFlowNode[],
   ) => void;
-  onSelectionChange: (params: OnSelectionChangeParams) => void;
   onConnect: (connection: Connection) => void;
   onConnectEnd: (
     event: MouseEvent | TouchEvent,
@@ -121,21 +118,42 @@ export function useFlowNodes(): FlowBindings {
   const documentEdges = useCanvasStore((state) => state.document?.edges);
   const whiteboard = useCanvasStore((state) => state.whiteboard);
   const drafts = useDrafts();
-  const selection = useCanvasStore(
-    useShallow((state) => ({
-      nodes: state.selectedNodeIds,
-      edges: state.selectedEdgeIds,
-      items: state.selectedItemIds,
-    })),
-  );
+  const selectedNodeIds = useCanvasStore((state) => state.selectedNodeIds);
+  const selectedEdgeIds = useCanvasStore((state) => state.selectedEdgeIds);
+  const selectedItemIds = useCanvasStore((state) => state.selectedItemIds);
 
-  const selected = React.useMemo(
+  /**
+   * 选区拆成两份，**节点那份不许被边的选区碰到**。
+   *
+   * `projectNodes` 只读 `nodes` / `items`，`projectEdges` 只读 `edges`，可是
+   * 以前两个投影共用同一个 `selected` 对象：选中一条边也会换掉 `nodes` 数组
+   * 的身份，于是 React Flow 的 `StoreUpdater` 跟着调一次 `setNodes`。
+   *
+   * 那一次多余的 `setNodes` 会踩进一个真实的死循环：`StoreUpdater` 在同一个
+   * effect 里先 `setNodes` 再 `setEdges`，而 React Flow 的选区监听器是在
+   * `setNodes` 里**同步**发出的——那一刻边还是上一帧的。`onSelectionChange`
+   * 于是把「节点新 + 边旧」这个半成品写回 store，下一帧投影又把它翻回来，
+   * 两个值来回弹，React 报 `Maximum update depth exceeded`，整页白屏。
+   * 复现：框选一个连着边的节点（便签 → 终端）。
+   *
+   * 拆开之后只改边的选区不再换 `nodes` 的身份，`setNodes` 不跑，半成品读不
+   * 到，循环一次就收敛。
+   */
+  const nodeSelection = React.useMemo(
     () => ({
-      nodes: new Set(selection.nodes),
-      edges: new Set(selection.edges),
-      items: new Set(selection.items),
+      nodes: new Set(selectedNodeIds),
+      edges: EMPTY_SELECTION.edges,
+      items: new Set(selectedItemIds),
     }),
-    [selection],
+    [selectedNodeIds, selectedItemIds],
+  );
+  const edgeSelection = React.useMemo(
+    () => ({
+      nodes: EMPTY_SELECTION.nodes,
+      edges: new Set(selectedEdgeIds),
+      items: EMPTY_SELECTION.items,
+    }),
+    [selectedEdgeIds],
   );
 
   /** 投影的全部输入就这两张表；身份只在表本身变了的时候换。 */
@@ -160,15 +178,30 @@ export function useFlowNodes(): FlowBindings {
    * 非 Electron 壳里 `applyWebviewPool` 原样返回，投影一个字节都不变。
    */
   const nodes = React.useMemo(
-    () => applyWebviewPool(projectNodes(tables, whiteboard, drafts, selected)),
-    [tables, whiteboard, drafts, selected],
+    () =>
+      applyWebviewPool(projectNodes(tables, whiteboard, drafts, nodeSelection)),
+    [tables, whiteboard, drafts, nodeSelection],
   );
   const edges = React.useMemo(
-    () => projectEdges(tables, whiteboard, selected),
-    [tables, whiteboard, selected],
+    () => projectEdges(tables, whiteboard, edgeSelection),
+    [tables, whiteboard, edgeSelection],
   );
 
   /**
+   * 变更流里我们只认「选中」这一种，而且选区**只从这两条变更流写回**。
+   *
+   * `onSelectionChange` 已经拆掉了：它不是变更流，而是一面**慢一帧的镜子**。
+   * React Flow 的 `SelectionListener` 在渲染时取快照、在 effect 里回调，而
+   * `StoreUpdater`（同一棵树里排在它前面）的 effect 已经先把这一帧的
+   * `nodes` / `edges` 灌进 React Flow 的 store 了。于是它报的是上一帧的选区，
+   * 照着它写回 store 就成了自激：框选一个连着边的节点（便签 → 终端）时，边
+   * 在「选中 / 没选中」之间来回弹，React 报 `Maximum update depth exceeded`，
+   * 整页白屏。
+   *
+   * 两条变更流没有这个问题——它们是用户手势当场产生的，包括点空白处取消选中
+   * （React Flow 的 `unselectNodesAndEdges` 也走 `triggerNodeChanges` /
+   * `triggerEdgeChanges`），信息并不比那面镜子少。
+   *
    * 变更流里我们只认「选中」这一种。
    *
    * 位置与尺寸走 `onNodeDrag*` / `NodeResizer` 的回调（那里能分清手势的
@@ -215,27 +248,6 @@ export function useFlowNodes(): FlowBindings {
   const onNodeDragStop = React.useCallback(
     (_event: unknown, node: CanvasFlowNode, dragged: CanvasFlowNode[]) =>
       commitDrag(dragged.length > 0 ? dragged : [node]),
-    [],
-  );
-
-  /**
-   * 一次写三项选区（§2.8）。`selectedNodeIds` 仍然只装节点，白板对象与边
-   * 各有一格，删除时按 id 前缀分流（`tools.splitSelectionForDelete`）。
-   */
-  const onSelectionChange = React.useCallback(
-    (params: OnSelectionChangeParams) => {
-      const nodeIds: string[] = [];
-      const itemIds: string[] = [];
-      for (const node of params.nodes) {
-        if (isItemId(node.id)) itemIds.push(node.id);
-        else nodeIds.push(node.id);
-      }
-      useCanvasStore.getState().setSelection({
-        nodes: nodeIds,
-        items: itemIds,
-        edges: params.edges.map((edge) => edge.id),
-      });
-    },
     [],
   );
 
@@ -316,7 +328,6 @@ export function useFlowNodes(): FlowBindings {
     onEdgesChange,
     onNodeDrag,
     onNodeDragStop,
-    onSelectionChange,
     onConnect,
     onConnectEnd,
     isValidConnection,

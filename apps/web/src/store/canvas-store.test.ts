@@ -289,6 +289,30 @@ describe("选择", () => {
     state().selectNodes([a.id]);
     expect(state().selectedNodeIds).toBe(before);
   });
+
+  /**
+   * 只有一项真的变了的时候，另外两项必须还给**同一个数组**。
+   *
+   * 画布的投影按身份记忆（`canvas/flow/use-flow-nodes.ts`）：节点数组的身份
+   * 一换，React Flow 的 `StoreUpdater` 就多调一次 `setNodes`，而那一次会把
+   * 「节点新 + 边旧」的半成品喂给选区监听器，两个值来回弹到白屏。
+   */
+  it("只改一项时，另外两项还是原来那两个数组", () => {
+    const a = makeNode("sticky");
+    load([a]);
+    state().setSelection({ nodes: [a.id], edges: [], items: ["wb:1"] });
+    const nodesBefore = state().selectedNodeIds;
+    const itemsBefore = state().selectedItemIds;
+
+    state().setSelection({
+      nodes: [a.id],
+      edges: ["e1"],
+      items: ["wb:1"],
+    });
+    expect(state().selectedEdgeIds).toEqual(["e1"]);
+    expect(state().selectedNodeIds).toBe(nodesBefore);
+    expect(state().selectedItemIds).toBe(itemsBefore);
+  });
 });
 
 describe("addNode", () => {

@@ -13,6 +13,25 @@ function same(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((id, index) => b[index] === id);
 }
 
+/**
+ * 内容没变就还给**上一份数组**。
+ *
+ * `setSelection` 一次写三项，三项里只要有一项真的变了就得 `set`，另外两项
+ * 以前会把调用方新造的数组原样存进去——内容一模一样，身份却换了。画布的投影
+ * 按身份记忆（`flow/use-flow-nodes.ts`），于是「只选中一条边」也会换掉整张
+ * 节点表的身份，React Flow 的 `StoreUpdater` 跟着多调一次 `setNodes`。
+ *
+ * 那一次多余的 `setNodes` 会踩进一个真实的死循环：`StoreUpdater` 在同一个
+ * effect 里先 `setNodes` 再 `setEdges`，而 React Flow 的选区监听器是在
+ * `setNodes` 里**同步**发出的——那一刻边还是上一帧的。`onSelectionChange`
+ * 于是把「节点新 + 边旧」这个半成品写回来，下一帧投影又把它翻回去，两个值
+ * 来回弹，React 报 `Maximum update depth exceeded`，整页白屏。
+ * 复现：框选一个连着边的节点（便签 → 终端）。
+ */
+function keep<T extends readonly string[]>(next: T, previous: T): T {
+  return same(next, previous) ? previous : next;
+}
+
 export function createSelectionSlice(
   set: CanvasSet,
   _get: CanvasGet,
@@ -54,9 +73,9 @@ export function createSelectionSlice(
           return state;
         }
         return {
-          selectedNodeIds: nodes,
-          selectedEdgeIds: edges,
-          selectedItemIds: items,
+          selectedNodeIds: keep(nodes, state.selectedNodeIds),
+          selectedEdgeIds: keep(edges, state.selectedEdgeIds),
+          selectedItemIds: keep(items, state.selectedItemIds),
         };
       }),
 
