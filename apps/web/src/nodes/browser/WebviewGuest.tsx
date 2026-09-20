@@ -1,11 +1,21 @@
 import * as React from "react";
 
 import { useBrowserPreferences, useT } from "@/app/preferences-store";
+import { Button } from "@/ui/button";
 
 import { DISCARD_TICK_MS, discardSettings, shouldDiscard } from "./discard";
 import { registerGuest, reportView } from "./drive";
-import type { WebviewElement, WebviewNavigationEvent } from "./webview";
-import { allowGuestNavigation } from "./webview";
+import type {
+  WebviewElement,
+  WebviewFailure,
+  WebviewNavigationEvent,
+} from "./webview";
+import {
+  allowGuestNavigation,
+  failureKind,
+  failureOf,
+  snapshotDataUrl,
+} from "./webview";
 import type { WebviewTab } from "./webview-tabs";
 
 /**
@@ -154,8 +164,30 @@ export function WebviewGuest({
       if (!ghostRef.current) navigateRef.current(url);
     };
 
-    const onStartLoading = () => patchRef.current({ loading: true });
+    /**
+     * 新的一次加载开始 = 上一次的失败作废。
+     *
+     * 必须在这里清，不能等成功：一次失败之后点刷新，如果还是失败，
+     * `did-fail-load` 会写一条新的；如果成功了，错误页要在**第一帧**就让位，
+     * 而 `did-stop-loading` 比这晚得多，中间那段时间人看到的是一张盖在已经
+     * 画好的页面上的错误页。
+     */
+    const onStartLoading = () =>
+      patchRef.current({ loading: true, failure: null });
     const onStopLoading = () => refreshNavState();
+
+    /**
+     * 主框架加载失败：打不开的页面要说出来，而不是留一块白。
+     *
+     * 判定在 `failureOf`（纯函数）里，三条否决见那里。`loading: false` 跟着
+     * 一起写：失败之后 `did-stop-loading` 不保证到，而 loading 卡住会让这个
+     * guest 永远不被回收（回收的第一条否决就是 loading）。
+     */
+    const onFailLoad = (event: Event) => {
+      const failure = failureOf(event as WebviewNavigationEvent);
+      if (!failure) return;
+      patchRef.current({ loading: false, failure });
+    };
     const onTitle = (event: Event) =>
       patchRef.current({
         title: (event as WebviewNavigationEvent).title ?? "",
@@ -185,6 +217,7 @@ export function WebviewGuest({
       }
     };
 
+    guest.addEventListener("did-fail-load", onFailLoad);
     guest.addEventListener("did-navigate", onDidNavigate);
     guest.addEventListener("did-navigate-in-page", onDidNavigate);
     guest.addEventListener("did-start-loading", onStartLoading);
@@ -197,6 +230,7 @@ export function WebviewGuest({
     guest.addEventListener("will-navigate", onWillNavigate);
     guest.addEventListener("new-window", onNewWindow);
     return () => {
+      guest.removeEventListener("did-fail-load", onFailLoad);
       guest.removeEventListener("did-navigate", onDidNavigate);
       guest.removeEventListener("did-navigate-in-page", onDidNavigate);
       guest.removeEventListener("did-start-loading", onStartLoading);
@@ -286,6 +320,47 @@ export function WebviewGuest({
   }, [zoom, activeTab, discarded, tab.src]);
 
   /* -------------------------------- 回收 --------------------------------- */
+  /**
+   * 回收前那一帧的缩略图。
+   *
+   * 回收本身是对的，但「回来时看到一块白，等几秒钟才是原来那一页」不是。
+   * 隐藏的那一刻拍一张，占位与重新加载期间都贴它，人看到的就是自己离开时
+   * 的那一页，只是糊的。
+   *
+   * 拍照挂在「变成隐藏」这一拍上，不是回收那一刻：回收发生在五分钟后，那
+   * 时候 guest 早就停止绘制，`capturePage` 回的是一张空图。
+   */
+  const [snapshot, setSnapshot] = React.useState("");
+  React.useEffect(() => {
+    if (!hidden || discarded) return;
+    const guest = ref.current;
+    if (!guest || typeof guest.capturePage !== "function") return;
+    let live = true;
+    void guestCall(() => guest.capturePage!())
+      ?.then((image) => {
+        const url = snapshotDataUrl(image);
+        if (live && url) setSnapshot(url);
+      })
+      .catch(() => {
+        // 拍不到就没有占位图，节点退回纯文字提示。这不值得报错：
+        // 一个已经在隐藏路上的 guest 拒绝截屏是正常的竞态。
+      });
+    return () => {
+      live = false;
+    };
+  }, [hidden, discarded]);
+
+  /**
+   * 正在从回收里回来。缩略图在这段时间里盖着还没画出来的页面。
+   *
+   * 由 `did-stop-loading` 结束，而不是由一个定时器：页面画好了才算回来了。
+   */
+  const [restoring, setRestoring] = React.useState(false);
+  React.useEffect(() => {
+    if (!restoring || tab.loading) return;
+    setRestoring(false);
+  }, [restoring, tab.loading]);
+
   const hiddenSinceRef = React.useRef<number | null>(
     hidden ? Date.now() : null,
   );
@@ -295,6 +370,7 @@ export function WebviewGuest({
       // 恢复：重新挂元素并重放地址。`restoringRef` 让随之而来的那次
       // `did-navigate` 被认作回声（见上面的注释）。
       restoringRef.current = true;
+      setRestoring(true);
       setDiscarded(false);
     }
   }, [hidden, discarded]);
@@ -344,30 +420,124 @@ export function WebviewGuest({
   if (discarded) {
     return (
       <div
-        className="grid h-full w-full place-items-center px-6 text-center text-[11px] text-muted-foreground"
+        className="relative h-full w-full overflow-hidden"
         data-slot="browser-discarded"
         style={hidden ? { display: "none" } : undefined}
       >
-        {t("browser.discarded", { minutes: discardMinutes })}
+        <Snapshot src={snapshot} />
+        <div className="absolute inset-0 grid place-items-center px-6 text-center text-[11px] text-muted-foreground">
+          <div className="space-y-1">
+            {tab.title && (
+              <div className="truncate text-foreground">{tab.title}</div>
+            )}
+            <div>{t("browser.discarded", { minutes: discardMinutes })}</div>
+          </div>
+        </div>
       </div>
     );
   }
 
+  /*
+    包一层只是为了给「回来路上的缩略图」和错误页一个定位上下文。隐藏仍然
+    写在 `<webview>` 自己身上（`style`）：那条不变量说的是**guest** 不被卸
+    载、只被隐藏，把它搬到外层就等于让一个断言盯着一个不相干的元素。
+    外层不控制显示，也不需要——隐藏的 guest 要么是非活动标签（外面那一层
+    已经 `display:none`），要么是 ghost（整个节点都 `display:none`）。
+  */
   return (
-    <webview
-      ref={(element) => {
-        ref.current = (element as WebviewElement | null) ?? null;
-        onElement(ref.current);
-      }}
-      src={tab.src || "about:blank"}
-      partition={partition}
-      // 必须是字符串：React 对它不认识的属性收到布尔 `true` 时**不写 DOM**
-      // 只发警告，于是 `allowpopups={true}` 从未真正生效。`@types/react` 把
-      // 它标成 boolean，所以这里只能绕过类型。
-      allowpopups={"true" as unknown as boolean}
-      style={style}
-      data-slot="browser-webview"
-      data-tab-id={tab.id}
+    <div className="relative h-full w-full">
+      <webview
+        ref={(element) => {
+          ref.current = (element as WebviewElement | null) ?? null;
+          onElement(ref.current);
+        }}
+        src={tab.src || "about:blank"}
+        partition={partition}
+        // 必须是字符串：React 对它不认识的属性收到布尔 `true` 时**不写 DOM**
+        // 只发警告，于是 `allowpopups={true}` 从未真正生效。`@types/react` 把
+        // 它标成 boolean，所以这里只能绕过类型。
+        allowpopups={"true" as unknown as boolean}
+        style={style}
+        data-slot="browser-webview"
+        data-tab-id={tab.id}
+      />
+      {/*
+        回来的路上那一段：guest 已经挂回去了，但还没画出来。盖上离开时的
+        那一帧，否则回收过的节点每次回来都先闪一块白。
+      */}
+      {restoring && snapshot && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          data-slot="browser-restoring"
+        >
+          <Snapshot src={snapshot} />
+        </div>
+      )}
+      {tab.failure && (
+        <FailurePage
+          failure={tab.failure}
+          onRetry={() => {
+            patchRef.current({ loading: true, failure: null });
+            guestCall(() => ref.current?.reload());
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 缩略图。`object-cover` + 顶部对齐：页面是从上往下看的。 */
+function Snapshot({ src }: { src: string }) {
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt=""
+      aria-hidden="true"
+      data-slot="browser-snapshot"
+      className="absolute inset-0 h-full w-full object-cover object-top opacity-40 blur-[1px]"
     />
+  );
+}
+
+/**
+ * 打不开的那一页（[浏览器节点] §2.4）。
+ *
+ * 盖在 guest 上而不是取代它：那个 `<webview>` 还活着、还能后退、还能重试，
+ * 卸载它就等于把失败变成一次进程重建。
+ *
+ * 四句话，按 `failureKind` 分类；下面小字是 Chromium 给的原始码，给的是
+ * 「这条能拿去搜」的那种价值，所以不翻译。
+ */
+function FailurePage({
+  failure,
+  onRetry,
+}: {
+  failure: WebviewFailure;
+  onRetry(): void;
+}) {
+  const t = useT();
+  const kind = failureKind(failure);
+  return (
+    <div
+      className="absolute inset-0 grid place-items-center bg-[var(--browser-bg)] px-6 text-center"
+      data-slot="browser-failed"
+      data-failure-kind={kind}
+    >
+      <div className="max-w-sm space-y-2">
+        <div className="text-[13px] text-foreground">
+          {t(`browser.failed.${kind}`)}
+        </div>
+        <div className="truncate font-mono text-[11px] text-muted-foreground">
+          {failure.url}
+        </div>
+        <div className="font-mono text-[10px] text-muted-foreground/70">
+          {failure.description || failure.code}
+        </div>
+        <Button size="sm" variant="outline" onClick={onRetry}>
+          {t("browser.failed.retry")}
+        </Button>
+      </div>
+    </div>
   );
 }

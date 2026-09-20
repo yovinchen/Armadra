@@ -42,6 +42,7 @@ vi.mock("@/store/canvas-store", () => {
 
 vi.mock("@/platform", () => ({
   openExternal: vi.fn(),
+  revealPath: vi.fn(async () => "revealed"),
   // 真实实现就是「preload 装没装 window.armadra」；测试按同一条判定走，
   // 这样「壳在 / 壳不在」两组用例仍然只靠那一个全局开关切换。
   isDesktop: () =>
@@ -49,7 +50,7 @@ vi.mock("@/platform", () => ({
 }));
 
 vi.mock("sonner", () => ({
-  toast: Object.assign(vi.fn(), { error: vi.fn() }),
+  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
 }));
 
 import { toast } from "sonner";
@@ -558,5 +559,219 @@ describe("guest 重新登记", () => {
     expect(register).toHaveBeenCalledWith(
       expect.objectContaining({ webContentsId: 9 }),
     );
+  });
+});
+
+/* ------------------------------ 键、错误页、下载 ---------------------------- */
+
+/**
+ * guest 里按下的和弦、打不开的页面、人自己点的下载。
+ *
+ * 三组共用一个桥替身，因为它们走的是同一条 `browser:drive`：这条通道从
+ * 「一个动词需要页面做的事」扩到了「只有页面能做或能显示的事」，而三者都
+ * 是后者。
+ */
+describe("guest 回来的事件", () => {
+  type DriveCommand = Record<string, unknown> & {
+    kind: string;
+    nodeId: string;
+  };
+  let drive: ((command: DriveCommand) => void) | null = null;
+  beforeEach(() => {
+    drive = null;
+    vi.mocked(toast).mockClear();
+    vi.mocked(toast.error).mockClear();
+    vi.mocked(toast.success).mockClear();
+    (window as unknown as Record<string, unknown>).armadra = {
+      browser: {
+        register: vi.fn(async () => ({ ok: true })),
+        unregister: vi.fn(async () => ({ ok: true })),
+        view: vi.fn(async () => ({ ok: true })),
+        control: vi.fn(async () => ({ ok: true })),
+        onDrive: (listener: (command: DriveCommand) => void) => {
+          drive = listener;
+          return () => {};
+        },
+      },
+    };
+  });
+
+  it("转发回来的和弦在节点的键盘作用域里重放", () => {
+    paint();
+    const seen: KeyboardEvent[] = [];
+    const listener = (event: Event) => seen.push(event as KeyboardEvent);
+    window.addEventListener("keydown", listener, true);
+    try {
+      act(() => {
+        drive!({
+          kind: "key",
+          nodeId: "b1",
+          key: "k",
+          code: "KeyK",
+          meta: true,
+        });
+      });
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.key).toBe("k");
+      expect(seen[0]!.metaKey).toBe(true);
+      // 目标必须落在浏览器作用域里：`when: browserFocus` 的那几条命令
+      // 就是靠这个判定的。
+      expect(
+        (seen[0]!.target as HTMLElement).closest(
+          '[data-keybinding-scope="browser"]',
+        ),
+      ).not.toBeNull();
+    } finally {
+      window.removeEventListener("keydown", listener, true);
+    }
+  });
+
+  it("别的节点的和弦不在这里重放", () => {
+    paint();
+    const seen: Event[] = [];
+    const listener = (event: Event) => seen.push(event);
+    window.addEventListener("keydown", listener, true);
+    try {
+      act(() => {
+        drive!({ kind: "key", nodeId: "other", key: "k", meta: true });
+      });
+      expect(seen).toHaveLength(0);
+    } finally {
+      window.removeEventListener("keydown", listener, true);
+    }
+  });
+
+  it("下载完成说一句，并给出「在文件夹里显示」", () => {
+    paint();
+    act(() => {
+      drive!({
+        kind: "download",
+        nodeId: "b1",
+        state: "completed",
+        filename: "report.pdf",
+        path: "/tmp/report.pdf",
+        bytes: 2048,
+      });
+    });
+    expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
+    const [, options] = vi.mocked(toast.success).mock.calls[0]!;
+    expect((options as { action?: { label: string } })?.action?.label).toBeTruthy();
+  });
+
+  it("人自己取消的下载不打扰", () => {
+    paint();
+    act(() => {
+      drive!({
+        kind: "download",
+        nodeId: "b1",
+        state: "cancelled",
+        filename: "report.pdf",
+        path: "",
+        bytes: 0,
+      });
+    });
+    expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+    expect(vi.mocked(toast.error)).not.toHaveBeenCalled();
+  });
+});
+
+describe("打不开的页面", () => {
+  function fail(guest: HTMLElement, over: Record<string, unknown> = {}) {
+    const event = new Event("did-fail-load") as Event &
+      Record<string, unknown>;
+    Object.assign(event, {
+      errorCode: -105,
+      errorDescription: "ERR_NAME_NOT_RESOLVED",
+      validatedURL: "https://nope.test/",
+      isMainFrame: true,
+      ...over,
+    });
+    act(() => {
+      guest.dispatchEvent(event);
+    });
+  }
+
+  it("画一张能看懂的错误页，而不是留一块白", () => {
+    paint();
+    fail(guests()[0]!);
+    const page = document.querySelector('[data-slot="browser-failed"]');
+    expect(page).not.toBeNull();
+    expect(page!.getAttribute("data-failure-kind")).toBe("offline");
+    expect(page!.textContent).toContain("https://nope.test/");
+    expect(page!.textContent).toContain("ERR_NAME_NOT_RESOLVED");
+  });
+
+  it("guest 不被卸载：错误页是盖上去的，后退与重试还在", () => {
+    paint();
+    fail(guests()[0]!);
+    expect(guests()).toHaveLength(1);
+  });
+
+  it("子框架失败与 ERR_ABORTED 不画错误页", () => {
+    paint();
+    fail(guests()[0]!, { isMainFrame: false });
+    expect(document.querySelector('[data-slot="browser-failed"]')).toBeNull();
+    fail(guests()[0]!, { errorCode: -3 });
+    expect(document.querySelector('[data-slot="browser-failed"]')).toBeNull();
+  });
+
+  it("新的一次加载开始就让位", () => {
+    paint();
+    const guest = guests()[0]!;
+    fail(guest);
+    expect(document.querySelector('[data-slot="browser-failed"]')).not.toBeNull();
+    act(() => {
+      guest.dispatchEvent(new Event("did-start-loading"));
+    });
+    expect(document.querySelector('[data-slot="browser-failed"]')).toBeNull();
+  });
+});
+
+describe("Esc 停止加载", () => {
+  it("正在加载时停，并且不冒泡出去", () => {
+    paint();
+    const guest = guests()[0]!;
+    const stop = vi.fn();
+    (guest as unknown as { stop: () => void }).stop = stop;
+    act(() => {
+      guest.dispatchEvent(new Event("did-start-loading"));
+    });
+    const root = document.querySelector<HTMLElement>(
+      '[data-keybinding-scope="browser"]',
+    )!;
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      root.dispatchEvent(event);
+    });
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("没在加载时 Esc 不归这里管", () => {
+    paint();
+    const guest = guests()[0]!;
+    const stop = vi.fn();
+    (guest as unknown as { stop: () => void }).stop = stop;
+    act(() => {
+      guest.dispatchEvent(new Event("did-stop-loading"));
+    });
+    const root = document.querySelector<HTMLElement>(
+      '[data-keybinding-scope="browser"]',
+    )!;
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      root.dispatchEvent(event);
+    });
+    expect(stop).not.toHaveBeenCalled();
+    // 浮层靠 Esc 关自己，吃掉一个没用上的 Esc 就是把那些浮层关不掉。
+    expect(event.defaultPrevented).toBe(false);
   });
 });

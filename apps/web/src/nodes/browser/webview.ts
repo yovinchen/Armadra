@@ -24,6 +24,54 @@ export interface WebviewElement extends HTMLElement {
   isLoading(): boolean;
   isCurrentlyAudible?(): boolean;
   getURL(): string;
+  /**
+   * 这一帧的位图（Electron `WebviewTag.capturePage`）。
+   *
+   * 回收前拍一张，回收后的占位与重新加载期间都用它。**不经 CDP**：
+   * `capturePage` 是 webview 元素自己的方法，不 attach debugger，也就不碰
+   * 「能力关闭时 attach 次数为零」那条验收闸门。
+   *
+   * 可选：这个方法在元素 attach 之前不存在，测试里的替身也不会有它。
+   */
+  capturePage?(): Promise<WebviewImage>;
+}
+
+/** `capturePage` 回来的那个 `NativeImage`，只写本节点用到的两个方法。 */
+export interface WebviewImage {
+  isEmpty(): boolean;
+  resize(options: { width?: number; height?: number }): WebviewImage;
+  toDataURL(): string;
+}
+
+/**
+ * 占位图的宽度（CSS 像素）。
+ *
+ * 回收的目的是省内存，所以占位图本身不能是新的内存问题：一个 1280×800 的
+ * PNG data URL 是几百 KB，八个后台节点就是几 MB 的字符串常驻在 React
+ * state 里。320 px 宽缩略图在节点尺寸下是明显糊的——这正是想要的效果，人
+ * 一眼就知道那不是活着的页面。
+ */
+export const SNAPSHOT_WIDTH = 320;
+
+/**
+ * PURE. 位图 → data URL，拿不到就空串。
+ *
+ * 空图要挡掉：`capturePage` 在一个已经停止绘制的 guest 上会回一张 0×0 的
+ * 图，`toDataURL()` 给出一个合法但全透明的 URL，贴上去就是一块比没有占位
+ * 更难解释的空白。
+ */
+export function snapshotDataUrl(image: WebviewImage | undefined): string {
+  if (!image || typeof image.toDataURL !== "function") return "";
+  try {
+    if (typeof image.isEmpty === "function" && image.isEmpty()) return "";
+    const scaled =
+      typeof image.resize === "function"
+        ? image.resize({ width: SNAPSHOT_WIDTH })
+        : image;
+    return scaled.toDataURL();
+  } catch {
+    return "";
+  }
 }
 
 /** guest 事件里用得上的几个字段。全部是可选的：不同事件带的不一样。 */
@@ -32,6 +80,86 @@ export interface WebviewNavigationEvent extends Event {
   favicons?: string[];
   title?: string;
   disposition?: string;
+  /** `did-fail-load` 的三个字段。 */
+  errorCode?: number;
+  errorDescription?: string;
+  validatedURL?: string;
+  isMainFrame?: boolean;
+}
+
+/* -------------------------------- 加载失败 -------------------------------- */
+
+/** 一次主框架加载失败。`null` 表示这一页没有失败。 */
+export interface WebviewFailure {
+  /** Chromium 的 `net::` 错误码（负数）。 */
+  readonly code: number;
+  /** Chromium 给的英文描述，例如 `ERR_NAME_NOT_RESOLVED`。 */
+  readonly description: string;
+  /** 失败的那个地址。 */
+  readonly url: string;
+}
+
+/**
+ * 「用户主动取消」的那个错误码。
+ *
+ * `ERR_ABORTED`。按停止、在加载中途点了另一个链接、以及大量 SPA 的正常导航
+ * 都会报它。把它当失败会让错误页在完全正常的操作后闪出来，所以它不是失败。
+ */
+export const ERR_ABORTED = -3;
+
+/**
+ * 一条 `did-fail-load` 该不该变成错误页。纯函数。
+ *
+ * 三条否决：不是主框架（一张图、一个广告 iframe 加载不出来不是这一页的
+ * 失败）、`ERR_ABORTED`、以及没有地址可报的那种（Chromium 在少数竞态下会
+ * 报一次空 `validatedURL`，据它画一张「打不开 ""」的错误页只会让人困惑）。
+ */
+export function failureOf(
+  event: Pick<
+    WebviewNavigationEvent,
+    "errorCode" | "errorDescription" | "validatedURL" | "isMainFrame"
+  >,
+): WebviewFailure | null {
+  if (event.isMainFrame === false) return null;
+  const code = event.errorCode;
+  if (typeof code !== "number" || code === 0 || code === ERR_ABORTED) {
+    return null;
+  }
+  const url = event.validatedURL ?? "";
+  if (!url) return null;
+  return { code, description: event.errorDescription ?? "", url };
+}
+
+/**
+ * 错误页上那一行的 i18n 键后缀。
+ *
+ * 只分四类，不是把 Chromium 的几十个 `net::` 码翻一遍：人能做的事只有这
+ * 四种——检查网络、检查地址、这个站点的证书有问题、以及「剩下的」。多出
+ * 来的精度不会改变任何一次操作。
+ */
+export function failureKind(
+  failure: WebviewFailure,
+): "offline" | "notFound" | "certificate" | "unknown" {
+  const name = failure.description.toUpperCase();
+  if (
+    name.includes("INTERNET_DISCONNECTED") ||
+    name.includes("NETWORK_CHANGED") ||
+    name.includes("NAME_NOT_RESOLVED") ||
+    name.includes("ADDRESS_UNREACHABLE")
+  ) {
+    return "offline";
+  }
+  if (name.includes("CERT") || name.includes("SSL")) return "certificate";
+  if (
+    name.includes("CONNECTION_REFUSED") ||
+    name.includes("CONNECTION_RESET") ||
+    name.includes("CONNECTION_CLOSED") ||
+    name.includes("EMPTY_RESPONSE") ||
+    name.includes("TIMED_OUT")
+  ) {
+    return "notFound";
+  }
+  return "unknown";
 }
 
 /* ------------------------------ 地址栏输入 ------------------------------- */

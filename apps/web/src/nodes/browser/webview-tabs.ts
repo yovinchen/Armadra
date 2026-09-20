@@ -1,5 +1,7 @@
 import * as React from "react";
 
+import type { WebviewFailure } from "./webview";
+
 /**
  * Electron 分支的标签模型（W3.1）。
  *
@@ -24,6 +26,13 @@ export interface WebviewTab {
   audible: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
+  /**
+   * 这一页主框架加载失败了。`null` 是正常。
+   *
+   * 留在标签模型里而不是 guest 组件的局部状态：它要同时决定错误页画不画、
+   * 标签条上那个标题写什么，以及回收判定里「这一页值不值得留着」。
+   */
+  failure: WebviewFailure | null;
 }
 
 let counter = 0;
@@ -43,6 +52,7 @@ export function newTab(url: string): WebviewTab {
     audible: false,
     canGoBack: false,
     canGoForward: false,
+    failure: null,
   };
 }
 

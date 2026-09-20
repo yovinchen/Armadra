@@ -63,6 +63,21 @@ const zh = {
   /* guest 渲染出错时的兜底：只让这个节点降级，不让整棵画布空白。 */
   "browser.guestFailed": "这个页面的显示出错了；关闭节点后重开即可恢复。",
 
+  /* 打不开的那一页（`did-fail-load`）。四句，按 `failureKind` 分类——
+     Chromium 的几十个 net:: 码里，能改变人下一步动作的只有这四种。 */
+  "browser.failed.offline": "连不上网络，这一页打不开。",
+  "browser.failed.notFound": "这个站点没有响应。",
+  "browser.failed.certificate": "这个站点的安全证书有问题，已停止加载。",
+  "browser.failed.unknown": "这一页加载失败了。",
+  "browser.failed.retry": "重试",
+
+  /* 人自己点下来的下载。Agent 引起的那些不走这条路（进暂存目录）。 */
+  "browser.download.done": "已下载 {name}",
+  "browser.download.doneWithSize": "已下载 {name}（{size}）",
+  "browser.download.failed": "{name} 下载中断",
+  "browser.download.reveal": "在文件夹里显示",
+  "browser.download.unnamed": "文件",
+
   /* 设置 → 浏览器（复查 §5.2）。三项都是内存开关，说的是「这台机器愿意为
      看不见的页面留多少」。 */
   "browser.settings.discard": "隐藏后回收页面",
@@ -118,6 +133,19 @@ const en: Record<keyof typeof zh, string> = {
     "Hidden for over {minutes} minutes, so the page was freed to save memory; coming back reloads it.",
   "browser.guestFailed":
     "This page failed to render; close the node and reopen it to recover.",
+
+  "browser.failed.offline": "No network connection, so this page cannot load.",
+  "browser.failed.notFound": "This site did not respond.",
+  "browser.failed.certificate":
+    "This site's security certificate is not valid, so loading stopped.",
+  "browser.failed.unknown": "This page failed to load.",
+  "browser.failed.retry": "Retry",
+
+  "browser.download.done": "Downloaded {name}",
+  "browser.download.doneWithSize": "Downloaded {name} ({size})",
+  "browser.download.failed": "{name} stopped downloading",
+  "browser.download.reveal": "Show in folder",
+  "browser.download.unnamed": "file",
 
   "browser.settings.discard": "Free hidden pages",
   "browser.settings.discardHint":
