@@ -769,3 +769,124 @@ opencode / pi / omp 没有目录那一档：替它们猜一家 provider 会列�
   只用于模型菜单与上下文上限的展示。接价格要改用量域，不在本批边界内。
 - Copilot 的 `github-copilot` provider 条目留在目录里（`KEPT_PROVIDERS` 有它），
   但 `copilot --help` 列不列模型没有验证过，所以它的 CLI 那一档是空的。
+
+## 20. 路由表收口与四处可用性缺口（2026-09-20）
+
+对着 `pnpm --filter @armadra/desktop dist` 的产物跑的（独立数据目录
+`/tmp/armadra-polish`，独立 `CLAUDE_CONFIG_DIR`），每一条结论后面是当场看到的数字。
+
+### 20.1 路由表：28 条没有标记 → 12 条真 501
+
+`ROUTES` 的 `implemented` 是手写的，而它是页面用来分辨「该等」还是「该改」的
+唯一依据。真起 core 逐条打之后，28 条里只有 16 条需要动：
+
+| 类别                                                | 条数 | 结论                                                                                        |
+| --------------------------------------------------- | ---: | ------------------------------------------------------------------------------------------- |
+| 终端域（`/api/terminals*` 九条 + 工作空间会话一条） |   10 | 早就答得出来（`terminal/install.ts` 的 `route()`），只是没打标记 → 补标记                   |
+| hook 面 `/context-link/{verb}`、`/control/{verb}`   |    2 | `HookServer` 构造里就注册了 → 补标记                                                        |
+| `/api/power` 四条                                   |    4 | 真的 501 → 本批做实（§20.2）                                                                |
+| `/api/ssh/askpass/prompts` 两条                     |    2 | **故意**留 501：助手走自己的 0600 socket，这两条路径从来不在 HTTP 面上（`remote/index.ts`） |
+| `/automation/*` 十条（hook 面）                     |   10 | 真的 501，本批不做：全仓库没有任何调用者                                                    |
+
+打包产物上逐条 `curl` 的结果（摘）：
+
+```
+GET  /api/terminals/backend            -> 200 {"effective":"tmux","tmuxVersion":"3.7b",…}
+GET  /api/terminals/no-such-session    -> 404 not_found
+POST /api/terminals                    -> 400 bad_request（缺少 workspaceId）
+GET  /api/power                        -> 200
+GET  /api/ssh/askpass/prompts/x        -> 501 未实现：/api/ssh/askpass/prompts/{promptId}
+GET  /api/not-a-route                  -> 404
+```
+
+**防止再漂移的是两条用例**，不是这张表本身：`core/main.test.ts` 起一个真 core，
+逐条断言「写着已实现的都有人接」且「答得出来的都打了标记」；`hook/server.test.ts`
+对 hook 面做同一件事。一条路由有三种装法——`router.handle`、等升级的
+`server.stream`、整段接管前缀的 `server.raw`（GitHub / 自动化 / 身份那三张 JSON
+面）——三种都算，所以 `Router.claimed`、`CoreServer.streamed`、
+`CoreServer.rawHandled` 是为这条用例加的。
+
+### 20.2 `/api/power`：保持唤醒的租约
+
+`core/resources/power.ts`。抑制机制是一个**子进程**：macOS `caffeinate -i`，
+Linux `systemd-inhibit --what=idle:sleep --mode=block`，Windows 上 Node 够不到
+`SetThreadExecutionState`，如实报 `unsupported`（租约照记，`blockedBy:
+"unavailable"`）。
+
+三条规矩：进程只在有**生效**租约时存在（起停只发生在 `settle()` 一个函数里）；
+被策略挡下的申请照样回一条 `active: false` 的租约，因为「为什么跑一半睡过去了」
+要有地方查；租约有 TTL（默认 300 s，上限 3600 s），没人续就到期消失，`stop()`
+在 core 退出时清场。策略四档是递进的：`never` ⊂ `agentSessions` ⊂ `automation`
+⊂ `manual`。
+
+打包产物上看到的：
+
+```
+POST   /api/power/leases            -> 200 active:true   …  pgrep caffeinate = 1
+POST   …/{id}/renew                 -> 200 createdAt 不变、expiresAt 后移
+POST   …/nope/renew                 -> 404 No such power lease
+POST   /api/power/leases {source:x} -> 400 source must be session, automation or manual
+DELETE …/{id}                       -> 200 holding:false …  pgrep caffeinate = 0
+```
+
+快照里的电源那一段（`GET …/resources`）现在读的是同一本租约簿，不再恒空。
+
+### 20.3 会话列表：一个节点一行
+
+节点每重启 / 回收一次就多一行 `terminal_sessions`，打包验收里同一个节点出现四次、
+三次是死的。面板问的是「这个节点现在在跑什么」，只有一个答案：**活着的那一行**，
+一行都不活就是**最新那一行**（重附会接上它）。
+
+打包产物上：同一个节点建三个终端、终止前两个 → 库里三行，`GET
+/api/workspaces/{id}/sessions` 报一行，且是第三个。
+
+### 20.4 错误文案：页面按 `code` 取，`message` 只兜底
+
+core 的 `{ code, message }` 里 `message` 通篇中文，页面原样 toast 出去，英文界面
+上就冒出一句中文。`apps/web/src/api/request.ts` 现在按 `code` 查
+`i18n/errors.ts`（`not_found` / `forbidden` / `bad_request` /
+`method_not_allowed` / `conflict` / `payload_too_large` / `unavailable` /
+`not_implemented` / `internal` / `unsupported` / `unsupported_on_remote`，外加
+GitHub 面的 `UNAUTHENTICATED` 等七个大写码），认不出的码才落回原话。
+
+代价是具体度：`bad_request` 的原话常常说得出是哪个字段。原话没有丢——
+`RuntimeRequestError.coreMessage` 留着它。这是唯一的出口，所以 toast、错误横幅
+与设置页三处一次性都跟着变。
+
+打包产物的渲染进程里：两种语言的串都在 chunk 里，整个界面切到英文后设置页
+逐行是英文。
+
+### 20.5 对话索引的范围
+
+命令面板原先列出 `~/.claude/projects` 下**所有**项目的标题（这台机器上 1,974
+条）。新设置 `conversations.scope`（默认 `workspaces`，可切 `all`）让扫描按本
+应用登记的工作空间根目录过滤，判定用的是每条转录自己记下的 `cwd`——mtime 没动
+的文件按库里那一行的 `cwd` 判，所以收着扫也不重新打开文件。
+
+范围外的行被**清掉**而不是留在库里等 `LIKE` 扫到；切回 `all` 下一趟自己长回来。
+打包产物上（造了两条转录，一条 cwd 在工作空间里、一条在外面）：
+
+```
+all        -> {"scanned":1432,"indexed":1431,"total":1432}  两条都在
+workspaces -> {"scanned":1,   "indexed":0,   "removed":1431,"total":1}  只剩里面那条
+```
+
+### 20.6 目录价格进本地成本
+
+`priceFor` 现在按**内置 → 目录 → 未定价**三级回退（`PriceLookup` 收一张表或一列
+表，每张表都先按原名、再按去掉日期的名字查完才轮到下一张）。内置表仍在最前：
+同一台机器算出的数字不能因为一次抓取而变。目录那一级是个**函数**，所以刚抓回来
+的价格下一趟扫描就算得上。
+
+打包产物上，抓完 models.dev（129 个模型 / 120 个带价格）之后：
+
+```
+目录才有价的: gpt-6-astra $1965.40, gpt-5.6-sol $603.41
+unpriced 只剩 codex-auto-review 与四个 deepseek —— 它们的 provider 不在
+KEPT_PROVIDERS 里，目录本来就没有它们，仍然只显示 token。
+```
+
+### 20.7 验证
+
+`pnpm --filter @armadra/desktop test`、`pnpm --filter @armadra/web test`、
+`pnpm -r typecheck`、`pnpm check` 全绿。
