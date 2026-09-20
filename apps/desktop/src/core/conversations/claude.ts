@@ -12,7 +12,7 @@ import {
 /**
  * Claude Code transcripts — `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/*.jsonl`.
  *
- * Ported from `apps/runtime/src/index/claude.rs`. One file per session, named
+ * Ported from the pre-merge implementation. One file per session, named
  * after the session id, inside a directory named after the flattened project
  * path. Sub-agent transcripts live one level deeper and are deliberately *not*
  * indexed: they are not sessions a human resumes.

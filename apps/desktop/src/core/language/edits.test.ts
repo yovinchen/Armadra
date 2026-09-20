@@ -1,6 +1,6 @@
 /**
  * `WorkspaceEdit` parsing, validation and application — a port of
- * `apps/runtime/src/language/tests/edits.rs`.
+ * the pre-merge implementation.
  */
 
 import { createHash } from "node:crypto";

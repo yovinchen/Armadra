@@ -6,11 +6,12 @@ import { DomainError } from "../workspaces/support";
  * the two text scrubbers a Git message has to go through before it is logged or
  * answered.
  *
- * A direct port of the small helpers scattered through `apps/runtime/src/git/`
+ * A direct port of the small helpers scattered through the pre-merge
+ * implementation
  * — `malformed()`, `invalid_cursor()`, `valid_oid()`, `command::sanitize()` and
  * `security::redact_secrets()`. They live together here because every other
  * file in this directory needs at least two of them, and because the error
- * *codes* are contractual: `apps/runtime/src/error.rs` maps `AppError` onto
+ * *codes* are contractual: the pre-merge implementation maps `AppError` onto
  * exactly these strings and the front end switches on them.
  */
 

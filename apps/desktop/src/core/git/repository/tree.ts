@@ -16,7 +16,7 @@ import type {
 /**
  * The workspace's branch tree, in one read.
  *
- * A port of `apps/runtime/src/git/repository/tree.rs`. The Git window's left
+ * A port of the pre-merge implementation. The Git window's left
  * column is not a repository picker: it lists every discovered checkout at
  * once, each with its branches, remotes, tags, linked worktrees and stashes.
  * Drawing that from the per-repository snapshots would be five requests per

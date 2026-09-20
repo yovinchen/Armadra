@@ -16,7 +16,7 @@ import {
 /**
  * One-hunk mutations, reconstructed from a freshly observed Git diff.
  *
- * A port of `apps/runtime/src/git/hunks.rs`. The load-bearing property is that
+ * A port of the pre-merge implementation. The load-bearing property is that
  * **client input never contains patch bytes**: a request names a file, a scope,
  * a digest of the diff it was looking at and the id of one hunk inside it, and
  * the patch that gets applied is rebuilt here from a diff taken under the

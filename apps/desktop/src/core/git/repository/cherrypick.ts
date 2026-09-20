@@ -30,7 +30,7 @@ import type {
  * Cherry-pick and revert: the same owned single-commit sequence with the patch
  * applied in opposite directions.
  *
- * A port of `apps/runtime/src/git/repository/integration/cherry_pick.rs`. They
+ * A port of the pre-merge implementation. They
  * share every precondition, every ownership binding and every recovery path,
  * so they share an implementation; what differs is one Git verb and one
  * verification.

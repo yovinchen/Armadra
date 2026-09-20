@@ -36,7 +36,7 @@ import {
 /**
  * Repository operations for the core.
  *
- * A port of `apps/runtime/src/git/repository/mod.rs`. Git stays authoritative:
+ * A port of the pre-merge implementation. Git stays authoritative:
  * the common-directory lock coordinates *this* service and the callers holding
  * a {@link RepositoryGuard}, never external `git` processes, and an interrupted
  * mutation is an unknown outcome rather than an automatic retry.

@@ -4,7 +4,7 @@
  * ## What starting one means
  *
  * It means running the project's code. A language server loads the project's
- * plugins, its `build.rs`, its `tsconfig` resolution and, for `rust-analyzer`,
+ * plugins, its the pre-merge implementation, its `tsconfig` resolution and, for `rust-analyzer`,
  * a `cargo check`. That is why the gate is the workspace's **execute** grant
  * and not its read grant, and why nothing here is started implicitly by a
  * probe.

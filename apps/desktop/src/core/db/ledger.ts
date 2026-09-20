@@ -19,7 +19,7 @@ import type { Migration } from "./migrations";
  * declaration — a ledger with a TEXT checksum would otherwise compare unequal
  * for a reason nobody could see.
  *
- * Ported line for line from `apps/runtime/src/db/mod.rs:120-225`; the messages
+ * Ported line for line from the pre-merge implementation; the messages
  * are the Rust ones so a support answer written for either implementation fits
  * the other.
  */

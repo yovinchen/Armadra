@@ -35,7 +35,7 @@ function table(...rows: ProcessRow[]): Map<number, ProcessRow> {
   return new Map(rows.map((value) => [value.pid, value]));
 }
 
-/** 移植自 `apps/runtime/src/resources/sample.rs` 的用例。 */
+/** 移植自 合并前实现的用例。 */
 describe("进程表的解析", () => {
   it("认得 macOS 的 mm:ss.cc 和 Linux 的 [dd-]hh:mm:ss", () => {
     expect(parseCpuTime("0:00.01")).toBe(10);

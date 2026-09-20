@@ -67,7 +67,7 @@ function repositoryJson() {
   };
 }
 
-/** 移植自 `apps/host/internal/githubhost/service_test.go` 的 PR 与清理部分。 */
+/** 移植自 合并前实现的 PR 与清理部分。 */
 describe("Pull request", () => {
   let fixture: GithubFixture;
 

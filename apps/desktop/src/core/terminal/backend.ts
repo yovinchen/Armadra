@@ -11,7 +11,7 @@
  * The design (`docs/design/typescript-core.md` §7, R2) names twelve:
  * `create`, `list`, `attach`, `detach`, `input`, `paste`, `resize`,
  * `capture`, `signal`, `terminate`, `getForeground`, `getCapabilities`. The
- * Rust trait (`apps/runtime/src/terminal/backend.rs`) spells some of them
+ * Rust trait (the pre-merge implementation) spells some of them
  * differently and splits two of them, so the correspondence is written down
  * here rather than left to be rediscovered:
  *

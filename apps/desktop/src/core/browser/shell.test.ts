@@ -15,7 +15,7 @@ import { runBrowserVerb } from "./verbs";
 /**
  * The shell route: the half of a verb that stays in the core.
  *
- * Ported from `apps/runtime/src/browser/tests/shell.rs`. None of this needs a
+ * Ported from the pre-merge implementation. None of this needs a
  * browser, and that is the point of the split. What is tested here is what did
  * NOT move to the shell — the argument surface, the lease, the prose — plus
  * the two refusals whose exact wording is part of the design rather than

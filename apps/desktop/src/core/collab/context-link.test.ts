@@ -9,7 +9,7 @@ import { rfc3339 } from "../workspaces/support";
 import { readableAs, runContextLink } from "./context-link";
 import { Args, Refusal } from "./refusals";
 
-/** Ported from `apps/runtime/src/collab/tests/content.rs`. */
+/** Ported from the pre-merge implementation. */
 
 let fixture: AgentFixture;
 let me: string;

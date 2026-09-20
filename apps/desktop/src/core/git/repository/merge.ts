@@ -22,7 +22,7 @@ import type { ExpectedState } from "./types";
 /**
  * Starting a merge, and resuming any owned integration sequence.
  *
- * A port of `apps/runtime/src/git/repository/integration/merge.rs`. Resume is
+ * A port of the pre-merge implementation. Resume is
  * here rather than beside each starter because the four kinds share one shape:
  * confirm ownership and state, run one Git verb, then prove the repository
  * ended up where the caller was told it would.

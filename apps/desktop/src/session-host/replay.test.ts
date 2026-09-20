@@ -8,7 +8,7 @@ import {
 } from "./replay";
 
 /**
- * The Rust unit tests of `crates/session-host/src/replay.rs`, ported one for
+ * The Rust unit tests of the pre-merge implementation, ported one for
  * one, plus the cases the port itself makes possible to state.
  *
  * They matter more here than they did there. The Rust version could at least

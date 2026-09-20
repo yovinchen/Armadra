@@ -19,7 +19,7 @@ import {
 } from "./entries";
 import { type Temporary, temporary } from "./workspace.fixture";
 
-/** Ported from the test module of `apps/runtime/src/file_ops.rs`. */
+/** Ported from the test module of the pre-merge implementation. */
 
 function refusal(run: () => unknown): DomainError {
   try {

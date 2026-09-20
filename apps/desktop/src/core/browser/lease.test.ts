@@ -14,7 +14,7 @@ import {
 
 /**
  * The control lease's state machine, line by line against the Rust suite it is
- * ported from (`apps/runtime/src/browser/tests/lease.rs`).
+ * ported from (the pre-merge implementation).
  *
  * No page and no clock: `request` takes `now`, so "the human went idle for
  * eleven seconds" is a value rather than a sleep.

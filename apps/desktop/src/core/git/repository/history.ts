@@ -19,7 +19,7 @@ import type {
 /**
  * Paged commit history for the graph view, and the reference log beside it.
  *
- * Ports `history.rs` and `reflog.rs`. The two page the same way and refuse a
+ * Ports the pre-merge implementation. The two page the same way and refuse a
  * cursor the same way, but they are paging over different things and the
  * difference is the interesting part:
  *

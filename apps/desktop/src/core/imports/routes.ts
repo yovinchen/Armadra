@@ -32,7 +32,7 @@ import { readManifest, receiveFiles } from "./receive";
 
 /**
  * What the two multipart routes may carry: a full batch plus room for the
- * manifest and the boundaries. The same figure `apps/runtime/src/lib.rs` gave
+ * manifest and the boundaries. The same figure the pre-merge implementation gave
  * axum's `DefaultBodyLimit` for exactly these two routes.
  */
 export const MAX_IMPORT_BODY_BYTES = MAX_BATCH_BYTES + 1024 * 1024;

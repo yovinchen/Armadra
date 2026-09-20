@@ -25,7 +25,7 @@ import {
  * Which repository a request is about, and the two helpers every read on the
  * legacy Git surface runs its commands through.
  *
- * A port of the free functions at the top of `apps/runtime/src/git/mod.rs`.
+ * A port of the free functions at the top of the pre-merge implementation.
  * The repository service keeps its own, richer context (it also needs the
  * common directory, which is the queue key); this one is what `status`,
  * `diff`, `stage`, `commit` and the hunk reader share.

@@ -3,7 +3,7 @@ import { type AgentFixture, agentFixture, callerFor } from "../agent/fixture";
 import { MAX_BODY_CHARS, PROTOCOL, runMailbox } from "./mailbox";
 import { Args, Refusal, Refused } from "./refusals";
 
-/** Ported from `apps/runtime/src/collab/tests/mailbox.rs`. */
+/** Ported from the pre-merge implementation. */
 
 let fixture: AgentFixture;
 let sender: string;

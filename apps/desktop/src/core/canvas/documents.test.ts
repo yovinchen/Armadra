@@ -10,7 +10,7 @@ import { linkEdge, stickyNode } from "./nodes.fixture";
 import { MAX_WHITEBOARD_BYTES } from "./validation";
 
 /**
- * Board documents, ported from `apps/runtime/src/db/tests/documents.rs`: the
+ * Board documents, ported from the pre-merge implementation: the
  * incremental save that keeps a board's mailbox alive, the orphan sweep's
  * line between state and receipts, the whiteboard's keep/overwrite/bound
  * rules, and the CAS.

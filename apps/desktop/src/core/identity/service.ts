@@ -31,7 +31,7 @@ import {
 /**
  * 单一本机拥有者的设备认证。
  *
- * 吸收自 `apps/host/internal/identity/service.go`。链条是三段：
+ * 吸收自 合并前的实现。链条是三段：
  *
  *   1. **签票**（{@link IdentityService.issueBootstrap}）——**特权本机操作**。调
  *      用方必须已经由操作系统确认是同一个用户；它永远不是一个匿名的浏览器或

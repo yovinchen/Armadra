@@ -9,8 +9,8 @@ import { linkEdge, stickyNode } from "./nodes.fixture";
 import { BUILTIN_AGENT_IDS, NODE_TYPES, validateDocument } from "./validation";
 
 /**
- * Document validation, ported from `apps/runtime/src/db/tests/validation.rs`
- * and `default_node_payload.rs`.
+ * Document validation, ported from the pre-merge implementation's test
+ * suites.
  */
 describe("document validation", () => {
   let core: Fixture;
@@ -231,7 +231,7 @@ describe("document validation", () => {
   });
 
   it("keeps the palette defaults valid for every kind", () => {
-    // `default_node_payload.rs`: the payload the front end mints for each
+    // the pre-merge implementation: the payload the front end mints for each
     // palette entry has to be one this validator accepts, or a fresh node
     // cannot be saved at all.
     const defaults: Record<string, unknown> = {

@@ -5,7 +5,7 @@ import { join } from "node:path";
 /**
  * Locating and rendering another agent's transcript.
  *
- * Ported from `apps/runtime/src/collab/transcript.rs`. Every CLI writes its
+ * Ported from the pre-merge implementation. Every CLI writes its
  * history somewhere different and none of them promise the shape, so this
  * module is deliberately forgiving: it reads the tail of a file, renders the
  * lines it recognises, and skips the ones it does not. A transcript we can

@@ -1,5 +1,5 @@
 /**
- * The Rust `known_hosts/tests.rs` module, case for case, plus the read/write
+ * The Rust the pre-merge implementation module, case for case, plus the read/write
  * cases that file cannot have because its trust file is a process global.
  */
 

@@ -1,5 +1,5 @@
 /**
- * 三家的用量读取。移植自 `apps/runtime/src/usage/{claude,codex,copilot}.rs`。
+ * 三家的用量读取。移植自 合并前的实现。
  *
  * 模块的三条规矩在这里逐条成立：
  *

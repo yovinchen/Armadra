@@ -5,7 +5,7 @@ import type { BackendStatus, DriveBackend, EventSink } from "./backend";
 /**
  * The core's end of `browser:drive`.
  *
- * Ported from `apps/runtime/src/browser/shell/client.rs`. One loopback
+ * Ported from the pre-merge implementation. One loopback
  * WebSocket, dialled by this process, to the Electron shell that started it.
  * The address and a one-time token arrive in this process's environment and
  * nowhere else: not a file, not a well-known port, not a constant. A core

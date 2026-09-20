@@ -1,6 +1,6 @@
 /**
  * 外部连接：把一条 Issue 或 PR 连到一个本地会话、分支或 worktree（设计 §7.1）。
- * 移植自 `apps/host/internal/githubhost/references.go`。
+ * 移植自 合并前的实现。
  *
  * 一条连接是一个徽标和一条回去的路——它从不把一个会话变成一个 GitHub 对象，取消
  * 连接也从不碰两边任何一边。

@@ -18,7 +18,7 @@ import { badRequest } from "../workspaces/support";
  * delimiters, CRLF-separated part headers, and `Content-Disposition: form-data;
  * name="…"`. Field names are the only header value read; a filename is parsed
  * but never trusted — the import manifest decides where each part goes, which
- * is the rule `apps/runtime/src/imports.rs` states and this preserves.
+ * is the rule the pre-merge implementation states and this preserves.
  */
 
 export interface MultipartField {

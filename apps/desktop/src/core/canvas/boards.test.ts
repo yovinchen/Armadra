@@ -5,7 +5,7 @@ import { type Fixture, fixture } from "../workspaces/fixture";
 import { createWorkspace } from "../workspaces/table";
 import { createBoard, deleteBoard, listBoards, updateBoard } from "./boards";
 
-/** Board rows, ported from `apps/runtime/src/db/tests/boards.rs`. */
+/** Board rows, ported from the pre-merge implementation. */
 describe("board rows", () => {
   let core: Fixture;
   let workspaceId: string;

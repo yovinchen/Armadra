@@ -5,7 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
  * and writes them.
  *
  * Same columns, same values and the same closed vocabularies as
- * `apps/runtime/src/db/agent_status.rs`: both implementations open the same
+ * the pre-merge implementation: both implementations open the same
  * database file during the changeover, so a row written by one has to be a row
  * the other recognises.
  */

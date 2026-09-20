@@ -1,5 +1,5 @@
 /**
- * 缓存好的用量快照加上后台刷新。移植自 `apps/runtime/src/usage/mod.rs` 的
+ * 缓存好的用量快照加上后台刷新。移植自 合并前实现的
  * `UsageService`。
  */
 

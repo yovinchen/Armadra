@@ -6,7 +6,7 @@ import { settingsDomain } from "../settings";
  * `AGENT_REGISTRY` in packages/shared/src/agents.ts.
  *
  * The tables are repeated here rather than imported because the core does not
- * depend on `@armadra/shared` — the same decision `apps/runtime/src/agent.rs`
+ * depend on `@armadra/shared` — the same decision the pre-merge implementation
  * made, for the same reason: the hook surface must keep answering when the
  * front end's package is not in the build. A test asserts the two agree.
  */

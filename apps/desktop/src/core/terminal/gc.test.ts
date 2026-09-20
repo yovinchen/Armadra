@@ -23,7 +23,7 @@ import { fixture, type Fixture } from "../workspaces/fixture";
 /**
  * The reclaim policy and the start-up reconciliation.
  *
- * The first half is the direct port of `gc.rs`'s three unit tests; the second
+ * The first half is the direct port of the pre-merge implementation's three unit tests; the second
  * runs against a real database, because the `live-work` gate and the orphan
  * sweep are both expressed as SQL and a fake would test the fake.
  */

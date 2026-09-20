@@ -1,7 +1,7 @@
 /**
  * Host keys, scanned and then trusted by a person.
  *
- * Ported from `apps/runtime/src/terminal/ssh/known_hosts.rs`.
+ * Ported from the pre-merge implementation.
  *
  * `ssh` is never allowed to decide this. `StrictHostKeyChecking=yes` plus a
  * known_hosts file Armadra owns means an unknown or changed key fails the

@@ -3,7 +3,7 @@
  * handshake, in one answer.
  *
  * Ported from `validate_execution_host` in
- * `apps/runtime/src/api/execution_hosts.rs`, and the reason the two questions
+ * the pre-merge implementation, and the reason the two questions
  * are deliberately not collapsed into one is unchanged: `ssh` can work
  * perfectly while the Worker is missing or is a different Armadra build, and a
  * person who is told only "failed" cannot tell which of the two they have to

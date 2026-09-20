@@ -16,7 +16,7 @@ import { MIN_VIEWPORT, MAX_VIEWPORT, clampViewport } from "./model";
 /**
  * Checks that need no browser: URL admission, filenames and viewports.
  *
- * Ported from `apps/runtime/src/browser/tests/policy.rs`.
+ * Ported from the pre-merge implementation.
  */
 
 describe("where a browser node may be pointed", () => {

@@ -27,7 +27,7 @@ import {
  * `context list | summary | transcript | terminal` — an agent reads a node it
  * is linked to.
  *
- * Ported from `apps/runtime/src/collab/context_link.rs`. The whole point of
+ * Ported from the pre-merge implementation. The whole point of
  * this surface is the authorization rule, and AGENTS.md states it in one
  * line: 协作上下文按连线读取. A caller may read only the nodes that appear in
  * **its own** link document. Holding the app bearer is not enough, and neither

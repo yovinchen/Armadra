@@ -1,5 +1,5 @@
 /**
- * The 8 `crates/hook/src/http.rs` unit tests, translated, plus the JSON
+ * The 8 pre-merge unit tests, translated, plus the JSON
  * canonicalisation the Rust client gets from `serde_json` for free.
  */
 

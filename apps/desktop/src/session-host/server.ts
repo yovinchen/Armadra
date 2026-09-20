@@ -34,7 +34,7 @@ import {
 /**
  * The server: one named pipe, many connections, every session this user owns.
  *
- * Shape, and why — a port of `crates/session-host/src/host/`:
+ * Shape, and why — a port of the pre-merge implementation:
  *
  *   * **One pipe, many connections.** A slow subscriber must not delay a
  *     control request on another connection. The name is derived

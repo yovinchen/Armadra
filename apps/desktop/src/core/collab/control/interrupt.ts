@@ -10,7 +10,7 @@ import { type Outcome, result } from "./outcome";
 /**
  * `interrupt` — the one thing an agent may still write into a peer's terminal.
  *
- * Ported from `apps/runtime/src/collab/control/interrupt.rs`. It carries no
+ * Ported from the pre-merge implementation. It carries no
  * text. The whole payload is `ESC`, which is what a person reaches for when a
  * CLI has gone down the wrong path: it stops the turn and leaves the session
  * exactly where it was. Nothing about the peer's work is replaced, nothing is

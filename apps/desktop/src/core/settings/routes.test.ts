@@ -1,8 +1,8 @@
 /**
  * The settings and execution-host routes.
  *
- * Ported from the handler assertions in `apps/runtime/src/api/settings.rs` and
- * `apps/runtime/src/api/execution_hosts.rs`. The two refusals `patch_settings`
+ * Ported from the handler assertions in the pre-merge implementation. The
+ * two refusals `patch_settings`
  * makes before the merge are here because `normalize` would otherwise snap the
  * value back to a default and the page's dropdown would disagree with the
  * stored document without anybody being told.

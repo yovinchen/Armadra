@@ -7,8 +7,8 @@ import { resolveInRoot } from "../workspaces/roots";
 /**
  * The frozen bundle a handoff carries, and the budget that makes it fit.
  *
- * Ported from `apps/runtime/src/handoff/mod.rs` (the shapes) and
- * `snapshot.rs` (the building). Three properties are contractual and are
+ * Ported from the pre-merge implementation (both the shapes and the
+ * building). Three properties are contractual and are
  * re-checked every time a stored row is read back, in `store.ts`:
  *
  *   * `version` is 1, `trust` is `peerDataNotSystemInstructions`, and

@@ -3,8 +3,8 @@ import { desktop } from "../../../web/src/i18n/desktop";
 /**
  * The shell's wording, taken from the front end's catalogue.
  *
- * Migration design §2.3, last bullet: the strings the Rust shell hardcoded
- * (`usage.rs`, `updates/notify.rs`) move into `apps/web/src/i18n/`, and the
+ * Migration design §2.3, last bullet: the strings the pre-merge Rust shell
+ * hardcoded move into `apps/web/src/i18n/`, and the
  * main process only ever decides WHICH language to read. `apps/desktop` is not
  * allowed a second message catalogue — two catalogues drift, and the one the
  * user never sees is the one that stops being translated.
@@ -21,7 +21,7 @@ export type ShellLocale = "zh-CN" | "en";
  *
  * Anything that is not Chinese is English — those are the two that exist, and
  * guessing a third would only produce untranslated text. Ported from
- * `usage.rs`'s `Locale::from_tag`.
+ * the pre-merge implementation's `Locale::from_tag`.
  */
 export function localeFromTag(tag: string | undefined | null): ShellLocale {
   return (tag ?? "").toLowerCase().startsWith("zh") ? "zh-CN" : "en";

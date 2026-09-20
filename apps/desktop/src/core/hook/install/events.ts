@@ -3,7 +3,7 @@
  * `packages/shared/src/hook-events.ts` exactly.
  *
  * The tables are repeated here rather than imported for the same reason
- * `apps/runtime/src/hook/install/mod.rs` repeats them: the installers must
+ * the pre-merge implementation repeats them: the installers must
  * keep working in a build of the core that does not carry the front end's
  * package. A test asserts the two agree.
  */

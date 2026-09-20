@@ -5,7 +5,7 @@ import { badRequest, conflict, forbidden, notFound } from "./support";
 /**
  * Where a workspace's files may be, and which of them a request may name.
  *
- * A direct port of `apps/runtime/src/security.rs`: same checks, same order,
+ * A direct port of the pre-merge implementation: same checks, same order,
  * same refusals. The order matters more than it looks — `resolveImportSource`
  * canonicalises *before* it asks what kind of file it found, so every later
  * question is asked about the file that would actually be read rather than

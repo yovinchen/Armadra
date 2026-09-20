@@ -2,7 +2,7 @@
  * `/api/settings` and `/api/settings/local` — reading and patching the
  * preferences document.
  *
- * Ported from `apps/runtime/src/api/settings.rs`, minus one thing: the write
+ * Ported from the pre-merge implementation, minus one thing: the write
  * ownership gate. `ownership::require_local_write` existed because two
  * processes could write this document and one of them had to be told it was no
  * longer the writer. There is one process now, so the gate has nothing to

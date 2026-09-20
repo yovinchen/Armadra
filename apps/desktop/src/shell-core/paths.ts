@@ -3,7 +3,7 @@ import path from "node:path";
 
 /**
  * The Runtime's data directory, resolved the way the Runtime resolves it
- * itself (`apps/runtime/src/paths.rs`, `data_dir`) and the way the Rust shell
+ * itself (the pre-merge implementation, `data_dir`) and the way the Rust shell
  * this one replaced did.
  *
  * Electron offers `app.getPath('userData')`, and on macOS it even lands in the

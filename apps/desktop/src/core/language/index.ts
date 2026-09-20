@@ -16,7 +16,7 @@
  * **A remote workspace answers `unsupported`, per language, with a reason.**
  * The Rust Runtime reaches a remote language server over a *second* `ssh`
  * connection to `armadra-runtime worker`, carrying protobuf `LanguageFrame`s
- * with a credit window and a link epoch (`apps/runtime/src/remote/language/`).
+ * with a credit window and a link epoch (the pre-merge implementation).
  * The core's remote domain (`core/remote`) brings up the control connection
  * and its version handshake, but the Worker *service* surface those frames
  * ride on is not connected yet — `registerRoot`, `listDirectory` and the
@@ -107,7 +107,7 @@ export function install(context: CoreContext): LanguageDomain {
    * The payload is built as a plain record and cast once here: the bus carries
    * a `WorkspaceEvent` union whose language members hold `OpaquePayload`
    * values, and a readonly descriptor is not one by assignment. The shape is
-   * checked where it is built — against `apps/runtime/src/events.rs`, field
+   * checked where it is built — against the pre-merge implementation, field
    * for field — rather than by the union, which deliberately does not describe
    * a server descriptor.
    */

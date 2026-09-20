@@ -32,7 +32,7 @@ function labelMapping(...groups: ReturnType<typeof group>[]) {
   });
 }
 
-/** 移植自 `apps/host/internal/githubhost/mapping_test.go`。 */
+/** 移植自 合并前的实现。 */
 describe("状态映射的校验", () => {
   it("没有映射、分组过多、来源未指定各有自己的原因码", () => {
     expect(checkMapping(undefined)).toBe("MAPPING_REQUIRED");

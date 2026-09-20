@@ -1,7 +1,7 @@
 /**
  * End-to-end tests that run the real bundle against a throwaway TCP server and
  * byte-compare what lands on the wire — the translation of
- * `crates/hook/tests/wire.rs`, case for case.
+ * the pre-merge implementation, case for case.
  *
  * The bundle is built here rather than assumed, so the suite is honest about
  * what ships: an import of the TypeScript sources would not catch a bundler

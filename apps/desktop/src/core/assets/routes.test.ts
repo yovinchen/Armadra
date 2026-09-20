@@ -9,7 +9,7 @@ import { ASSETS_DIRECTORY, MAX_ASSET_BYTES } from "./store";
 
 /**
  * The whiteboard asset store, ported from
- * `apps/runtime/src/api/tests/assets.rs`: deduplication, both upload body
+ * the pre-merge implementation: deduplication, both upload body
  * shapes, import from a path and the read-back boundary.
  */
 

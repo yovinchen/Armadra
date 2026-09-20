@@ -16,7 +16,7 @@ import {
  * The `workspaces` table, and the default board every workspace is created
  * with.
  *
- * A port of `apps/runtime/src/db/workspaces.rs`, query for query. What is
+ * A port of the pre-merge implementation, query for query. What is
  * **not** ported is the write-ownership gate around each of them: it asked
  * whether this process or the Go Host owned the canvas domain, and with one
  * process there is no second answer. The `write_ownership` table goes with it

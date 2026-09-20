@@ -15,7 +15,7 @@ import { badRequest } from "../workspaces/support";
  * the files an editor node currently has open and publishes `file.changed` the
  * moment one of them changes underneath.
  *
- * A port of `apps/runtime/src/file_watch.rs`, including the parts that are
+ * A port of the pre-merge implementation, including the parts that are
  * easy to mistake for incidental:
  *
  *   * The **parent directory** is watched, never the file. An atomic replace

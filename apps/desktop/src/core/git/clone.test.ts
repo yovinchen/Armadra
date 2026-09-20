@@ -17,8 +17,8 @@ import { redactSecrets, sanitize, sanitizeRepository } from "./support";
 /**
  * Clone jobs and the two text scrubbers every Git message goes through.
  *
- * Ported from `apps/runtime/src/git/tests/{clone,clone_cancellation}.rs` and
- * the sanitizing tests in `apps/runtime/src/git/command.rs`.
+ * Ported from the pre-merge implementation's clone tests and its command
+ * sanitizing tests.
  */
 
 afterAll(() => {

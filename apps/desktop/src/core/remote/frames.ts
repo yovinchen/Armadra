@@ -13,7 +13,7 @@
  * | Reachability | nothing listens on the far side | a listener exists; a unix socket keeps it to one user, a port does not |
  * | Lifetime | the Worker's stdin closes when the connection drops, so it exits with it | an orphaned remote core outlives the tunnel and has to be reaped |
  * | Failure classification | a write that never left is distinguishable from an answer that never came — which is what `UNKNOWN_OUTCOME` is | HTTP gives a client the same timeout for both, and a retried non-idempotent request is a second mutation |
- * | Port of the existing semantics | `apps/runtime/src/remote/client/` translates line for line | every call site's error mapping is rewritten |
+ * | Port of the existing semantics | the pre-merge implementation translates line for line | every call site's error mapping is rewritten |
  *
  * The deciding one is the fourth. The remote contract's rule is that a request
  * which was written and then lost its answer is reported as `UNKNOWN_OUTCOME`

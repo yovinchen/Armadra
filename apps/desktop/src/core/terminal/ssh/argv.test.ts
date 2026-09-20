@@ -1,5 +1,5 @@
 /**
- * The Rust `argv.rs` test module, case for case.
+ * The Rust the pre-merge implementation test module, case for case.
  *
  * Seven of the eight are direct ports; the eighth covers the Node probe, which
  * has no Rust counterpart because the Rust Worker is a static binary.

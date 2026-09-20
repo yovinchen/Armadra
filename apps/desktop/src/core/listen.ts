@@ -24,7 +24,7 @@ import { hardenDirectory, hardenFile } from "./paths";
  * A spec for another platform's transport parses (so the same argument can be
  * tested everywhere) and fails at bind time with a message that says so,
  * rather than silently falling back to a port. The parser is a byte-for-byte
- * port of `apps/runtime/src/listen.rs`, because `--listen` is an argument the
+ * port of the pre-merge implementation, because `--listen` is an argument the
  * shell writes and either implementation reads.
  */
 

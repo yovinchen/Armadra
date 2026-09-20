@@ -15,7 +15,7 @@ import { DomainError } from "../workspaces/support";
 /**
  * Working-tree and index diffs: `git diff` and `git diff --cached`.
  *
- * A port of `apps/runtime/src/git/diff.rs`.
+ * A port of the pre-merge implementation.
  */
 
 export type DiffScope = "worktree" | "staged";

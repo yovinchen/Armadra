@@ -9,7 +9,7 @@ import {
   resolveLink,
 } from "./addressing";
 
-/** Ported from the addressing half of `apps/runtime/src/collab/addressing.rs`. */
+/** Ported from the addressing half of the pre-merge implementation. */
 
 const link = (id: string, title: string, kind = "terminal"): ContextLink => ({
   id,

@@ -5,7 +5,7 @@ import { Refusal } from "./refusals";
 /**
  * Naming a peer — the one place that turns `--node` / `--to` into a link.
  *
- * Ported from `apps/runtime/src/collab/addressing.rs`. Both collaboration
+ * Ported from the pre-merge implementation. Both collaboration
  * surfaces address the same thing: a node the caller is linked to on the
  * canvas. `context-link` reads it, the mailbox posts to it, and neither may
  * reach a node the user did not connect. Keeping the rule here means the two

@@ -9,7 +9,7 @@ import { settingsDomain } from "../settings";
 /**
  * The conversations index — "resume this conversation", across projects.
  *
- * Ported from `apps/runtime/src/index/mod.rs`. Every agent CLI leaves its
+ * Ported from the pre-merge implementation. Every agent CLI leaves its
  * history somewhere under the user's home directory. This module walks those
  * directories, reads the first user message out of each transcript, and keeps
  * a `(provider, session_id) → title` table so the command palette can offer

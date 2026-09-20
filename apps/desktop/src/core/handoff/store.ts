@@ -37,7 +37,7 @@ import {
 /**
  * Frozen, user-approved handoff material.
  *
- * Ported from `apps/runtime/src/handoff/mod.rs`. Peer data never becomes a
+ * Ported from the pre-merge implementation. Peer data never becomes a
  * system message, and an inbox entry is not evidence of task completion.
  *
  * Accepting puts the bundle's notice in the target's mailbox and stops there.

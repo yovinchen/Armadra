@@ -5,7 +5,7 @@ import { agentPath } from "../terminal/environment";
 /**
  * The six agent CLIs this build knows, and what each of them can do.
  *
- * Ported from `apps/runtime/src/agent.rs`. Only what the core needs lives here
+ * Ported from the pre-merge implementation. Only what the core needs lives here
  * — ids, labels, launch programs and capabilities. The canonical registry
  * (flags, prompt assembly, hook events) stays in `packages/shared`; the launch
  * line is assembled in the web app and typed into the PTY.
@@ -243,7 +243,7 @@ export function validAgentId(agentId: string): boolean {
  *
  * Structural rather than imported so the agent domain does not have to know
  * which module the settings document is parsed in; the fields are the ones
- * `apps/runtime/src/settings` defines.
+ * the pre-merge implementation defines.
  */
 export interface CustomAgent {
   readonly id: string;

@@ -2,9 +2,8 @@
  * Normalising the settings document: known keys are forced to valid values,
  * unknown keys are passed through, and a patch merges rather than replaces.
  *
- * Ported from `apps/runtime/src/settings/schema.rs` plus the defaults and
- * choice lists `apps/runtime/src/settings/mod.rs` declares, and the `language`
- * section of `apps/runtime/src/language/settings.rs`.
+ * Ported from the pre-merge implementation, plus the defaults, choice lists
+ * and language section it declares.
  *
  * The rule the whole file follows: a value outside the offered set **snaps back
  * to the default** rather than being rejected. A settings file is something a

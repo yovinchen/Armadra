@@ -11,7 +11,7 @@ import { install } from "./install";
 /**
  * The terminal routes, against a real database, a real router and real PTYs.
  *
- * A direct translation of `apps/runtime/src/api/tests/terminals.rs`'s
+ * A direct translation of the pre-merge implementation's
  * `the_terminal_backend_routes_speak_the_v15_shapes`, field by field: during
  * the changeover both implementations answer the same page, so a response
  * that differs by one key is a page that breaks on a setting.

@@ -6,7 +6,7 @@ import type { Lease } from "./model";
  * One line back, in prose, because the reader is a model reading its own
  * stdout.
  *
- * Ported from `apps/runtime/src/browser/shell/render.rs` and `agent/render.rs`.
+ * Ported from the pre-merge implementation.
  * Three rules run through every line here, and they are the reason this is a
  * module and not a template string at each call site:
  *

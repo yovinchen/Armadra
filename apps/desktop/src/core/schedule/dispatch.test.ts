@@ -1,6 +1,6 @@
 /**
  * 投递方，对着
- * `apps/host/internal/commanddispatch/{agents,dispatcher}_test.go`。
+ * 合并前的实现。
  *
  * 这个文件守的第一条是那句硬规矩：**`blocked` / `waiting` 的节点不投递**。停在
  * 一个问题上的 pane 收到一次写入，等于让这次投递碰巧带的字符去回答那个问题。

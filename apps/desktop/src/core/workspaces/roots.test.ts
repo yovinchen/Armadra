@@ -14,7 +14,7 @@ import {
   workspaceRelativePath,
 } from "./roots";
 
-/** Path narrowing, ported from `apps/runtime/src/security.rs`. */
+/** Path narrowing, ported from the pre-merge implementation. */
 describe("workspace roots", () => {
   const directory = canonicalize(mkdtempSync(join(tmpdir(), "armadra-roots-")));
   afterAll(() => {

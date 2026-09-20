@@ -1,5 +1,5 @@
 /**
- * The 15 `crates/hook/src/endpoint.rs` unit tests, translated. Same names,
+ * The 15 pre-merge unit tests, translated. Same names,
  * same assertions: a divergence here is a divergence a runtime would see.
  */
 

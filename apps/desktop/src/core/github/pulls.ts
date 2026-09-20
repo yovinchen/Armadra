@@ -1,5 +1,5 @@
 /**
- * Pull request（设计 §8）。移植自 `apps/host/internal/githubhost/pulls.go`。
+ * Pull request（设计 §8）。移植自 合并前的实现。
  *
  * 合并那条路径是这个文件大部分内容存在的原因：一次合并带着读者看到的那个确切
  * head，而 core 在发出任何东西之前会把 PR 和它的检查都重新读一遍。

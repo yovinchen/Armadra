@@ -6,7 +6,7 @@ import { sha256Hex } from "./support";
 /**
  * The Git half of a handoff bundle.
  *
- * A port of `git_fingerprint` in `apps/runtime/src/handoff/snapshot.rs`. A
+ * A port of `git_fingerprint` in the pre-merge implementation. A
  * handoff says "this is the worktree I was working in"; this is what makes
  * that claim checkable, and what makes it honest when it cannot be checked.
  *

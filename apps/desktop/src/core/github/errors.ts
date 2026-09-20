@@ -2,8 +2,7 @@
  * GitHub 域的两层错误：传输层的 {@link GithubApiError} 和域层的
  * {@link GithubError}。
  *
- * 移植自 `apps/host/internal/githubapi/client.go` 的 `Code` 与
- * `githubhost/service.go` 的那组 `errors.New`。分成两层不是为了整齐：传输层知道
+ * 移植自合并前实现的错误码与那组错误定义。分成两层不是为了整齐：传输层知道
  * 的是 HTTP 状态和一个稳定的机器原因，域层知道的是**调用方该做什么**——重新登录、
  * 等一会、重新读一遍版本，还是告诉用户。把两者合并会让「403 是没权限」和
  * 「403 是次级限流」变成同一个答案，而它们的修法不一样。
@@ -89,7 +88,7 @@ export function isGithubError(
   return error instanceof GithubError && error.kind === kind;
 }
 
-/** 兼容面（protobuf）上的一次拒绝：HTTP 状态 + 状态码 + 一句固定的英文。 */
+/** JSON 面上的一次拒绝：HTTP 状态 + 状态码 + 一句固定的英文。 */
 export interface GithubFailure {
   readonly status: number;
   readonly code: string;
@@ -97,8 +96,8 @@ export interface GithubFailure {
 }
 
 /**
- * 域错误 → 线上的拒绝。逐条对着 `apps/host/internal/server/github.go` 的
- * `githubFailure`，状态码和文案都不动——前端 `packages/host-client/src/github`
+ * 域错误 → 线上的拒绝。逐条对着合并前实现的
+ * `githubFailure`，状态码和文案都不动——前端 `apps/web/src/api/github.ts`
  * 的 `classifyGithubFailure` 认的就是这些。
  */
 export function githubFailure(error: unknown): GithubFailure {

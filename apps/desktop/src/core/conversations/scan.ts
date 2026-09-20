@@ -4,7 +4,7 @@ import { join } from "node:path";
 /**
  * Shared plumbing for the transcript scanners.
  *
- * Ported from `apps/runtime/src/index/scan.rs`. Every provider needs the same
+ * Ported from the pre-merge implementation. Every provider needs the same
  * four things: a bounded list of candidate files, each file's mtime and size,
  * a bounded read of the file's head, and a title that has been collapsed and
  * cut. None of it is provider-specific, so it lives here and `claude.ts` /

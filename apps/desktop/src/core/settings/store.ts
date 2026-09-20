@@ -2,7 +2,7 @@
  * The in-memory settings document and its typed accessors, backed by
  * `<data dir>/settings.json` and `<data dir>/worker-settings.json`.
  *
- * Ported from `apps/runtime/src/settings/store.rs`. The two implementations
+ * Ported from the pre-merge implementation. The two implementations
  * read and write the same two files in the same format, and this is load
  * bearing rather than tidy: during the changeover the switch may select either
  * core between two starts, and a person's terminal backend, browser path and

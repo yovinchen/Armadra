@@ -113,7 +113,7 @@ describe("the node probe", () => {
 
 /* -------------------------------- handshake -------------------------------- */
 
-/** Ports `apps/runtime/src/remote/client/handshake.rs`'s test module. */
+/** Ports the pre-merge implementation's test module. */
 describe("the handshake", () => {
   function hello(): WorkerHello {
     return {
@@ -217,7 +217,7 @@ describe("the handshake", () => {
 
 /* ------------------------------- supervisor -------------------------------- */
 
-/** Ports `apps/runtime/src/remote/client/supervisor.rs`'s test module. */
+/** Ports the pre-merge implementation's test module. */
 describe("the reconnect policy", () => {
   class Fake {
     closed = false;
@@ -457,7 +457,7 @@ describe("validating an execution host", () => {
 
 /* ---------------------------------- switch --------------------------------- */
 
-/** Ports `apps/runtime/src/remote/switch.rs`'s test module. */
+/** Ports the pre-merge implementation's test module. */
 describe("the execution host switch", () => {
   function print(head: string, entries: string): RootFingerprint {
     return { head, entries, entryCount: 1 };

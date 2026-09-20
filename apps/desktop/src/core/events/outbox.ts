@@ -11,7 +11,7 @@ import type { WorkspaceEvent } from "../bus";
  *
  * ## 和 Go Host 的关系
  *
- * `apps/host/internal/eventstream/catchup.go` 的三个状态原样保留，因为它们是
+ * 合并前实现的三个状态原样保留，因为它们是
  * 三个答案，不是同一个答案的深浅：
  *
  *   * `ok` —— 这些帧补上，然后从 `nextCursor` 继续；

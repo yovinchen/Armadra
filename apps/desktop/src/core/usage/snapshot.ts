@@ -1,7 +1,7 @@
 /**
  * The usage snapshot and the two bars the tray strip reads.
  *
- * Ported from the shape half of `apps/runtime/src/usage/mod.rs`. What is *not*
+ * Ported from the shape half of the pre-merge implementation. What is *not*
  * here is the fetching: the three provider modules read a CLI's stored
  * credentials and call a quota endpoint, and that — along with the cost scan
  * and the Copilot device flow — is the usage domain's own phase.

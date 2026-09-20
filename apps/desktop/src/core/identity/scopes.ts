@@ -4,7 +4,7 @@ import { validIdentifier } from "./tokens";
 /**
  * 授权位，以及它们在库里的样子。
  *
- * 移植自 `apps/host/internal/identity/validation.go`。JSON 的键名刻意保留 Go 的
+ * 移植自 合并前的实现。JSON 的键名刻意保留 Go 的
  * 导出字段名（`Permission` / `WorkspaceID` / `ExecutionHostID`）：`identity_sessions`
  * 的 `scopes` 列存的就是这串 JSON，旧 `host.db` 搬进统一库之后要原样解得开。
  *

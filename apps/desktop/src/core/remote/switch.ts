@@ -1,7 +1,7 @@
 /**
  * Moving a workspace to a different execution host.
  *
- * Ported from `apps/runtime/src/remote/switch.rs`.
+ * Ported from the pre-merge implementation.
  *
  * A switch is a **rebinding with verification**, never a file move. Files are
  * moved by the person, with Git; this decides only whether the directory the

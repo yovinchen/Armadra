@@ -109,7 +109,7 @@ export function install(context: CoreContext): WorkspaceEventStream {
       if (!allows([scope("events:read", workspaceId)])) {
         return { status: 403, reason: "Forbidden" };
       }
-      // 游标的三档判定在升级之前，和 `catchup.go` 一样：三个状态是三个答案，
+      // 游标的三档判定在升级之前，和 合并前的实现 一样：三个状态是三个答案，
       // 不是同一个答案的深浅。拒绝写在状态行上（`409 SNAPSHOT_REQUIRED`），
       // 因为这时候还没有 socket 可以说话；带不带游标由客户端决定，页面不带，
       // 所以页面永远走 404 / 成功这两条老路。

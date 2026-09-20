@@ -23,9 +23,7 @@ import {
 /**
  * The AI commit-message draft, and the handoff fingerprint beside it.
  *
- * Ported from `apps/runtime/src/git/message/tests.rs`,
- * `apps/runtime/tests/git_message_api.rs` and the git half of
- * `apps/runtime/tests/handoff_api.rs`.
+ * Ported from the pre-merge implementation's message and handoff test suites.
  */
 
 afterAll(cleanupFixtures);

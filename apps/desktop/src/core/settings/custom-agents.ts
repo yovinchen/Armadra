@@ -1,7 +1,7 @@
 /**
  * `settings.agents.custom[]` — sanitising user-defined CLI entries.
  *
- * Ported from `apps/runtime/src/settings/agents.rs`. The rules enforced here
+ * Ported from the pre-merge implementation. The rules enforced here
  * are the ones `customAgentSchema` states in `packages/shared/src/agents.ts`;
  * entries that break them are **dropped** rather than rejected, so one bad
  * hand-edit cannot make the whole settings file unreadable.

@@ -1,7 +1,7 @@
 /**
  * What a control verb answers with.
  *
- * Ported from the `Outcome` type in `apps/runtime/src/collab/control/mod.rs`.
+ * Ported from the `Outcome` type in the pre-merge implementation.
  * Two shapes, and the distinction is load-bearing: most verbs answer
  * `{ok, message, result}` — prose the model reads plus a small object it can
  * branch on — but two of them have a reply shape that *is* the answer. The

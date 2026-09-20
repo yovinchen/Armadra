@@ -8,8 +8,7 @@ import { readStatusAt } from "./status";
 /**
  * Hunk-level staging.
  *
- * Ported from `apps/runtime/src/git/hunks/tests.rs` and
- * `apps/runtime/tests/git_hunks_api.rs`.
+ * Ported from the pre-merge implementation's hunk unit and API test suites.
  */
 
 afterAll(cleanupFixtures);

@@ -5,8 +5,7 @@ import { conflict, internalError, sanitize } from "./support";
 /**
  * The one place a Git child process is started.
  *
- * A port of `apps/runtime/src/git/command.rs` and
- * `apps/runtime/src/git/repository/command.rs`, which spawn Git the same way
+ * A port of the pre-merge implementation, which spawns Git the same way
  * for different owners. What both establish, and what this keeps:
  *
  *   * **The environment is a lockdown, not a suggestion.** Every variable that

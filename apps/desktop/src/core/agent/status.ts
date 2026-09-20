@@ -5,7 +5,7 @@ import { rfc3339 } from "../workspaces/support";
  * The `agent_status` table: the reduced per-node agent state and its read
  * receipt.
  *
- * Ported from `apps/runtime/src/db/agent_status.rs`, reads first. The Hook
+ * Ported from the pre-merge implementation, reads first. The Hook
  * surface writes this row on every report; this domain reads it (the `list`
  * verb, the transcript, the title suggestion, the handoff cutoff) and owns the
  * one write a person makes: clearing the unread badge.

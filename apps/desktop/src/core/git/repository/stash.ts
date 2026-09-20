@@ -41,7 +41,7 @@ import type {
  * The stash list, the state token every write is confirmed against, and the
  * reset that uses both.
  *
- * A port of `apps/runtime/src/git/repository/stash.rs`. The state token is the
+ * A port of the pre-merge implementation. The state token is the
  * important export: it is a digest over HEAD, the stash reflog, the porcelain
  * status, the full binary staged and unstaged diffs and every untracked file's
  * content, and every stash, reset, merge, rebase and cherry-pick names the one

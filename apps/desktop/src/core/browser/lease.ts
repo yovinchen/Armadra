@@ -9,7 +9,7 @@ import {
 /**
  * The control lease: who is allowed to drive one session.
  *
- * Ported from `apps/runtime/src/browser/session/lease.rs`. Reads never take
+ * Ported from the pre-merge implementation. Reads never take
  * the lease. Anything input-shaped does, and there is exactly one holder at a
  * time. Two rules carry the whole design:
  *

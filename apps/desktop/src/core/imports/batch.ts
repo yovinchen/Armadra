@@ -33,7 +33,7 @@ import {
 /**
  * File imports are copies, never a grant to read beyond the workspace later.
  *
- * A port of `apps/runtime/src/imports.rs`. Each batch has an exclusive staging
+ * A port of the pre-merge implementation. Each batch has an exclusive staging
  * directory and commits as one rename, so a half-written import is never
  * visible under the name the canvas is told about — and a batch that fails
  * anywhere leaves the workspace exactly as it found it.

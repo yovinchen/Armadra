@@ -30,7 +30,7 @@ import {
 /**
  * One browser node, as the core sees it when the page lives in the shell.
  *
- * Ported from `apps/runtime/src/browser/shell/session.rs`. What stays here is
+ * Ported from the pre-merge implementation. What stays here is
  * the lease state machine (a pure function of `now`), the `active_tab_url`
  * column, and the activity ring the node header shows. What never arrives is
  * the process, the page and the profile directory: the page is a guest in the

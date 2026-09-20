@@ -1,4 +1,4 @@
-/** The 12 `crates/hook/src/control.rs` unit tests, translated. */
+/** The 12 pre-merge unit tests, translated. */
 
 import { describe, expect, it } from "vitest";
 

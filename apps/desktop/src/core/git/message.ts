@@ -16,7 +16,7 @@ import { badRequest, conflict, isDigest, sha256Hex } from "./support";
 /**
  * The AI commit-message draft.
  *
- * A port of `apps/runtime/src/git/message/`. Two properties are what make this
+ * A port of the pre-merge implementation. Two properties are what make this
  * safe enough to offer at all, and both are kept:
  *
  *   * **The prompt is captured, not streamed.** Sensitive paths are excluded by

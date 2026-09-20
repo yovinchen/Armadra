@@ -6,7 +6,7 @@ import { rfc3339 } from "./lease";
 /**
  * What the shell tells this process about, and what each fact changes.
  *
- * Ported from `on_event` in `apps/runtime/src/browser/shell/mod.rs`. Only two
+ * Ported from `on_event` in the pre-merge implementation. Only two
  * of them change state. A navigation writes `active_tab_url`, which is the one
  * column a restart needs. Human input takes the lease, which is what preempts
  * an agent — and it arrives here because the guest's own `before-input-event`

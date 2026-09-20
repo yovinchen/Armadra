@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
  * What a collaboration verb says when it says no, and the loosely typed `args`
  * object every verb reads its flags out of.
  *
- * Ported from `apps/runtime/src/collab/mod.rs`. Two refusal shapes, not one,
+ * Ported from the pre-merge implementation. Two refusal shapes, not one,
  * and the distinction is the same one the Rust module draws:
  *
  *   * {@link Refusal} carries a status and one sentence. The context-link

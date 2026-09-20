@@ -30,7 +30,7 @@
  *     `listDirectory` and `gitHeadCommit` to fingerprint it — and those
  *     operations are R4 and R5's. Answering them now would mean rebinding a
  *     workspace to a directory nothing verified, which is the one outcome
- *     `switch.rs` exists to prevent.
+ *     the pre-merge implementation exists to prevent.
  */
 
 import { VERSION } from "../instance";

@@ -10,7 +10,7 @@ import {
 } from "./search";
 import { type Temporary, temporary } from "./workspace.fixture";
 
-/** Ported from the test module of `apps/runtime/src/file_search.rs`. */
+/** Ported from the test module of the pre-merge implementation. */
 
 const MAX_SEARCH_FILE_BYTES = 1_048_576;
 
@@ -37,7 +37,7 @@ describe("the workspace index and search", () => {
     root.remove();
   });
 
-  /** The same tree `file_search.rs`'s `workspace()` helper builds. */
+  /** The same tree the pre-merge implementation's `workspace()` helper builds. */
   function workspace(): string {
     mkdirSync(join(root.path, "src/api"), { recursive: true });
     mkdirSync(join(root.path, "node_modules/pkg"), { recursive: true });

@@ -15,8 +15,8 @@ import { load } from "js-yaml";
  * WHY NSLocalNetworkUsageDescription EXISTS
  * On macOS 15+ a connection to an address on the user's own subnet is
  * gated by Local Network privacy, and access is attributed to the
- * RESPONSIBLE PROCESS — which for everything Armadra spawns (the Rust
- * Runtime, the Go Host, an agent CLI) is Armadra.app, not the child.
+ * RESPONSIBLE PROCESS — which for everything Armadra spawns (the core, the
+ * session host, an agent CLI) is Armadra.app, not the child.
  * Apple-signed binaries such as `/usr/bin/curl` are exempt; a Homebrew `node`
  * or an agent's own binary is not. Without this key there is no usage string
  * to show, so the system does not prompt and no row appears under System

@@ -3,7 +3,7 @@ import { Args, truncate } from "../collab/refusals";
 /**
  * The hook's flags, as the drive channel's camelCase arguments.
  *
- * Ported from `shell_args` in `apps/runtime/src/browser/agent/mod.rs`. Written
+ * Ported from `shell_args` in the pre-merge implementation. Written
  * out per verb rather than forwarded wholesale. A pass-through would mean the
  * shell's verbs taking whatever a caller typed, and the point of a verb
  * interface is that the set of things one can say is closed.

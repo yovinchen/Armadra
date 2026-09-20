@@ -13,8 +13,8 @@ import { Args, collapseNewlines, stripControl, truncate } from "./refusals";
 import { findUnder, readTail, render, renderEntry } from "./transcript";
 
 /**
- * Ported from `apps/runtime/src/collab/transcript.rs`, `board_log.rs` and the
- * `Args` helpers in `collab/mod.rs`.
+ * Ported from the pre-merge implementation's transcript and board-log test
+ * suites, and the `Args` helpers it used.
  */
 
 let directory: string;

@@ -2,7 +2,7 @@
  * The repository service's wire vocabulary: the mutation verbs it accepts and
  * the records it answers with.
  *
- * Ported field for field from `apps/runtime/src/git/repository/`. Every name
+ * Ported field for field from the pre-merge implementation. Every name
  * here is contractual — `packages/shared` has a zod schema for each, and
  * `apps/web` switches on the string values.
  */

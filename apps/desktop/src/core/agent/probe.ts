@@ -1,7 +1,7 @@
 /**
  * CLI 版本探测 —— `docs/design/agent-automation-design.md` §1「CLI 版本探测」。
  *
- * 移植自 `apps/runtime/src/agent_probe.rs`。每个已装上的 CLI 一天跑一次
+ * 移植自 合并前的实现。每个已装上的 CLI 一天跑一次
  * `<launchCmd> --version`，把解析出来的版本缓存在
  * `settings.agents.probes[<agentId>]`——设计 §9 说的那张 `agent_capability_cache`
  * 表，在这里就是设置文档里的这一节。

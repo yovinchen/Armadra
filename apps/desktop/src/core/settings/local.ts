@@ -15,7 +15,7 @@
  * still answers with one object, and a patch still names `terminal.backend`
  * rather than a file.
  *
- * Ported from `apps/runtime/src/settings/local.rs`, path for path. The file
+ * Ported from the pre-merge implementation, path for path. The file
  * format and the split are the same bytes on both sides on purpose: during the
  * changeover a person may run the Rust Runtime one morning and the TypeScript
  * core the next, and the machine's own preferences must not be forgotten in

@@ -1,7 +1,7 @@
 /**
  * The `SSH_ASKPASS` helper, and the private socket it talks to.
  *
- * Ported from `apps/runtime/src/terminal/ssh/askpass.rs`, with one deliberate
+ * Ported from the pre-merge implementation, with one deliberate
  * change of transport that is written down here rather than left to be
  * rediscovered.
  *

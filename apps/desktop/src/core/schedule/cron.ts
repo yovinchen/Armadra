@@ -1,7 +1,7 @@
 /**
  * 五段 cron，带时区。
  *
- * 移植自 Go Host 的 `apps/host/internal/automation/schedule.go`，那边靠
+ * 移植自 Go Host 的 合并前的实现，那边靠
  * `robfig/cron` 加 `time/tzdata`。Node 自带完整 ICU，所以时区表不用另外带一份；
  * 要自己写的是解析和「下一次」的搜索，以及 Go 那边花了两个函数说清楚的两件事：
  *

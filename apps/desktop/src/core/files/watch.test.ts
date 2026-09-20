@@ -16,7 +16,7 @@ import {
 import { writeTextFile } from "./write";
 
 /**
- * Ported from the test module of `apps/runtime/src/file_watch.rs`.
+ * Ported from the test module of the pre-merge implementation.
  *
  * Filesystem notifications are asynchronous on every platform, so the two
  * helpers are the same ones the Rust suite uses: poll up to a generous

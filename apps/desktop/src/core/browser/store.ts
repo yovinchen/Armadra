@@ -6,7 +6,7 @@ import { type SessionState, type Viewport, parseSessionState } from "./model";
  * `browser_sessions` rows: what the core still stores about a browser node,
  * and nothing about what the page contains.
  *
- * Ported from `apps/runtime/src/browser/store.rs`. Under the Electron shell
+ * Ported from the pre-merge implementation. Under the Electron shell
  * that is two columns — `lease_generation` and `active_tab_url`. The process
  * identity migration 0012 added (`pid`, `pid_started_at`, `cdp_port`) is dead:
  * there is no browser of ours to identify, so nothing here writes those

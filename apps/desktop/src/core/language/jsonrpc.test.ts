@@ -1,6 +1,6 @@
 /**
  * Framing, classification and id namespacing — a direct port of
- * `apps/runtime/src/language/tests/jsonrpc.rs`.
+ * the pre-merge implementation.
  */
 
 import { describe, expect, it } from "vitest";

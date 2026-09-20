@@ -18,7 +18,7 @@ import {
   undated,
 } from "./cost";
 
-/** 移植自 `apps/runtime/src/usage/cost/{scan,pricing,mod}.rs` 的用例。 */
+/** 移植自 合并前实现的用例。 */
 describe("价格表", () => {
   it("带日期的快照落回它不带日期的 id", async () => {
     expect(undated("claude-opus-4-5-20251101")).toBe("claude-opus-4-5");

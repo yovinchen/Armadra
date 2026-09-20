@@ -1,6 +1,6 @@
 /**
  * `github_config` / `github_status_mappings` / `github_references` 三张表的读写。
- * 移植自 `apps/host/internal/storage/github.go`。
+ * 移植自 合并前的实现。
  *
  * **令牌永远不在这里**。`GithubConfig` 记来源、密钥存储种类以及那个存储里持有
  * 值的引用名；读凭据本身永远回到 OS 存储。
@@ -82,7 +82,7 @@ function textValid(value: string, max: number, allowEmpty: boolean): boolean {
   if (typeof value !== "string") return false;
   if (value === "") return allowEmpty;
   if (Buffer.byteLength(value, "utf8") > max) return false;
-  // 控制字符那一条不是洁癖：这些值会进日志、进 protobuf、进 SQL 的 CHECK，
+  // 控制字符那一条不是洁癖：这些值会进日志、进 JSON、进 SQL 的 CHECK，
   // 一个换行或者 DEL 在其中任何一处都是一次注入的入口。
   for (const character of value) {
     const code = character.codePointAt(0) ?? 0;

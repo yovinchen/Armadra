@@ -1,5 +1,5 @@
 /**
- * 端点包装。移植自 `apps/host/internal/githubapi/resources.go` 与 `projects.go`。
+ * 端点包装。移植自合并前实现的对应模块。
  *
  * 每一个在拼路径之前先校验引用，所以 owner 或仓库名永远没法把请求扩到调用方指名
  * 的那个仓库之外。

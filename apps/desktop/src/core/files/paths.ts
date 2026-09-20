@@ -11,9 +11,9 @@ import { badRequest, forbidden, notFound } from "../workspaces/support";
 /**
  * The path rules every filesystem surface shares.
  *
- * A port of the half of `apps/runtime/src/security.rs` that `files.rs`,
- * `file_ops.rs` and `file_watch.rs` lean on, plus the two resolvers
- * `file_ops.rs` keeps to itself. `core/workspaces/roots.ts` already carries
+ * A port of the half of the pre-merge implementation's security module that
+ * files, file-ops and file-watch lean on, plus the two resolvers it keeps to
+ * itself. `core/workspaces/roots.ts` already carries
  * the other half (`canonicalDirectory`, `resolveInRoot`,
  * `workspaceRelativePath`, `resolveImportSource`) and is not duplicated here.
  *

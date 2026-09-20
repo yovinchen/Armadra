@@ -1,6 +1,6 @@
 /**
  * The proxy against a real child process (`tools/probes/mock-lsp.mjs`) — a
- * port of `apps/runtime/src/language/tests/mux.rs`.
+ * port of the pre-merge implementation.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";

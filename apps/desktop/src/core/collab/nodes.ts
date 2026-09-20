@@ -4,7 +4,7 @@ import { Refusal } from "./refusals";
 /**
  * Resolving what a collaboration verb is allowed to touch.
  *
- * Ported from the lookup half of `apps/runtime/src/collab/mod.rs`. Everything
+ * Ported from the lookup half of the pre-merge implementation. Everything
  * here re-derives the answer from the database rather than from the request:
  * the caller is a CLI acting on text it read somewhere, so "which node is
  * this?" and "may it reach that one?" are questions the board answers, never

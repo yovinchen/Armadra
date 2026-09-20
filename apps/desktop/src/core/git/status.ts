@@ -6,7 +6,7 @@ import { badRequest } from "./support";
 /**
  * Porcelain status parsing and the repository status summary.
  *
- * A port of `apps/runtime/src/git/status.rs`.
+ * A port of the pre-merge implementation.
  */
 
 export interface GitFileStatus {

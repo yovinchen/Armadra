@@ -9,7 +9,7 @@ import {
   reportsALiveWindow,
 } from "./context-usage";
 
-/** Ported from the `mod tests` in `apps/runtime/src/context_usage.rs`. */
+/** Ported from the `mod tests` in the pre-merge implementation. */
 
 const NOW = 1_788_566_400_000;
 

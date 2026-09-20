@@ -164,9 +164,11 @@ function withoutReason(descriptor: ServerDescriptor): ServerDescriptor {
  * One `unsupported` row per language for a workspace whose files are on
  * another machine.
  *
- * The remote language link is a second `ssh` connection carrying protobuf
- * `LanguageFrame`s to a Worker that runs the servers there. The core's remote
- * domain brings up the *control* connection and its handshake, but not the
+ * The remote language link is meant to be a second `ssh` connection carrying
+ * `LanguageFrame`s to a Worker that runs the servers there (the pre-merge
+ * implementation did this over Protobuf; this one would use JSON, matching
+ * `core/remote`'s frames). The core's remote domain brings up the *control*
+ * connection and its handshake, but not the
  * Worker service surface those frames ride on, so there is nothing to route to
  * yet. Answering rows rather than an error is deliberate: the settings page
  * still lists every language and says, per language, that it is unavailable

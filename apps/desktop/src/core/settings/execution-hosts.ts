@@ -1,7 +1,7 @@
 /**
  * `/api/execution-hosts` — the machines a workspace may run on.
  *
- * Ported from `apps/runtime/src/api/execution_hosts.rs`.
+ * Ported from the pre-merge implementation.
  *
  * An execution host is not a second store. It is `settings.ssh.hosts[]` read
  * out as an addressable object, so a client can create, rename, retire and

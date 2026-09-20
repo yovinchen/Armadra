@@ -6,7 +6,7 @@ import { apiFailure } from "./errors";
 import { githubFixture, type GithubFixture } from "./fixture";
 import { reference, validToken } from "./credentials";
 
-/** 移植自 `apps/host/internal/githubcred/service_test.go` 与 `secret_test.go`。 */
+/** 移植自合并前实现的对应用例。 */
 describe("GitHub 凭据", () => {
   let fixture: GithubFixture;
 

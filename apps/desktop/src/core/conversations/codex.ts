@@ -12,7 +12,7 @@ import {
 /**
  * Codex rollouts — `${CODEX_HOME:-~/.codex}/sessions/ ** /rollout-*.jsonl`.
  *
- * Ported from `apps/runtime/src/index/codex.rs`. Files are filed under
+ * Ported from the pre-merge implementation. Files are filed under
  * `sessions/YYYY/MM/DD/` and named `rollout-<timestamp>-<uuid>.jsonl`. The
  * first record is a `session_meta` carrying the id and the cwd; the turns that
  * follow are `response_item` envelopes around OpenAI-shaped messages.

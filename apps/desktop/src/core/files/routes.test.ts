@@ -9,8 +9,8 @@ import { install } from "./routes";
 import { releaseWorkspace } from "./watch";
 
 /**
- * Ported from `apps/runtime/src/api/tests/files.rs` (saves, entries, watch)
- * and `apps/runtime/src/api/tests/search.rs` (index and search over the wire).
+ * Ported from the pre-merge implementation (saves, entries, watch, index and
+ * search over the wire).
  *
  * The language-service half of the Rust search test has no port here: that
  * surface is R5's, and the route still answers 501 by name.

@@ -91,7 +91,7 @@ describe("the tray usage strip", () => {
   });
 
   /** The exact body a running Runtime answered `GET /api/usage/mini` with,
-   * kept verbatim from `usage.rs` so the strip is checked against a real
+   * kept verbatim from the pre-merge implementation so the strip is checked against a real
    * payload rather than against a shape this file invented. */
   it("renders both rows of a real Runtime answer", () => {
     const body =

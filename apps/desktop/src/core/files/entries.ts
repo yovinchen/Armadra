@@ -34,7 +34,7 @@ import { symlinkMetadata } from "./stat";
 /**
  * File management for the editor and the file tree (E01/M4).
  *
- * A port of `apps/runtime/src/file_ops.rs`. Create, rename/move and delete,
+ * A port of the pre-merge implementation. Create, rename/move and delete,
  * all inside one workspace and all behind the workspace's write permission
  * (checked by the route).
  *

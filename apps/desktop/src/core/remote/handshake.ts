@@ -1,7 +1,7 @@
 /**
  * What makes a remote Worker usable, and what only makes it different.
  *
- * Ported from `apps/runtime/src/remote/client/handshake.rs`.
+ * Ported from the pre-merge implementation.
  *
  * Compatibility is three separate questions, and each one fails for its own
  * reason:

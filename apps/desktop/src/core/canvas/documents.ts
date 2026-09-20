@@ -18,7 +18,7 @@ import {
  * Loading a board's nodes, edges and whiteboard snapshot, and saving them
  * under an optimistic revision check.
  *
- * A port of `apps/runtime/src/db/documents.rs`. Two things in it are contract
+ * A port of the pre-merge implementation. Two things in it are contract
  * rather than implementation, and neither may drift:
  *
  *   * **The CAS.** `UPDATE … WHERE id = ? AND updated_at = ?` is the whole of

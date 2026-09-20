@@ -1,7 +1,7 @@
 /**
  * The settings document: defaults, per-section normalisation, custom agents.
  *
- * Ported case for case from `apps/runtime/src/settings/tests.rs`. Where a Rust
+ * Ported case for case from the pre-merge implementation. Where a Rust
  * case asserts on a typed accessor this asserts on the document, because the
  * document is what `GET /api/settings` hands the page and is therefore the part
  * that is contractual.

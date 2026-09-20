@@ -1,6 +1,5 @@
 /**
- * GitHub Copilot 的设备流。移植自 `apps/runtime/src/usage/copilot.rs` 的登录那一半
- * 与 `copilot_login.rs`。
+ * GitHub Copilot 的设备流。移植自合并前实现的登录那一半。
  *
  * 和别的供应商不同，这台机器上没有一个 Copilot CLI 的凭据可以借，所以 core 自己跑
  * GitHub 的**设备流**并拥有得到的令牌：

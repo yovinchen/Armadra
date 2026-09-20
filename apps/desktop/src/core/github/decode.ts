@@ -1,5 +1,5 @@
 /**
- * 远端 JSON → protobuf 消息。移植自 `apps/host/internal/githubapi/decode.go`。
+ * 远端 JSON → protobuf 消息。移植自 合并前的实现。
  *
  * 线上形状只声明 core 真正用到的字段，其余一律丢掉而不是转发：上游新加一个键
  * 不可能在没有人审过的情况下到达客户端。

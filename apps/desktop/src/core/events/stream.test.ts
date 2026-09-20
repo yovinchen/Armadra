@@ -1,8 +1,8 @@
 /**
  * The per-workspace fan-out.
  *
- * Ported from the two cases in `apps/runtime/src/events.rs` plus the behaviour
- * `apps/runtime/src/api/events.rs` gets from `tokio::sync::broadcast` for free
+ * Ported from the two cases in the pre-merge implementation, plus the
+ * behaviour it got from `tokio::sync::broadcast` for free
  * and this implementation has to arrange on purpose: a bounded backlog, the
  * oldest frames dropped rather than the connection, and one slow reader not
  * holding up a fast one.

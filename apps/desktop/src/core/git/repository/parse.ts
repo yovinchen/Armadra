@@ -4,7 +4,7 @@ import type { CommitRecord, WorktreeRecord } from "./types";
 /**
  * Parsers for the machine-readable Git output the repository service reads.
  *
- * A port of `apps/runtime/src/git/repository/parse.rs`. The two record
+ * A port of the pre-merge implementation. The two record
  * splitters are separate on purpose: `for-each-ref` ends a record with a
  * newline, `git log -z` with a NUL, and reading one with the other's rule turns
  * a subject containing a newline — which a reflog message may — into a

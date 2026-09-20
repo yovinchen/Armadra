@@ -11,7 +11,7 @@ import type { RepositoryAction } from "./types";
  * Everything one action has to pass before it is queued.
  *
  * A port of `RepositoryService::validate_action` in
- * `apps/runtime/src/git/repository/actions.rs`. It runs *before* the operation
+ * the pre-merge implementation. It runs *before* the operation
  * takes the repository lock, which is the reason it exists as a separate step:
  * a request that cannot be run should be a refusal the caller sees now, not an
  * operation that occupies the queue and then fails.

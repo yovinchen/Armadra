@@ -18,7 +18,7 @@ import { type Outcome, result } from "./outcome";
 /**
  * `list`, and the three verbs that add a node to the board.
  *
- * Ported from `apps/runtime/src/collab/control/nodes.rs`. `open-agent` is the
+ * Ported from the pre-merge implementation. `open-agent` is the
  * one that matters most and the one that does the least: the core never starts
  * an agent process. It writes a node whose data carries the launch line, and
  * the terminal node creates its own PTY when the canvas mounts it. `after` is

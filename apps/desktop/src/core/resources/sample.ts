@@ -1,5 +1,5 @@
 /**
- * 主机与每个会话的采样。移植自 `apps/runtime/src/resources/sample.rs`。
+ * 主机与每个会话的采样。移植自 合并前的实现。
  *
  * ## 选型：`ps`，不是 `pidusage`
  *

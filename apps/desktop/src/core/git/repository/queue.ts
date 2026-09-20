@@ -18,7 +18,7 @@ import type {
  * Starting one repository mutation.
  *
  * A port of `RepositoryService::start` in
- * `apps/runtime/src/git/repository/queue.rs`. Three things happen in this order
+ * the pre-merge implementation. Three things happen in this order
  * and the order is the contract:
  *
  *   1. The action is validated and the reviewed state is checked — a request

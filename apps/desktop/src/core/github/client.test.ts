@@ -9,7 +9,7 @@ import {
 import { codeOf } from "./errors";
 import { fakeGithub, type FakeGithub } from "./fixture";
 
-/** 移植自 `apps/host/internal/githubapi/client_test.go`。 */
+/** 移植自 合并前的实现。 */
 describe("GitHub 传输层", () => {
   let github: FakeGithub;
 

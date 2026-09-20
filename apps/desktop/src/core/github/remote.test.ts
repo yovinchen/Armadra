@@ -10,7 +10,7 @@ import {
   webHostFor,
 } from "./remote";
 
-/** 移植自 `apps/host/internal/githubapi/remote_test.go`。 */
+/** 移植自 合并前的实现。 */
 describe("git remote 与 API base 的本地解析", () => {
   it("接受 https、ssh、git 与 scp 四种写法", () => {
     for (const value of [

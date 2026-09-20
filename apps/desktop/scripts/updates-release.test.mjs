@@ -51,7 +51,7 @@ function updaterAsset(target) {
 }
 
 /**
- * The derivation `offer.rs` performs: the manifest and the bundle have to be
+ * The derivation the pre-merge implementation performs: the manifest and the bundle have to be
  * siblings of the same release, and the digest comes from the release index —
  * not from the manifest, which is served by whoever serves the bytes.
  */

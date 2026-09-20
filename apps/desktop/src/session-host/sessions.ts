@@ -25,7 +25,7 @@ import {
  *     connection goes away, whatever else happens. A frontend that crashes
  *     while paused must not leave the CLI frozen forever.
  *
- * A port of `crates/session-host/src/session.rs`, including its tests.
+ * A port of the pre-merge implementation, including its tests.
  */
 
 /** Identifies one connection. Assigned by the host, monotonic, never reused. */

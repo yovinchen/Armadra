@@ -1,6 +1,6 @@
 /**
  * Uri rewriting in both directions, field by field — a port of
- * `apps/runtime/src/language/tests/uri.rs`.
+ * the pre-merge implementation.
  *
  * The failure this file exists to catch is a *missing field*. A rewrite that
  * covers `textDocument.uri` and forgets `LocationLink.targetUri` does not fail

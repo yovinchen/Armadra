@@ -20,7 +20,7 @@ import type { CommitRecord, LogCommit, LogPage, LogRequest } from "./types";
 /**
  * The workspace-wide commit log.
  *
- * A port of `apps/runtime/src/git/repository/log.rs`. A workspace is not one
+ * A port of the pre-merge implementation. A workspace is not one
  * repository, and the Git window does not switch between them: it draws **one**
  * graph in which every discovered repository's commits are interleaved by
  * committer time, each row carrying the checkout it came from.

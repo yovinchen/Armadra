@@ -6,7 +6,7 @@ import { install as installWorkspaces } from "../workspaces/routes";
 import { install } from "./routes";
 
 /**
- * The board routes, ported from `apps/runtime/src/api/tests/boards.rs`: the
+ * The board routes, ported from the pre-merge implementation: the
  * v3 contract of the document pair, the retired-kanban rejection and the CAS
  * a second save runs into.
  */

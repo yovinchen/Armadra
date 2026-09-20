@@ -8,7 +8,7 @@ import { type Outcome, result } from "./outcome";
 /**
  * `close`, and the human confirmation it waits for.
  *
- * Ported from `apps/runtime/src/collab/control/close.rs`. This is the one
+ * Ported from the pre-merge implementation. This is the one
  * destructive verb, so it never runs on the agent's word alone: the canvas
  * gets a `control.confirm` frame, a human answers it, and only then does the
  * node leave the board and its PTY get destroyed.

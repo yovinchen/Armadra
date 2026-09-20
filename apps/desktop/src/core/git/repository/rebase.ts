@@ -37,7 +37,7 @@ import {
 /**
  * Rebase replays the current branch onto a reviewed commit.
  *
- * A port of `apps/runtime/src/git/repository/integration/rebase.rs`. Unlike
+ * A port of the pre-merge implementation. Unlike
  * merge and cherry-pick it detaches HEAD for the whole sequence, so ownership
  * is bound to Git's own `rebase-merge` records rather than to a motionless
  * HEAD.

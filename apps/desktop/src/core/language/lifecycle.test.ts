@@ -1,7 +1,7 @@
 /**
  * Crashing, idle stopping and hanging — the lifecycle branches a real server
  * reaches only by accident, driven by the mock's `--crash-after` and `--hang`
- * switches. A port of `apps/runtime/src/language/tests/lifecycle.rs`.
+ * switches. A port of the pre-merge implementation.
  */
 
 import { afterEach, describe, expect, it } from "vitest";

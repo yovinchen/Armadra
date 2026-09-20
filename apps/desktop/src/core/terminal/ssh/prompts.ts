@@ -1,7 +1,7 @@
 /**
  * Password and passphrase prompts, routed to a person.
  *
- * Ported from `apps/runtime/src/terminal/ssh/prompts.rs`.
+ * Ported from the pre-merge implementation.
  *
  * `ssh` asks for a secret on a TTY. A Worker connection has no TTY, so before
  * this module the only options were `BatchMode=yes` — which fails outright on

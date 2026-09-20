@@ -1,5 +1,5 @@
 /**
- * `redact_secrets`, ported from `apps/runtime/src/security.rs`.
+ * `redact_secrets`, ported from the pre-merge implementation.
  *
  * Two things in this domain are written by somebody other than Armadra and are
  * then shown to a person: a server's prompt text, and `ssh`'s own diagnostics.
@@ -41,7 +41,7 @@ const OUTPUT_CHARS = 600;
  *
  * Never a full transcript: a verbose `ssh` runs to hundreds of lines, and the
  * settings page shows this in a box beside a button. Ported from `ssh::tail`
- * in `apps/runtime/src/terminal/ssh/mod.rs`, including its character ceiling
+ * in the pre-merge implementation, including its character ceiling
  * being counted in code points rather than in UTF-16 units.
  */
 export function tail(text: string): string {

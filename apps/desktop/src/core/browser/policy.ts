@@ -4,7 +4,7 @@ import { Refusal } from "../collab/refusals";
 /**
  * Where a controlled browser may be pointed.
  *
- * Ported from `apps/runtime/src/browser/policy.rs`. Pure functions on purpose:
+ * Ported from the pre-merge implementation. Pure functions on purpose:
  * a decision takes a URL, the addresses it resolved to and the workspace's
  * policy, and returns an admission or a refusal code. Nothing here needs a
  * browser, so every rule is testable without one.

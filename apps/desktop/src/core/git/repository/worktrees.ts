@@ -37,7 +37,7 @@ import type {
  * Linked worktrees: listing them, verifying a Frame's binding, and preparing
  * the directories a new one may be created in.
  *
- * A port of `apps/runtime/src/git/repository/worktrees.rs`.
+ * A port of the pre-merge implementation.
  */
 
 export async function worktreeRecords(

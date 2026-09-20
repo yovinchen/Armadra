@@ -19,9 +19,8 @@ import { type AgentFixture, agentFixture } from "./fixture";
 import { isAwaitingHuman } from "./status";
 
 /**
- * Ported from `apps/runtime/src/api/tests/approvals.rs`,
- * `collab/tests/approvals.rs` and `db/tests/agent_status.rs`, plus the
- * cross-device CAS the Go Host adds in `agenthost/approvals.go`.
+ * Ported from the pre-merge implementation's approvals and agent-status test
+ * modules, plus the cross-device CAS the former Go Host added.
  */
 
 let fixture: AgentFixture;

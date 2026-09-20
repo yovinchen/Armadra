@@ -29,7 +29,7 @@ import {
  * **produced by the Rust crate itself** rather than read off its source.
  *
  * ```sh
- * # printed by a throwaway test inside crates/session-host, 2026-09-20
+ * # printed by a throwaway test inside the pre-merge Rust session-host, 2026-09-20
  * ENDPOINT=\\.\pipe\armadra-session-S-1-5-21-…-1001-37f614153a749bbd-v1
  * FRAME=a102000007000000000000002a00000000000000020000006869
  * JSON={"type":"attach","id":3,"sessionKey":"node-a","generation":2,"size":{"cols":100,"rows":30}}

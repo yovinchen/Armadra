@@ -1,7 +1,7 @@
 /**
  * 模型目录：谁发布了一个模型、它多少钱、能装多少 token（用户实测反馈 F10）。
  *
- * 移植自 `apps/runtime/src/models/catalog.rs`，读写**同一个**缓存文件
+ * 移植自 合并前的实现，读写**同一个**缓存文件
  * `<dataDir>/models-catalog.json`，同一份 JSON 形状。
  *
  * ## 数字从哪来

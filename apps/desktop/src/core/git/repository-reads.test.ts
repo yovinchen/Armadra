@@ -25,9 +25,7 @@ import { DomainError } from "../workspaces/support";
 /**
  * Every repository-level read, against real checkouts.
  *
- * Ported from `apps/runtime/tests/git_repository_{branches,history,refs,
- * remotes,stash,worktrees}.rs`, `git_workspace_log.rs`,
- * `git_reflog_pathspec.rs` and `git_multi_repository_api.rs`.
+ * Ported from the pre-merge implementation's git repository test suites.
  */
 
 afterAll(cleanupFixtures);

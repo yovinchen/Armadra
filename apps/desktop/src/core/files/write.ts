@@ -23,7 +23,7 @@ import { noteWrite } from "./watch";
 /**
  * `PUT /api/workspaces/{id}/file` — the editor node's save.
  *
- * A port of the write half of `apps/runtime/src/files.rs`. The contract the
+ * A port of the write half of the pre-merge implementation. The contract the
  * editor depends on, unchanged:
  *
  *   * A **missing** content version means create-only; an existing file

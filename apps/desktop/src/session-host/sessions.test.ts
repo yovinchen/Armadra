@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SessionError, SessionTable } from "./sessions";
 
 /**
- * The Rust unit tests of `crates/session-host/src/session.rs`, ported one for
+ * The Rust unit tests of the pre-merge implementation, ported one for
  * one. The generation fence and the per-connection pause claim are the two
  * rules that decide whether a recycled agent writes into the wrong console
  * and whether a crashed frontend freezes a CLI, so they are the two rules

@@ -4,7 +4,7 @@ import type { CollabContext } from "./service";
 /**
  * `GET /api/workspaces/{id}/deliveries` — the delivery record panel.
  *
- * Ported from `apps/runtime/src/db/deliveries.rs`. **Deprecated as a
+ * Ported from the pre-merge implementation. **Deprecated as a
  * collaboration record.** The verbs that typed a peer's message into a
  * terminal are gone, and nothing in this core inserts here any more: a peer's
  * message lives in `agent_mailbox` until its recipient reads it.

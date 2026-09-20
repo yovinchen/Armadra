@@ -1,5 +1,5 @@
 /**
- * The ceilings and the stable reason keys — `apps/runtime/src/language/mod.rs`
+ * The ceilings and the stable reason keys — the pre-merge implementation
  * top half, kept in its own module so `jsonrpc` and `registry` can share them
  * without importing each other.
  */

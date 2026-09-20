@@ -221,7 +221,7 @@ describe("the assembled filesystem and import domains", () => {
 
   /**
    * The two multipart routes carry the Runtime's ceiling (`MAX_BATCH_BYTES`
-   * plus a MiB, as `apps/runtime/src/lib.rs` gave axum), not the core's single
+   * plus a MiB, as the pre-merge implementation gave axum), not the core's single
    * 12 MiB one: a 12 MiB file is a legal import, and it reaches the manifest.
    */
   it("lets an upload above the core's single body ceiling reach the manifest", async () => {

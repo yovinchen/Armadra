@@ -40,7 +40,7 @@ import { isTerminal } from "./types";
  * Explicit integration state: which merge, cherry-pick, revert or rebase this
  * service started, and whether it is still the one Git has in progress.
  *
- * A port of `apps/runtime/src/git/repository/integration/{mod,snapshot}.rs`.
+ * A port of the pre-merge implementation.
  * Ownership is deliberately local to this process's lifetime: a restarted core
  * never claims an external Git sequence, because it has no way to know what
  * started it or what the person doing it intended.

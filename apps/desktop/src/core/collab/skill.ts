@@ -19,7 +19,7 @@ import { writeAtomically } from "../hook/install/shared";
  * exist, which is indistinguishable from not having them
  * (docs/design/agent-integration.md §2: 一个 CLI 只有一个「已集成 / 未集成」状态).
  *
- * Ported from `apps/runtime/src/collab/skills.rs`. Two rules kept from it:
+ * Ported from 合并前的实现. Two rules kept from it:
  *
  *   * the body is compared before it is written, so reinstalling an unchanged
  *     skill leaves the file — and its mtime — alone, and a CLI that caches by

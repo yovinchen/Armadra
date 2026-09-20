@@ -27,7 +27,7 @@
 export type OpaquePayload = Readonly<Record<string, unknown>>;
 
 /**
- * The 21 `WorkspaceEvent` variants of `apps/runtime/src/events.rs`, by their
+ * The 21 `WorkspaceEvent` variants of 合并前的实现, by their
  * contractual `type` string (contract §5, last paragraph: "21 个
  * `WorkspaceEvent` 的 `type` 字符串逐字不变").
  *
@@ -154,7 +154,7 @@ export type WorkspaceEvent = {
 }[WorkspaceEventType];
 
 /**
- * Every `type` string, in the order `apps/runtime/src/events.rs` declares its
+ * Every `type` string, in the order the pre-merge implementation declares its
  * variants. Exported so a test can assert the set rather than trusting that
  * nobody renamed one while moving code around.
  */

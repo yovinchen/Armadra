@@ -23,8 +23,7 @@ import {
 /**
  * The worktree half of the domain: status, diff, staging and committing.
  *
- * Ported from `apps/runtime/src/git/tests/{status,diff,stage,commit}.rs` and
- * `apps/runtime/tests/git_repository_api.rs`.
+ * Ported from the pre-merge implementation's git test suites.
  */
 
 afterAll(cleanupFixtures);

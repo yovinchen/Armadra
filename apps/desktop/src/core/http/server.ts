@@ -124,9 +124,9 @@ export class CoreServer {
           : badRequest(body.reason);
       } else {
         const core = coreRequest(request, url, body.body);
-        // Raw routes come before the table: they own their own encoding
-        // (protobuf compatibility faces), so the JSON envelope must not touch
-        // them. Origin and the body ceiling still apply — they ran above.
+        // Raw routes come before the table: they own their own request and
+        // response handling, so the JSON envelope must not touch them.
+        // Origin and the body ceiling still apply — they ran above.
         const raw = this.rawRoutes.find((route) =>
           path.startsWith(route.prefix),
         );
@@ -210,9 +210,9 @@ export class CoreServer {
 
   /**
    * A route matched by prefix, before the table, that writes its own response.
-   * For the compatibility faces that speak something other than the JSON
-   * envelope (`/rpc/…` protobuf). Origin and the body ceiling are still
-   * enforced before the handler runs.
+   * For domains whose verbs do not fit the generic JSON envelope (identity,
+   * GitHub, automations) and want to encode and dispatch by hand. Origin and
+   * the body ceiling are still enforced before the handler runs.
    */
   raw(prefix: string, handler: RawHandler): void {
     this.rawRoutes.push({ prefix, handler });

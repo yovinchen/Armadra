@@ -1,7 +1,7 @@
 /**
  * The domain types a browser session is described with.
  *
- * Ported from `apps/runtime/src/browser/model.rs`. Plain data with the
+ * Ported from the pre-merge implementation. Plain data with the
  * `camelCase` shape the front end and the event stream already read, so the
  * same session can be described over loopback JSON without a second
  * vocabulary.

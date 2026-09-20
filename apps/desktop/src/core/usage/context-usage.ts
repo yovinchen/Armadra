@@ -14,7 +14,7 @@ import { getWorkspace } from "../workspaces/table";
 /**
  * How much of its context window one agent node has used.
  *
- * Ported from `apps/runtime/src/context_usage.rs`. Live observations only —
+ * Ported from the pre-merge implementation. Live observations only —
  * never cumulative billing totals, never a guess dressed as a measurement.
  *
  * Every answer carries a `source` and a `quality`, and the pair is the whole

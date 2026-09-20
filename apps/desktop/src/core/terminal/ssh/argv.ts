@@ -1,7 +1,7 @@
 /**
  * The `ssh` command lines the core builds.
  *
- * Ported line for line from `apps/runtime/src/terminal/ssh/argv.rs`. One rule
+ * Ported line for line from the pre-merge implementation. One rule
  * governs the whole file: **argv, never a shell string.** Each option is its
  * own array element, so a host called `a;rm -rf /` could at worst become one
  * meaningless `ssh` argument — and it never gets that far, because

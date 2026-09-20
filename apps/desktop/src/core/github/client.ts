@@ -1,6 +1,6 @@
 /**
  * core 通往 GitHub REST / GraphQL 的唯一一条路。移植自
- * `apps/host/internal/githubapi/client.go`。
+ * 合并前的实现。
  *
  * 它拥有条件请求、翻页、限流处理和退避，所以没有调用方需要自己再实现一遍；也
  * 因此**一次写永远不会被悄悄重试**：结果没被读到的请求报 `UNKNOWN_OUTCOME`，

@@ -2,7 +2,7 @@
  * `armadra-hook` — the hook / context / canvas client Armadra injects into
  * agent terminals, in TypeScript.
  *
- * This is a port of `crates/hook`, not a reinterpretation of it: the
+ * This is a port of the pre-merge implementation, not a reinterpretation of it: the
  * subcommands, the request bytes, the prose, the exit codes and the
  * fail-open rules are the Rust client's, and `wire.test.ts` byte-compares the
  * two where a CLI or the runtime can tell them apart.

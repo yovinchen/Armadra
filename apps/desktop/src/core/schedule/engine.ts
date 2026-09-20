@@ -57,7 +57,7 @@ import { type Snapshot, ScheduleStore, conflict } from "./store";
 /**
  * 持久化的调度内核。
  *
- * 逐条移植自 `apps/host/internal/automation/{engine,plans,manual,receipts}.go`。
+ * 逐条移植自 合并前的实现。
  * 它不创建 PTY、不跑 shell，也不把「送到了」当成「做完了」——真正的写入由
  * {@link Dispatcher} 负责，这一层只决定「该不该写、写哪一次、结果算什么」。
  *

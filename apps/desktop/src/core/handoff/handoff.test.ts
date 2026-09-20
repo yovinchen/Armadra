@@ -14,7 +14,7 @@ import {
   readForCaller,
 } from "./store";
 
-/** Ported from `apps/runtime/src/handoff/tests.rs`. */
+/** Ported from the pre-merge implementation. */
 
 let fixture: AgentFixture;
 let source: string;

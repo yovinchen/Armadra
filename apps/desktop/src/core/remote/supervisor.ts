@@ -1,7 +1,7 @@
 /**
  * Reconnect policy for one execution host.
  *
- * Ported from `apps/runtime/src/remote/client/supervisor.rs`, arithmetic
+ * Ported from the pre-merge implementation, arithmetic
  * included — the off-by-one that file's comment describes is the reason the
  * table is indexed by *failures so far* rather than by the failure count.
  *

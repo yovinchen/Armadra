@@ -10,7 +10,7 @@ import type { CanvasEdge, CanvasNode } from "./document-types";
 /**
  * What a board document may contain.
  *
- * A port of `apps/runtime/src/db/validation.rs`, and the one module here that
+ * A port of the pre-merge implementation, and the one module here that
  * has to be read as a specification rather than as code: it is the only thing
  * standing between a client's JSON and the rows every other domain reads. The
  * per-type payload rules in particular are deliberately exhaustive — an

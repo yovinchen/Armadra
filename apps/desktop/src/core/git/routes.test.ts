@@ -17,8 +17,7 @@ import { install } from "./index";
  *
  * The shapes come from `apps/web/src/api/git.ts` and
  * `apps/web/src/api/git-repository.ts`; the statuses and the permission gates
- * come from `apps/runtime/src/api/git.rs`, `apps/runtime/src/git/api/` and
- * `apps/runtime/tests/git_execution_permissions.rs`.
+ * come from the pre-merge implementation's git route and permission tests.
  */
 
 describe("the Git routes", () => {

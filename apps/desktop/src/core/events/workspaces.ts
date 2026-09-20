@@ -2,7 +2,7 @@
  * Does this workspace exist?
  *
  * The event stream's only question about another domain's data, asked before
- * the upgrade because that is where `apps/runtime/src/api/events.rs` asks it:
+ * the upgrade because that is where the pre-merge implementation asks it:
  * `db::get_workspace(&state.pool, &workspace_id).await?` runs first, and a
  * missing workspace becomes a `NotFound` — an HTTP 404 with the usual
  * `{ code, message }` body — rather than a socket that opens and then closes.

@@ -7,7 +7,7 @@ import { internalError, nowRfc3339, sha256Hex } from "./support";
 /**
  * Workspace repository discovery.
  *
- * A port of `apps/runtime/src/git/discovery.rs`. A workspace directory is not
+ * A port of the pre-merge implementation. A workspace directory is not
  * one repository: it may hold the root repository, independent repositories in
  * subdirectories, submodules and linked worktrees, and the Git panel has to see
  * all of them.

@@ -7,7 +7,7 @@ import { UTF8_BOM, listDirectory, readRawFile, readTextFile } from "./read";
 import { type Temporary, temporary } from "./workspace.fixture";
 
 /**
- * Ported from the read half of `apps/runtime/src/files.rs`'s test module:
+ * Ported from the read half of the pre-merge implementation's test module:
  * `lists_directories_before_files_and_ignores_build_folders`,
  * `rejects_binary_previews` and `reports_line_endings_bom_and_encoding`.
  */

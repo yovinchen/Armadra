@@ -10,7 +10,7 @@ import { installRoutes } from "./routes";
  * is what makes writes to one repository serial and writes to two repositories
  * parallel — a second instance would be a second queue for the same worktree.
  *
- * The domain publishes no event of its own. `apps/runtime/src/events.rs` has
+ * The domain publishes no event of its own. the pre-merge implementation has
  * none for Git: the panel polls its operations, and the one thing a Git write
  * changes that another domain cares about is the *set* of repositories, which
  * is a discovery cache this module drops when a `file.changed` frame names a

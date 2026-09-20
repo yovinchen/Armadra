@@ -19,7 +19,7 @@ import type {
 /**
  * What one commit changed, for the commit graph's detail pane.
  *
- * A port of `apps/runtime/src/git/repository/commits.rs`. The file list and the
+ * A port of the pre-merge implementation. The file list and the
  * patch are deliberately separate requests: a commit can touch thousands of
  * files and a single file can be megabytes, so loading both at once would make
  * selecting a row in the graph an unbounded operation.

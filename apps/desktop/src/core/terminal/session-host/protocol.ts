@@ -3,12 +3,12 @@ import { createHash } from "node:crypto";
 /**
  * The named-pipe wire format of the Windows session host, in TypeScript.
  *
- * The host itself is still the Rust `crates/session-host` binary — R6 rewrites
- * it — so **this file is a second speaker on an existing wire, not a new
- * protocol**. Every constant, every field name and every derivation below is
- * pinned to `crates/session-host/src/{protocol,pipe,client}.rs`, and the tests
- * beside it use the Rust unit tests' own vectors so a drift is a failure here
- * rather than a Windows machine that cannot open a terminal.
+ * The host itself was the Rust session-host binary before R6 rewrote it in
+ * TypeScript — so this file was a second speaker on an existing wire, not a
+ * new protocol. Every constant, every field name and every derivation below
+ * is pinned to that pre-merge implementation, and the tests beside it use its
+ * unit tests' own vectors so a drift is a failure here rather than a Windows
+ * machine that cannot open a terminal.
  *
  * ## The frame
  *
@@ -257,11 +257,11 @@ export type HostErrorCode =
  * between two modules a CJS bundle loads at startup is the kind of thing that
  * works until the bundler reorders it.
  *
- * Optional on the wire: the Rust host of `crates/session-host` ignores
- * unknown fields and has no notion of this proof, so a build talking to it
- * sends the field and is not refused for it. The TypeScript host of
- * `src/session-host/` **requires** it. That asymmetry is what lets the two
- * hosts share one protocol major through R6.
+ * Optional on the wire: the pre-merge Rust host ignored unknown fields and
+ * had no notion of this proof, so a build talking to it sent the field and
+ * was not refused for it. The TypeScript host of `src/session-host/`
+ * **requires** it. That asymmetry is what let the two hosts share one
+ * protocol major through R6.
  */
 export interface HelloAuth {
   readonly nonce: string;

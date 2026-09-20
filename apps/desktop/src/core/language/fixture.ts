@@ -2,7 +2,7 @@
  * The harness the proxy tests drive: one {@link Hub} over a real child
  * process, plus a per-session inbox.
  *
- * A port of the `Harness` in `apps/runtime/src/language/tests/mux.rs`, against
+ * A port of the `Harness` in the pre-merge implementation, against
  * the same `tools/probes/mock-lsp.mjs`. These are not unit tests of a fake: a
  * Node process is started, framed JSON-RPC crosses a pipe, and the assertions
  * are about what a browser session would actually receive. The mock exists

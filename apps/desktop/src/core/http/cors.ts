@@ -6,7 +6,7 @@
  * still a loopback literal — this never widens to a hostname the network could
  * resolve, because a hostname is whatever somebody's `/etc/hosts` says.
  *
- * Ported from `apps/runtime/src/api/support.rs`.
+ * Ported from the pre-merge implementation.
  */
 export function isLoopbackOrigin(origin: string): boolean {
   return (

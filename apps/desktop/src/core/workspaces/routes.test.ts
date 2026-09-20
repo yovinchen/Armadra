@@ -12,7 +12,7 @@ import { type Fixture, fixture } from "./fixture";
 import { install } from "./routes";
 
 /**
- * The workspace routes, ported from `apps/runtime/src/api/tests/workspaces.rs`.
+ * The workspace routes, ported from the pre-merge implementation.
  *
  * The multipart import test of that file is not here: `POST
  * /api/workspaces/import` is R4's (the route table says so), and a test for a

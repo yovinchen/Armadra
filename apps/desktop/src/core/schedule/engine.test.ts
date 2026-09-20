@@ -1,6 +1,5 @@
 /**
- * 调度内核，逐条对着 Go Host 的
- * `apps/host/internal/automation/{engine,manual,recovery,history,agent_target}_test.go`。
+ * 调度内核，逐条对着合并前实现的调度用例。
  *
  * 这些用例守的不是「能不能跑起来」，而是那几条**只有在出错时才看得见**的规矩：
  * 改配置会作废批准、错过的窗口只补一次、同一个目标同时只有一次投递在飞、

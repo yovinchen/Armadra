@@ -3,7 +3,7 @@ import { requireExecution, validOid } from "./support";
 /**
  * Application-level Git execution policy, not an operating-system sandbox.
  *
- * A direct port of `apps/runtime/src/git/access.rs`. Worktree inspection may
+ * A direct port of the pre-merge implementation. Worktree inspection may
  * invoke clean filters even for `status`, so without the workspace's execution
  * grant only built-in metadata / index / object reads are admitted, and every
  * admitted command additionally runs with fsmonitor, hooks, signature checks

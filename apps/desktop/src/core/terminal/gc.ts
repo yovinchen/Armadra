@@ -174,7 +174,7 @@ export interface Adopted {
  * observed an exit code, and saying `exited` would invent one.
  *
  * The Rust Runtime does this inside the migration transaction
- * (`apps/runtime/src/db/mod.rs`); here it belongs to the terminal domain,
+ * (the pre-merge implementation); here it belongs to the terminal domain,
  * which is the note R0 left in `db/open.ts`.
  */
 export function failNonPersistentRows(

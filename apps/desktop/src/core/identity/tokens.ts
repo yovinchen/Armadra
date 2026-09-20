@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 /**
  * 身份域的原语：标识、密钥、哈希域、以及「这串东西长得像不像凭据」。
  *
- * 逐条对着 `apps/host/internal/identity/validation.go` 移植。三件事一个字都不能
+ * 逐条对着 合并前的实现移植。三件事一个字都不能
  * 改，否则旧 `host.db` 搬进统一库之后，已有的会话全部认证不上：
  *
  *   * 标识是 16 字节随机的小写十六进制（32 字符）；

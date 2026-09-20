@@ -5,12 +5,12 @@
  *
  * The design's phase table names four backends (`tmux`, `direct`,
  * `sessionHost`, `ssh`), which reads as four implementations of
- * {@link TerminalBackend}. The Rust Runtime does not have one: `api/terminals.rs`
+ * {@link TerminalBackend}. The Rust Runtime does not have one: the pre-merge implementation
  * builds `ssh_argv(&host)`, splits off argv[0] as the program, and hands the
  * rest to the *same* `SpawnRequest` a local terminal uses. The session that
  * results is a tmux session (or a direct pty) whose `backend_kind` is `tmux`,
  * running `ssh` as its command. There is no `SshBackend` in
- * `apps/runtime/src/terminal/`.
+ * the pre-merge implementation.
  *
  * Porting it as a fourth peer would therefore change behaviour in ways nothing
  * asked for: the row's `backend_kind` would become a fourth string the

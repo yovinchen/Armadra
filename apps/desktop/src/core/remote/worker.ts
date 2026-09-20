@@ -1,7 +1,7 @@
 /**
  * One live `ssh … worker --stdio` child, and the registry of them.
  *
- * Ported from `apps/runtime/src/remote/client/{mod,connection}.rs`, with the
+ * Ported from the pre-merge implementation, with the
  * payload encoding changed to JSON for the reasons {@link ./frames} sets out.
  *
  * The read half runs in its own callback rather than being "write one frame,

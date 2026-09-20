@@ -11,7 +11,7 @@ import {
 } from "./table";
 
 /**
- * The `workspaces` table, ported from `apps/runtime/src/db/tests/workspaces.rs`
+ * The `workspaces` table, ported from the pre-merge implementation
  * one test at a time.
  */
 describe("the workspaces table", () => {

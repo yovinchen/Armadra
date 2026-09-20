@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 /**
  * Where the core keeps everything that is not in the database.
  *
- * Resolved exactly the way `apps/runtime/src/paths.rs` resolves it, because the
+ * Resolved exactly the way the pre-merge implementation resolves it, because the
  * two implementations have to name the same directory: a machine that ran the
  * Rust Runtime yesterday and the TypeScript core today must find the same
  * `canvas.db`, the same `endpoints.json` and the same hook endpoint file.

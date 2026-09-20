@@ -1,6 +1,6 @@
 /**
  * The method allowlist, the write gate, the registry and settings — a port of
- * `apps/runtime/src/language/tests/policy.rs`.
+ * the pre-merge implementation.
  */
 
 import { describe, expect, it } from "vitest";

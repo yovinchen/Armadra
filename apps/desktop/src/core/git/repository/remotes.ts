@@ -10,7 +10,7 @@ import type { ExpectedState, ForceWithLease } from "./types";
  * The network traffic: fetch, fast-forward pull, push and the Sync that is all
  * three in one owned sequence.
  *
- * A port of `apps/runtime/src/git/repository/remotes.rs`. Two rules run through
+ * A port of the pre-merge implementation. Two rules run through
  * all of it: a diverged branch stops the sequence and is reported — nothing is
  * merged, rebased or force-pushed to make three steps "succeed" — and a force
  * push exists only as `--force-with-lease` against the exact remote OID the

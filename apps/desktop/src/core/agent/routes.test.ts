@@ -5,7 +5,7 @@ import { rfc3339 } from "../workspaces/support";
 import { type AgentFixture, agentFixture } from "./fixture";
 
 /**
- * Ported from `apps/runtime/src/api/tests/agents.rs` — the surfaces this
+ * Ported from the pre-merge implementation — the surfaces this
  * domain answers on the runtime listener.
  */
 

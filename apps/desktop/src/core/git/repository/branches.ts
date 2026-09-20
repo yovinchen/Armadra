@@ -21,7 +21,7 @@ import { sanitizeRepository } from "../support";
  * The three ref namespaces one checkout answers about: branches, tags and
  * remotes, plus the identity a commit from it would carry.
  *
- * Ports `branches.rs`, `refs.rs` and `identity.rs`. They share a file because
+ * Ports the pre-merge implementation. They share a file because
  * all four reads are one `for-each-ref` or one `git config` and nothing else,
  * and because every one of them is shaped by the same decision: an absent
  * value is `null`, never zero and never an error. A branch without an upstream

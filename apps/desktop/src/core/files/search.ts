@@ -7,7 +7,7 @@ import { symlinkMetadata } from "./stat";
 /**
  * Workspace file index and project-wide content search (E01/M4).
  *
- * A port of `apps/runtime/src/file_search.rs`. Two read-only surfaces the
+ * A port of the pre-merge implementation. Two read-only surfaces the
  * editor needs and the browser cannot provide:
  *
  *   * `indexFiles` backs 快速打开 — a fuzzy filename match over the workspace,
@@ -245,7 +245,7 @@ export interface SearchResult {
  * Translate one glob into an anchored regular expression.
  *
  * `**` crosses directory separators, `*` and `?` do not. A pattern with no `/`
- * matches the file name at any depth, which is what `*.rs` has to mean.
+ * matches the file name at any depth, which is what the pre-merge implementation has to mean.
  */
 export function globToRegex(pattern: string): string {
   if (pattern.length > 200) throw badRequest("Glob pattern is too long");

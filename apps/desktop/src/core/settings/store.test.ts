@@ -2,8 +2,8 @@
  * The store and the local split: patching, persistence, and which of the two
  * files a key lands in.
  *
- * Ported from the second half of `apps/runtime/src/settings/tests.rs` and from
- * `apps/runtime/src/settings/local.rs`'s own cases, plus one this side owes and
+ * Ported from the second half of the pre-merge implementation's test suite
+ * and its own cases, plus one this side owes and
  * the Rust side does not: the two implementations have to write the same bytes
  * for the same document, because during the changeover either of them may be
  * the one that wrote the file a person's next start reads.

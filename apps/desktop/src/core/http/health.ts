@@ -11,7 +11,7 @@ import { BUILD, instanceId } from "../instance";
  * adopted as the current one.
  *
  * The field list and their order are the Rust Runtime's, byte for byte
- * (`apps/runtime/src/api/health.rs`): the shell parses one document whichever
+ * (the pre-merge implementation): the shell parses one document whichever
  * implementation wrote it, and `/api/health` is the older spelling the
  * launcher script still uses.
  */

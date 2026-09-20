@@ -13,7 +13,7 @@ import { type ErrorResponse, coreError } from "../http/errors";
 /**
  * A refusal, carrying the status and the `code` the Rust Runtime answers with.
  *
- * The codes are not re-invented here: `apps/runtime/src/error.rs` maps its
+ * The codes are not re-invented here: the pre-merge implementation maps its
  * variants onto exactly these strings, the front end switches on them, and the
  * zod schemas in `packages/shared` are written against the `{ code, message }`
  * pair. In particular a 500 is `internal_error`, not `internal`.

@@ -40,8 +40,8 @@ export { CONTROL_SOCKET, TICKET_PATH, controlSocketPath } from "./control";
  * 这一轮 core 的实例标识，按身份域的拼法：32 位十六进制。
  *
  * `instanceId()` 是带连字符的 UUID，`/health` 与 `endpoints.json` 用的就是它，
- * 壳按那一行对账，所以它不能改。身份域这边继承的是 Go Host 的形状——票据、
- * 会话、以及 `packages/host-client` 校验 `hostInstanceId` 的那条正则，全都要
+ * 壳按那一行对账，所以它不能改。身份域这边继承的是合并前实现的形状——票据、
+ * 会话、以及前端校验 `hostInstanceId` 的那条正则，全都要
  * 32 位十六进制。去掉连字符正好是同一串字节的另一种写法，两边说的是同一次运行。
  */
 export function identityInstanceId(): string {

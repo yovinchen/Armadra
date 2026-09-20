@@ -11,7 +11,7 @@ import { badRequest, conflict, forbidden, notFound } from "./support";
 /**
  * Staging, unstaging, conflict resolution and restoring paths.
  *
- * A port of `apps/runtime/src/git/stage.rs`.
+ * A port of the pre-merge implementation.
  */
 
 export interface StageResult {

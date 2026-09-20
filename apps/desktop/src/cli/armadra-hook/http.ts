@@ -5,7 +5,7 @@
  * user, so there is no TLS, no redirect handling, no keep-alive and no
  * connection pool. `node:http` is not used because it reorders and rewrites
  * headers (`Host`, `Connection`, capitalisation) and the exact bytes are the
- * contract here: `crates/hook/tests/wire.rs` asserts the header list in order.
+ * contract here: the pre-merge implementation asserts the header list in order.
  */
 
 import * as net from "node:net";

@@ -5,7 +5,7 @@ import { rfc3339 } from "../workspaces/support";
 /**
  * `<workspace>/.armadra/board-log.jsonl` — the delivery trace.
  *
- * Ported from `apps/runtime/src/collab/board_log.rs`. Every delivery *and*
+ * Ported from the pre-merge implementation. Every delivery *and*
  * every refusal is traced, because the interesting question after the fact is
  * almost always "why did nothing arrive?". The message body is never written:
  * the log records that a message of N characters went from A to B and what

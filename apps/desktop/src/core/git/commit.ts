@@ -7,7 +7,7 @@ import { badRequest, conflict, internalError, sanitize } from "./support";
 /**
  * Reading HEAD, committing (including amend) and `git init`.
  *
- * A port of `apps/runtime/src/git/commit.rs`.
+ * A port of the pre-merge implementation.
  */
 
 export interface CommitResult {

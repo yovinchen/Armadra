@@ -1,7 +1,7 @@
 /**
  * `GET /api/usage/mini`.
  *
- * Ported from the `MiniUsage` cases in `apps/runtime/src/usage/mod.rs`. The
+ * Ported from the `MiniUsage` cases in the pre-merge implementation. The
  * empty case is the one this build actually serves — no provider module has
  * been written yet — so it is asserted first and in full.
  */

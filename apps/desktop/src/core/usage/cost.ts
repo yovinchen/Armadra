@@ -1,5 +1,5 @@
 /**
- * 本地成本统计。移植自 `apps/runtime/src/usage/cost/`。
+ * 本地成本统计。移植自 合并前的实现。
  *
  * Claude 和 Codex 都在磁盘上留下带每次请求 token 数的 JSONL 记录。这个模块把它们
  * 变成今天 / 近 30 天 / 当前会话的总数，加上按天、按模型的拆分，**全部在这台机器上**。
@@ -181,7 +181,7 @@ function openai(input: number, output: number, cacheRead: number): ModelPrice {
 }
 
 /**
- * 每百万 token 多少美元。和 `apps/runtime/src/usage/cost/pricing.rs` 的内建表逐行
+ * 每百万 token 多少美元。和 合并前的实现 的内建表逐行
  * 一致——同一台机器在两种 core 下必须算出同一个数字。
  */
 export const BUILT_IN_PRICES: Readonly<Record<string, ModelPrice>> = {

@@ -1,7 +1,7 @@
 /**
  * `settings.ssh.hosts[]` — what may be configured about a remote machine.
  *
- * Ported from the validation half of `apps/runtime/src/terminal/ssh/mod.rs`.
+ * Ported from the validation half of the pre-merge implementation.
  * Only the half that reads and normalises the settings document lives here;
  * actually reaching a host (`probe_host`, the argv builder, `known_hosts`) is
  * the terminal domain's, and arrives with it.

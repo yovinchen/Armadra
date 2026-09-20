@@ -6,7 +6,7 @@ import { badRequest, conflict, notFound, sanitize } from "./support";
 /**
  * Background `git clone` jobs: validation, progress and cancellation.
  *
- * A port of `apps/runtime/src/git/clone.rs`. Clone jobs exist before any
+ * A port of the pre-merge implementation. Clone jobs exist before any
  * workspace does, so they cannot hang off the per-workspace event hub; the
  * dialog polls `GET /api/git/clone/{jobId}` instead.
  */

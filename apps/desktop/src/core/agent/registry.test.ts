@@ -16,7 +16,7 @@ import {
   validAgentId,
 } from "./registry";
 
-/** Ported from the `mod tests` in `apps/runtime/src/agent.rs`. */
+/** Ported from the `mod tests` in the pre-merge implementation. */
 
 const NO_CUSTOM = { customAgents: () => [] };
 

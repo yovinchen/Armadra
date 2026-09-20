@@ -10,7 +10,7 @@ import { isReadonly, metadata } from "./stat";
 /**
  * Reading: the file tree, the editor's text read, and the raw download.
  *
- * A port of the read half of `apps/runtime/src/files.rs`. The three readers
+ * A port of the read half of the pre-merge implementation. The three readers
  * are deliberately separate rather than one reader with flags: the editor's
  * reader refuses binary and stops at the preview limit, both of which are
  * right for an editor and wrong for a picture, and the tree's reader never

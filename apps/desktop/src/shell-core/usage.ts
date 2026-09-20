@@ -1,6 +1,6 @@
 /**
  * The tray usage strip — roadmap §3.9「托盘迷你条」, ported from
- * the Rust shell's `usage.rs` with one change: the wording is no longer here.
+ * the Rust shell's 合并前的实现 with one change: the wording is no longer here.
  *
  * Two disabled menu items above the tray's actions: the most pressed session
  * window and the most pressed week window, each a short bar plus a percentage.

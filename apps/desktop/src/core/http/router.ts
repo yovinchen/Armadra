@@ -56,7 +56,7 @@ export interface HandlerResult {
   readonly body?: unknown;
   /** Extra response headers (content-type may be overridden here). */
   readonly headers?: Readonly<Record<string, string>>;
-  /** A pre-encoded body sent verbatim (protobuf, files); `body` is ignored. */
+  /** A pre-encoded body sent verbatim (files, assets); `body` is ignored. */
   readonly raw?: Buffer;
 }
 

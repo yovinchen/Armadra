@@ -1,6 +1,6 @@
 /**
- * The Rust `prompts.rs` test module, case for case, plus the redaction cases
- * that live in `security.rs` on that side.
+ * The Rust the pre-merge implementation test module, case for case, plus the redaction cases
+ * that live in the pre-merge implementation on that side.
  */
 
 import { describe, expect, it } from "vitest";

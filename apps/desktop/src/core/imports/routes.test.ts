@@ -14,7 +14,7 @@ import { IMPORTS_DIRECTORY } from "./limits";
 import { install } from "./routes";
 
 /**
- * Ported from `apps/runtime/src/api/tests/files.rs`:
+ * Ported from the pre-merge implementation:
  * `file_import_roundtrip_preserves_binary_bytes_and_download_boundary` and
  * `file_import_rejects_traversal_incomplete_payloads_and_readonly_workspaces`.
  */

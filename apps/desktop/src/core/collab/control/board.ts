@@ -15,7 +15,7 @@ import type { CollabContext } from "../service";
  * Loading and saving the board document, plus the placement and naming rules
  * every control verb shares.
  *
- * Ported from `apps/runtime/src/collab/control/board.rs`. Every mutating verb
+ * Ported from the pre-merge implementation. Every mutating verb
  * goes through the ordinary board document — load, edit, save with the same
  * CAS the web app uses — and then publishes `board.changed` so the canvas
  * reloads. The agent never touches the front end, and the front end never has

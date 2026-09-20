@@ -1,8 +1,7 @@
 /**
  * outbox 的三个答案，以及「补发的那一帧就是当初那一帧」。
  *
- * 对照的是 `apps/host/internal/eventstream/catchup.go` 与
- * `apps/host/internal/storage/events.go`：状态语义、游标推进、保留下限的裁剪。
+ * 对照的是合并前实现的对应模块：状态语义、游标推进、保留下限的裁剪。
  */
 
 import { readFileSync } from "node:fs";

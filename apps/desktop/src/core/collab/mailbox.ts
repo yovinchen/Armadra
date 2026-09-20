@@ -14,7 +14,7 @@ import { type CollabContext, nowSeconds } from "./service";
 /**
  * `armadra.mailbox.v1` — pull-only cooperation between two linked agents.
  *
- * Ported from `apps/runtime/src/collab/mailbox.rs`. A node posts a small
+ * Ported from the pre-merge implementation. A node posts a small
  * handoff, its peer reads it on demand and explicitly acknowledges it. No PTY,
  * hook state or provider configuration participates in delivery; the database
  * is the sole durable source of truth.

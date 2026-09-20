@@ -8,7 +8,7 @@ import { badRequest, notFound } from "../workspaces/support";
  * The whiteboard asset store: content-addressed, bounded, and served back
  * under a name nothing may turn into a path.
  *
- * A port of `apps/runtime/src/api/assets.rs`. Three of its decisions are the
+ * A port of the pre-merge implementation. Three of its decisions are the
  * whole design and are kept verbatim:
  *
  *   * **The name is the content.** `<sha256[..16]>.<ext>` means re-uploading

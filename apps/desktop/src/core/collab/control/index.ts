@@ -18,7 +18,7 @@ export type { Outcome } from "./outcome";
 /**
  * The thirteen canvas verbs, and the one function the Hook surface calls.
  *
- * Ported from `apps/runtime/src/collab/control/mod.rs`. The split of
+ * Ported from the pre-merge implementation. The split of
  * responsibilities with the Hook domain is deliberate and is the whole reason
  * {@link ControlDispatcher} exists: the Hook server owns the socket, the
  * bearer, the node token and the body limit, and once it has decided *who is

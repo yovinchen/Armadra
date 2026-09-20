@@ -22,7 +22,7 @@ import { type Outcome, result } from "./outcome";
 /**
  * Verbs that change what is already on the board: links, titles and colour.
  *
- * Ported from `apps/runtime/src/collab/control/edits.rs`. `link` is the one
+ * Ported from the pre-merge implementation. `link` is the one
  * with a second write: the edge goes into the board document *and* both link
  * documents, because the link document is what the context-link and mailbox
  * verbs authorise against. The two have to move in the same breath or an

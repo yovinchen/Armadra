@@ -1,5 +1,5 @@
 /**
- * GitHub API 凭据服务。移植自 `apps/host/internal/githubcred/`。
+ * GitHub API 凭据服务。移植自 合并前的实现。
  *
  * 它和 Worker 的 git 凭据处理是**两件事**：SSH 密钥和 git credential helper 属于
  * 执行主机，而 API 令牌属于这台机器。

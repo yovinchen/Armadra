@@ -64,7 +64,7 @@ function issueJson(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/** 移植自 `apps/host/internal/githubhost/service_test.go`。 */
+/** 移植自 合并前的实现。 */
 describe("GitHub 服务", () => {
   let fixture: GithubFixture;
 

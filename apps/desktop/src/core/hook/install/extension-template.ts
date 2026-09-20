@@ -145,7 +145,7 @@ const ARMADRA_TIMEOUT_MS = (() => {
     : 1500;
 })();
 
-// The same gate as \`crates/hook/src/endpoint.rs::is_valid_node_id\`: an id only
+// The same gate as the pre-merge implementation's: an id only
 // becomes part of a filesystem path after it passes this.
 function armadraIsValidId(value) {
   return (
@@ -166,7 +166,7 @@ function armadraText(value) {
 }
 
 // \`KEY='value'\` with POSIX single-quote escaping, mirroring
-// \`crates/hook/src/endpoint.rs::parse_endpoint_file\`.
+// the pre-merge implementation.
 function armadraUnquote(value) {
   if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
     return value.slice(1, -1).split("'\\\\''").join("'");
@@ -237,7 +237,7 @@ function armadraHeaders(session) {
 }
 
 // The \`terminalBinding.sourceRevision\` counter, byte for byte the format of
-// \`crates/hook/src/context_usage.rs::next_revision\`: 8 big-endian bytes
+// the pre-merge implementation: 8 big-endian bytes
 // followed by their bitwise inverse, incremented in place.
 //
 // The Rust client holds an advisory lock across the read-modify-write and

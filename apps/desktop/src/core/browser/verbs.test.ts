@@ -11,8 +11,8 @@ import { runBrowserVerb } from "./verbs";
 /**
  * The three authorization rules and the seventeen verbs.
  *
- * Ported from `apps/runtime/src/browser/tests/verbs.rs` and the capability
- * half of `tests/policy.rs`. Nothing here opens a socket: the drive channel is
+ * Ported from the pre-merge implementation and its capability tests.
+ * Nothing here opens a socket: the drive channel is
  * a stub, because what is worth testing on this side is which arguments travel
  * and who was allowed to send them.
  */

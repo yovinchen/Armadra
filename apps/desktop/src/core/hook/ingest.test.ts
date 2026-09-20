@@ -7,7 +7,7 @@ import { getApproval } from "./store";
 /**
  * The wire contract: what a report persists, broadcasts and leaves unread.
  *
- * Ported from `apps/runtime/src/hook/tests/{auth,reports}.rs`, against the
+ * Ported from the pre-merge implementation, against the
  * same payloads.
  */
 

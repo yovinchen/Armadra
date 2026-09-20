@@ -1,6 +1,6 @@
 /**
  * Shadow documents: ownership, versions and incremental edits — a port of
- * `apps/runtime/src/language/tests/documents.rs`.
+ * the pre-merge implementation.
  */
 
 import { describe, expect, it } from "vitest";

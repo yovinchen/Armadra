@@ -6,7 +6,7 @@ import { hardenDirectory, hardenFile } from "../../paths";
 /**
  * Detecting a usable tmux and rendering the configuration it is started with.
  *
- * Both are ports of `apps/runtime/src/terminal/tmux/config.rs`, byte for byte
+ * Both are ports of the pre-merge implementation, byte for byte
  * where the bytes are contractual: the conf is written to the same path the
  * Rust Runtime writes, and a machine that ran one yesterday and the other
  * today must not see its options change underneath a live server.

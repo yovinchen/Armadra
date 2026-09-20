@@ -15,7 +15,7 @@ import { DomainError } from "../workspaces/support";
 import { ImportBatch, fileInfo, relativePath } from "./batch";
 import { IMPORTS_DIRECTORY, MAX_FILE_BYTES } from "./limits";
 
-/** Ported from the test module of `apps/runtime/src/imports.rs`. */
+/** Ported from the test module of the pre-merge implementation. */
 
 function refuses(run: () => unknown): boolean {
   try {

@@ -15,7 +15,7 @@
  *    no UI at all — that is the entire point of the process — so the host has
  *    to answer, or the session deadlocks at creation and again at every close.
  *
- * A line-by-line port of `crates/session-host/src/replay.rs`, kept
+ * A line-by-line port of the pre-merge implementation, kept
  * line-by-line on purpose: {@link safeCut} is the kind of function whose bugs
  * are invisible until a user's screen has a replacement character in it
  * forever, and "the Rust one did it this way" is a far stronger argument than

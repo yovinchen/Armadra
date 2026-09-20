@@ -10,7 +10,7 @@ import {
 } from "./control";
 
 /**
- * Ported from `apps/runtime/src/collab/tests/verbs.rs` and `gates.rs`.
+ * Ported from the pre-merge implementation's control test suites.
  *
  * Every test goes through the {@link import("./control").ControlDispatcher},
  * which is exactly what the Hook surface calls once it has authenticated the

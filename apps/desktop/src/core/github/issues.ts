@@ -1,5 +1,5 @@
 /**
- * Issue 的那些动词。移植自 `apps/host/internal/githubhost/issues.go`。
+ * Issue 的那些动词。移植自 合并前的实现。
  */
 
 import {

@@ -1,6 +1,6 @@
 /**
  * git remote 与 API base 的本地解析。移植自
- * `apps/host/internal/githubapi/remote.go`。
+ * 合并前的实现。
  *
  * 全部在本地完成，在任何请求之前：属于另一个服务的 remote 不用联网就能认出来，
  * 这就是「企业版仓库不会被拿到公有服务上去查」的实现。

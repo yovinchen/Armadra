@@ -4,7 +4,7 @@ import { join, posix, win32 } from "node:path";
 import { dataDir, endpointsFile } from "./paths";
 
 /**
- * The resolution has to agree with `apps/runtime/src/paths.rs` on every
+ * The resolution has to agree with the pre-merge implementation on every
  * platform, not just the one the test happens to run on — the two processes
  * find each other's socket by computing the same path independently.
  */

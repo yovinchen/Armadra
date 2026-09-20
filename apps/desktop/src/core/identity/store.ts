@@ -6,7 +6,7 @@ import { ID_PATTERN, newId } from "./tokens";
 /**
  * 身份域的持久化，五张表、一个事务。
  *
- * 吸收自 `apps/host/internal/storage/identity.go`。表名列名都是 Host 的，所以
+ * 吸收自 合并前的实现。表名列名都是 Host 的，所以
  * 旧 `host.db` 搬进来的行在这里原样读得出来。
  *
  * 唯一一条不能松的规矩：**每次认证都读库**。没有任何内存缓存能比一次撤销活得

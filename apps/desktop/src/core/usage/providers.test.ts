@@ -18,7 +18,7 @@ import {
 
 const NOW = Date.parse("2026-09-20T00:00:00Z");
 
-/** 移植自 `apps/runtime/src/usage/{claude,codex,copilot,mod}.rs` 的用例。 */
+/** 移植自 合并前实现的用例。 */
 describe("凭据载荷里的令牌", () => {
   it("expiresAt 为 0 是「不按时钟过期」，不是 1970 年就过期了", () => {
     const payload = JSON.stringify({

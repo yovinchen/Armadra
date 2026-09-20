@@ -25,7 +25,7 @@ import { type BrowserSessionHandle, ensureSession } from "./session";
 /**
  * `POST /browser/{verb}` — an agent drives a browser node it is linked to.
  *
- * Ported from `apps/runtime/src/browser/agent/mod.rs`. Three rules, all of
+ * Ported from the pre-merge implementation. Three rules, all of
  * them checks rather than conventions:
  *
  *   * **Only a linked node.** The target must appear in the caller's own

@@ -30,7 +30,7 @@ import { TmuxBackend } from "./backend";
 
 /**
  * The tmux backend's specification, ported one for one from
- * `apps/runtime/src/terminal/tmux/tests.rs`.
+ * the pre-merge implementation.
  *
  * Everything that needs a live tmux server is guarded the same way the Rust
  * suite guards it — skipped when `tmux >= 3.2` is not on PATH — and binds its

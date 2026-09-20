@@ -12,7 +12,7 @@ import {
  * The `boards` table: listing, naming, creating, reordering and deleting the
  * boards of one workspace.
  *
- * A port of `apps/runtime/src/db/boards.rs`. `whiteboard_json` is read and
+ * A port of the pre-merge implementation. `whiteboard_json` is read and
  * written but never parsed — the core only ever knows its length (see
  * `validation.ts`), which is what lets a client change the snapshot format
  * without a core release.

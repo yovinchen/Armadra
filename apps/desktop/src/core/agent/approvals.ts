@@ -18,9 +18,8 @@ import { getAgentStatus } from "./status";
  * Permission answers — the round trip closed by an answer file, and the CAS
  * that makes it singular.
  *
- * Ported from `apps/runtime/src/collab/approvals.rs` and
- * `apps/runtime/src/db/approvals.rs`, with the cross-device rule the Go Host
- * added on top (`apps/host/internal/agenthost/approvals.go`).
+ * Carried over from the pre-merge implementation, with the cross-device rule
+ * the former Go Host added on top.
  *
  * **The order is the design.** A CLI that asks for permission stops: it is
  * blocked on a read of a file this process will write. Everything here exists

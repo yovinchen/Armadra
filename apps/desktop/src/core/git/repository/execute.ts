@@ -29,8 +29,8 @@ import { type ExpectedState, type RepositoryAction, resetFlag } from "./types";
 /**
  * Running one validated action to completion.
  *
- * A port of `apps/runtime/src/git/repository/execute.rs`, plus the tag and
- * remote writers that lived in `refs.rs`. The order at the top is the
+ * A port of the pre-merge implementation, plus the tag and
+ * remote writers that lived in the pre-merge implementation. The order at the top is the
  * important part and is unchanged: the repository is revalidated, HEAD is
  * compared with the state the caller reviewed, and — for everything that is
  * not itself an integration verb — an in-progress Git sequence is refused

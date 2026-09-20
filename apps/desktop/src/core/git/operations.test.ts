@@ -21,9 +21,7 @@ import { DomainError } from "../workspaces/support";
 /**
  * The operation queue and the conflict centre.
  *
- * Ported from `apps/runtime/tests/git_repository_{queue,branches,refs,remotes,
- * reset,merge,stash,worktrees}.rs` and
- * `apps/runtime/tests/git_repository_merge/`.
+ * Ported from the pre-merge implementation's git repository test suites.
  */
 
 afterAll(cleanupFixtures);

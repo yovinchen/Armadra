@@ -14,7 +14,7 @@ import { type Temporary, temporary } from "./workspace.fixture";
 import { writeTextFile } from "./write";
 
 /**
- * Ported from the write half of `apps/runtime/src/files.rs`'s test module.
+ * Ported from the write half of the pre-merge implementation's test module.
  *
  * `simultaneous_writers_cannot_both_replace_the_same_version` has no port: it
  * spawns two OS threads to prove the per-path gate closes the window between

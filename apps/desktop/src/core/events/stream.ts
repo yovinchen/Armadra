@@ -1,8 +1,8 @@
 /**
  * `WS /api/workspaces/{id}/events` — the per-workspace fan-out.
  *
- * Ported from `apps/runtime/src/events.rs` (`EventHub`) and
- * `apps/runtime/src/api/events.rs` (the socket loop). The acceptance test for
+ * Ported from the pre-merge implementation (`EventHub` and the socket loop).
+ * The acceptance test for
  * this file is `apps/web/src/api/events.ts`, which is not allowed to change: a
  * frame it cannot parse through `workspaceEventSchema` is a frame it drops.
  *

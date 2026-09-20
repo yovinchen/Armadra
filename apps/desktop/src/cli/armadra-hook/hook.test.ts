@@ -1,6 +1,6 @@
 /**
- * The 13 `crates/hook/src/hook.rs` unit tests plus the 3 from
- * `context_usage.rs`, translated, and the launcher's own cases.
+ * The 13 pre-merge unit tests plus the 3 from
+ * the pre-merge implementation, translated, and the launcher's own cases.
  */
 
 import * as fs from "node:fs";

@@ -22,7 +22,7 @@ import {
 } from "./index";
 import { clamp, collapse, readLines } from "./scan";
 
-/** Ported from `apps/runtime/src/index/tests.rs`. */
+/** Ported from the pre-merge implementation. */
 
 let directory: string;
 let database: DatabaseSync;
