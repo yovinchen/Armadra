@@ -7,6 +7,11 @@
     "noEmit": true,
     "allowJs": false
   },
-  "include": ["src/**/*.ts", "electron.vite.config.ts", "vitest.config.mts", "vitest.live.config.mts"],
+  "include": [
+    "src/**/*.ts",
+    "electron.vite.config.ts",
+    "vitest.config.mts",
+    "vitest.live.config.mts"
+  ],
   "exclude": ["node_modules", "out", "release", "resources"]
 }
