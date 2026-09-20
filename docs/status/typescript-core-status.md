@@ -1299,3 +1299,27 @@ releaseDrive(sessionId, actor): Lease;
 ### 26.7 一处已知的红
 
 `packages/shared` 的 `test/usage-dashboard.test.ts` 有一条 `ZodError`（`ranges` 缺失），在**未改动的基线上同样失败**，与本批无关。其余全绿：`@armadra/desktop`（2754 通过 / 6 跳过）、`@armadra/web`（2570）、`pnpm -r typecheck`、`pnpm check`。
+
+## 27. Agent 投递阶段 C+：界面那一侧的上下文读取预算（2026-09-21）
+
+设计是 [Agent 之间的推式投递与终端驱动](../design/agent-delivery.md) §10 新追加的两行。core 那一半（真正的摘要、`--since` 游标、读取预算、脱敏、审计表）由另一批落地，这一节只记**界面**这一侧：一个开关、一个徽标、一份线上类型。
+
+### 27.1 一个开关、一个徽标，回答的是同一件事的两端
+
+- **「允许相连 Agent 读取转录」**（`nodes/AgentSettingsDialog.tsx`）：写 `data.agent.contextShare`，开 = `full`（缺省，字段可以不存在），关 = `summary`——关掉不是「读不到」，是对方只拿得到一份 ≤2 KB 的摘要，所以两端都是一句完整的话而不是「删字段」。
+- **「被读取 N 次」**（`nodes/ContextReadsBadge.tsx`）：读 `GET /api/nodes/{id}/context-reads`，`total > 0` 才画，悬停列最近五条（谁、什么动词、多少字节、多久以前）。数字来自 core 的审计表，页面不按事件累加。`staleTime` 30 秒，节点折叠或已退出、窗口切后台时不轮询。
+- 少了任一半，另一半都没有意义：一个开关如果没有「被读过几次」这个事实，用户没有任何依据决定要不要关它。
+
+设计 §10 那张表里的「节点设置」一行在这之前没有落点——`inboxWake` 与 `acceptSubDelivery` 两个字段 core 早就在读，界面上一直没有入口。这一批顺手把那个家建起来：终端节点菜单的「Agent 设置…」打开一个对话框，三项（收件箱唤醒三档、允许从向我投递、允许相连 Agent 读取转录）都在里面，写入一律走 `canvas-store` 的 `updateNodeData`。
+
+### 27.2 core 还没就绪时，界面当作没有这件事
+
+`contextReads` 的失败（404 / 501 / 连不上）一律不画徽标、不弹提示、不重试：一个还没实现的读取审计不是用户要处理的故障。线上类型在 `packages/shared/src/api/context-reads.ts`（zod，camelCase，`readerName` 可空，只有元数据没有正文——一份「谁读过我」的清单说的是读这件事，不是内容）。
+
+### 27.3 验证
+
+组件测试两份：`AgentSettingsDialog.test.tsx`（三项的默认值与写回，关掉读取写的是 `summary` 而不是删字段，裸终端不开这个对话框）、`ContextReadsBadge.test.tsx`（零次不画、数字取自 core、悬停四要素、最多五条、404/501 静默、可见时 30 秒一次而折叠时不轮询）。
+
+全绿：`@armadra/shared`（29 个文件 163 条）、`@armadra/web`（266 个文件 2,623 条）、`pnpm --filter @armadra/web typecheck`、`pnpm -r typecheck`、`pnpm repo:check`、`pnpm ci:workflows`、`pnpm release:check`。
+
+一处已知的红不在本批改动面上：`pnpm format:check` 对 `apps/web/src/panels/usage/{Heatmap,MetricCards,UsagePanel}.tsx` 报格式问题，这三个文件在本批里**一个字节都没改**，基线 `bc7560c7` 上同样报。
