@@ -106,6 +106,7 @@ export const terminalAgentSchema = z.object({
    * the other direction.
    */
   acceptSubDelivery: z.boolean().optional(),
+  contextShare: z.enum(["full", "summary"]).optional(),
 });
 
 /**
