@@ -23,7 +23,6 @@ import { definition, baseAgent } from "./registry";
 import { listAgents } from "./list";
 import { loadSession } from "../collab/nodes";
 import { listContextReads } from "../collab/context-reads";
-import { type ContextUsageCache, contextUsage } from "../usage/context-usage";
 import {
   type ConfirmRequest,
   accept,
@@ -46,8 +45,8 @@ import { audit } from "../identity/audit";
 import type { CoreRequest, HandlerResult, RouteMatch } from "../http/router";
 
 /**
- * The runtime-surface routes the agent, collaboration, handoff, conversation
- * and context-usage domains own.
+ * The runtime-surface routes the agent, collaboration, handoff and
+ * conversation domains own.
  *
  * The hook surface is not here: `POST /control/{verb}`, `/context-link/{verb}`
  * and the automation doors belong to the Hook domain, which authenticates the
@@ -65,7 +64,6 @@ const MAX_CONTEXT_READS = 200;
 export interface AgentRouteDeps {
   readonly server: CoreServer;
   readonly collab: CollabContext;
-  readonly usage: ContextUsageCache;
 }
 
 export function installRoutes(deps: AgentRouteDeps): void {
@@ -435,52 +433,6 @@ export function installRoutes(deps: AgentRouteDeps): void {
           Number.isFinite(limit) && limit > 0
             ? Math.min(limit, MAX_CONTEXT_READS)
             : DEFAULT_CONTEXT_READS,
-        ),
-      };
-    }),
-  );
-
-  /* ------------------------------ context usage --------------------------- */
-
-  server.router.handle(
-    "GET",
-    "/api/workspaces/{workspaceId}/nodes/{nodeId}/context-usage",
-    answeredAsync(async (match, request) => {
-      const sessionId = request.query.get("sessionId");
-      const generation = Number.parseInt(
-        request.query.get("generation") ?? "",
-        10,
-      );
-      if (sessionId === null || sessionId === "") {
-        throw badRequest("sessionId is required");
-      }
-      if (!Number.isFinite(generation) || generation < 0) {
-        throw badRequest("generation is required");
-      }
-      const modelId = request.query.get("modelId");
-      return {
-        status: 200,
-        body: await contextUsage(
-          {
-            database,
-            settings: collab.settings,
-            cache: deps.usage,
-            ...(collab.terminals === undefined
-              ? {}
-              : {
-                  isCurrentNodeSession:
-                    collab.terminals.isCurrentNodeSession.bind(
-                      collab.terminals,
-                    ),
-                }),
-          },
-          param(match, "workspaceId"),
-          param(match, "nodeId"),
-          {
-            sessionId,
-            generation,
-            ...(modelId === null ? {} : { modelId }),
-          },
         ),
       };
     }),

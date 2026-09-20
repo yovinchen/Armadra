@@ -382,51 +382,16 @@ describe("hook mode", () => {
 });
 
 describe("context-usage", () => {
-  it("sends only bound metadata with a monotonic revision", async () => {
-    const directory = tempdir();
-    const server = await serve("HTTP/1.1 204 No Content\r\n\r\n");
-    const endpoint = writeEndpointFile(directory, server.port);
-    const sequences = path.join(directory, "context-sequences");
-    fs.mkdirSync(sequences);
-    if (process.platform !== "win32") fs.chmodSync(sequences, 0o700);
-    const seed = Buffer.alloc(16);
-    seed.writeBigUInt64BE(4n, 0);
-    seed.writeBigUInt64BE(~4n & 0xffff_ffff_ffff_ffffn, 8);
-    fs.writeFileSync(path.join(sequences, "session-1-2.seq"), seed);
-
-    const output = await run(
-      ["context-usage"],
-      {
-        ARMADRA_NODE_ID: "node-7",
-        ARMADRA_ENDPOINT_FILE: endpoint,
-        ARMADRA_SESSION_ID: "session-1",
-        ARMADRA_SESSION_GENERATION: "2",
-      },
-      '{"session_id":"provider-1","model":{"id":"fixture"},"transcript_path":"private-content",' +
-        '"context_window":{"context_window_size":200000,"current_usage":{"input_tokens":100,' +
-        '"cache_creation_input_tokens":20,"cache_read_input_tokens":30,"output_tokens":99}}}',
-    );
+  /**
+   * The subcommand is gone, but a `~/.claude/settings.json` written by an
+   * older build still calls it on every status refresh until a repair pass
+   * removes the line. It has to stay quiet and succeed.
+   */
+  it("is a silent no-op that still exits 0", async () => {
+    const output = await run(["context-usage"], {}, "{}");
     expect(output.code).toBe(0);
     expect(output.stdout).toBe("");
     expect(output.stderr).toBe("");
-
-    const captured = await server.request();
-    const body = JSON.parse(captured.body) as {
-      payload: {
-        armadraContextUsage: {
-          sessionId: string;
-          generation: number;
-          sourceRevision: string;
-        };
-      };
-    };
-    const report = body.payload.armadraContextUsage;
-    expect(report.sessionId).toBe("session-1");
-    expect(report.generation).toBe(2);
-    expect(report.sourceRevision).toBe("5");
-    expect(captured.body).not.toContain("private-content");
-    expect(captured.body).not.toContain("output_tokens");
-    server.close();
   });
 });
 

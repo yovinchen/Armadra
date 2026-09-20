@@ -33,7 +33,6 @@ export const AGENT_CAPABILITIES = [
   "subagent",
   "contextLink",
   "usage",
-  "contextUsage",
   "nativeRecurrence",
   "structuredInputAck",
   "supportsModelSelection",
@@ -127,7 +126,6 @@ export const AGENT_REGISTRY: readonly AgentDefinition[] = [
       "contextLink",
       "browser",
       "usage",
-      "contextUsage",
       "structuredInputAck",
       "supportsModelSelection",
     ],
@@ -138,15 +136,12 @@ export const AGENT_REGISTRY: readonly AgentDefinition[] = [
     color: "#10a37f",
     launchCmd: "codex",
     promptMode: "argv",
-    // `contextUsage` here is the *estimated* kind: codex writes a structured
-    // rollout we can read, but reports no live window.
     capabilities: [
       "hooks",
       "resume",
       "subagent",
       "contextLink",
       "browser",
-      "contextUsage",
       "structuredInputAck",
       "supportsModelSelection",
     ],
@@ -173,15 +168,12 @@ export const AGENT_REGISTRY: readonly AgentDefinition[] = [
     launchCmd: "pi",
     promptMode: "argv",
     // `hooks` means "there is a status source", not "there is a hooks key in a
-    // settings file": Pi's is an in-process extension on the same socket. Its
-    // `contextUsage` is the reported kind — the extension reads the live
-    // window instead of estimating one.
+    // settings file": Pi's is an in-process extension on the same socket.
     capabilities: [
       "hooks",
       "resume",
       "browser",
       "contextLink",
-      "contextUsage",
       "structuredInputAck",
       "supportsModelSelection",
     ],
@@ -198,7 +190,6 @@ export const AGENT_REGISTRY: readonly AgentDefinition[] = [
       "resume",
       "browser",
       "contextLink",
-      "contextUsage",
       "structuredInputAck",
       "supportsModelSelection",
     ],
@@ -209,9 +200,7 @@ export const AGENT_REGISTRY: readonly AgentDefinition[] = [
     color: "#a371f7",
     launchCmd: "copilot",
     promptMode: "flag-prompt",
-    // A command hook like Claude's. No `contextUsage`: Copilot has no status
-    // line, and whether its session events carry per-turn token counts is
-    // unverified — a capability is not declared from a document.
+    // A command hook like Claude's.
     capabilities: [
       "hooks",
       "resume",

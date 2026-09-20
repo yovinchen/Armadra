@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { filterData, nextRevision, statusLine } from "./context-usage.js";
+import { nextRevision } from "./binding.js";
 import {
   buildPayload,
   decisionOutput,
@@ -20,7 +20,7 @@ import {
   pollForAnswer,
   writeRequestFile,
 } from "./hook.js";
-import { asObject, canonicalJson, parseJson } from "./json.js";
+import { asObject, parseJson } from "./json.js";
 import type { JsonValue } from "./json.js";
 import { launcherFileName, launcherScript } from "./launcher.js";
 import { CLIENT_VERSION, MAX_PAYLOAD_BYTES } from "./usage.js";
@@ -168,47 +168,7 @@ describe("permission files", () => {
   });
 });
 
-describe("context usage", () => {
-  it("forwards only current context metadata", () => {
-    const input = parseJson(
-      '{"session_id":"s","model":{"id":"m","secret":"hidden"},"transcript_path":"private",' +
-        '"cost":{"total":500},"prompt":"private","context_window":{"total_input_tokens":99999999,' +
-        '"context_window_size":200000,"current_usage":{"input_tokens":100,' +
-        '"cache_creation_input_tokens":20,"cache_read_input_tokens":30,"output_tokens":90}}}',
-    );
-    const output = filterData(input)!;
-    const usage = asObject(
-      field(asObject(output)!["context_window"]!, "current_usage"),
-    )!;
-    expect(Object.keys(usage).length).toBe(3);
-    const text = canonicalJson(output);
-    expect(text).not.toContain("private");
-    expect(text).not.toContain("total_input");
-    expect(text).not.toContain("output_tokens");
-
-    const compact = asObject(parseJson(canonicalJson(input)))!;
-    asObject(compact["context_window"])!["current_usage"] = null;
-    expect(
-      field(asObject(filterData(compact))!["context_window"]!, "current_usage"),
-    ).toBeNull();
-  });
-
-  /**
-   * 状态行是用户自己那一行屏幕。`hook/install/claude.ts` 只在用户没有自己的状
-   * 态行时才写我们这条，外来的那条一个字节都不包装，所以这里追加什么都不会碰
-   * 到别人写的行（设计 §2.3）。
-   */
-  it("draws the node's name, and nothing at all without one", () => {
-    expect(statusLine("reviewer")).toBe("@reviewer");
-    expect(statusLine(" codex-1 ")).toBe("@codex-1");
-    expect(statusLine(undefined)).toBe("");
-    expect(statusLine("")).toBe("");
-    // 环境变量不是可信输入：一个带转义的「名字」会移动光标，不是画一行字。
-    expect(statusLine("bad[2Jname")).toBe("");
-    expect(statusLine("Reviewer")).toBe("");
-    expect(statusLine("x".repeat(25))).toBe("");
-  });
-
+describe("terminal binding", () => {
   it("keeps revisions monotonic across parallel allocations", () => {
     const file = path.join(tempdir(), "session.seq");
     const initial = Buffer.alloc(16);

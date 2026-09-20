@@ -21,7 +21,6 @@ import {
   noteAcknowledged,
   readForCaller,
 } from "../handoff/store";
-import { ContextUsageCache } from "../usage/context-usage";
 import { ORPHAN_MINUTES, pendingDir, sweepOrphans } from "./approvals";
 import { armProbeSweep } from "./probe";
 import { installRoutes } from "./routes";
@@ -29,7 +28,7 @@ import { installHookBridge } from "./hook-bridge";
 
 /**
  * The agent domain's assembly point — agent status, approvals, collaboration,
- * handoff, the conversations index and context usage.
+ * handoff and the conversations index.
  *
  * Three things are published from here rather than registered as routes,
  * because the Hook surface (its own domain, its own credentials, its own body
@@ -39,8 +38,7 @@ import { installHookBridge } from "./hook-bridge";
  *   * {@link import("../collab/control").ControlDispatcher} — the thirteen
  *     canvas verbs;
  *   * {@link contextLinkReader} — `context list | summary | transcript |
- *     terminal`;
- *   * {@link contextUsageCache} — where a provider's live window report lands.
+ *     terminal`.
  *
  * The terminal bridge is the other direction: this domain needs a PTY for
  * `interrupt`, `close`, the terminal read and the title suggestion, and it
@@ -50,7 +48,6 @@ import { installHookBridge } from "./hook-bridge";
  */
 
 let assembled: CollabContext | undefined;
-const usage = new ContextUsageCache();
 
 /**
  * 出队泵（设计 `agent-delivery.md` §4.6）。上下文现取，因为
@@ -66,11 +63,6 @@ export function sendPump(): SendPump {
 /** The collaboration context of the running core, for the Hook domain. */
 export function collab(): CollabContext | undefined {
   return assembled;
-}
-
-/** Where a provider's live context-window report lands. */
-export function contextUsageCache(): ContextUsageCache {
-  return usage;
 }
 
 /**
@@ -149,7 +141,7 @@ export function install(context: CoreContext): CollabContext {
   };
   assembled = withHandoff;
   setControlDispatcher(createControlDispatcher(withHandoff));
-  installRoutes({ server: context.server, collab: withHandoff, usage });
+  installRoutes({ server: context.server, collab: withHandoff });
   // The hook surface authenticates; these two families answer.
   installHookBridge(context.db.database, contextLinkReader);
   // The skill half of the install unit (docs/design/agent-integration.md §2).
@@ -201,5 +193,4 @@ export function install(context: CoreContext): CollabContext {
   return withHandoff;
 }
 
-export { ContextUsageCache } from "../usage/context-usage";
 export type { CollabContext } from "../collab/service";

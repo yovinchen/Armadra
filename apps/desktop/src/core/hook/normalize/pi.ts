@@ -28,11 +28,9 @@ import {
  *     another loop straight after it, and OMP even says so with
  *     `willContinue`.
  *   * **compaction.** `session_compact`, `auto_compaction_end` and
- *     `model_select` say nothing about what the node is doing; they are
- *     subscribed so the extension can push a fresh `getContextUsage()`
- *     reading, which travels on the separate `armadraContextUsage` payload.
- *     Here they are deliberately dropped: reporting `working` for a background
- *     compaction would drag an idle node out of the state the idle gate reads.
+ *     `model_select` say nothing about what the node is doing and are
+ *     deliberately dropped: reporting `working` for a background compaction
+ *     would drag an idle node out of the state the idle gate reads.
  *
  * `tool_call` is observed and never blocked. Pi lets a handler stop a tool,
  * but Armadra's permission semantics are "the CLI is asking"; §3.5 forbids
@@ -97,7 +95,7 @@ export function normalize(
     case "tool_approval_resolved":
       event = stateEvent(nodeId, agentId, WORKING);
       break;
-    // Context-only events: see the module note.
+    // Events that say nothing about the node's state: see the module note.
     default:
       return undefined;
   }

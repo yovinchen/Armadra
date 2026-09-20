@@ -8,7 +8,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { HOOK_CLIENT_REVISION, OPENCODE_CONTEXT_EVENTS } from "./events";
+import { HOOK_CLIENT_REVISION } from "./events";
 import { opencodePluginSource } from "./extension-template";
 import {
   installOpencode,
@@ -52,11 +52,7 @@ describe("the opencode plugin", () => {
    * cannot. Both halves have to be in the file for either claim to hold.
    */
   it("connects in process and keeps the spawn fallback", () => {
-    const source = opencodePluginSource(
-      "opencode",
-      CLIENT,
-      OPENCODE_CONTEXT_EVENTS,
-    );
+    const source = opencodePluginSource("opencode", CLIENT);
     // bun's transport first — that is what opencode runs on — then node's,
     // then the loopback port the endpoint file may carry.
     expect(source).toContain("unix: session.sock");
@@ -71,8 +67,6 @@ describe("the opencode plugin", () => {
     expect(source).toContain("context-sequences");
     // The route stays opencode's own.
     expect(source).toContain('"/hook/" + ARMADRA_AGENT');
-    // opencode gives a plugin no live window, so nothing is ever pushed.
-    expect(source).toContain("const ARMADRA_CONTEXT_EVENTS = [];");
     // And the bus hook never returns a decision to opencode (§3.5).
     expect(source).not.toContain("permissionDecision");
     expect(source).not.toContain('"deny"');
@@ -114,7 +108,6 @@ describe("the opencode plugin", () => {
     const source = opencodePluginSource(
       "opencode",
       String.raw`C:\Program Files\armadra\armadra-hook.exe`,
-      OPENCODE_CONTEXT_EVENTS,
     );
     expect(source).toContain(
       String.raw`C:\\Program Files\\armadra\\armadra-hook.exe`,

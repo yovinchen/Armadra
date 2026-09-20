@@ -63,9 +63,8 @@ import {
  * Because it is asynchronous, a `notification` is never a fence: it is not
  * subscribed to gate anything, and nothing waits on its exit code.
  *
- * **`preCompact`** would bump a compaction epoch, and Copilot declares no
- * `contextUsage` for it to reset (§4). Claude's `PreCompact` is dropped for
- * the same reason.
+ * **`preCompact`** says nothing about what the node is doing, so it is
+ * dropped. Claude's `PreCompact` is dropped for the same reason.
  *
  * `preToolUse` never appears here because it is never subscribed: it is
  * Copilot's only blocking event and a non-zero exit denies the tool (§6).

@@ -27,12 +27,6 @@ export interface RouteEntry {
 }
 
 export const ROUTES: readonly RouteEntry[] = [
-  {
-    path: "/api/workspaces/{workspaceId}/nodes/{nodeId}/context-usage",
-    methods: ["GET"],
-    surface: "runtime",
-    implemented: true,
-  },
   // 「被读取 N 次」：谁读过这个节点的上下文（设计 agent-delivery.md §13）。
   // 不挂在工作空间下，因为它问的是一个节点的历史，而节点 id 全局唯一。
   {
@@ -990,11 +984,6 @@ export const ROUTES: readonly RouteEntry[] = [
   },
   {
     path: "/automation/session-title",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/session-context-usage",
     methods: ["POST"],
     surface: "hook",
   },

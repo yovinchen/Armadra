@@ -61,7 +61,6 @@ export const USAGE = `armadra-hook — Armadra hook client
 
 USAGE:
   armadra-hook <agentId>                       report a hook event (payload on stdin)
-  armadra-hook context-usage                  report Claude status-line context metadata
   armadra-hook context <verb> [options]        read a linked node's context
   armadra-hook canvas <verb> [--flag value]    drive the canvas
   armadra-hook browser <verb> [--flag value]   drive a linked browser node
@@ -142,8 +141,8 @@ ENVIRONMENT:
   ARMADRA_AGENT_ID         provider id of the CLI running in this terminal
   ARMADRA_NODE_NAME        this node's name on the board; unset when unnamed
   ARMADRA_NODE_ROLE        main (has subs) / sub (has a main); unset among peers
-  ARMADRA_SESSION_ID       terminal session binding for context observations
-  ARMADRA_SESSION_GENERATION  terminal generation for context observations
+  ARMADRA_SESSION_ID       terminal session binding carried by hook reports
+  ARMADRA_SESSION_GENERATION  terminal generation carried by hook reports
   ARMADRA_ENDPOINT_FILE    path to the 0600 endpoint file
   ARMADRA_CANVAS_CONTROL   set to 1 when this node may drive the canvas
   ARMADRA_PERM_WAIT_SECS   >0 enables in-hook permission answering (claude only)

@@ -24,7 +24,6 @@
  */
 
 import { runBrowser, runCanvas, runContext } from "./control.js";
-import { run as runContextUsage } from "./context-usage.js";
 import { run as runDoctor } from "./doctor.js";
 import { run as runHook } from "./hook.js";
 import { CLIENT_VERSION, USAGE } from "./usage.js";
@@ -48,7 +47,12 @@ export async function main(argv: string[]): Promise<number> {
     case "context":
       return runContext(argv.slice(1));
     case "context-usage":
-      return runContextUsage();
+      // Retired with the context readout, kept as a silent success: a
+      // `settings.json` written by an older build still names it in its
+      // `statusLine`, and until a repair pass takes that line out Claude runs
+      // this on every status refresh. Anything printed — an error above all —
+      // would land on the user's screen several times a second.
+      return 0;
     case "canvas":
       return runCanvas(argv.slice(1));
     case "browser":

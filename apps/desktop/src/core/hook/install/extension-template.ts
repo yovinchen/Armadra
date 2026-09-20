@@ -23,8 +23,8 @@ import { HOOK_CLIENT_REVISION } from "./events";
  * plugin used before it spoke to the socket directly.
  *
  * The generator is split so the two shapes can share: {@link transportPrelude}
- * is the provider-agnostic half (endpoint, token, sequence, transport, the two
- * `armadraReport*` entry points) and the wirings below are each CLI's own.
+ * is the provider-agnostic half (endpoint, token, sequence, transport and the
+ * `armadraReport` entry point) and the wirings below are each CLI's own.
  *
  * The bodies are generated text, not source this build runs, which is why they
  * are template literals rather than modules: they have to be byte-identical to
@@ -57,23 +57,15 @@ function jsStringArray(values: readonly string[]): string {
 
 /**
  * The provider-agnostic half of the module: constants, endpoint reading,
- * sequence allocation, both transports, and the two entry points
- * `armadraReport(payload)` and `armadraReportContextUsage(ctx)`.
- *
- * `contextEvents` may be empty for a provider with no live window to read;
- * `armadraReportContextUsage` is then simply never called.
+ * sequence allocation, both transports, and the `armadraReport(payload)`
+ * entry point.
  */
-export function transportPrelude(
-  agentId: string,
-  clientBin: string,
-  contextEvents: readonly string[],
-): string {
+export function transportPrelude(agentId: string, clientBin: string): string {
   return (
     `${PRELUDE_HEADER}\n` +
     `const ARMADRA_CLIENT = "${jsString(clientBin)}";\n` +
     `const ARMADRA_AGENT = "${jsString(agentId)}";\n` +
     `const ARMADRA_CLIENT_REVISION = "${HOOK_CLIENT_REVISION}";\n` +
-    `const ARMADRA_CONTEXT_EVENTS = ${jsStringArray(contextEvents)};\n` +
     PRELUDE_BODY
   );
 }
@@ -86,10 +78,9 @@ export function piExtensionSource(
   agentId: string,
   clientBin: string,
   events: readonly string[],
-  contextEvents: readonly string[],
 ): string {
   return (
-    `${transportPrelude(agentId, clientBin, contextEvents)}\n` +
+    `${transportPrelude(agentId, clientBin)}\n` +
     `const ARMADRA_EVENTS = ${jsStringArray(events)};\n` +
     PI_WIRING
   );
@@ -99,9 +90,8 @@ export function piExtensionSource(
 export function opencodePluginSource(
   agentId: string,
   clientBin: string,
-  contextEvents: readonly string[],
 ): string {
-  return `${transportPrelude(agentId, clientBin, contextEvents)}\n${OPENCODE_WIRING}`;
+  return `${transportPrelude(agentId, clientBin)}\n${OPENCODE_WIRING}`;
 }
 
 const PRELUDE_HEADER = `// Armadra — agent status reporter.
@@ -459,58 +449,6 @@ async function armadraReport(payload) {
   }
   await armadraSpawn(payloadText);
 }
-
-// \`ctx.getContextUsage()\` gives one already-summed number, so it lands in the
-// first of the runtime's three disjoint buckets and the other two are zero;
-// the runtime adds them and gets exactly that number back. A null \`tokens\` —
-// what the CLI reports between a compaction and the next response — is
-// forwarded as a null \`current_usage\`, which is what tells the runtime the
-// previous reading no longer describes this session.
-function armadraContextData(ctx) {
-  const providerSession = armadraText(ctx?.sessionManager?.getSessionId?.());
-  const modelId = armadraText(ctx?.model?.id);
-  if (!providerSession || !modelId) return undefined;
-  let usage;
-  try {
-    usage = ctx?.getContextUsage?.();
-  } catch {
-    return undefined;
-  }
-  const capacity =
-    usage && Number.isSafeInteger(usage.contextWindow) && usage.contextWindow > 0
-      ? usage.contextWindow
-      : null;
-  const window = { context_window_size: capacity };
-  if (usage) {
-    const tokens = usage.tokens;
-    window.current_usage =
-      Number.isSafeInteger(tokens) && tokens >= 0
-        ? { input_tokens: tokens, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
-        : null;
-  }
-  return { session_id: providerSession, model: { id: modelId }, context_window: window };
-}
-
-/** Report the live context window. Never throws and never rejects. */
-async function armadraReportContextUsage(ctx) {
-  const session = armadraSession();
-  if (!session) return;
-  const data = armadraContextData(ctx);
-  if (!data) return;
-  const binding = armadraNextRevision(session);
-  if (!binding) return;
-  let bodyText;
-  try {
-    bodyText = JSON.stringify({
-      nodeId: session.nodeId,
-      version: 1,
-      payload: { armadraContextUsage: { ...binding, data } },
-    });
-  } catch {
-    return;
-  }
-  await armadraPost(session, "/hook/" + ARMADRA_AGENT, bodyText);
-}
 `;
 
 const PI_WIRING = `
@@ -540,9 +478,6 @@ function armadraPayload(name, event, ctx) {
 
 async function armadraHandle(name, event, ctx) {
   try {
-    if (ARMADRA_CONTEXT_EVENTS.includes(name)) {
-      await armadraReportContextUsage(ctx);
-    }
     await armadraReport(armadraPayload(name, event, ctx));
   } catch {
     // Reporting is best effort; a handler that threw would reach the CLI.

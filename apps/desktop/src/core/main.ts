@@ -140,9 +140,9 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // GitHub after identity: its two faces authenticate every call against the
   // identity store, and it reads `store_meta.host_id` at assembly time.
   installGithub,
-  // Agents before terminals: the collaboration verbs and the context-usage
-  // cache have to exist before a PTY can report into them, and the terminal
-  // domain hands its bridge back through `agent/setTerminalBridge`.
+  // Agents before terminals: the collaboration verbs have to exist before a
+  // PTY can report into them, and the terminal domain hands its bridge back
+  // through `agent/setTerminalBridge`.
   installAgents,
   // 模型域在 Agent 域之后：`GET /api/agents/{id}/models` 要问 Agent 注册表这个
   // id 是谁、启动程序是什么。它自己只读磁盘上的目录缓存，网络那一趟等到第一次

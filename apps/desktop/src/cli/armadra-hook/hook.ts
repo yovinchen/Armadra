@@ -11,7 +11,7 @@ import * as path from "node:path";
 
 import { envVar, isValidNodeId, pendingDir } from "./endpoint.js";
 import type { Endpoint } from "./endpoint.js";
-import { loadBinding } from "./context-usage.js";
+import { loadBinding } from "./binding.js";
 import { canonicalJsonBytes, parseJson } from "./json.js";
 import type { JsonValue } from "./json.js";
 import { postJsonRequest, send as httpSend } from "./http.js";

@@ -34,7 +34,6 @@ import {
   createControlDispatcher,
   setControlDispatcher,
 } from "../collab/control";
-import { ContextUsageCache } from "../usage/context-usage";
 import { installRoutes } from "./routes";
 
 /**
@@ -147,7 +146,6 @@ export interface AgentFixture {
   readonly boardId: string;
   readonly collab: CollabContext;
   readonly terminal: StubTerminal;
-  readonly usage: ContextUsageCache;
   /** Every workspace event published, in order. */
   readonly events: { workspaceId: string; event: WorkspaceEvent }[];
   /** Node ids the collaboration context asked the send pump to look at. */
@@ -201,7 +199,6 @@ export function agentFixture(): AgentFixture {
 
   const events: { workspaceId: string; event: WorkspaceEvent }[] = [];
   const terminal = stubTerminal();
-  const usage = new ContextUsageCache();
   const customAgents: CustomAgent[] = [];
   const settings: AgentSettings = { customAgents: () => customAgents };
   const state = { watchers: 0 };
@@ -236,7 +233,7 @@ export function agentFixture(): AgentFixture {
       readForCaller(collab, caller, id, sessionId, generation),
   };
   setControlDispatcher(createControlDispatcher(collab));
-  installRoutes({ server, collab, usage });
+  installRoutes({ server, collab });
 
   const insertNode = (type: string, title: string, data: unknown): string => {
     const id = uuidV7();
@@ -258,7 +255,6 @@ export function agentFixture(): AgentFixture {
     boardId: board.id,
     collab,
     terminal,
-    usage,
     events,
     nudged,
     get watchers() {

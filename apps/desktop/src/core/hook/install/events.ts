@@ -134,32 +134,3 @@ export const COPILOT_HOOK_EVENTS = [
   "preCompact",
   "sessionEnd",
 ] as const;
-
-/**
- * Handlers that also push a `ctx.getContextUsage()` reading. Pi's own
- * documentation calls `agent_settled` the event a status integration should
- * use, and the compaction/model events are the two moments an existing reading
- * stops describing the session.
- */
-export const PI_CONTEXT_EVENTS = [
-  "agent_end",
-  "agent_settled",
-  "session_compact",
-  "model_select",
-] as const;
-
-/**
- * Oh My Pi 18.x settles through `session_stop` rather than `agent_settled` and
- * compacts through `auto_compaction_end`; both are added to Pi's list.
- */
-export const OMP_CONTEXT_EVENTS = [
-  "agent_end",
-  "agent_settled",
-  "session_stop",
-  "session_compact",
-  "auto_compaction_end",
-  "model_select",
-] as const;
-
-/** opencode exposes no live context window, so no handler pushes a reading. */
-export const OPENCODE_CONTEXT_EVENTS: readonly string[] = [];

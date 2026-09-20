@@ -36,7 +36,6 @@ export const AGENT_CAPABILITIES = [
   "subagent",
   "contextLink",
   "usage",
-  "contextUsage",
   "nativeRecurrence",
   "structuredInputAck",
   "supportsModelSelection",

@@ -131,7 +131,7 @@ describe("the agent registry", () => {
           label: "Narrow",
           launchCmd: "wrapper",
           baseAgent: "claude",
-          disabledCapabilities: ["resume", "contextUsage", "invented"],
+          disabledCapabilities: ["resume", "usage", "invented"],
         },
         {
           id: "custom:unknown",
@@ -142,9 +142,7 @@ describe("the agent registry", () => {
       ],
     };
     expect(hasCapability(settings, "custom:narrow", "resume")).toBe(false);
-    expect(hasCapability(settings, "custom:narrow", "contextUsage")).toBe(
-      false,
-    );
+    expect(hasCapability(settings, "custom:narrow", "usage")).toBe(false);
     expect(hasCapability(settings, "custom:narrow", "hooks")).toBe(true);
     // A base that does not have it cannot be given it by not disabling it.
     expect(hasCapability(settings, "custom:narrow", "invented")).toBe(false);
@@ -153,9 +151,10 @@ describe("the agent registry", () => {
   });
 
   it("answers capabilities for a built-in from the registry alone", () => {
-    expect(hasCapability(NO_CUSTOM, "claude", "contextUsage")).toBe(true);
-    // Copilot has no status line; the capability is not declared from a doc.
-    expect(hasCapability(NO_CUSTOM, "copilot", "contextUsage")).toBe(false);
+    expect(hasCapability(NO_CUSTOM, "claude", "usage")).toBe(true);
+    // Copilot has no account-usage adapter; the capability is not declared
+    // from a doc.
+    expect(hasCapability(NO_CUSTOM, "copilot", "usage")).toBe(false);
     expect(hasCapability(NO_CUSTOM, "gemini", "hooks")).toBe(false);
     // A `custom:` id with no stored entry is nobody.
     expect(hasCapability(NO_CUSTOM, "custom:ghost", "hooks")).toBe(false);

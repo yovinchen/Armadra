@@ -215,7 +215,7 @@ export function asRecord(env: EnvPairs): Record<string, string> {
  * The four variables an agent terminal is told about at creation (contract §5,
  * item 5, first four). `ARMADRA_SESSION_ID` and `ARMADRA_SESSION_GENERATION`
  * are the other two and are added by {@link contextSessionEnvironment}, which
- * is where the telemetry sequence they index is initialised.
+ * is where the revision sequence they index is initialised.
  *
  * `ARMADRA_NODE_NAME` joins them when this node has a name on its board
  * (`docs/design/agent-delivery.md` §2.4): the model has to be able to answer
@@ -255,17 +255,15 @@ export function agentEnvironment(
 }
 
 /**
- * Adds the session identity an agent's context-usage reports are keyed by.
+ * Adds the session identity a hook report's `terminalBinding` is keyed by, and
+ * that `canvas handoff-read` / `ack` prove themselves with.
  *
  * Only for a session that has a node: without one there is nothing to
  * attribute a report to. The pair is replaced rather than appended on a
  * recycle, so a session can never carry two generations at once.
  *
- * R3 owns the sequence file this initialises; until then the variables are
- * injected and nothing reads them, which is the same order the Rust side grew
- * in. `initializeSequence` is therefore a parameter: the caller supplies it
- * when it exists, and a failure to initialise never prevents a user's terminal
- * from starting.
+ * `initializeSequence` is a parameter because a failure to initialise the
+ * revision counter must never prevent a user's terminal from starting.
  */
 export function contextSessionEnvironment(
   env: EnvPairs,

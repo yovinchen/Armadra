@@ -2,10 +2,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   HOOK_CLIENT_REVISION,
-  OMP_CONTEXT_EVENTS,
   OMP_HOOK_EVENTS,
-  OPENCODE_CONTEXT_EVENTS,
-  PI_CONTEXT_EVENTS,
   PI_HOOK_EVENTS,
 } from "./events";
 import { opencodePluginSource, piExtensionSource } from "./extension-template";
@@ -85,8 +82,7 @@ export function installPi(
 ): InstallReport {
   const path = piExtensionPath(configHome);
   const events = agentId === "omp" ? OMP_HOOK_EVENTS : PI_HOOK_EVENTS;
-  const context = agentId === "omp" ? OMP_CONTEXT_EVENTS : PI_CONTEXT_EVENTS;
-  writeAtomically(path, piExtensionSource(agentId, clientBin, events, context));
+  writeAtomically(path, piExtensionSource(agentId, clientBin, events));
   return installed(agentId, path, clientBin);
 }
 
@@ -95,10 +91,7 @@ export function installOpencode(
   clientBin: string,
 ): InstallReport {
   const path = opencodePluginPath(configHome);
-  writeAtomically(
-    path,
-    opencodePluginSource("opencode", clientBin, OPENCODE_CONTEXT_EVENTS),
-  );
+  writeAtomically(path, opencodePluginSource("opencode", clientBin));
   return installed("opencode", path, clientBin);
 }
 

@@ -165,15 +165,6 @@ export function ingest(
   }
 
   const payload = request.payload ?? null;
-  if (
-    typeof payload === "object" &&
-    payload !== null &&
-    "armadraContextUsage" in payload
-  ) {
-    // Context telemetry rides the same route and is the context-usage domain's
-    // to read; a report that carries one says nothing about the node's state.
-    return ACCEPTED;
-  }
   if (!hasCapability(agentId, "hooks")) return ACCEPTED;
 
   const event = normalizeAs(provider, agentId, nodeId, payload);
