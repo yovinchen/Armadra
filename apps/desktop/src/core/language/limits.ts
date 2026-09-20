@@ -19,6 +19,13 @@ export const reason = {
   IDLE: "idle",
   USER: "user",
   CRASHED: "crashed",
+  /**
+   * The server started, read `initialize`, and refused it. That is not a
+   * crash: the process was fine and it said exactly what was wrong — a
+   * missing toolchain, an unreadable project — so the answer carries its own
+   * message instead of the word "crashed".
+   */
+  INITIALIZE_FAILED: "initialize_failed",
   RESTART_BUDGET_EXHAUSTED: "restart_budget_exhausted",
   WORKSPACE_CLOSED: "workspace_closed",
   /** The remote execution host's language link went away. */

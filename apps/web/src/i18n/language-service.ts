@@ -56,6 +56,7 @@ export const languageService: MessageModule = {
     "lsp.reason.idle": "空闲超时",
     "lsp.reason.user": "已手动停止",
     "lsp.reason.crashed": "进程异常退出",
+    "lsp.reason.initialize_failed": "server 拒绝了初始化",
     "lsp.reason.restart_budget_exhausted": "重启次数已用尽",
     "lsp.reason.workspace_closed": "工作区已关闭",
 
@@ -160,6 +161,7 @@ export const languageService: MessageModule = {
     "lsp.reason.idle": "Idle timeout",
     "lsp.reason.user": "Stopped by hand",
     "lsp.reason.crashed": "The process exited unexpectedly",
+    "lsp.reason.initialize_failed": "The server refused to initialise",
     "lsp.reason.restart_budget_exhausted": "Out of restart attempts",
     "lsp.reason.workspace_closed": "The workspace was closed",
 

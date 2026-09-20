@@ -212,6 +212,20 @@ describe("language/mux", () => {
     );
   });
 
+  it("a refused initialize keeps the server's own words", async () => {
+    const test = start(["--refuse-initialize"]);
+    test.join("a", true);
+    // Not `crashed`: the process was fine and said why it could not serve the
+    // project. Losing that sentence leaves the panel with nothing to show.
+    expect(await test.hub.ensureStarted()).toBe("initialize_failed");
+    expect(test.hub.state).toBe("crashed");
+    expect(test.hub.reason).toBe("initialize_failed");
+    const reported = test.serverEvents.findLast(
+      (event) => event.stderrTail !== undefined,
+    );
+    expect(reported?.stderrTail).toContain("valid mock installation");
+  });
+
   it("a session gets its initialize answered from cache", async () => {
     const test = start();
     test.join("a", true);

@@ -85,20 +85,20 @@ function createWorkspace(
  * which the launch path spells as an executable plus arguments — so the
  * argument goes in the settings override, where a user's own `args` lives.
  */
-function plantMockServer(): void {
+function plantMockServer(program: string = process.execPath): void {
   const settings = settingsDomain()?.settings;
   if (settings === undefined) throw new Error("settings are not assembled");
   settings.patch({
     language: {
       servers: {
-        marksman: { path: process.execPath, args: [MOCK_LSP] },
+        marksman: { path: program, args: [MOCK_LSP] },
       },
       probes: {
         local: {
           marksman: {
             serverId: "marksman",
-            program: process.execPath,
-            executable: process.execPath,
+            program,
+            executable: program,
             version: "1.0.0",
             status: "ok",
             exitCode: 0,
@@ -300,6 +300,34 @@ describe("language routes", () => {
       {},
     );
     expect(missing.status).toBe(404);
+  }, 60_000);
+
+  it("restart launches the path the settings name now, not the old one", async () => {
+    const { core, root } = await start();
+    createWorkspace(core, "ws-1", root, {
+      read: true,
+      write: true,
+      execute: true,
+    });
+    // The path the user first typed is wrong, which is the case the restart
+    // button exists for.
+    plantMockServer(join(root, "not-a-language-server"));
+    const failed = await post(core, "/api/workspaces/ws-1/language/sessions", {
+      languageId: "markdown",
+      clientId: "node-1",
+    });
+    expect(((await failed.json()) as JsonObject)["state"]).not.toBe("running");
+
+    plantMockServer();
+    const restarted = await post(
+      core,
+      "/api/workspaces/ws-1/language/servers/marksman/restart",
+      {},
+    );
+    expect(restarted.status).toBe(200);
+    const descriptor = (await restarted.json()) as JsonObject;
+    expect(descriptor["state"]).toBe("running");
+    expect(descriptor["executable"]).toBe(process.execPath);
   }, 60_000);
 });
 

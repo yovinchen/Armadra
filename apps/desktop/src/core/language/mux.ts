@@ -64,8 +64,10 @@ import {
   MAX_RESTARTS,
   RESTART_BACKOFF_SECONDS,
   RESTART_WINDOW_SECONDS,
+  STDERR_TAIL_BYTES,
   reason,
 } from "./limits";
+import { redactSecrets } from "../terminal/ssh/redact";
 import { codeActionIsOffered, serverEditAllowed } from "./policy";
 import {
   candidate as registryCandidate,
@@ -152,7 +154,12 @@ export class Hub {
   readonly languageId: string;
   readonly root: string;
   readonly rewriter: Rewriter;
-  readonly launch: Launch;
+  /**
+   * Not `readonly`: an explicit restart re-reads the settings, so a path the
+   * user has just corrected is the one that starts. The `serverId` inside it
+   * never changes — it is the half of this hub's identity.
+   */
+  launch: Launch;
   private readonly events: HubEvents;
   private readonly version: string;
   private readonly shutdownGraceMs: number;
@@ -184,6 +191,11 @@ export class Hub {
   private initializeResolve:
     | ((value: JsonValue | undefined) => void)
     | undefined;
+  /**
+   * The message from the last `initialize` the server refused, so the panel
+   * can show the server's own words rather than the word "crashed".
+   */
+  private initializeError = "";
   private starting: Promise<string | undefined> | undefined;
 
   constructor(options: HubOptions) {
@@ -262,6 +274,19 @@ export class Hub {
     );
     const capabilities = await withTimeout(handshake, INITIALIZE_TIMEOUT_MS);
     if (capabilities === undefined || capabilities === null) {
+      // A refused `initialize` is the server telling us why it cannot serve
+      // this project — "no TypeScript installation here", "unreadable
+      // project file". That sentence is the only useful thing anyone has, so
+      // it rides the same in-memory tail a crash uses instead of being
+      // dropped for a bare `crashed`.
+      if (this.initializeError !== "") {
+        const why = this.initializeError;
+        this.initializeError = "";
+        await this.stopProcess("crashed", reason.INITIALIZE_FAILED);
+        this.stderrTail = why;
+        this.publishStatus();
+        return reason.INITIALIZE_FAILED;
+      }
       await this.stopProcess("crashed", reason.CRASHED);
       return reason.CRASHED;
     }
@@ -434,6 +459,7 @@ export class Hub {
     if (id === INITIALIZE_ID) {
       const resolve = this.initializeResolve;
       this.initializeResolve = undefined;
+      this.initializeError = errorMessageOf(message.value["error"]);
       const result = message.value["result"];
       const capabilities =
         result !== null && typeof result === "object" && !Array.isArray(result)
@@ -679,6 +705,20 @@ export class Hub {
 
 function refused(why: string): JsonValue {
   return { applied: false, failureReason: why };
+}
+
+/**
+ * The `message` of a JSON-RPC error object, bounded and stripped of secrets
+ * the same way a stderr tail is; anything that is not an error object is no
+ * message at all.
+ */
+function errorMessageOf(value: JsonValue | undefined): string {
+  if (value === null || value === undefined || typeof value !== "object") {
+    return "";
+  }
+  const text = (value as JsonObject)["message"];
+  if (typeof text !== "string" || text === "") return "";
+  return redactSecrets(text.slice(0, STDERR_TAIL_BYTES));
 }
 
 function isFailure(

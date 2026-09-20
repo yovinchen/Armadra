@@ -47,6 +47,12 @@ const hang = flags.has("--hang");
 const bigResponse = flags.has("--big-response");
 const applyEdit = flags.has("--apply-edit") || flags.has("--apply-outside");
 const applyOutside = flags.has("--apply-outside");
+/**
+ * Answer `initialize` with an error and stay up, the way a real server does
+ * when it cannot serve this project — `typescript-language-server` with no
+ * TypeScript installed says exactly this.
+ */
+const refuseInitialize = flags.has("--refuse-initialize");
 
 /** The id of the one edit this server ever asks for. */
 const APPLY_ID = "mock-apply";
@@ -163,6 +169,17 @@ function handle(message) {
   const { id, method, params } = message;
   switch (method) {
     case "initialize":
+      if (refuseInitialize) {
+        send({
+          jsonrpc: "2.0",
+          id,
+          error: {
+            code: -32603,
+            message: "Could not find a valid mock installation. Exiting.",
+          },
+        });
+        return;
+      }
       send({
         jsonrpc: "2.0",
         id,
