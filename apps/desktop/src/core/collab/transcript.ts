@@ -65,10 +65,111 @@ export function readTail(path: string, maxBytes: number): string {
 }
 
 /**
+ * 渲染的两档（设计 `agent-delivery.md` §13 第 2 条）。
+ *
+ * 缺省这一档就是这个模块一直以来的行为，所以 `render(text)` 一个字都不用改。
+ * `transcript` 那条路传的是收紧过的一档：每条消息截到 2 KB，`tool_result` 只
+ * 留工具名、字节数与首行——工具结果是一份转录里最长、对读者最没用的一段，一
+ * 次 `Read` 的回显就能顶掉整份预算。
+ */
+export interface RenderOptions {
+  /** 一条消息截到这么多个字符。 */
+  readonly maxLineChars?: number;
+  /** `tool_result` 只留工具名、字节数与首行。 */
+  readonly briefToolResults?: boolean;
+}
+
+interface RenderContext {
+  readonly maxLineChars: number;
+  readonly briefToolResults: boolean;
+  /**
+   * `tool_use_id` → 工具名，跨条目累积。
+   *
+   * `tool_result` 自己不带工具名，只带它回应的那次调用的 id；要说出「这是哪个
+   * 工具的结果」就得记得前面那条 `tool_use`。一份转录是按时间顺序读的，所以这
+   * 张表只需要往前看。
+   */
+  readonly toolNames: Map<string, string>;
+}
+
+function contextOf(options: RenderOptions | undefined): RenderContext {
+  return {
+    maxLineChars: options?.maxLineChars ?? MAX_LINE,
+    briefToolResults: options?.briefToolResults ?? false,
+    toolNames: new Map(),
+  };
+}
+
+/**
+ * 一条渲染好的记录，外加它在源文本里结束于第几个字节。
+ *
+ * 那个偏移是增量游标的全部实现（§13 第 3 条）：交出去 N 条之后，下次从第 N 条
+ * 之后那个字节接着读。它算的是**源文本**的字节，不是渲染出来的散文的字节。
+ */
+export interface TranscriptRecord {
+  readonly line: string;
+  readonly endOffset: number;
+}
+
+/** 一次增量读取的结果：读到的文本，以及现在的文件尾在第几个字节。 */
+export interface Range {
+  readonly text: string;
+  readonly startOffset: number;
+  readonly endOffset: number;
+}
+
+/**
+ * 从 `startByte` 读到文件尾，最多 `maxBytes`（增量游标那条路）。
+ *
+ * 偏移大于文件长度的时候从头读：转录被换掉或者被截短了，那个偏移在新内容里指
+ * 的是另一段话。路径是否还是同一个由游标自己判（`context-reads.ts`），长度这
+ * 一层的判据在这里。
+ */
+export function readRange(
+  path: string,
+  startByte: number,
+  maxBytes: number,
+): Range {
+  const handle = openSync(path, "r");
+  try {
+    const length = statSync(path).size;
+    const start = startByte > length || startByte < 0 ? 0 : startByte;
+    // 超过上限时保留**尾部**：新的那些比旧的那些有用。
+    const from = Math.max(start, length - maxBytes);
+    const size = Math.max(0, length - from);
+    if (size === 0) return { text: "", startOffset: from, endOffset: length };
+    const buffer = Buffer.alloc(size);
+    let filled = 0;
+    while (filled < size) {
+      const read = readSync(handle, buffer, filled, size - filled, from + filled);
+      if (read === 0) break;
+      filled += read;
+    }
+    return {
+      text: buffer.subarray(0, filled).toString("utf8"),
+      startOffset: from,
+      endOffset: length,
+    };
+  } finally {
+    closeSync(handle);
+  }
+}
+
+/**
  * Renders JSONL (or a JSON array / object of messages) into one line per
  * message. Unknown lines are skipped rather than reported.
  */
-export function render(text: string): string[] {
+export function render(text: string, options?: RenderOptions): string[] {
+  return renderRecords(text, options).map((record) => record.line);
+}
+
+/** {@link render}，但每条还带着它在源文本里的结束偏移。 */
+export function renderRecords(
+  text: string,
+  options?: RenderOptions,
+): TranscriptRecord[] {
+  const context = contextOf(options);
+  const total = Buffer.byteLength(text, "utf8");
   const trimmed = text.trimStart();
   if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
     let value: unknown;
@@ -78,12 +179,19 @@ export function render(text: string): string[] {
       value = undefined;
     }
     if (value !== undefined) {
-      const rendered = renderDocument(value);
-      if (rendered.length > 0) return rendered;
+      const rendered = renderDocument(value, context);
+      // 整份 JSON 没有「读到一半」这回事：偏移一律是文件尾。
+      if (rendered.length > 0) {
+        return rendered.map((line) => ({ line, endOffset: total }));
+      }
     }
   }
-  const lines: string[] = [];
+  const records: TranscriptRecord[] = [];
+  let offset = 0;
   for (const raw of text.split("\n")) {
+    // `+1` 是被 `split` 吃掉的那个换行；最后一段多算一个字节不影响判据（游标
+    // 只会因此少读零字节），但少算会让同一条被读第二次。
+    offset += Buffer.byteLength(raw, "utf8") + 1;
     const line = raw.trim();
     if (line === "") continue;
     let value: unknown;
@@ -92,17 +200,19 @@ export function render(text: string): string[] {
     } catch {
       continue;
     }
-    const rendered = renderEntry(value);
-    if (rendered !== undefined) lines.push(rendered);
+    const rendered = renderEntry(value, context);
+    if (rendered !== undefined) {
+      records.push({ line: rendered, endOffset: Math.min(offset, total) });
+    }
   }
-  return lines;
+  return records;
 }
 
-function renderDocument(value: unknown): string[] {
+function renderDocument(value: unknown, context: RenderContext): string[] {
+  const render = (entry: unknown): string | undefined =>
+    renderEntry(entry, context);
   if (Array.isArray(value)) {
-    return value
-      .map(renderEntry)
-      .filter((line): line is string => line !== undefined);
+    return value.map(render).filter((line): line is string => line !== undefined);
   }
   if (value === null || typeof value !== "object") return [];
   const record = value as Record<string, unknown>;
@@ -110,7 +220,7 @@ function renderDocument(value: unknown): string[] {
     const items = record[key];
     if (Array.isArray(items)) {
       return items
-        .map(renderEntry)
+        .map(render)
         .filter((line): line is string => line !== undefined);
     }
   }
@@ -120,7 +230,11 @@ function renderDocument(value: unknown): string[] {
 const ROLES = ["user", "assistant", "system"];
 
 /** One transcript entry → one prose line, or nothing. */
-export function renderEntry(value: unknown): string | undefined {
+export function renderEntry(
+  value: unknown,
+  options?: RenderOptions | RenderContext,
+): string | undefined {
+  const context = isContext(options) ? options : contextOf(options);
   if (value === null || typeof value !== "object") return undefined;
   const record = value as Record<string, unknown>;
   // Codex wraps everything in `{type, payload}`; unwrap once.
@@ -130,7 +244,7 @@ export function renderEntry(value: unknown): string | undefined {
     typeof payload === "object" &&
     !Array.isArray(payload)
   ) {
-    return renderEntry(payload);
+    return renderEntry(payload, context);
   }
   const kind = record.type;
   const role =
@@ -150,31 +264,42 @@ export function renderEntry(value: unknown): string | undefined {
       : (record.content ?? record.text);
   if (content === undefined || content === null) return undefined;
 
-  const body = renderContent(content).trim();
+  const body = renderContent(content, context).trim();
   if (body === "") return undefined;
   const label =
     role === "user" ? "[用户]" : role === "assistant" ? "[助手]" : "[系统]";
   // A tool line already carries its own label.
-  if (body.startsWith("[工具") || body.startsWith("[结果")) return clamp(body);
-  return clamp(`${label} ${body}`);
+  if (body.startsWith("[工具") || body.startsWith("[结果")) {
+    return clamp(body, context.maxLineChars);
+  }
+  return clamp(`${label} ${body}`, context.maxLineChars);
+}
+
+function isContext(
+  options: RenderOptions | RenderContext | undefined,
+): options is RenderContext {
+  return options !== undefined && "toolNames" in options;
 }
 
 /** `content` is a string in some CLIs and a block array in others. */
-function renderContent(content: unknown): string {
+function renderContent(content: unknown, context: RenderContext): string {
   if (typeof content === "string") return collapse(content);
   if (Array.isArray(content)) {
     return content
-      .map(renderBlock)
+      .map((block) => renderBlock(block, context))
       .filter((part): part is string => part !== undefined)
       .join(" ");
   }
   if (content !== null && typeof content === "object") {
-    return renderBlock(content) ?? "";
+    return renderBlock(content, context) ?? "";
   }
   return "";
 }
 
-function renderBlock(block: unknown): string | undefined {
+function renderBlock(
+  block: unknown,
+  context: RenderContext,
+): string | undefined {
   if (block === null || typeof block !== "object") return undefined;
   const record = block as Record<string, unknown>;
   const kind = typeof record.type === "string" ? record.type : "text";
@@ -190,6 +315,8 @@ function renderBlock(block: unknown): string | undefined {
     case "tool_use":
     case "function_call": {
       const name = typeof record.name === "string" ? record.name : "未命名工具";
+      const id = record.id ?? record.tool_use_id ?? record.call_id;
+      if (typeof id === "string" && id !== "") context.toolNames.set(id, name);
       const input = record.input ?? record.arguments;
       const detail = input === undefined ? "" : summarizeInput(input);
       return detail === "" ? `[工具 ${name}]` : `[工具 ${name} ${detail}]`;
@@ -197,8 +324,21 @@ function renderBlock(block: unknown): string | undefined {
     case "tool_result":
     case "function_call_output": {
       const detail =
-        record.content === undefined ? "" : renderContent(record.content);
-      return `[结果 ${shorten(detail.trim(), MAX_TOOL_DETAIL)}]`;
+        record.content === undefined
+          ? ""
+          : typeof record.content === "string"
+            ? record.content
+            : renderContent(record.content, context);
+      if (!context.briefToolResults) {
+        return `[结果 ${shorten(collapse(detail), MAX_TOOL_DETAIL)}]`;
+      }
+      const id = record.tool_use_id ?? record.call_id ?? record.id;
+      const name =
+        (typeof id === "string" ? context.toolNames.get(id) : undefined) ??
+        "工具";
+      const bytes = Buffer.byteLength(detail, "utf8");
+      const first = collapse(detail.split("\n")[0] ?? "");
+      return `[结果 ${name} ${bytes} B${first === "" ? "" : ` 首行：${shorten(first, MAX_TOOL_DETAIL)}`}]`;
     }
     // Thinking blocks are the model talking to itself; not somebody else's
     // context.
@@ -243,8 +383,8 @@ function shorten(text: string, maxChars: number): string {
   return `${characters.slice(0, maxChars).join("")}…`;
 }
 
-function clamp(line: string): string {
-  return shorten(line, MAX_LINE);
+function clamp(line: string, maxChars: number): string {
+  return shorten(line, maxChars);
 }
 
 /* -------------------------------- locating -------------------------------- */

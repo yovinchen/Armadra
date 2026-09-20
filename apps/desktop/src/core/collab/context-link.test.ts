@@ -193,10 +193,13 @@ describe("reading a linked node", () => {
     const body = await read(me, "transcript", { node: "Peer" });
     expect(body).toContain("[用户] do the thing");
     expect(body).toContain("[助手] done");
-    expect(body).toContain("完整转录 2 条");
-    // `summary` is the same reader with a line budget.
-    const summary = await read(me, "summary", { node: "Peer", n: 1 });
-    expect(summary).toContain("最近 1 条（共 2 条");
+    expect(body).toContain("最近的 2 条");
+    // 头部要说出这一次大概值多少 token（§13 第 2 条）。
+    expect(body).toMatch(/本次约 \d+ KB ≈ \d+ token/);
+    // `summary` 不再是「同一个读者带条数上限」，它是一份摘要：没有原文行。
+    const summary = await read(me, "summary", { node: "Peer" });
+    expect(summary).toContain("最后一条人类提示：do the thing");
+    expect(summary).toContain("最后一条助手回复：done");
     expect(summary).not.toContain("[用户]");
   });
 

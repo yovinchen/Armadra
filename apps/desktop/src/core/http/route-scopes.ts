@@ -193,6 +193,9 @@ export const ROUTE_SCOPE_RULES: readonly RouteScopeRule[] = [
 
   { pattern: /^\/api\/ownership/, read: "canvas:read", write: "canvas:write" },
 
+  // 「谁读过这个节点」与画布本体同一档：它答的是画布上的一个节点的历史。
+  { pattern: /^\/api\/nodes\/[^/]+\/context-reads$/, read: "canvas:read" },
+
   {
     pattern: /^\/automation\//,
     read: "automation:read",

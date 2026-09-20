@@ -2,6 +2,8 @@ import { closeSync, openSync, readSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { hasCapability } from "../agent/registry";
 import { getAgentStatus } from "../agent/status";
+import { hasOpenApproval } from "../agent/approvals";
+import { type TargetState, targetState } from "../agent/target-state";
 import type { ContextLink } from "../canvas/context-links";
 import { getContextLinks } from "../canvas/context-links";
 import { resolveInRoot } from "../workspaces/roots";
@@ -18,14 +20,19 @@ import {
   loadSession,
   workspaceRoot,
 } from "./nodes";
+import { type ReadVerb, noteRead, readCursor, writeCursor } from "./context-reads";
+import { requireReadBudget } from "./read-budget";
+import { redact } from "./redact";
 import { type Args, Refusal, truncate } from "./refusals";
-import type { CollabContext } from "./service";
+import { type CollabContext, nowDate } from "./service";
+import { digestTranscript, renderSummary } from "./transcript-summary";
 import {
-  MAX_RENDERED_BYTES,
   MAX_TAIL_BYTES,
+  type TranscriptRecord,
   locate,
+  readRange,
   readTail,
-  render,
+  renderRecords,
 } from "./transcript";
 
 /**
@@ -46,8 +53,36 @@ import {
 
 export const VERBS = ["list", "summary", "transcript", "terminal"] as const;
 
+/** 终端画面默认给这么多行。 */
 const DEFAULT_LINES = 40;
-const MAX_LINES = 400;
+/**
+ * 终端画面最多给这么多行（§13 第 7 条，从 400 收到 200）。
+ *
+ * 400 行的 PTY 画面是几十 KB 的字符，而终端画面的用处是「它现在停在哪」，不是
+ * 「它这半小时干了什么」——后者是 `summary` 的事。
+ */
+const MAX_LINES = 200;
+
+/** `transcript` 默认给最近这么多条。 */
+export const DEFAULT_TRANSCRIPT_ENTRIES = 20;
+
+/** 一条用户/助手消息截到这么多个字符（约 2 KB 的中文）。 */
+const MAX_ENTRY_CHARS = 2_000;
+
+/** 一次 `transcript` 的散文上限。 */
+export const MAX_TRANSCRIPT_BYTES = 32 * 1024;
+
+/** `--full --max-kb` 能把上限抬到的最大值。 */
+export const MAX_FULL_KB = 128;
+
+/**
+ * token 估算的系数：这么多个字符约等于一个 token。
+ *
+ * 一个粗估，而且是故意粗的。真值随语言与分词器变（中文更接近 1.5，英文代码更
+ * 接近 4），而这一行要回答的问题只有一个：「我这次读进来的东西，在我的上下文
+ * 里大概占多大」。给一个量级就够了，给一个假装精确的数反而会被当成预算来用。
+ */
+export const CHARS_PER_TOKEN = 3.5;
 
 /**
  * Byte budget for a file or a diff. Everything above it is cut at a character
@@ -87,11 +122,6 @@ export async function runContextLink(
     );
   }
 
-  const lines = clamp(
-    args.count(["n", "lines"]) ?? DEFAULT_LINES,
-    1,
-    MAX_LINES,
-  );
   const handles = loadHandles(context.database, document.links);
   let link: ContextLink;
   try {
@@ -116,20 +146,107 @@ export async function runContextLink(
     throw Refusal.forbidden(`「${target.title}」不在当前工作空间，已拒绝。`);
   }
 
+  const nowMs = nowDate(context).getTime();
+  // 读别人要花别人的额度，也要留下一条记录——两件事都在真的读之前问，因为一
+  // 次被拒绝的读取不该占掉额度（与 `send-limits.ts::rate` 同一条规矩）。
+  requireReadBudget(
+    context.database,
+    caller.node.id,
+    target.id,
+    target.title,
+    nowMs,
+  );
+  const share = contextShare(target);
+
   // A content node reads the same whatever the verb: there is no transcript
   // and no terminal screen behind a file, a folder or a web page, so
   // `summary`, `transcript` and `terminal` all render its content.
-  const content = readContent(context, target);
-  if (content !== undefined) return content;
+  if (isContentNode(target)) {
+    // 只开放摘要的节点，连它指着的那个文件都不给：`contextShare` 说的是「这个
+    // 节点对外只交出一句话」，而一个编辑器节点的全部内容就是那份文件。
+    if (share === "summary") throw summaryOnly(target, "文件内容");
+    const content = readContent(context, target);
+    if (content !== undefined) {
+      return finish(context, caller, target, "content", content, nowMs);
+    }
+  }
 
   switch (verb) {
-    case "terminal":
-      return readTerminal(context, target, lines);
-    case "summary":
-      return readTranscript(context, target, lines);
-    default:
-      return readTranscript(context, target, undefined);
+    case "terminal": {
+      if (share === "summary") throw summaryOnly(target, "终端画面");
+      const lines = clamp(
+        args.count(["n", "lines"]) ?? DEFAULT_LINES,
+        1,
+        MAX_LINES,
+      );
+      const body = await readTerminal(context, target, lines);
+      return finish(context, caller, target, "terminal", body, nowMs);
+    }
+    case "summary": {
+      const body = readSummary(context, target, handles);
+      return finish(context, caller, target, "summary", body, nowMs);
+    }
+    default: {
+      if (share === "summary") throw summaryOnly(target, "转录原文");
+      const body = readTranscript(context, caller, target, args, nowMs);
+      return finish(context, caller, target, "transcript", body, nowMs);
+    }
   }
+}
+
+/**
+ * 每一次跨连线的读取，出门前过的同一道手续：脱敏，然后记一行审计。
+ *
+ * 一处而不是四处，因为「读别人的东西要脱敏、要留痕」是对这个surface 整体的要
+ * 求，不是对某个动词的要求；写成四份，下一个动词就会忘掉其中一份。
+ */
+function finish(
+  context: CollabContext,
+  caller: Caller,
+  target: NodeRef,
+  verb: ReadVerb,
+  body: string,
+  nowMs: number,
+): string {
+  const clean = redact(body);
+  noteRead(
+    context.database,
+    {
+      reader: caller.node.id,
+      target: target.id,
+      verb,
+      bytes: Buffer.byteLength(clean, "utf8"),
+    },
+    nowMs,
+  );
+  return clean;
+}
+
+/**
+ * 这个节点对相连的 Agent 开放到什么程度（`data.agent.contextShare`）。
+ *
+ * 缺省 `full`：0025 之前的每一个节点都没有这个字段，而它们本来就是全开的。
+ */
+export function contextShare(target: NodeRef): "full" | "summary" {
+  const agent = target.data.agent;
+  if (agent === null || typeof agent !== "object" || Array.isArray(agent)) {
+    return "full";
+  }
+  const value = (agent as Record<string, unknown>).contextShare;
+  return value === "summary" ? "summary" : "full";
+}
+
+function summaryOnly(target: NodeRef, what: string): Refusal {
+  return Refusal.forbidden(
+    `「${target.title}」只对外开放摘要，${what}读不到。用 \`context summary --node "${target.title}"\` 读它的摘要。`,
+  );
+}
+
+/** 内容类节点：读到什么由类型定，与动词无关。 */
+function isContentNode(target: NodeRef): boolean {
+  return ["sticky", "editor", "files", "browser", "diff"].includes(
+    target.nodeType,
+  );
 }
 
 /* --------------------------------- sources -------------------------------- */
@@ -483,26 +600,54 @@ async function readTerminal(
       Math.max(1, lines),
       false,
     );
-    return `「${target.title}」终端最近 ${capture.lines} 行：\n\n${capture.data.trimEnd()}\n`;
+    // 画面里还会剩下转义序列：`capture(…, false)` 关掉的是 SGR，光标定位
+    // （CSI）与窗口标题（OSC）照旧写在里面，而它们在模型眼里是噪声——一屏
+    // Codex 的界面里有几百个 `[2K[G`。
+    const screen = stripAnsi(capture.data).trimEnd();
+    return `「${target.title}」终端最近 ${capture.lines} 行：\n\n${screen}\n`;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw Refusal.notFound(`无法读取「${target.title}」的终端画面：${message}`);
   }
 }
 
-/**
- * `undefined` lines means the whole transcript (capped by bytes); a number is
- * the last n rendered lines.
- */
-function readTranscript(
+/* -------------------------------- 转录两档 -------------------------------- */
+
+/** 定位一个节点的转录文件，找不到就抛那句解释。 */
+function locateTranscript(
   context: CollabContext,
   target: NodeRef,
-  lines: number | undefined,
-): string {
+): { readonly path: string; readonly origin: string } {
   const status = getAgentStatus(context.database, target.id);
   const agentId = target.agentId ?? status?.agentId ?? "claude";
   const found = locate(agentId, status?.transcriptPath, status?.sessionId);
   if (found === undefined) throw missing(target, agentId);
+  return found;
+}
+
+/** 这个节点现在在五态的哪一个。 */
+function stateOf(context: CollabContext, target: NodeRef): TargetState {
+  const bridge = context.terminals;
+  if (bridge?.driveTarget !== undefined) return bridge.driveTarget(target.id).state;
+  const status = getAgentStatus(context.database, target.id);
+  const session = loadSession(context.database, target.id);
+  const live =
+    session === undefined ? undefined : bridge?.generation(session.sessionId);
+  return targetState(status, live);
+}
+
+/**
+ * `summary` —— 一份真的摘要（§13 第 1 条）。
+ *
+ * 它不再收 `-n`：条数是原文读取的参数，而摘要的大小是常数。一个还能用条数调
+ * 大的「摘要」只是原文换了个名字，而那正是这一批要改掉的事。
+ */
+function readSummary(
+  context: CollabContext,
+  target: NodeRef,
+  handles: Handles,
+): string {
+  const found = locateTranscript(context, target);
   let text: string;
   try {
     text = readTail(found.path, MAX_TAIL_BYTES);
@@ -512,22 +657,193 @@ function readTranscript(
       `「${target.title}」的转录文件读不出来（${message}）。`,
     );
   }
-  const rendered = render(text);
-  if (rendered.length === 0) {
+  const handle = handles.get(target.id);
+  return renderSummary(
+    {
+      title: target.title,
+      ...(handle === undefined ? {} : { handle }),
+      state: stateOf(context, target),
+      pendingApproval: hasOpenApproval(context, target.id),
+      origin: found.origin,
+    },
+    digestTranscript(text),
+  );
+}
+
+/**
+ * `transcript` —— 原文，但按条数、按条长、按总量三重收口（§13 第 2 条）。
+ *
+ * 三个数各自挡住一种失控：条数挡住「一次把半小时倒进来」，条长挡住「一条消息
+ * 就是一份文件」，总量挡住前两个都没挡住的那种（二十条各两千字也有 40 KB）。
+ * 要更多必须显式说出来：`--full --max-kb <n>`，上限 {@link MAX_FULL_KB}。
+ */
+function readTranscript(
+  context: CollabContext,
+  caller: Caller,
+  target: NodeRef,
+  args: Args,
+  nowMs: number,
+): string {
+  const found = locateTranscript(context, target);
+  const full = args.flag("full");
+  const maxBytes = full
+    ? clamp(
+        args.count(["max-kb", "maxKb"]) ?? MAX_FULL_KB,
+        1,
+        MAX_FULL_KB,
+      ) * 1024
+    : MAX_TRANSCRIPT_BYTES;
+  const since = args.flag("since");
+
+  const cursor = since
+    ? readCursor(context.database, caller.node.id, target.id, found.path)
+    : undefined;
+  let range;
+  try {
+    range = readRange(found.path, cursor?.byteOffset ?? 0, MAX_TAIL_BYTES);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw Refusal.notFound(
+      `「${target.title}」的转录文件读不出来（${message}）。`,
+    );
+  }
+
+  const records = renderRecords(range.text, {
+    // `--full` 松的是这两档，不是总量：总量永远有一个数，只是那个数可以被显式
+    // 抬高。
+    ...(full ? {} : { maxLineChars: MAX_ENTRY_CHARS, briefToolResults: true }),
+  });
+  if (records.length === 0) {
+    if (since && cursor !== undefined) {
+      return (
+        `「${target.title}」自上次读取之后没有新条目（来源：${found.origin}）。\n` +
+        `游标：${range.endOffset} 字节。\n`
+      );
+    }
     throw Refusal.notFound(
       `「${target.title}」的转录里没有可读的对话（${found.origin}）。`,
     );
   }
-  const selected =
-    lines === undefined
-      ? rendered
-      : rendered.slice(Math.max(0, rendered.length - Math.max(1, lines)));
-  const body = selected.join("\n");
-  const header =
-    lines === undefined
-      ? `「${target.title}」完整转录 ${rendered.length} 条（来源：${found.origin}）：\n\n`
-      : `「${target.title}」最近 ${selected.length} 条（共 ${rendered.length} 条，来源：${found.origin}）：\n\n`;
-  return `${header}${truncate(body, MAX_RENDERED_BYTES)}\n`;
+
+  const entries = args.count(["n", "lines"]);
+  const picked = pick(records, since, entries, maxBytes);
+  const body = picked.lines.join("\n");
+  const bytes = Buffer.byteLength(body, "utf8");
+  const tokens = Math.ceil([...body].length / CHARS_PER_TOKEN);
+
+  let header =
+    `「${target.title}」` +
+    (since ? "自上次读取之后的" : "最近的") +
+    ` ${picked.lines.length} 条` +
+    (since ? "" : `（这一段里共 ${records.length} 条）`) +
+    `，来源：${found.origin}\n` +
+    `本次约 ${Math.max(1, Math.round(bytes / 1024))} KB ≈ ${tokens} token` +
+    (full ? "（--full）" : "") +
+    "\n";
+  if (picked.truncated) {
+    header += full
+      ? `（到 ${Math.floor(maxBytes / 1024)} KB 就停了，还有更多。）\n`
+      : "（到上限就停了。要更多：`--full --max-kb 64`，或者 `--since` 只取新的。）\n";
+  }
+
+  // 游标记的是**真的交出去了的**那一段，不是文件尾：没给出去的条目下次还要给。
+  writeCursor(
+    context.database,
+    caller.node.id,
+    target.id,
+    {
+      transcriptPath: found.path,
+      byteOffset: range.startOffset + picked.endOffset,
+    },
+    nowMs,
+  );
+  return (
+    `${header}\n${body}\n\n` +
+    `游标：${range.startOffset + picked.endOffset} 字节。下次加 \`--since\` 只取新的。\n`
+  );
+}
+
+interface Picked {
+  readonly lines: readonly string[];
+  /** 交出去的最后一条在这段文本里结束于第几个字节。 */
+  readonly endOffset: number;
+  readonly truncated: boolean;
+}
+
+/**
+ * 从渲染好的记录里挑出这次要给的那些。
+ *
+ * 两个方向，因为两条路问的不是同一个问题：不带 `--since` 问的是「最近的 N
+ * 条」，从尾往前取；带 `--since` 问的是「上次之后的那些」，从头往后取，取到预
+ * 算用完为止——剩下的留给下一次，所以游标只走到真的交出去的那一条。
+ */
+function pick(
+  records: readonly TranscriptRecord[],
+  since: boolean,
+  entries: number | undefined,
+  maxBytes: number,
+): Picked {
+  if (since) {
+    const lines: string[] = [];
+    let bytes = 0;
+    let endOffset = 0;
+    for (const record of records) {
+      const size = Buffer.byteLength(record.line, "utf8") + 1;
+      if (bytes + size > maxBytes && lines.length > 0) {
+        return { lines, endOffset, truncated: true };
+      }
+      lines.push(record.line);
+      bytes += size;
+      endOffset = record.endOffset;
+      if (entries !== undefined && lines.length >= entries) {
+        return {
+          lines,
+          endOffset,
+          truncated: records[records.length - 1]?.endOffset !== endOffset,
+        };
+      }
+    }
+    return { lines, endOffset, truncated: false };
+  }
+
+  const wanted = clamp(entries ?? DEFAULT_TRANSCRIPT_ENTRIES, 1, records.length);
+  const tail = records.slice(records.length - wanted);
+  const lines: string[] = [];
+  let bytes = 0;
+  let dropped = tail.length < records.length;
+  // 从尾往前塞，超预算就丢掉更旧的那些。
+  for (let index = tail.length - 1; index >= 0; index -= 1) {
+    const line = tail[index]?.line ?? "";
+    const size = Buffer.byteLength(line, "utf8") + 1;
+    if (bytes + size > maxBytes && lines.length > 0) {
+      dropped = true;
+      break;
+    }
+    lines.unshift(line);
+    bytes += size;
+  }
+  return {
+    lines,
+    endOffset: tail[tail.length - 1]?.endOffset ?? 0,
+    truncated: dropped,
+  };
+}
+
+/**
+ * CSI 与 OSC 转义序列（§13 第 7 条）。
+ *
+ * 只认这两族：SGR 已经由 `capture(…, false)` 关掉了，剩下的是光标定位与窗口标
+ * 题，它们在散文里就是噪声。别的 C0 控制字符由 `stripControl` 管，那是另一条
+ * 路上的事（防伪造帧行），这里不重复。
+ */
+export function stripAnsi(text: string): string {
+  return text
+    // OSC：`ESC ] … BEL` 或 `ESC ] … ESC \`（窗口标题、超链接）。
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+    // CSI：`ESC [ … 终结字符`（光标定位、清行、滚动区）。
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    // 剩下的两字节转义（`ESC M`、`ESC =` 这些）。
+    .replace(/\u001b[@-Z\\-_]/g, "");
 }
 
 function sticky(target: NodeRef): string {

@@ -106,6 +106,15 @@ export const terminalAgentSchema = z.object({
    * the other direction.
    */
   acceptSubDelivery: z.boolean().optional(),
+  /**
+   * 这个节点对相连的 Agent 开放到什么程度
+   * （docs/design/agent-delivery.md §13 第 6 条）。
+   *
+   * `full` 是缺省：转录原文、终端画面与文件都读得到。`summary` 只开放
+   * `context summary` 那一份 ≤ 2 KB 的摘要，`transcript` / `terminal` 与文件
+   * 读取一律回 `FORBIDDEN`——一个在做敏感事情的节点，应该能在不下线的前提下
+   * 只交出「我在干什么」。
+   */
   contextShare: z.enum(["full", "summary"]).optional(),
 });
 

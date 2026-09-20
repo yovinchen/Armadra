@@ -22,6 +22,7 @@ import {
 import { definition, baseAgent } from "./registry";
 import { listAgents } from "./list";
 import { loadSession } from "../collab/nodes";
+import { listContextReads } from "../collab/context-reads";
 import { type ContextUsageCache, contextUsage } from "../usage/context-usage";
 import {
   type ConfirmRequest,
@@ -55,6 +56,11 @@ import type { CoreRequest, HandlerResult, RouteMatch } from "../http/router";
  * Splitting it that way is what keeps a route from ever being a weaker door
  * than the verb behind it.
  */
+
+/** `GET /api/nodes/{id}/context-reads` 不带 `limit` 时给这么多条。 */
+const DEFAULT_CONTEXT_READS = 20;
+/** 带了也最多给这么多条：这一栏是节点头上的一个小清单，不是审计导出。 */
+const MAX_CONTEXT_READS = 200;
 
 export interface AgentRouteDeps {
   readonly server: CoreServer;
@@ -409,6 +415,29 @@ export function installRoutes(deps: AgentRouteDeps): void {
       status: 200,
       body: refresh(database, undefined, configuredScope(database)),
     })),
+  );
+
+  /* ------------------------------ context reads --------------------------- */
+
+  // 节点头那一句「被读取 N 次」（设计 §13 第 5 条）。读取本身是 Agent 之间
+  // 的事，而「谁在读我」是**人**要知道的事——一个 Agent 静悄悄地把另一个的转
+  // 录读走十次，今天在界面上一点痕迹都没有。
+  server.router.handle(
+    "GET",
+    "/api/nodes/{nodeId}/context-reads",
+    answered((match, request) => {
+      const limit = Number.parseInt(request.query.get("limit") ?? "", 10);
+      return {
+        status: 200,
+        body: listContextReads(
+          database,
+          param(match, "nodeId"),
+          Number.isFinite(limit) && limit > 0
+            ? Math.min(limit, MAX_CONTEXT_READS)
+            : DEFAULT_CONTEXT_READS,
+        ),
+      };
+    }),
   );
 
   /* ------------------------------ context usage --------------------------- */

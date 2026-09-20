@@ -33,6 +33,14 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     implemented: true,
   },
+  // 「被读取 N 次」：谁读过这个节点的上下文（设计 agent-delivery.md §13）。
+  // 不挂在工作空间下，因为它问的是一个节点的历史，而节点 id 全局唯一。
+  {
+    path: "/api/nodes/{nodeId}/context-reads",
+    methods: ["GET"],
+    surface: "runtime",
+    implemented: true,
+  },
   {
     path: "/api/workspaces/{workspaceId}/git/hunks",
     methods: ["GET", "POST"],
