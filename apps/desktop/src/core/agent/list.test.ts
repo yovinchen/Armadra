@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { install as installIntegration } from "../hook/install/integration";
 import { type AgentListRow, listAgents } from "./list";
+import { forgetProbes, rememberProbe } from "./probe";
 import { AGENT_IDS, type AgentSettings, type CustomAgent } from "./registry";
 import { type AgentFixture, agentFixture } from "./fixture";
 
@@ -51,6 +52,7 @@ beforeEach(() => {
 
 afterEach(() => {
   fixture.close();
+  forgetProbes();
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -140,5 +142,45 @@ describe("listAgents and the integration", () => {
     const mine = rows.find((row) => row.id === "custom:mine");
     expect(mine?.launchArgs?.[0]).toBe("--settings");
     expect(mine?.clientRevision).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * 探测那一栏（Agent 自动化设计 §1）。
+ *
+ * 只**读**缓存：探测是后台扫描的事，一次列表绝不等一个子进程。所以这里断言的是
+ * 两件事——探到的结果会出现在行里，没探到的行里干脆没有这个键（页面据此把有版
+ * 本门槛的能力判成 unknown，而不是判成「支持」）。
+ */
+describe("listAgents 与版本探测", () => {
+  const rowsNow = (): AgentListRow[] =>
+    listAgents({
+      dataDir: fixture.directory,
+      settings: { customAgents: () => [] },
+      env: isolated(),
+    });
+
+  it("没探过的行没有 probe 这个键", () => {
+    forgetProbes();
+    expect(rowsNow().every((row) => !Object.hasOwn(row, "probe"))).toBe(true);
+  });
+
+  it("探到的结果原样出现在它自己那一行上", () => {
+    forgetProbes();
+    rememberProbe({
+      agentId: "codex",
+      launchCmd: "codex",
+      version: "0.155.1",
+      status: "ok",
+      probedAt: new Date().toISOString(),
+    });
+    const rows = rowsNow();
+    expect(rows.find((row) => row.id === "codex")?.probe).toMatchObject({
+      version: "0.155.1",
+      status: "ok",
+      launchCmd: "codex",
+    });
+    // 别人的行不受影响：版本是那一个程序的事实。
+    expect(rows.find((row) => row.id === "claude")?.probe).toBeUndefined();
   });
 });
