@@ -36,14 +36,14 @@ import {
  * predecessor product name) left there — see {@link retireGlobalEntries} and
  * `repair.ts`.
  *
- * ## The status line
+ * ## The status line we no longer write
  *
- * Context telemetry rides the same file's `statusLine`. Unlike a hook, a
- * status line is singular: `--settings` would win over the user's own. So it
- * is written only when `~/.claude/settings.json` has no `statusLine` of its
- * own (or has one that is recognisably ours), and the report says so
- * otherwise. A foreign status line is never wrapped or chained: its command
- * may have side effects and chaining would alter its lifecycle.
+ * An earlier build put a `statusLine` of ours into `~/.claude/settings.json`
+ * to carry context telemetry. That feature is gone, so nothing writes one any
+ * more — and install, repair and uninstall all *remove* the one we used to
+ * write, because it would otherwise run a subcommand of a removed feature on
+ * every status refresh. A status line we do not plainly recognise as ours is
+ * never touched.
  *
  * Claude's hook timeouts are **seconds**. The client is a fire-and-forget POST
  * with its own 1.5s deadline, so a short timeout here only bounds the damage
@@ -94,23 +94,9 @@ export function install(
     timeout: TIMEOUT_SECONDS,
   });
   const settings: JsonObject = { hooks: events };
-
-  // A status line is singular and `--settings` outranks the user's file, so
-  // ours is written only when theirs is absent.
-  const contextInstalled = !hasForeignStatusLine(configHome);
-  if (contextInstalled) {
-    settings.statusLine = {
-      type: "command",
-      command: hookCommand(clientBin, "context-usage"),
-    };
-  }
   writeJsonObject(path, settings);
 
-  const warning = !contextInstalled
-    ? "context_statusline_preserved"
-    : retired
-      ? "legacy_global_hooks_removed"
-      : undefined;
+  const warning = retired ? "legacy_global_hooks_removed" : undefined;
   return {
     agentId: AGENT_ID,
     configPath: path,
@@ -155,13 +141,15 @@ export function isInstalled(integrationHome: string): boolean {
 }
 
 /**
- * Removes our hook entries and our status line from the user's own
+ * Removes our hook entries and our old status line from the user's own
  * `settings.json`, leaving everything else exactly as it was. Answers whether
  * anything was there.
  *
  * This runs on install as well as on uninstall: a machine upgrading from the
  * file-injected era has our entries in two places, and the one in `~/.claude`
- * would fire for every session the user starts outside Armadra.
+ * would fire for every session the user starts outside Armadra. The status
+ * line is the same story one step further along — it names a subcommand this
+ * build no longer implements, so an upgrade has to take it back out.
  */
 export function retireGlobalEntries(configHome: string): boolean {
   const path = settingsPath(configHome);
@@ -193,34 +181,11 @@ export function retireGlobalEntries(configHome: string): boolean {
 }
 
 /**
- * Whether the user's own settings claim the status line. A file we cannot
- * parse counts as claimed: replacing a status line we could not read would be
- * taking something over rather than filling a gap.
- */
-function hasForeignStatusLine(configHome: string): boolean {
-  let settings: JsonObject;
-  try {
-    settings = readJsonObject(settingsPath(configHome));
-  } catch {
-    return true;
-  }
-  const statusLine = settings.statusLine;
-  if (statusLine === undefined) return false;
-  if (
-    typeof statusLine !== "object" ||
-    statusLine === null ||
-    Array.isArray(statusLine)
-  ) {
-    return true;
-  }
-  const command = statusLine.command;
-  return !(typeof command === "string" && managedContextCommand(command));
-}
-
-/**
- * Whether a status-line command is one we wrote. Exported because it is the
+ * Whether a status-line command is one we wrote — `<our binary> context-usage`,
+ * from the era that had a context readout. Exported because it is the
  * conservative half of the rule and is worth asserting directly: anything it
- * does not plainly recognise is preserved.
+ * does not plainly recognise is preserved, and `repair.ts` asks the same
+ * question of every CLI's settings file.
  */
 export function managedContextCommand(command: string): boolean {
   if (!command.endsWith(" context-usage")) return false;

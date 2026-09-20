@@ -53,7 +53,7 @@ describe("the Claude Code installer", () => {
 
     const settings = managed(integration) as unknown as {
       hooks: Record<string, { hooks: Record<string, unknown>[] }[]>;
-      statusLine: { command: string };
+      statusLine?: unknown;
     };
     for (const event of CLAUDE_HOOK_EVENTS) {
       const handler = settings.hooks[event]?.[0]?.hooks[0];
@@ -62,9 +62,8 @@ describe("the Claude Code installer", () => {
       expect(handler?.timeout, event).toBe(5);
     }
     expect(Object.keys(settings.hooks)).toHaveLength(CLAUDE_HOOK_EVENTS.length);
-    expect(settings.statusLine.command).toBe(
-      "/opt/armadra/armadra-hook context-usage",
-    );
+    // The context readout is gone; nothing writes a status line any more.
+    expect(settings.statusLine).toBeUndefined();
   });
 
   it("points the launch line at the file and says nothing when it is gone", () => {
@@ -171,21 +170,49 @@ describe("the Claude Code installer", () => {
     expect(readFileSync(path, "utf8")).toBe(original);
   });
 
-  it("keeps ours out of the file entirely when a foreign status line is there", () => {
+  it("never touches a status line that is not recognisably ours", () => {
     const [config, integration] = homes();
     const path = settingsPath(config);
     mkdirSync(config, { recursive: true });
     const foreign = { type: "command", command: "/my/statusline", padding: 3 };
     writeFileSync(path, JSON.stringify({ statusLine: foreign }), "utf8");
 
-    const report = install(config, integration, CLIENT);
-    expect(report.warning).toBe("context_statusline_preserved");
-    // Not written at all: `--settings` outranks the user's file, so writing
-    // one would silently replace theirs for every Armadra session.
+    install(config, integration, CLIENT);
     expect(
       (managed(integration) as unknown as Record<string, unknown>).statusLine,
     ).toBeUndefined();
     expect(read(path).statusLine).toEqual(foreign);
+    uninstall(config, integration);
+    expect(read(path).statusLine).toEqual(foreign);
+  });
+
+  /**
+   * The upgrade this removal turns on: a machine that installed the era with
+   * the context readout has our `statusLine` in the user's own file, naming a
+   * subcommand that no longer does anything. Install takes it out, and so does
+   * uninstall for a machine that never reinstalls.
+   */
+  it("takes our own old status line back out, on install and on uninstall", () => {
+    for (const act of [install, uninstall] as const) {
+      const [config, integration] = homes();
+      const path = settingsPath(config);
+      mkdirSync(config, { recursive: true });
+      writeFileSync(
+        path,
+        JSON.stringify({
+          model: "opus",
+          statusLine: {
+            type: "command",
+            command: "/opt/armadra/armadra-hook context-usage",
+          },
+        }),
+        "utf8",
+      );
+      act(config, integration, CLIENT);
+      const settings = read(path) as { model: string; statusLine?: unknown };
+      expect(settings.statusLine).toBeUndefined();
+      expect(settings.model).toBe("opus");
+    }
   });
 
   /** An unreadable `settings.json` must not read as "the status line is free". */

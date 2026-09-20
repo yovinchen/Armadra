@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, extname, join } from "node:path";
+import { managedContextCommand } from "./claude";
 import { SKILLS_ROOT, instructionFile } from "./skills";
 import {
   type JsonObject,
@@ -342,13 +343,23 @@ function scanHookFile(agentId: string, path: string): LegacyFinding[] {
     }
   }
   const command = statusLineCommand(document);
-  if (command !== undefined && isLegacyCommand(command)) {
+  if (command !== undefined && isRetiredStatusLine(command)) {
     found.push(finding("status_line", path, command));
   }
   for (const entry of hookCommands(document)) {
     if (isLegacyCommand(entry)) found.push(finding("hook_entry", path, entry));
   }
   return found;
+}
+
+/**
+ * A status line this product wrote, under any of its names. The current name
+ * is in here too: the `context-usage` subcommand it calls was removed with the
+ * context readout, and a settings file still pointing at it would run a
+ * no-op on every status refresh.
+ */
+function isRetiredStatusLine(command: string): boolean {
+  return isLegacyCommand(command) || managedContextCommand(command);
 }
 
 function statusLineCommand(document: JsonObject): string | undefined {
@@ -519,7 +530,7 @@ function repairHookFile(
     }
   }
   const command = statusLineCommand(document);
-  if (command !== undefined && isLegacyCommand(command)) {
+  if (command !== undefined && isRetiredStatusLine(command)) {
     delete document.statusLine;
     removed.push(`${path}: statusLine`);
   }
