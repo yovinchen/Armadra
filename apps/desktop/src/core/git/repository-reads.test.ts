@@ -374,7 +374,13 @@ describe("cherry-pick preview", () => {
     const repo = repository("pick-missing");
     const repositoryService = service();
     const gone = await failure(() =>
-      cherryPickPreview(repositoryService, repo.path, ".", "0".repeat(40), null),
+      cherryPickPreview(
+        repositoryService,
+        repo.path,
+        ".",
+        "0".repeat(40),
+        undefined,
+      ),
     );
     expect(gone.status).toBe(404);
     const onto = await failure(() =>

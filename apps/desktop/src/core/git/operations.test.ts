@@ -16,6 +16,7 @@ import type { RepositoryService } from "./repository/service";
 import { stashes } from "./repository/stash";
 import type { ExpectedState, RepositoryAction } from "./repository/types";
 import { worktrees } from "./repository/worktrees";
+import { DomainError } from "../workspaces/support";
 
 /**
  * The operation queue and the conflict centre.
@@ -42,6 +43,17 @@ async function start(
     expected,
   );
   return settle(repositoryService, snapshot.id);
+}
+
+/** The `DomainError` a refused start carried, so its status can be asserted. */
+async function failure(run: () => Promise<unknown>): Promise<DomainError> {
+  try {
+    await run();
+  } catch (error) {
+    if (error instanceof DomainError) return error;
+    throw error;
+  }
+  throw new Error("expected a refusal");
 }
 
 /** The token a stash, reset or drop is confirmed against. */
@@ -210,6 +222,31 @@ describe("tags and remotes", () => {
     });
     expect(stale.state).toBe("failed");
     expect(stale.message).toContain("different object");
+  });
+
+  it("refuses an action that left a field out instead of throwing", async () => {
+    // The action is read here exactly as it arrived; the shared zod schema
+    // runs in the browser. Every field a validator reads therefore has to
+    // refuse a missing value rather than dereference it — a `TypeError` here
+    // leaves the router with nothing to say but "the core failed".
+    const repo = repository("action-fields");
+    const repositoryService = service();
+    const head = repo.head();
+    const incomplete = [
+      { kind: "deleteTag", name: "v1" },
+      { kind: "createTag", targetOid: head, message: null },
+      { kind: "addRemote", name: "origin" },
+      { kind: "startRebase", expectedStateToken: "0".repeat(64) },
+      { kind: "createStash", includeUntracked: false },
+      { kind: "createBranch", startPoint: null, switch: false },
+      { kind: "createWorktree", expectedOid: head, branch: "main" },
+    ] as unknown as RepositoryAction[];
+    for (const action of incomplete) {
+      const refusal = await failure(() =>
+        start(repositoryService, repo.path, action),
+      );
+      expect(refusal.status).toBe(400);
+    }
   });
 
   it("adds, renames, re-points and removes a remote", async () => {

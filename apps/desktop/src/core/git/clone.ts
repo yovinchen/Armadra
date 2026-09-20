@@ -78,9 +78,10 @@ function cloneUrlChar(character: string): boolean {
  * only. Anything else — `file://`, `http://`, `ext::`, a local path, a leading
  * dash — is refused.
  */
-export function validateCloneUrl(raw: string): string {
-  const url = raw.trim();
+export function validateCloneUrl(raw: unknown): string {
   const invalid = (): Error => badRequest("Repository URL is invalid");
+  if (typeof raw !== "string") throw invalid();
+  const url = raw.trim();
   if (
     url === "" ||
     url.length > 2_048 ||

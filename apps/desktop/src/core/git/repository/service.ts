@@ -413,12 +413,18 @@ export class RepositoryService {
     return oid;
   }
 
+  /**
+   * The name-shaped fields take `unknown` for the same reason
+   * {@link validOid} does: a repository action is inspected here exactly as it
+   * arrived, so a field the caller omitted has to refuse rather than throw.
+   */
   async validateBranch(
     directory: string,
-    name: string,
+    name: unknown,
     signal?: AbortSignal,
   ): Promise<void> {
     if (
+      typeof name !== "string" ||
       name === "" ||
       name.length > 255 ||
       name.startsWith("-") ||
@@ -441,9 +447,12 @@ export class RepositoryService {
 
   async validateReference(
     directory: string,
-    reference: string,
+    reference: unknown,
     signal?: AbortSignal,
   ): Promise<void> {
+    if (typeof reference !== "string") {
+      throw badRequest("Git reference is invalid");
+    }
     if (reference === "HEAD" || validOid(reference)) return;
     if (reference.startsWith("refs/")) {
       if (reference.length > 1024 || hasControl(reference)) {
@@ -461,10 +470,11 @@ export class RepositoryService {
 
   async validateTagName(
     directory: string,
-    name: string,
+    name: unknown,
     signal?: AbortSignal,
   ): Promise<void> {
     if (
+      typeof name !== "string" ||
       name === "" ||
       name.length > 255 ||
       name.startsWith("-") ||
@@ -488,10 +498,11 @@ export class RepositoryService {
   /** A remote name that does not have to exist yet. */
   async validateRemoteName(
     directory: string,
-    name: string,
+    name: unknown,
     signal?: AbortSignal,
   ): Promise<void> {
     if (
+      typeof name !== "string" ||
       name === "" ||
       name.length > 255 ||
       name.startsWith("-") ||
@@ -522,10 +533,11 @@ export class RepositoryService {
 
   async validateRemote(
     directory: string,
-    remote: string,
+    remote: unknown,
     signal?: AbortSignal,
   ): Promise<void> {
     if (
+      typeof remote !== "string" ||
       remote === "" ||
       remote.length > 255 ||
       remote.startsWith("-") ||

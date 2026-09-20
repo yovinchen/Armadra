@@ -14,6 +14,7 @@ import {
   badRequest,
   conflict,
   hashField,
+  isDigest,
   malformed,
   nowRfc3339,
   oneLine,
@@ -51,8 +52,9 @@ import type {
 const MAX_UNTRACKED_BYTES = 32 * 1024 * 1024;
 const MAX_STASHES = 1000;
 
-export function validateMessage(message: string): void {
+export function validateMessage(message: unknown): void {
   if (
+    typeof message !== "string" ||
     Buffer.byteLength(message, "utf8") > 4096 ||
     message.includes("\0") ||
     message.includes("\r")
@@ -61,8 +63,8 @@ export function validateMessage(message: string): void {
   }
 }
 
-export function validateStateToken(token: string): void {
-  if (token.length !== 64 || !/^[0-9a-fA-F]+$/.test(token)) {
+export function validateStateToken(token: unknown): void {
+  if (!isDigest(token)) {
     throw badRequest("Stash requires an observed repository state token");
   }
 }

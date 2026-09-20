@@ -216,9 +216,14 @@ export async function verifyWorktreeBinding(
  */
 export function newWorktreePath(
   context: RepositoryContext,
-  requested: string,
+  requested: unknown,
 ): string {
-  if (requested === "" || requested.length > 4096 || requested.includes("\0")) {
+  if (
+    typeof requested !== "string" ||
+    requested === "" ||
+    requested.length > 4096 ||
+    requested.includes("\0")
+  ) {
     throw badRequest("Worktree path is invalid");
   }
   const candidate = isAbsolutePath(requested)

@@ -72,19 +72,34 @@ export function shuttingDown(): DomainError {
 }
 
 /** SHA-1 (40) or SHA-256 (64) hex, the two object-id widths Git produces. */
-export function validOid(oid: string): boolean {
-  return (oid.length === 40 || oid.length === 64) && /^[0-9a-fA-F]+$/.test(oid);
+/**
+ * `unknown` rather than `string` on purpose: a repository action reaches the
+ * validators exactly as it arrived on the wire — the shared zod schema runs in
+ * the browser, not here — so a field the caller left out arrives as
+ * `undefined`. Reading `.length` off it is a TypeError the router can only
+ * report as a core failure; answering `false` makes it the 400 it is.
+ */
+export function validOid(oid: unknown): boolean {
+  return (
+    typeof oid === "string" &&
+    (oid.length === 40 || oid.length === 64) &&
+    /^[0-9a-fA-F]+$/.test(oid)
+  );
 }
 
-export function requireOid(oid: string): void {
+export function requireOid(oid: unknown): void {
   if (!validOid(oid)) {
     throw badRequest("Expected commit must be an object ID");
   }
 }
 
 /** A 64-character hex digest: a state token, a diff digest or a hunk id. */
-export function isDigest(value: string): boolean {
-  return value.length === 64 && /^[0-9a-fA-F]+$/.test(value);
+export function isDigest(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    value.length === 64 &&
+    /^[0-9a-fA-F]+$/.test(value)
+  );
 }
 
 export function sha256Hex(...parts: (string | Uint8Array)[]): string {
