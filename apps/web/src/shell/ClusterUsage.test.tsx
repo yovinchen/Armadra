@@ -14,7 +14,7 @@ vi.mock("../api/client", () => ({
 import { installDomPolyfills, TestProviders } from "../app/test-harness";
 import { usePreferencesStore } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
-import { DockUsage } from "./DockUsage";
+import { ClusterUsage } from "./ClusterUsage";
 
 installDomPolyfills();
 afterEach(cleanup);
@@ -45,12 +45,12 @@ const usage: Usage = {
 function renderDock() {
   return render(
     <TestProviders>
-      <DockUsage />
+      <ClusterUsage />
     </TestProviders>,
   );
 }
 
-describe("DockUsage", () => {
+describe("ClusterUsage", () => {
   beforeEach(() => {
     usePreferencesStore.setState({ showUsage: true, locale: "zh-CN" });
     useCanvasStore.setState((state) => ({

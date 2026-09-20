@@ -14,6 +14,7 @@ import { WORK_PANEL_WIDTH, type RightPanelKey } from "../panels/WorkPanelSheet";
 import { cn } from "@/lib/cn";
 import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
+import { ClusterUsage } from "./ClusterUsage";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import { useMenuTooltip } from "./menu-tooltip";
 import type { ReactNode } from "react";
@@ -126,6 +127,8 @@ export function ControlsCluster() {
         >
           <Activity />
         </ClusterButton>
+
+        <ClusterUsage />
 
         {focusNodeId && (
           <ClusterButton

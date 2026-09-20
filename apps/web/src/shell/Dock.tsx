@@ -6,7 +6,6 @@ import {
 } from "../canvas/menus/AddMenuContent";
 import { DockTools } from "./DockTools";
 import { setCanvasLocked, useCanvasLocked } from "../canvas/canvas-lock";
-import { DockUsage } from "./DockUsage";
 import { useMenuTooltip } from "./menu-tooltip";
 import { currentViewportCenter } from "../canvas/placement";
 import { fitView, zoomToLevel } from "../canvas/flow/use-flow-viewport";
@@ -210,8 +209,6 @@ export function Dock() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <DockUsage />
       </div>
     </div>
   );

@@ -109,8 +109,11 @@
   pointer-events: none;
 }
 
-/* Reserve action slots so labels never move when controls appear. Keyboard
-   focus reveals the controls; coarse pointers always get the full affordance. */
+/* Reserve action slots so labels never move when controls appear. Hover,
+   selection, an open menu or keyboard focus on the control itself reveals
+   them; coarse pointers always get the full affordance. Focus *inside* the
+   body (a terminal being typed in) deliberately does not: that kept the
+   close button lit on whichever node the cursor lived in. */
 .node-secondary-action {
   opacity: 0;
   pointer-events: none;
@@ -120,9 +123,9 @@
 }
 
 [data-slot="node-shell"]:hover .node-secondary-action,
-[data-slot="node-shell"]:focus-within .node-secondary-action,
 [data-slot="node-shell"][data-selected="true"] .node-secondary-action,
-.node-secondary-action[aria-expanded="true"] {
+.node-secondary-action[aria-expanded="true"],
+.node-secondary-action:focus-visible {
   opacity: 1;
   pointer-events: auto;
 }

@@ -389,7 +389,9 @@ function NodeMenu(props: {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton label={t("node.more")}>
+        {/* Revealed together with the close button: one control that is
+            always there beside one that appears on hover reads as a glitch. */}
+        <IconButton className="node-secondary-action" label={t("node.more")}>
           <MoreHorizontal />
         </IconButton>
       </DropdownMenuTrigger>

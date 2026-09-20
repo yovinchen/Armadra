@@ -94,7 +94,12 @@ function summary(
     .join(" · ");
 }
 
-export function DockUsage() {
+/**
+ * The quota ring, in the right-hand cluster under "resources": the dock is
+ * for editing the canvas, the cluster is for the panels, and this opens a
+ * panel. Same 28px footprint as the cluster's icon buttons.
+ */
+export function ClusterUsage() {
   const t = useT();
   const compact = useCompactLayout();
   const usagePanel = useCanvasStore((state) => state.panels.usage);
@@ -118,7 +123,7 @@ export function DockUsage() {
       <Tooltip delayDuration={500}>
         <TooltipTrigger asChild>
           <IconButton
-            size="dock"
+            size="cluster"
             label={t("usage.dashboard.open")}
             active={usagePanel !== "closed"}
             onClick={open}
@@ -126,7 +131,7 @@ export function DockUsage() {
             <Gauge />
           </IconButton>
         </TooltipTrigger>
-        <TooltipContent>{t("usage.dashboard.open")}</TooltipContent>
+        <TooltipContent side="left">{t("usage.dashboard.open")}</TooltipContent>
       </Tooltip>
     );
   }
@@ -140,7 +145,7 @@ export function DockUsage() {
       <TooltipTrigger asChild>
         <button
           type="button"
-          data-slot="dock-usage"
+          data-slot="cluster-usage"
           data-level={ringLevel ?? "none"}
           aria-label={t("usage.dockLabel", { value: detail })}
           aria-pressed={usagePanel !== "closed"}
@@ -162,7 +167,7 @@ export function DockUsage() {
           </span>
         </button>
       </TooltipTrigger>
-      <TooltipContent>{detail}</TooltipContent>
+      <TooltipContent side="left">{detail}</TooltipContent>
     </Tooltip>
   );
 }
