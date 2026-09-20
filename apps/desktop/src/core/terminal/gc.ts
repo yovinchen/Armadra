@@ -207,10 +207,16 @@ export async function reconcile(
     (await backend.list()).map((reference) => reference.name),
   );
 
+  // Ordered so the first row naming a backend reference is the one that
+  // reference belongs to: a running row beats a dead one, then the newer
+  // generation, then the newer row. Two rows *can* name the same pane — a node
+  // whose old pane was unreachable opens a second session under the same key,
+  // and the first one comes back when the tmux server does.
   const rows = database
     .prepare(
       `SELECT id, session_key, backend_ref, generation FROM terminal_sessions
-        WHERE backend_kind = ? AND (status = 'running' OR attach_state <> 'exited')`,
+        WHERE backend_kind = ? AND (status = 'running' OR attach_state <> 'exited')
+        ORDER BY (status = 'running') DESC, generation DESC, created_at DESC`,
     )
     .all(kind) as Record<string, unknown>[];
 
@@ -232,8 +238,12 @@ export async function reconcile(
   for (const row of rows) {
     const id = String(row.id);
     const reference = (row.backend_ref as string | null) ?? "";
+    // A pane has exactly one row. The second row naming it is buried rather
+    // than revived: two "running" rows over one pane give the node two live
+    // sessions, and whichever one a lookup lands on is chance.
+    const taken = known.has(reference);
     known.add(reference);
-    if (alive.has(reference)) {
+    if (alive.has(reference) && !taken) {
       revive.run(id);
       adopted.push({
         key: asSessionKey(String(row.session_key)),

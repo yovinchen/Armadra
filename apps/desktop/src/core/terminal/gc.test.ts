@@ -117,18 +117,22 @@ function insert(
     workspaceId?: string;
     reference?: string | null;
     generation?: number;
+    /** Defaults to the id; set it to give two rows the same pane. */
+    key?: string;
+    createdAt?: string;
   },
 ): void {
   db.prepare(
     `INSERT INTO terminal_sessions (id, workspace_id, cwd, shell, kind, status,
         created_at, session_key, backend_kind, backend_ref, generation, attach_state,
         termination_intent)
-      VALUES (?, ?, '/tmp', '/bin/sh', 'terminal', ?, '2026-09-19T00:00:00.000Z', ?, ?, ?, ?, ?, 'none')`,
+      VALUES (?, ?, '/tmp', '/bin/sh', 'terminal', ?, ?, ?, ?, ?, ?, ?, 'none')`,
   ).run(
     values.id,
     values.workspaceId ?? "ws",
     values.status ?? "running",
-    values.id,
+    values.createdAt ?? "2026-09-19T00:00:00.000Z",
+    values.key ?? values.id,
     values.backend,
     values.reference ?? null,
     values.generation ?? 1,
@@ -304,6 +308,55 @@ describe("start-up reconciliation", () => {
         ended_at: "2026-09-20T12:00:00.000Z",
       },
     ]);
+  });
+
+  /**
+   * One pane, one row.
+   *
+   * A node whose pane was unreachable opens a second session under the same
+   * key; when the tmux server comes back, both rows name that one pane. Both
+   * used to be revived, so the node had two live sessions and which one a
+   * lookup landed on was chance — the adoption would rebuild the record under
+   * one id while `alive` and `context terminal` asked about the other.
+   */
+  it("adopts one row per pane and buries the rest", async () => {
+    const db = database();
+    insert(db, {
+      id: "stale",
+      backend: "tmux",
+      reference: "armadra-ws-node-1",
+      key: "node",
+      status: "exited",
+      attach: "detached",
+      createdAt: "2026-09-19T00:00:00.000Z",
+    });
+    insert(db, {
+      id: "current",
+      backend: "tmux",
+      reference: "armadra-ws-node-1",
+      key: "node",
+      createdAt: "2026-09-19T01:00:00.000Z",
+    });
+
+    const { report, adopted } = await reconcile(
+      db,
+      new FakeBackend(["armadra-ws-node-1"]),
+      "tmux",
+      "2026-09-20T12:00:00.000Z",
+    );
+
+    expect(report).toMatchObject({ detached: 1, exited: 1 });
+    expect(adopted).toEqual([
+      { key: "node" as SessionKey, reference: "armadra-ws-node-1", generation: 1 },
+    ]);
+    const rows = Object.fromEntries(
+      (
+        db
+          .prepare("SELECT id, status FROM terminal_sessions")
+          .all() as Record<string, unknown>[]
+      ).map((row) => [row.id, row.status]),
+    );
+    expect(rows).toEqual({ current: "running", stale: "exited" });
   });
 
   /**

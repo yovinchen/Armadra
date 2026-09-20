@@ -279,8 +279,18 @@ export class TerminalManager {
     generation: number,
     pid: number | undefined,
   ): void {
+    // A key can have more than one row: the session a node opened while its
+    // old pane was gone sits beside the row that pane belongs to. Unordered,
+    // this took whichever SQLite handed back first, and adopting under a row
+    // that is already `exited` leaves the *running* row with no record at all
+    // — every lookup by that session id then says "not running" about the
+    // pane the user is looking at.
     const row = this.database
-      .prepare("SELECT * FROM terminal_sessions WHERE session_key = ?")
+      .prepare(
+        "SELECT * FROM terminal_sessions WHERE session_key = ? " +
+          "ORDER BY (status = 'running') DESC, generation DESC, created_at DESC " +
+          "LIMIT 1",
+      )
       .get(key) as Record<string, unknown> | undefined;
     if (row === undefined) return;
     const id = String(row.id);
