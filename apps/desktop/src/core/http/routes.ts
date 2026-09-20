@@ -793,26 +793,13 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/api/data/info",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/data/backup",
     methods: ["POST"],
     surface: "runtime",
-  },
-  {
-    path: "/api/data/legacy-kanban-archives",
-    methods: ["GET"],
-    surface: "runtime",
-  },
-  {
-    path: "/api/data/legacy-kanban-archives/{canvasId}",
-    methods: ["GET"],
-    surface: "runtime",
-  },
-  {
-    path: "/api/data/legacy-kanban-archives/{canvasId}/export",
-    methods: ["GET"],
-    surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/usage",

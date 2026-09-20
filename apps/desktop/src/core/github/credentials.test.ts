@@ -38,7 +38,7 @@ describe("GitHub 凭据", () => {
         "",
         0,
       ),
-    ).rejects.toThrow("unavailable");
+    ).rejects.toThrow("UNAUTHENTICATED");
     // 库里没有行，密钥也被清掉了：状态不会声称一个没连上过的账号。
     expect(fixture.store.config()).toBeUndefined();
   });

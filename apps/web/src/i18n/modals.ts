@@ -164,6 +164,7 @@ export const modals: MessageModule = {
     "settings.whiteboard.color.light-violet": "浅紫",
 
     "settings.terminalBackend": "终端后端",
+    "settings.terminalBackend.restart": "改动在下次启动应用时生效",
     "settings.backend.auto": "自动",
     "settings.backend.tmux": "tmux", // i18n-exempt
     "settings.backend.direct": "直连",
@@ -441,6 +442,8 @@ export const modals: MessageModule = {
     "settings.whiteboard.color.light-violet": "Light violet",
 
     "settings.terminalBackend": "Terminal backend",
+    "settings.terminalBackend.restart":
+      "Takes effect the next time the app starts",
     "settings.backend.auto": "Auto",
     "settings.backend.tmux": "tmux",
     "settings.backend.direct": "Direct",

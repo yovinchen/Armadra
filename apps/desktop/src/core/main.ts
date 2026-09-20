@@ -26,6 +26,7 @@ import { CoreServer } from "./http/server";
 import { VERSION, announcement, instanceId } from "./instance";
 import { install as installSettings } from "./settings";
 import { install as installUsage } from "./usage";
+import { install as installData } from "./data";
 import { type ListenSpec, bind, formatListenSpec, release } from "./listen";
 import { databaseFile, endpointsFile, resolveDataDir } from "./paths";
 import {
@@ -132,6 +133,8 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installImports,
   installSettings,
   installUsage,
+  // After settings: the data page reports the log retention that store holds.
+  installData,
   installIdentity,
   // GitHub after identity: its two faces authenticate every call against the
   // identity store, and it reads `store_meta.host_id` at assembly time.

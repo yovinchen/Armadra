@@ -127,6 +127,9 @@ export function TerminalPage() {
               ))}
             </SelectContent>
           </Select>
+          <p className="text-xs text-muted-foreground">
+            {t("settings.terminalBackend.restart")}
+          </p>
         </SettingsRow>
 
         <SettingsRow

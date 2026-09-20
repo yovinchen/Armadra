@@ -1,11 +1,6 @@
 import { z } from "zod";
-import {
-  healthSchema,
-  legacyKanbanArchiveExportSchema,
-  legacyKanbanArchivePageSchema,
-  legacyKanbanArchiveSchema,
-} from "@armadra/shared";
-import { query, request } from "./request";
+import { healthSchema } from "@armadra/shared";
+import { request } from "./request";
 
 /* ------------------------------------ 数据 -------------------------------- */
 
@@ -37,21 +32,4 @@ export const systemApi = {
   /** 把 `canvas.db` 原样复制到同目录的 `…backup-manual-<时间戳>`。 */
   backupData: () =>
     request("/api/data/backup", dataBackupSchema, { method: "POST" }),
-  legacyKanbanArchives: (cursor?: string, signal?: AbortSignal) =>
-    request(
-      `/api/data/legacy-kanban-archives?limit=50${cursor !== undefined ? `&cursor=${query(cursor)}` : ""}`,
-      legacyKanbanArchivePageSchema,
-      { signal },
-    ),
-  legacyKanbanArchive: (canvasId: string, signal?: AbortSignal) =>
-    request(
-      `/api/data/legacy-kanban-archives/${query(canvasId)}`,
-      legacyKanbanArchiveSchema,
-      { signal },
-    ),
-  exportLegacyKanbanArchive: (canvasId: string) =>
-    request(
-      `/api/data/legacy-kanban-archives/${query(canvasId)}/export`,
-      legacyKanbanArchiveExportSchema,
-    ),
 };

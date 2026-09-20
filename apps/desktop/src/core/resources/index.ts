@@ -143,8 +143,10 @@ export function install(context: CoreContext): ResourceDomain {
       }
       if (target.kind === "ref") {
         // 没有行的会话按它的后端句柄销毁——tmux 知道那个名字指的是它自己的哪个
-        // 会话，别的一律拒绝。
-        await terminateBackend(target.reference, context.dataDir);
+        // 会话，别的一律拒绝；拒绝要说出来，不能答成「已终止」。
+        if (!(await terminateBackend(target.reference, context.dataDir))) {
+          return coreError(404, "not_found", "No such backend session");
+        }
         return { status: 204 };
       }
       const pid = panePids(context.dataDir).get(
@@ -187,9 +189,9 @@ function backendRefOf(
 async function terminateBackend(
   reference: string,
   dataDir: string,
-): Promise<void> {
+): Promise<boolean> {
   // 只接受这个 core 自己的会话名。一个任意的名字不能通过这条路寻址。
-  if (!reference.startsWith("armadra-")) return;
+  if (!reference.startsWith("armadra-")) return false;
   const pid = panePids(dataDir).get(reference);
   if (pid !== undefined) await terminateTree(pid);
   const { execFile } = await import("node:child_process");
@@ -208,4 +210,5 @@ async function terminateBackend(
       () => done(),
     );
   });
+  return true;
 }

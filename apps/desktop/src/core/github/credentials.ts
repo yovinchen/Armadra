@@ -37,7 +37,7 @@ import { GithubCredentialStatusSchema } from "./schema";
 import { create } from "../contract/message";
 
 import { GithubClient, type GithubClientOptions } from "./client";
-import { codeOf, githubError } from "./errors";
+import { codeOf, githubError, GithubApiError } from "./errors";
 import {
   PUBLIC_API_BASE,
   apiHost,
@@ -607,7 +607,10 @@ export class CredentialService {
     let response;
     try {
       response = await client.get("/user");
-    } catch {
+    } catch (error) {
+      // The client already says why — a rejected token is UNAUTHENTICATED,
+      // not "GitHub is unavailable"; only a failure it could not classify is.
+      if (error instanceof GithubApiError) throw error;
       throw githubError("unavailable");
     }
     let login = "";

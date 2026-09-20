@@ -21,7 +21,6 @@ import { host } from "./host";
 import { integration } from "./integration";
 import { hostIdentity } from "./host-identity";
 import { hostNative } from "./host-native";
-import { legacyArchives } from "./legacy-archives";
 import { contextUsage } from "./context-usage";
 import { desktop } from "./desktop";
 import { gitHunks } from "./git-hunks";
@@ -79,7 +78,6 @@ export const MESSAGE_MODULES = {
   "host-identity": hostIdentity,
   "host-native": hostNative,
   integration,
-  "legacy-archives": legacyArchives,
   "context-usage": contextUsage,
   "git-repository": gitRepository,
   "frame-binding": frameBinding,

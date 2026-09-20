@@ -257,7 +257,6 @@ const UNREFERENCED: readonly string[] = [
   "image.empty",
   "launch.stalled",
   "launcher.open",
-  "legacyArchive.bytes",
   "lsp.executableMissing",
   "lsp.formatOnSaveHint",
   "lsp.openDocuments",
