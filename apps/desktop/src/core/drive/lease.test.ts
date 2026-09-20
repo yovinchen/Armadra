@@ -24,8 +24,7 @@ import {
  */
 
 const T0 = new Date("2026-09-20T09:00:00Z");
-const at = (seconds: number): Date =>
-  new Date(T0.getTime() + seconds * 1_000);
+const at = (seconds: number): Date => new Date(T0.getTime() + seconds * 1_000);
 
 const TERMINAL = { humanIdleSeconds: 10, agentIdleSeconds: 120 };
 const human = (): Actor => humanActor("device-a", "Laptop");
