@@ -213,6 +213,9 @@ export function agentFixture(): AgentFixture {
     audience: () => state.watchers,
     terminals: terminal.bridge,
     dataDir: directory,
+    // `send --interrupt` 等 `idle` 的那一段：注入一个空操作，用例才不用真的睡
+    // 五秒去证明「等不到就退回排队」。
+    delay: async () => {},
   });
   const collab: CollabContext = {
     ...base,

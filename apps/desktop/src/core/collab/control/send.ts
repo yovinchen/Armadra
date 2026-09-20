@@ -42,6 +42,7 @@ import {
   SEND_QUEUE_TTL_SECONDS,
   claim,
   enqueue,
+  findByKey,
   positionOf,
   requeue,
   settle,
@@ -198,6 +199,27 @@ export async function send(
   const target = resolveTarget(context, caller, args);
   const body = readBody(args);
   const key = readKey(args);
+
+  // 幂等先答（§3.3）。一次重发**不是**一次新的投递，所以它不该撞上速率闸：
+  // 「同样的 key 和正文重发是安全的」这句话，一撞上 RATE_LIMITED 就不成立了。
+  if (key !== undefined) {
+    const already = findByKey(
+      context.database,
+      caller.node.id,
+      target.id,
+      key,
+      now,
+    );
+    if (already !== undefined) {
+      if (already.body !== body) {
+        throw refuse(
+          "KEY_CONFLICT",
+          `幂等键 \`${key}\` 已经指向另一段正文，换一个 key。`,
+        );
+      }
+      return receipt(duplicateBody(context, already, now));
+    }
+  }
 
   /* --- 失控闸（§7）。放在状态闸之前：环里的消息不因为目标空闲就被放行。 --- */
   const trail = limits.trailFor(caller.node.id, nowMs);
