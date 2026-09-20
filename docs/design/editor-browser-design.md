@@ -7,7 +7,7 @@
 
 画布保留 Editor、Files、Diff、Browser 节点。节点展开后可进入焦点模式，文件树/搜索结果及 Git 面板可打开关联节点；同一路径默认复用已有编辑器，用户可主动新建第二个视图。
 
-文件和浏览器目标始终绑定 executionHostId。远程项目中的网页 `localhost` 指向浏览器所在执行主机，文件路径指向 Worker 根目录；节点头部用简短主机徽标显示来源。
+文件和浏览器目标始终绑定 executionHostId。远程项目中的网页 `localhost` 指向浏览器所在执行主机，文件路径指向执行主机上的工作区根目录；节点头部用简短主机徽标显示来源。
 
 UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、Tabs；编辑区域与终端有独立快捷键上下文，不与画布拖动/缩放抢事件。
 
@@ -20,7 +20,7 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 | 文本编辑 | 语法高亮、行号、折叠、缩进、括号匹配、多光标、行操作、撤销/重做 |
 | 搜索替换 | 当前文件/选择区、大小写/正则/全词、替换预览                     |
 | 快速打开 | 路径模糊匹配、最近文件、跳转行列                                |
-| 项目搜索 | Worker 侧执行，支持 glob/忽略规则/大小上限，结果分页与取消      |
+| 项目搜索 | 执行主机侧执行，支持 glob/忽略规则/大小上限，结果分页与取消     |
 | 语言服务 | 补全、诊断、hover、定义、引用、符号、重命名、格式化、代码操作   |
 | 文件信息 | 编码、BOM、LF/CRLF、tab/space、语言、只读、当前执行主机         |
 | Markdown | 编辑/预览/分屏，代码块高亮、项目内资源与链接                    |
@@ -39,9 +39,9 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 | 功能     | 实现                                                                                                                                                                                                                                        |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 搜索替换 | CodeMirror `search({ top: true })`，面板自带大小写/正则/全字；替换那一行由 `EditorState.readOnly` 决定是否出现，面板文案经 `EditorState.phrases` 走 i18n                                                                                    |
-| 快速打开 | ⌘P → `GET …/file-index?query=&limit=`，Runtime 侧模糊匹配文件名（命中路径的排在后面），跳过 `.git`/`node_modules`/`target`/`dist` 等与 `.armadra`，扫描上限 40 000 项、默认返回 40 条，截断如实标注；同一路径复用已有编辑器                 |
+| 快速打开 | ⌘P → `GET …/file-index?query=&limit=`，core 侧模糊匹配文件名（命中路径的排在后面），跳过 `.git`/`node_modules`/`target`/`dist` 等与 `.armadra`，扫描上限 40 000 项、默认返回 40 条，截断如实标注；同一路径复用已有编辑器                    |
 | 项目搜索 | ⌘⇧H → 资源管理器「搜索」页 → `POST …/file-search`。字面量或正则、大小写、全字、包含/排除 glob、每文件命中上限（默认 20）、5s 总时长上限；>1 MiB 与含 NUL 的文件只计入 `skipped` 不读取；按文件分页（`offset`/`nextOffset`），点命中打开到行 |
-| 文件信息 | 读取返回 `encoding`(`utf-8`/`unknown`)、`bom`、`eol`(`lf`/`crlf`/`mixed`/`none`)、`readonly`，编辑器状态栏显示；非 UTF-8 的文件 Runtime 不给内容版本，因此天然只读                                                                          |
+| 文件信息 | 读取返回 `encoding`(`utf-8`/`unknown`)、`bom`、`eol`(`lf`/`crlf`/`mixed`/`none`)、`readonly`，编辑器状态栏显示；非 UTF-8 的文件 core 不给内容版本，因此天然只读                                                                             |
 | Markdown | 头部按钮在 编辑 / 并排 / 预览 之间轮转。`react-markdown` 不接 `rehype-raw`，裸 HTML 与 `<script>` 只作为文本出现；相对路径图片经 `file-download` 读取，链接只放行 http/https 与文档内锚点                                                   |
 | 文件管理 | 文件树右键与顶部按钮：新建文件/文件夹、重命名、移动（改路径或拖到目录行）、删除到回收站；受工作区 write 权限约束，无权限时菜单项不出现                                                                                                      |
 | 语言服务 | 只有能力探测：`GET …/language-service` 恒为 `{ status: "unavailable", reason: "not_implemented" }`，设置 → 工作区显示「未启用」，编辑器状态栏显示「LSP 未启用」，不出现任何补全入口                                                         |
@@ -56,7 +56,7 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 
 ### 2.1 文件管理器拖拽
 
-左侧文件树和 Files 节点使用同一文件引用，包含协议版本、Runtime/Host 来源、工作空间和规范化相对路径。内部拖拽传递文件引用；打开预览复用项目中的文件，不把一次拖动变成重复导入。
+左侧文件树和 Files 节点使用同一文件引用，包含协议版本、执行来源、工作空间和规范化相对路径。内部拖拽传递文件引用；打开预览复用项目中的文件，不把一次拖动变成重复导入。
 
 | 落点                                   | 行为                                                                           |
 | -------------------------------------- | ------------------------------------------------------------------------------ |
@@ -75,7 +75,7 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 
 `DocumentId = executionHostId + workspaceId + normalizedRelativePath`。状态包含 baseVersion、baseHash、draftRevision、encoding、eol、dirty、externalVersion、readOnlyReason。编辑器视图 ID 与文档 ID 分开，两个节点打开同文件共享本设备草稿，避免互相覆盖。
 
-读取返回 bytes/encoding/version；写入包含 expectedVersion、目标编码和 EOL。Worker 检查规范路径和版本后执行同目录临时文件写入、刷新与原子替换；保留权限，遇到符号链接按明确策略写入允许的真实目标，不直接替换链接造成语义变化。
+读取返回 bytes/encoding/version；写入包含 expectedVersion、目标编码和 EOL。core 检查规范路径和版本后执行同目录临时文件写入、刷新与原子替换；保留权限，遇到符号链接按明确策略写入允许的真实目标，不直接替换链接造成语义变化。
 
 原子替换只保证保存完整，不保证与外部编辑器的强互斥。写入前重新核对指纹，监听写入后的外部变化；变化竞争时保留恢复副本并提示，不声称能对所有外部写者实现原子 CAS。
 
@@ -87,7 +87,7 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 - 远端断开：草稿可本机持久化，标题显示未同步；重连比较版本后保存。
 - 保存响应丢失：查询文件版本/hash 判断是否已保存，再决定重试。
 
-已实现（E01/M4，Runtime + 画布）：编辑器节点打开文本文件时用 `POST /api/workspaces/{id}/file-watch` 注册，Runtime 用 notify 监听该文件的父目录，变化经现有工作空间事件通道推 `file.changed`（`workspaceId` / `path` / `kind` = modified·removed·replaced / `sha256` / `size` / `mtime`）。写入前先登记即将发布的哈希，自身保存不会被报成外部修改；关闭节点、撤销读权限、删除工作空间和 Runtime 关停都会释放 watcher。监听不可用时注册回答 `status: "unsupported"`，客户端退回 `GET /api/workspaces/{id}/file-version`（窗口重新获得焦点时问一次，不轮询）。
+已实现（E01/M4，core + 画布）：编辑器节点打开文本文件时用 `POST /api/workspaces/{id}/file-watch` 注册，core 监听该文件的父目录，变化经现有工作空间事件通道推 `file.changed`（`workspaceId` / `path` / `kind` = modified·removed·replaced / `sha256` / `size` / `mtime`）。写入前先登记即将发布的哈希，自身保存不会被报成外部修改；关闭节点、撤销读权限、删除工作空间和 core 关停都会释放 watcher。监听不可用时注册回答 `status: "unsupported"`，客户端退回 `GET /api/workspaces/{id}/file-version`（窗口重新获得焦点时问一次，不轮询）。
 
 节点侧：无草稿自动重载并提示；有草稿显示非模态提示条，提供比较（磁盘版 → 草稿的行级 diff，复用变更节点的着色）、重载放弃草稿、保留草稿三种选择。保留草稿把最新磁盘版本当作下一次保存的内容版本，之后磁盘再变仍然 409 并重新提示。文件被删除时只保留草稿，下一次保存按新建提交。
 
@@ -103,9 +103,9 @@ UI 使用现有 shadcn/Radix 原语组织工具栏、菜单、Sheet、Dialog、T
 
 ## 4. 语言服务与不受信任预览
 
-LSP 运行在 Worker 侧，生命周期按工作空间/语言复用，idle 时回收。LSP 的 JSON-RPC 在执行端适配，跨端走类型化 EditorService 或限范围的版本化载荷，不开放任意进程通道。
+LSP 运行在执行主机侧，生命周期按工作空间/语言复用，idle 时回收。LSP 的 JSON-RPC 在执行端适配，跨端走类型化 EditorService 或限范围的版本化载荷，不开放任意进程通道。
 
-格式化/重命名/代码操作返回 WorkspaceEdit，客户端预览文件列表、内容和版本，再由 Worker 执行。版本不符就重新计算；未允许的项目外路径拒绝。
+格式化/重命名/代码操作返回 WorkspaceEdit，客户端预览文件列表、内容和版本，再由执行主机执行。版本不符就重新计算；未允许的项目外路径拒绝。
 
 Markdown 预览禁用任意脚本，HTML 经清理；相对链接解析在工作空间资源服务下。HTTP 内容、Markdown 和语言服务建议都是资料，不获得应用 RPC 权限。SVG 用隔离预览，禁止把脚本能力直接带入应用文档。
 
@@ -115,7 +115,7 @@ Markdown 预览禁用任意脚本，HTML 经清理；相对链接解析在工作
 
 原因：Tauri 在不同平台使用不同 WebView 引擎，不能假设桌面系统 WebView 都具有同一套 Chromium 调试接口；原生子 WebView 与画布缩放、裁剪、遮挡的行为也需要逐平台验证。依据 [Tauri WebView 平台说明](https://v2.tauri.app/reference/webview-versions/) 与 [WebView API](https://v2.tauri.app/reference/javascript/api/namespacewebview/)。
 
-首轮 Browser Worker 使用 Rust 管理 Chromium 生命周期和受限 CDP 适配；不引入公开的原始 CDP 代理。浏览器二进制按 OS/架构单独受管下载或使用用户选定的受支持路径，校验 hash/签名和版本；缺少浏览器时提供安装/选择流程及明确不可用状态。
+首轮 Browser Worker 使用 core 管理 Chromium 生命周期和受限 CDP 适配；不引入公开的原始 CDP 代理。浏览器二进制按 OS/架构单独受管下载或使用用户选定的受支持路径，校验 hash/签名和版本；缺少浏览器时提供安装/选择流程及明确不可用状态。
 
 M0 必须验证 macOS/Windows/Linux 的启动、页面渲染、输入法、画布裁剪、帧传输与无头服务器模式。若某平台 PoC 不通过，登记具体能力缺口，不能以普通 iframe 替代后标记完整。音视频、DRM、浏览器扩展和通用同步账号不作为本期浏览器验收目标；开发预览、交互、调试、登录、文件上传下载必须完成。
 
@@ -133,11 +133,11 @@ M0 必须验证 macOS/Windows/Linux 的启动、页面渲染、输入法、画�
 | 共享状态   | Agent 正在操作徽标、人工接管、当前控制者、只读观察者                             |
 | 远程查看   | 同一 BrowserSession 在桌面、浏览器和手机上呈现                                   |
 
-URL 只允许 http/https；开发项目可以显式声明 loopback 服务。访问执行主机上的应用管理端口、云元数据地址和非项目内网目标有独立网络策略，检查重定向及解析结果；不能让任意远端页面通过浏览器绕过 Host 的授权。
+URL 只允许 http/https；开发项目可以显式声明 loopback 服务。访问执行主机上的应用管理端口、云元数据地址和非项目内网目标有独立网络策略，检查重定向及解析结果；不能让任意远端页面通过浏览器绕过 core 的授权。
 
 页面新窗口默认转受管新 tab 并提示；下载存入工作空间指定目录，状态包含来源、目标、大小及校验。上传由用户/已授权 Agent 选择项目内文件；不可通过页面 file chooser 读取整个执行主机。
 
-已实现（B01/M5，`apps/runtime/src/browser/`）：
+已实现（B01/M5，core 的 `browser/` 域）：
 
 | 类别   | 实现                                                                                                                                                                                                                                                 |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -172,9 +172,9 @@ DOM 元素引用绑定 session/tab/frame/navigationEpoch；页面导航或元素
 
 动作身份包含真实 Agent Session 和项目授权；开始时获取 BrowserControlLease。人类点击“接管”立即撤销 Agent 输入租约，已经派发但结果未明的动作显示 unknown，不重复执行。读页面可以多读者，输入默认单写者。
 
-涉及账号、发布、购买、权限等动作仍受调用方授权范围约束；页面本身的文字不能提升 Agent 的 Host 权限。Cookie 密钥默认不向 Agent 返回，登录由浏览器会话维持；将来若提供凭据导出必须另设能力与审计。
+涉及账号、发布、购买、权限等动作仍受调用方授权范围约束；页面本身的文字不能提升 Agent 在 core 里的权限。Cookie 密钥默认不向 Agent 返回，登录由浏览器会话维持；将来若提供凭据导出必须另设能力与审计。
 
-已实现（B01/M5）：`armadra-hook browser <navigate|read|click|type|wait|capture>` 经 `POST /browser/{verb}` 到达 Runtime，与 `context`/`canvas` 同一套凭据。授权是三重检查：目标必须出现在调用者自己的上下文链接文档里、必须是同工作空间的 `browser` 节点、且调用者持有本 Runtime 签发的节点令牌（`legacy` 一律拒绝）；`browser` 能力可在自定义 Agent 设置里关掉。人与 Agent 操作的是同一个 session，没有第二个只给 Agent 的浏览器。
+已实现（B01/M5）：`armadra-hook browser <navigate|read|click|type|wait|capture>` 经 `POST /browser/{verb}` 到达 core，与 `context`/`canvas` 同一套凭据。授权是三重检查：目标必须出现在调用者自己的上下文链接文档里、必须是同工作空间的 `browser` 节点、且调用者持有本 core 签发的节点令牌（`legacy` 一律拒绝）；`browser` 能力可在自定义 Agent 设置里关掉。人与 Agent 操作的是同一个 session，没有第二个只给 Agent 的浏览器。
 
 `read` 支持 text/elements/links/title/console/network，正文按字节上限截断并如实标注。元素引用是 `e<navigationEpoch>-<序号>`，页面导航后同一个引用返回 `STALE_TARGET`，必须重新 read；`links` 不发引用，因为链接要么走 elements 要么直接用它报出的 href。`wait` 只接受 selector / url-contains / title-contains 三选一，上限 30 秒，没有 network idle 这一项。每一次动作（含被拒绝的）都写进节点活动 `.armadra/board-log.jsonl`。
 
@@ -198,15 +198,15 @@ DOM 元素引用绑定 session/tab/frame/navigationEpoch；页面导航或元素
 
 ## 9. 后台与恢复
 
-BrowserSession 与节点生命周期分离：节点隐藏不关闭页面；Host 重启后尝试重新认领 Browser Worker。Browser Worker 崩溃后可恢复 profile、URL 和历史，但不能恢复任意网页 JS 堆/未提交表单，必须显示恢复方式与丢失范围。
+BrowserSession 与节点生命周期分离：节点隐藏不关闭页面；core 重启后尝试重新认领 Browser Worker。Browser Worker 崩溃后可恢复 profile、URL 和历史，但不能恢复任意网页 JS 堆/未提交表单，必须显示恢复方式与丢失范围。
 
 画布无订阅者时，截图暂停；有 Agent 控制或自动化正在等待页面时不销毁 session。空闲浏览器回收策略必须排除下载、权限请求、未完成上传和 active lease，回收前保存可恢复信息。
 
 “关闭浏览器节点”区分移除展示和结束 BrowserSession；结束需要检查其他设备订阅与任务引用。网页普通登录状态存于执行主机隔离 profile，不同步整个 profile 到其他设备。
 
-已实现（B01/M5）：关闭节点只退订画面，页面继续跑，重新打开同一节点接回同一 session（`DELETE …/sessions/{id}` 默认 `terminate=false`）；`terminate=true` 才结束进程组、删 profile、删行。Runtime 启动时后台重放所有 `keepAlive` 的行：按原 profile 重新拉起、回到记录的 URL，`generation` +1 好让客户端认出这是重启后的会话；页面 JS 堆与未提交的表单回不来，节点状态如实显示。Runtime 正常退出会关掉自己启动的全部浏览器。
+已实现（B01/M5）：关闭节点只退订画面，页面继续跑，重新打开同一节点接回同一 session（`DELETE …/sessions/{id}` 默认 `terminate=false`）；`terminate=true` 才结束进程组、删 profile、删行。core 启动时后台重放所有 `keepAlive` 的行：按原 profile 重新拉起、回到记录的 URL，`generation` +1 好让客户端认出这是重启后的会话；页面 JS 堆与未提交的表单回不来，节点状态如实显示。core 正常退出会关掉自己启动的全部浏览器。
 
-限制：Runtime 被 SIGKILL 时来不及关浏览器，残留进程会占住 profile，下次重启该会话报 `launch_failed` 并显示 disconnected，需要手动清理。Windows 上只能结束浏览器主进程，没有进程组语义。空闲回收策略、跨设备订阅检查与"结束前保存可恢复信息"尚未实现。
+限制：core 被 SIGKILL 时来不及关浏览器，残留进程会占住 profile，下次重启该会话报 `launch_failed` 并显示 disconnected，需要手动清理。Windows 上只能结束浏览器主进程，没有进程组语义。空闲回收策略、跨设备订阅检查与"结束前保存可恢复信息"尚未实现。
 
 ## 10. 测试与交付
 

@@ -4,17 +4,17 @@
 
 ## 0. 结论
 
-| 决定            | 内容                                                                                                                                                                                                                                                                           |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 服务器从哪来    | 只复用执行主机上用户已安装的 language server（PATH 或设置里的绝对路径），`--version` 探测成功才算存在；缺失、探测失败、被禁用一律回答 `unsupported` 并给稳定 reason。不下载、不安装、不做任何自动动作                                                                          |
-| 进程在哪跑      | 在工作空间的执行主机上：本机工作空间由 Runtime 进程内的 `language::Manager` 拉起；远端工作空间由远端 `armadra-runtime worker` 拉起，Runtime 只做转发。同一执行主机上一个 server 服务该主机上所有打开该语言文件的编辑器节点，按（执行主机, 工作空间, serverId）复用             |
-| 谁是 LSP 客户端 | 执行主机侧的 `Manager` 是唯一真正与 server 握手的 JSON-RPC 客户端；每个 Web 连接得到一个「会话」，会话看到的 `initialize` 应答由 `Manager` 用缓存的 server capabilities 代答。文档状态（didOpen/didChange 影子文本与版本号）只在执行主机侧维护一份，server 重启对 Web 透明     |
-| Web 客户端      | CodeMirror 官方 `@codemirror/lsp-client`（传输层可替换、按 uri 管理多文件），经一条会话专用 WebSocket 传原始 JSON-RPC 文本帧。实测 language chunk 19.9 kB gzip（门槛 150 kB），自研薄客户端不启用（§2.4 判定结果）                                                             |
-| 权限门          | 启动 server 需要工作空间 **execute** 授权（与 Git 同理：server 会执行项目内的构建脚本、插件、`cargo check`）；会话内方法按 read / write 分级白名单，白名单之外的方法在执行主机侧拒绝                                                                                           |
-| 路径边界        | Web 只见工作空间相对路径（`armadra:///<rel>`），执行主机侧把它改写成 `file://<root>/<rel>` 交给 server，反向同样改写；server 返回的工作空间之外的位置标记为 `external`，首版不打开                                                                                             |
-| 多文件修改      | 重命名、代码操作、格式化返回的 `WorkspaceEdit` 先在 Web 预览（文件列表、逐文件 diff、内容版本），确认后由执行主机按 sha256 逐文件写入；受影响的已打开文档必须没有未保存草稿                                                                                                    |
-| 协议            | 新增 `proto/armadra/v1/language.proto`（能力探测、会话、消息信封、编辑应用），`worker.proto` 的 `WorkerRequest/WorkerResponse` 各加 oneof 分支（编号从 30 起），远端用第二条 `worker --stdio --language-link` 连接承载全双工帧；`resources.proto` 加平台组件 `LANGUAGE_SERVER` |
-| 首批语言        | TypeScript/JavaScript、Rust、Go、Python、JSON、YAML、Markdown（§1.2 表）                                                                                                                                                                                                       |
+| 决定            | 内容                                                                                                                                                                                                                                                                       |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 服务器从哪来    | 只复用执行主机上用户已安装的 language server（PATH 或设置里的绝对路径），`--version` 探测成功才算存在；缺失、探测失败、被禁用一律回答 `unsupported` 并给稳定 reason。不下载、不安装、不做任何自动动作                                                                      |
+| 进程在哪跑      | 在工作空间的执行主机上：本机工作空间由 core 进程内的 `language::Manager` 拉起；远端工作空间由远端 core（经 SSH 拉起的执行进程）拉起，本机 core 只做转发。同一执行主机上一个 server 服务该主机上所有打开该语言文件的编辑器节点，按（执行主机, 工作空间, serverId）复用      |
+| 谁是 LSP 客户端 | 执行主机侧的 `Manager` 是唯一真正与 server 握手的 JSON-RPC 客户端；每个 Web 连接得到一个「会话」，会话看到的 `initialize` 应答由 `Manager` 用缓存的 server capabilities 代答。文档状态（didOpen/didChange 影子文本与版本号）只在执行主机侧维护一份，server 重启对 Web 透明 |
+| Web 客户端      | CodeMirror 官方 `@codemirror/lsp-client`（传输层可替换、按 uri 管理多文件），经一条会话专用 WebSocket 传原始 JSON-RPC 文本帧。实测 language chunk 19.9 kB gzip（门槛 150 kB），自研薄客户端不启用（§2.4 判定结果）                                                         |
+| 权限门          | 启动 server 需要工作空间 **execute** 授权（与 Git 同理：server 会执行项目内的构建脚本、插件、`cargo check`）；会话内方法按 read / write 分级白名单，白名单之外的方法在执行主机侧拒绝                                                                                       |
+| 路径边界        | Web 只见工作空间相对路径（`armadra:///<rel>`），执行主机侧把它改写成 `file://<root>/<rel>` 交给 server，反向同样改写；server 返回的工作空间之外的位置标记为 `external`，首版不打开                                                                                         |
+| 多文件修改      | 重命名、代码操作、格式化返回的 `WorkspaceEdit` 先在 Web 预览（文件列表、逐文件 diff、内容版本），确认后由执行主机按 sha256 逐文件写入；受影响的已打开文档必须没有未保存草稿                                                                                                |
+| 协议            | core 内的类型化接口（能力探测、会话、消息信封、编辑应用），本机走进程内通道，远端经第二条 SSH 连接承载全双工的语言帧；资源面板的平台组件枚举加 `LANGUAGE_SERVER`                                                                                                           |
+| 首批语言        | TypeScript/JavaScript、Rust、Go、Python、JSON、YAML、Markdown（§1.2 表）                                                                                                                                                                                                   |
 
 ## 1. 目标与边界
 
@@ -37,7 +37,7 @@
 
 ### 1.2 首批语言与服务器发现
 
-发现只在执行主机上进行，规则与 `apps/runtime/src/agent_probe.rs` 一致：只运行 `--version`（关闭 stdin、8 s 超时、64 KiB 输出上限），结果缓存 24 h，探测失败是独立答案而不是「支持」。**注意 rustup 的 `rust-analyzer` 代理即使组件未安装也存在于 PATH**，本机实测 `rust-analyzer --version` 报 `Unknown binary 'rust-analyzer' in official toolchain`——所以「文件存在」不算发现，`--version` 退出码 0 才算。
+发现只在执行主机上进行，规则与 core 里 Agent CLI 探测的规则一致：只运行 `--version`（关闭 stdin、8 s 超时、64 KiB 输出上限），结果缓存 24 h，探测失败是独立答案而不是「支持」。**注意 rustup 的 `rust-analyzer` 代理即使组件未安装也存在于 PATH**，本机实测 `rust-analyzer --version` 报 `Unknown binary 'rust-analyzer' in official toolchain`——所以「文件存在」不算发现，`--version` 退出码 0 才算。
 
 | languageId                | 扩展名                        | 候选（按顺序，先命中先用）                                | 启动参数                    | 说明                                                                                              |
 | ------------------------- | ----------------------------- | --------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -49,7 +49,7 @@
 | `yaml`                    | yaml yml                      | `yaml-language-server`                                    | `--stdio`                   |                                                                                                   |
 | `markdown`                | md markdown                   | `marksman`                                                | `server`                    | 只做链接/标题补全与定义；预览仍走 `react-markdown`                                                |
 
-候选表是 `apps/runtime/src/language/registry.rs` 里的静态常量；用户可在设置 `language.servers[<serverId>]` 覆盖 `path`/`args`/`enabled`/`initializationOptions`/`settings`。设置里不提供「安装」按钮，缺失时的文案只说明缺什么（`server_not_found` / `server_probe_failed` / `execution_not_granted` / `disabled` / `language_unknown`）。
+候选表是 core 的 `language/` 域里的静态常量；用户可在设置 `language.servers[<serverId>]` 覆盖 `path`/`args`/`enabled`/`initializationOptions`/`settings`。设置里不提供「安装」按钮，缺失时的文案只说明缺什么（`server_not_found` / `server_probe_failed` / `execution_not_granted` / `disabled` / `language_unknown`）。
 
 ### 1.3 生命周期
 
@@ -60,7 +60,7 @@
 | server 异常退出                          | 状态 `crashed`，10 分钟内最多重启 3 次（1 s / 5 s / 20 s 退避）；超出则停在 `crashed`，附 stderr 尾部 4 KiB（经 `security::redact_secrets`），设置页与状态栏提供「重启」             |
 | 超过资源上限（§3.3）                     | 状态 `stopped`，reason `resource_exhausted`，不自动重启                                                                                                                              |
 | 工作空间失去 execute 或 read 授权        | 立即 `shutdown`/`exit`，会话状态 `unsupported / execution_not_granted`；Web 移除全部诊断                                                                                             |
-| 工作空间删除、远端主机断开、Runtime 退出 | 结束 server 进程组；远端 link 断开时远端 Worker 自己按「控制端消失」（stdio EOF）结束其 server                                                                                       |
+| 工作空间删除、远端主机断开、core 退出    | 结束 server 进程组；远端 link 断开时远端 core 自己按「控制端消失」结束其 server                                                                                                      |
 | 设置改变（路径、禁用）                   | 受影响的 server 走「重启」路径，先 `shutdown` 再按新配置探测                                                                                                                         |
 
 ## 2. 架构
@@ -68,28 +68,28 @@
 ### 2.1 分层
 
 ```text
-EditorNode ─┐  apps/web/src/editor/language/     Runtime（控制端）                        执行主机
+EditorNode ─┐  apps/web/src/editor/language/     core（控制端）                           执行主机
 EditorNode ─┼─ LanguageClient ── WS(JSON-RPC 文本帧) ── language::routes ── LanguageLink ── language::Manager ── Server(stdio JSON-RPC)
 ProblemsPanel┘ (@codemirror/lsp-client)              │                  │ local: 进程内通道             ├── Session(会话 A)
-                                                     │                  └ remote: ssh worker --language-link ├── Session(会话 B)
+                                                     │                  └ remote: 第二条 SSH 连接承载语言帧 ├── Session(会话 B)
    设置页 → GET language-service ─────────────────── language::discover / 远端 LanguageCapabilities         └── Documents(影子文本, 版本)
 ```
 
 - **Web**：一个工作空间、一种语言一个 `LanguageClient`（`@codemirror/lsp-client` 的 `LSPClient` + 自定义 `Transport`）；多个编辑器节点共用它。Web 不知道绝对路径，也不知道 server 在哪台机器。
-- **Runtime（控制端）**：`language::routes` 提供 HTTP/WS；`LanguageLink` 抽象「到执行主机的全双工帧通道」，本机实现是进程内通道，远端实现是 `remote/language.rs` 持有的第二条 ssh 连接。控制端不解析 LSP 语义，只做会话 ↔ link 的路由与权限位传递。
-- **执行主机（`language::Manager`）**：真正的 LSP 客户端。持有 server 进程、影子文档、会话表、方法白名单、uri 改写和 `WorkspaceEdit` 应用。本机工作空间时它就在 Runtime 进程里，远端时在远端 Worker 进程里——**同一份代码，两条路径经过同一组测试**。
+- **core（控制端）**：`language::routes` 提供 HTTP/WS；`LanguageLink` 抽象「到执行主机的全双工帧通道」，本机实现是进程内通道，远端实现是 core 的 `remote/` 域持有的第二条 SSH 连接。控制端不解析 LSP 语义，只做会话 ↔ link 的路由与权限位传递。
+- **执行主机（`language::Manager`）**：真正的 LSP 客户端。持有 server 进程、影子文档、会话表、方法白名单、uri 改写和 `WorkspaceEdit` 应用。本机工作空间时它就在本机 core 进程里，远端时在远端执行主机的 core 进程里——**同一份代码，两条路径经过同一组测试**。
 
 ### 2.2 执行主机侧：进程管理与多路复用
 
 | 部件        | 职责                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server`    | 一个 server 进程：spawn（无 shell、cwd = root、环境剥离 `ARMADRA_*` 与 hook 端点变量、unix `setsid` / Windows 复用命令 Worker 的 Job Object）、`Content-Length` 编解码、请求 id → 发起会话映射、`initialize` 结果缓存、stderr 环形缓冲 64 KiB、退出监测                                                                                                                                                                 |
+| `server`    | 一个 server 进程：spawn（无 shell、cwd = root、环境剥离 `ARMADRA_*` 与 hook 端点变量、unix `setsid` / Windows 复用终端域已有的进程收容机制）、`Content-Length` 编解码、请求 id → 发起会话映射、`initialize` 结果缓存、stderr 环形缓冲 64 KiB、退出监测                                                                                                                                                                  |
 | `documents` | 每个 uri 一份影子文本：`text`、LSP `version`（执行主机单调递增）、`refcount`（几个会话打开）、`sha256`；接受会话送来的增量/全文变更，应用到影子文本后再以执行主机版本号转发给 server。多会话同 uri：第一个会话 `didOpen`，其余只增引用；只有「拥有者」会话的 didChange 被采纳（§2.5）                                                                                                                                   |
 | `session`   | 一个 Web 连接的视角：代答 `initialize`/`initialized`/`shutdown`；JSON-RPC id 加会话命名空间（`<sessionSeq>:<clientId>`），防止两个会话 id 撞车与跨会话 `$/cancelRequest`；在飞请求上限 32，超出直接回 `-32803 RequestFailed`；单请求 30 s 超时                                                                                                                                                                          |
 | `mux`       | 会话 → server：按白名单与授权位过滤后转发；server → 会话：响应按 id 映射回发起会话，`publishDiagnostics` 广播给该 server 的所有会话，`$/progress` 转成 `LanguageSessionStatus.progress`；server → 客户端请求（`workspace/configuration`、`client/registerCapability`、`window/workDoneProgress/create`、`workspace/applyEdit`）由 `Manager` 自己应答，不到 Web                                                          |
+| `lifecycle` | 空闲计时、重启预算、资源采样（pid + startTime 进入资源面板 `components`，kind `languageServer`）、core 退出时统一结束                                                                                                                                                                                                                                                                                                   |
 | `uri`       | 双向改写。Web ↔ 执行主机：`armadra:///<rel>` ↔ `file://<canonicalRoot>/<rel>`；改写只走已知字段（`textDocument.uri`、`Location[]`、`LocationLink`、`WorkspaceEdit.changes`/`documentChanges`、`DiagnosticRelatedInformation.location`、`WorkspaceSymbol.location`）；根之外的 `file:` 转成 `armadra-external:///<不透明 id>`，其它 scheme 原样透传。改写规则有独立 fixture 测试：漏一个字段就是绝对路径泄漏或导航失效 |
 | `policy`    | 方法 → 所需授权（§3.1 表）；未知方法与 `workspace/executeCommand` 拒绝（JSON-RPC `-32601`）                                                                                                                                                                                                                                                                                                                             |
-| `lifecycle` | 空闲计时、重启预算、资源采样（pid + startTime 进入资源面板 `components`，kind `languageServer`）、Runtime 退出时统一结束                                                                                                                                                                                                                                                                                                |
 | `edits`     | `WorkspaceEdit` 校验（全部路径在根内、每个文件带 `expectedSha256`、单文件 ≤ 2 MiB、文件数 ≤ 50）与逐文件写入（复用 `files::write_text_file`），每写一个就发布 `file.changed`（绕过自保存抑制，让干净的编辑器按既有规则自动重载）                                                                                                                                                                                        |
 
 ### 2.3 与文件内容版本、外部变更的协调
@@ -141,18 +141,20 @@ ProblemsPanel┘ (@codemirror/lsp-client)              │                  │ 
 
    **与本节原方案的偏差**：原本写的是「转成 Web 侧的预览流程，等用户 60 s」。没有这样做，因为那要求执行主机能反向拉起一个浏览器对话框并阻塞等它——远端工作空间上这条路要穿过 link、控制端与 socket 三层，而超时那一支（60 s 后回 `applied: false`）恰恰是最常见的结果。现在的门与客户端那条完全一致，触发它的又几乎总是用户刚点下的代码操作，所以「谁批准的」这个问题的答案没有变。
 
-### 2.7 远端 Worker：经 stdio 协议代理
+### 2.7 远端执行：经第二条 SSH 连接代理
 
-现有远端连接（`remote/client.rs`）是**严格串行**的请求—应答通道，被一个互斥量保护并兼作 Git 队列；LSP 需要 server 主动推送（诊断、进度）且不能让一次补全阻塞文件读写。因此：
+现有远端连接（core 的 `remote/` 域）是**严格串行**的请求—应答通道，被一个互斥量保护并兼作 Git 队列；LSP 需要 server 主动推送（诊断、进度）且不能让一次补全阻塞文件读写。因此：
 
-- 远端每台主机在有语言会话时再开**第二条** ssh 连接：`ssh … <worker> worker --stdio --language-link [--state-dir …]`，启动行、路径校验、`ARMADRA_REMOTE_WORKER_LAUNCHER` 覆盖、握手（`runtime_version` 完全一致、能力含 `language.link.v1`）与现有连接完全相同。
-- 握手之后该连接放弃「一问一答」：双方都可随时写 `WorkerRequest{language_frame}` / `WorkerResponse{language_frame}`，`request_id` 为空表示无人等待；帧上限仍是 1 MiB，单条 LSP 消息上限 960 KiB，超出的响应在执行主机侧替换为 `-32803` 错误并注明「结果过大」。
-- 流控沿用 `StreamAck` 语义：`LanguageAck.received_through` + `available_credit_bytes`，每方向 4 MiB 未确认预算，超出则暂停读取 server 输出（server 自己会阻塞在 stdout，不丢消息）。
-- 会话开关、能力探测、`WorkspaceEdit` 应用仍走原来的串行连接（它们是请求—应答，且需要 `allow_write/allow_execute` 与现有 `WorkerServiceRequest` 一样由控制端解析、执行主机复核）。
+- 远端每台主机在有语言会话时再开**第二条** SSH 连接，专门承载语言帧；启动行、路径校验、握手（版本完全一致、能力含语言 link 的标识）与现有连接完全相同。
+- 握手之后该连接放弃「一问一答」：双方都可随时写语言消息帧，`request_id` 为空表示无人等待；帧上限仍是 1 MiB，单条 LSP 消息上限 960 KiB，超出的响应在执行主机侧替换为 `-32803` 错误并注明「结果过大」。
+- 流控沿用确认/信用（ack/credit）语义：`received_through` + `available_credit_bytes`，每方向 4 MiB 未确认预算，超出则暂停读取 server 输出（server 自己会阻塞在 stdout，不丢消息）。
+- 会话开关、能力探测、`WorkspaceEdit` 应用仍走原来的串行连接（它们是请求—应答，且需要 `allow_write/allow_execute` 由控制端解析、执行主机复核）。
 - link 断开：控制端把该主机所有会话置为 `disconnected`，Web 清空诊断并显示状态；重连后按 §1.3 重放 didOpen。已发出未应答的请求按 `UNKNOWN_OUTCOME` 处理（只影响 rename/apply 这类写；读请求由客户端超时重试）。
-- 空闲：远端 link 在该主机所有 server 都 `idle_stopped` 或无会话 5 分钟后关闭，避免长期占用一条 ssh 会话（sshd `MaxSessions` 默认 10）。
+- 空闲：远端 link 在该主机所有 server 都 `idle_stopped` 或无会话 5 分钟后关闭，避免长期占用一条 SSH 会话（sshd `MaxSessions` 默认 10）。
 
-### 2.8 协议：`proto/armadra/v1/language.proto`
+### 2.8 协议：原 `proto/armadra/v1/language.proto`（历史记录，字段形状仍是现状参考）
+
+> 下面这份 `.proto` 是 Rust Runtime + Go Host 架构下的原始协议设计。合入 TypeScript core 后跨进程协议整体删除（见 §2.8 末尾与 [core 合一设计](./typescript-core.md)），本机与远端之间不再有 protobuf 帧，而是 core 内部的类型化调用与经 SSH 承载的 JSON 消息。保留这份 schema 是因为它仍然是消息形状（字段、编号、取值范围）的权威参考——迁移时 core 的 `language/` 域按同样的字段语义实现,不重新设计。
 
 字段号规划（枚举 0 恒为 UNSPECIFIED，删除即 `reserved`，`optional` 只用于「未传 ≠ 零值」）：
 
@@ -271,7 +273,7 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 
 （R7d：跨进程协议已整体删除，这里原本要求的 `.proto` 与三端 fixture 不再存在。同样的事实——UNSUPPORTED 带 reason、`pid` 可缺席、payload 里的中文与 emoji、apply-edit 的 map——由 core 的语言域用例直接断言。）
 
-### 2.9 Runtime ↔ Web 接口（camelCase JSON；错误 `{ code, message }`）
+### 2.9 core ↔ Web 接口（camelCase JSON；错误 `{ code, message }`）
 
 | 接口                                                      | 内容                                                                                                                                                                                                                                                |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -292,18 +294,18 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 
 | 工作空间授权    | 允许的 LSP 动作                                                                                                                                                                                                                                                                                                                                                    |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 无 execute      | 什么都不启动。探测仍可运行（`--version` 是 Runtime 自己的固定命令，不是项目代码）但结果标 `execution_not_granted`                                                                                                                                                                                                                                                  |
+| 无 execute      | 什么都不启动。探测仍可运行（`--version` 是 core 自己的固定命令，不是项目代码）但结果标 `execution_not_granted`                                                                                                                                                                                                                                                     |
 | execute         | 启动 server；`initialize/initialized/shutdown/exit`（代答）、`didOpen/didChange/didClose/didSave`（影子文本，不落盘）、`completion`、`completionItem/resolve`、`hover`、`signatureHelp`、`definition/typeDefinition/implementation/references`、`documentSymbol`、`workspace/symbol`、`documentHighlight`、`codeAction`（只读取）、`$/cancelRequest`、`$/progress` |
 | execute + write | 以上加 `formatting/rangeFormatting`（编辑器无 write 本就只读，保持一致）、`prepareRename/rename`、`codeAction/resolve`、`POST …/edits`、server 的 `workspace/applyEdit`                                                                                                                                                                                            |
-| 任何情况拒绝    | `workspace/executeCommand`、带 `command` 的 codeAction、`window/showDocument` 指向根外、未知方法、非本会话 id 的 `$/cancelRequest`。拒绝在执行主机侧（`policy.rs`）而不只是控制端，与 `WorkerServiceRequest` 的「执行主机复核」一致                                                                                                                                |
+| 任何情况拒绝    | `workspace/executeCommand`、带 `command` 的 codeAction、`window/showDocument` 指向根外、未知方法、非本会话 id 的 `$/cancelRequest`。拒绝在执行主机侧（`policy` 模块）而不只是控制端，与其它跨主机请求「执行主机复核」的规则一致                                                                                                                                    |
 
 授权变化经现有工作空间设置流触发 §1.3 的关停；`allow_write/allow_execute` 由控制端从 `workspace.permissions` 解析后随 `OpenLanguageSessionRequest` 下发，会话生命周期内固定，变化即关会话。
 
 ### 3.2 进程隔离
 
 - 无 shell、无用户 argv 拼接：可执行文件用探测时冻结的绝对路径，参数来自注册表或设置里的数组。
-- 环境：继承执行主机登录环境（server 需要 `PATH`、`GOPATH`、`CARGO_HOME`），但剥离 `ARMADRA_*` 与 hook 端点相关变量——server 不得拿到 Runtime 凭据。
-- 进程组：unix `setsid` 后 `kill(-pgid)`；Windows 复用 `command/platform_windows.rs` 的 Job Object，`containment_ready()` 为假时语言服务在 Windows 上 `unsupported / containment_unavailable`。
+- 环境：继承执行主机登录环境（server 需要 `PATH`、`GOPATH`、`CARGO_HOME`），但剥离 `ARMADRA_*` 与 hook 端点相关变量——server 不得拿到 core 凭据。
+- 进程组：unix `setsid` 后 `kill(-pgid)`；Windows 复用终端域已有的进程收容机制，收容不可用时语言服务在 Windows 上 `unsupported / containment_unavailable`。
 - server 读写范围是操作系统层的：它以用户身份运行，本来就能读整台机器。设计不假装沙箱，而是把「启动 server = 执行项目代码」放在 execute 门后并在设置页写明。
 
 ### 3.3 资源上限
@@ -334,27 +336,11 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 
 约束：单文件 ≤ 800 行，测试与实现分文件，一级包按组件拆分（[仓库结构 §3.1](./repository-structure.md)）。`api.rs` 已 5.7k 行，语言服务路由不进它。
 
-### 4.1 Rust：`apps/runtime/src/language/`
+### 4.1 core 的 `language/` 模块（TypeScript）
 
-| 文件           | 行数预算 | 内容                                                                                                                                                                      |
-| -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mod.rs`       | ≤ 150    | `pub` 类型、`Manager` 句柄、reason key 常量、错误映射                                                                                                                     |
-| `registry.rs`  | ≤ 200    | §1.2 静态表；`language_id_for(path)`；与 `EditorNode.loadLanguage` 的扩展名表保持一致（契约测试比对）                                                                     |
-| `discover.rs`  | ≤ 300    | PATH 查找、设置覆盖、`--version` 探测、24 h 缓存、`LanguageServerDescriptor` 生成                                                                                         |
-| `jsonrpc.rs`   | ≤ 250    | `Content-Length` 编解码、消息分类（request/response/notification）、id 命名空间改写                                                                                       |
-| `server.rs`    | ≤ 500    | 进程 spawn/退出、读写任务、`initialize` 缓存、stderr 环形、在飞请求表、`shutdown/exit`                                                                                    |
-| `documents.rs` | ≤ 300    | 影子文档：全文/增量应用、版本、引用、sha256、拥有者会话                                                                                                                   |
-| `session.rs`   | ≤ 400    | 会话：代答 initialize、id 命名空间、在飞上限、超时、cancel                                                                                                                |
-| `mux.rs`       | ≤ 500    | server ↔ 会话路由、广播、server→客户端请求代答、进度转状态                                                                                                               |
-| `uri.rs`       | ≤ 300    | 双向改写与 external 映射                                                                                                                                                  |
-| `policy.rs`    | ≤ 150    | 方法 → 授权表、拒绝错误                                                                                                                                                   |
-| `edits.rs`     | ≤ 300    | `WorkspaceEdit` 校验与逐文件写入、`file.changed` 发布                                                                                                                     |
-| `lifecycle.rs` | ≤ 300    | 空闲计时、重启预算、资源采样接入、退出清理                                                                                                                                |
-| `link.rs`      | ≤ 150    | `LanguageLink` trait（`send(LanguageFrame)` / `recv()` / `epoch()`）与进程内实现                                                                                          |
-| `routes.rs`    | ≤ 400    | axum 处理器：探测、会话开关、WS stream、edits、restart/stop；在 `lib.rs` 注册                                                                                             |
-| `tests/`       | —        | `mod tests;` 下分 `jsonrpc.rs`、`documents.rs`、`uri.rs`、`policy.rs`、`mux.rs`（mock server 进程）、`lifecycle.rs`（崩溃/空闲用 mock 的 `--crash-after`、`--hang` 开关） |
+> 下面这份按 Rust 模块划分的文件清单是原 Rust Runtime 实现的布局记录，具体 TypeScript 文件名以实际代码为准，这里不重新杜撰路径。按职责，`core/language/` 至少需要覆盖：`Manager` 句柄与 reason key 常量、错误映射；§1.2 的静态候选表与 `language_id_for(path)`（与前端扩展名表保持一致）；PATH 查找、设置覆盖、`--version` 探测与 24 h 缓存；`Content-Length` 编解码与消息分类；server 进程 spawn/退出、读写任务、`initialize` 缓存、stderr 环形缓冲、在飞请求表；影子文档（全文/增量应用、版本、引用、sha256、拥有者会话）；会话管理（代答 initialize、id 命名空间、在飞上限、超时、cancel）；server↔会话的路由与广播（mux）；uri 双向改写与 external 映射；方法→授权表（policy）；`WorkspaceEdit` 校验与逐文件写入（edits）；空闲计时、重启预算、资源采样接入（lifecycle）；到执行主机的全双工帧通道抽象（link，本机走进程内实现）；HTTP/WS 处理器（探测、会话开关、WS stream、edits、restart/stop）。测试与实现分文件、单文件 ≤ 800 行的约束不变（见文首「约束」段）。
 
-其它位置：`remote/language.rs`（≤ 400，远端 link 客户端：第二条 ssh 连接、握手、epoch、ack 流控、断线状态）；`worker/language_link.rs`（≤ 250，`--language-link` 服务循环：读任务 + 写任务并发）；`resources/platform.rs` 加 `LanguageServer` 组件；`settings.rs` 加 `LanguageSettings`；`events.rs` 加 `LanguageSession` / `LanguageServer` 两个变体；`apps/runtime/tests/language_real.rs`（真实 server 集成测试，见 §5）。
+其它位置：core 的 `remote/` 域持有远端 link 客户端（第二条 SSH 连接、握手、epoch、ack 流控、断线状态）；远端执行侧的语言 link 服务循环（读任务 + 写任务并发）；资源采样模块加 `LanguageServer` 组件；设置模块加 `LanguageSettings`；事件模块加 `LanguageSession` / `LanguageServer` 两个变体；真实 server 的集成测试（见 §5）。
 
 ### 4.2 TypeScript
 
@@ -380,6 +366,8 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 `packages/shared/src/api/language.ts`：`languageServerStateSchema`、`languageFeatureSchema`、`languageServerDescriptorSchema`、`languageServiceStatusSchema`（加宽）、`openLanguageSessionRequest/ResponseSchema`、`applyLanguageEditRequest/ResultSchema`、`languageSessionEventSchema`、`languageServerEventSchema`；`api.ts` 只 re-export（现在 `api.ts` 是单文件，`api/` 目录与它并存合法；将来整体拆分时 `api.ts` → `api/index.ts`）。`domain.ts` 的 `languageServiceSchema.status` 加宽。
 
 ## 5. 实施拆解
+
+> 下面的批次划分、验收命令（`cargo test` / `go test` / `pnpm protocol:*`）与「实施状态」叙述记录的是 2026-09-06/07 在 Rust Runtime + Go Host 架构下完成的原始实施过程，属于历史事实，不随本次措辞收口改写。这些能力已随 [core 合一设计](./typescript-core.md) 迁移进 TypeScript core，现状验证改用 `pnpm --filter @armadra/desktop test`（core/桌面壳）与 `pnpm --filter @armadra/server test`（服务器壳），不再有 `cargo test` / `go test` / `pnpm protocol:*`。
 
 四个批次可并行；批次间只依赖本文写定的接口形状，不依赖对方代码。协议由批次 A 先落，B/D 在 A 合入前用本文 §2.8 的字段做本地 stub。
 
@@ -434,22 +422,22 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 
 ### 6.1 验收
 
-| #   | 场景                        | 通过标准                                                                                                                                |
-| --- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | 执行主机无任何 server       | 设置页每语言 `unsupported` + 缺失原因；编辑器状态栏「LSP 不可用」；无补全源                                                             |
-| 2   | rustup 代理存在但组件缺失   | `server_probe_failed`，不当作可用                                                                                                       |
-| 3   | 无 execute 授权             | 不启动进程（`ps` 验证），reason `execution_not_granted`                                                                                 |
-| 4   | 两个节点同一文件            | 只有一个 didOpen；第二个显示「跟随」；关闭拥有者后另一个接管                                                                            |
-| 5   | 编辑 → 保存                 | didChange 去抖；保存后 didSave；409 时无 didSave                                                                                        |
-| 6   | 外部修改（无草稿 / 有草稿） | 无草稿：重载 + 全文 didChange；有草稿：LSP 不动，提示条照旧                                                                             |
-| 7   | 重命名跨文件                | 预览列出全部文件与 diff；有脏文件时阻止并列出；应用后 sha 校验、编辑器重载                                                              |
-| 8   | server 崩溃 / 挂起 / 大响应 | 3 次后停止并显示 stderr 尾部；挂起请求 30 s 超时；大响应转错误                                                                          |
-| 9   | 空闲 10 分钟                | 进程退出；再打开文件透明重启，诊断重新出现                                                                                              |
-| 10  | 远端工作空间                | 第二条 ssh 连接只在有会话时存在；断线状态与重连；Web 从未收到绝对路径（抓包 grep `file://` 为 0）                                       |
-| 11  | 资源面板                    | server 行有 pid/startTime/RSS；停止按钮生效                                                                                             |
-| 12  | 日志                        | `RUST_LOG=debug` 全程跑完 1–10 后，日志 grep 文件正文片段为 0                                                                           |
-| 13  | 体积                        | language chunk gzip ≤ 150 kB；未打开编辑器不加载                                                                                        |
-| 14  | 回归                        | `pnpm test`、`cargo test --workspace`、`go -C apps/host test ./...`、`pnpm protocol:check`、`pnpm --filter @armadra/web typecheck` 全绿 |
+| #   | 场景                        | 通过标准                                                                                                                              |
+| --- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 执行主机无任何 server       | 设置页每语言 `unsupported` + 缺失原因；编辑器状态栏「LSP 不可用」；无补全源                                                           |
+| 2   | rustup 代理存在但组件缺失   | `server_probe_failed`，不当作可用                                                                                                     |
+| 3   | 无 execute 授权             | 不启动进程（`ps` 验证），reason `execution_not_granted`                                                                               |
+| 4   | 两个节点同一文件            | 只有一个 didOpen；第二个显示「跟随」；关闭拥有者后另一个接管                                                                          |
+| 5   | 编辑 → 保存                 | didChange 去抖；保存后 didSave；409 时无 didSave                                                                                      |
+| 6   | 外部修改（无草稿 / 有草稿） | 无草稿：重载 + 全文 didChange；有草稿：LSP 不动，提示条照旧                                                                           |
+| 7   | 重命名跨文件                | 预览列出全部文件与 diff；有脏文件时阻止并列出；应用后 sha 校验、编辑器重载                                                            |
+| 8   | server 崩溃 / 挂起 / 大响应 | 3 次后停止并显示 stderr 尾部；挂起请求 30 s 超时；大响应转错误                                                                        |
+| 9   | 空闲 10 分钟                | 进程退出；再打开文件透明重启，诊断重新出现                                                                                            |
+| 10  | 远端工作空间                | 第二条 ssh 连接只在有会话时存在；断线状态与重连；Web 从未收到绝对路径（抓包 grep `file://` 为 0）                                     |
+| 11  | 资源面板                    | server 行有 pid/startTime/RSS；停止按钮生效                                                                                           |
+| 12  | 日志                        | `RUST_LOG=debug` 全程跑完 1–10 后，日志 grep 文件正文片段为 0                                                                         |
+| 13  | 体积                        | language chunk gzip ≤ 150 kB；未打开编辑器不加载                                                                                      |
+| 14  | 回归                        | `pnpm test`、`pnpm --filter @armadra/desktop test`、`pnpm --filter @armadra/server test`、`pnpm --filter @armadra/web typecheck` 全绿 |
 
 ### 6.2 不做
 
@@ -457,5 +445,5 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 - 不做 AI 补全、不把 Agent 会话接进补全源；LSP 建议是资料，不获得任何应用 RPC 权限（编辑器设计 §4）。
 - 不开放 `workspace/executeCommand` 与带命令的代码操作；不开放任意 JSON-RPC 透传。
 - 不做 semanticTokens、inlayHint、callHierarchy、pull diagnostics、多根工作区、工作空间之外文件的打开、同一语言多 server 并行、每文件类型的 UI 级配置。
-- 不把语言服务迁到 Go Host：它是执行层能力，随 `apps/runtime` → `apps/worker` 一起走（[仓库结构 §5](./repository-structure.md) 第 7 步）。
+- 不把语言服务单独拆成另一个服务：它是执行层能力，跟着 core 的 `language/` 域走，不独立于执行主机存在。
 - 不承诺 Windows 实机：Job Object 门与 T01 一样只交叉编译验证，未验证前设置页如实显示。

@@ -56,7 +56,7 @@
 
 ### 3.1 多仓库日志
 
-> 数据层已实现（2026-09-07）。Runtime `apps/runtime/src/git/repository/log.rs` 与 `tree.rs`、路由 `apps/runtime/src/git/api/workspace.rs`、schema `packages/shared/src/git-repository.ts`、网关 `apps/web/src/git/gateway.ts` 的 `log()` / `refs()`。下面的字段名就是实现的字段名。
+> 数据层已实现（2026-09-07）。core 的 `git/` 域与网关 `apps/web/src/git/gateway.ts` 提供同等字段，`log()` / `refs()` 两个入口对应下方的多仓库日志与分支树接口。下面的字段名就是实现的字段名。
 
 新增工作空间级读取 `POST /api/workspaces/{id}/git/log`：
 
@@ -89,7 +89,7 @@
 - `stashes[].index` 是**这一刻**的 `stash@{n}`，只用来显示；每个 stash 动作绑的是 `oid`——别人 push 或 drop 一条之后序号整体挪位，对象不会。`stashCount` 保留给折叠时的组标题。
 - 读不出来的检出被略过而不是让整个请求失败：一个坏掉的 vendored clone 不该让分支树整块消失。该读取需要执行权限（要跑 `worktree list` 与 stash 计数），与单仓库的 `worktrees` / `stashes` 一致。
 
-Host 模式：两条读取加进 git 域的 `GitReadMethod`（`LOG = 28`、`REFS = 29`），SSH 远端走 `WorkerServiceOperation`（`GIT_LOG = 54`、`GIT_REFS = 55`）。两条都是**工作空间级**的，Go Host 的 `workspaceWideRead` 把它们和 `REPOSITORIES` 一起豁免检出作用域检查——工作空间根仍由文件系统域的注册决定，从不取自请求。后加的 `GET …/git/identity`（`IDENTITY = 30`、`GIT_IDENTITY = 56`）不是工作空间级的：它按检出回答，因为一个 vendored clone 完全可能配着另一个地址。`CONTRACT_VERSION` 升到 4——除了这条新操作，hunk 载荷多了 `path`、状态行多了 `originPath`、分支树多了 stash 列表，每一处都是旧对端会读漏的形状。`git-e2e` 加了用例；写动作除新增的 `renameBranch` 外全部复用现有 `GitRepositoryAction`，不新增写路径。
+远端 SSH 模式：两条读取加进 git 域的读方法（`LOG`、`REFS`），走远端执行通道。两条都是**工作空间级**的，与仓库发现（`REPOSITORIES`）一起豁免检出作用域检查——工作空间根仍由文件系统域的注册决定，从不取自请求。后加的 `GET …/git/identity` 不是工作空间级的：它按检出回答，因为一个 vendored clone 完全可能配着另一个地址。这批改动同时给 hunk 载荷多了 `path`、状态行多了 `originPath`、分支树多了 stash 列表；`git-e2e` 加了用例；写动作除新增的 `renameBranch` 外全部复用现有写接口，不新增写路径。
 
 ### 3.2 前端
 
@@ -102,7 +102,7 @@ Host 模式：两条读取加进 git 域的 `GitReadMethod`（`LOG = 28`、`REFS
 
 - 不做 IDEA 的「折叠线性段」「IntelliSort」——先做筛选与多仓库；记为后续。
 - 不做跨仓库的一次提交（跨仓库勾选 = 按仓库各提交一次）。
-- 不改 Runtime 的写路径、锁与队列；不改 GitHub 面板。
+- 不改 core 的写路径、锁与队列；不改 GitHub 面板。
 - 不做画布上的 Git 节点；Git 仍是工作面板。
 
 ## 5. 验收
@@ -110,7 +110,7 @@ Host 模式：两条读取加进 git 域的 `GitReadMethod`（`LOG = 28`、`REFS
 - 三个以上仓库（根 + 嵌套 + worktree）的工作空间：日志页一张图、颜色条正确、`路径` 筛到单仓库、分支树按仓库分组、⌘ 多选分支。
 - 筛选（用户 / 日期 / 路径 / 文本 / 正则）都在服务端生效，翻页游标在筛选变化后作废。
 - 提交页：勾选即暂存、跨仓库提交按仓库拆分、操作横幅与冲突组、Stash / Unstash。
-- Runtime 直连与 Host 模式（`pnpm ownership:e2e --domain git`）都通过；Web 测试覆盖树构造、多仓库车道、游标合并、勾选↔暂存映射；手机 390×844 四级导航可用。
+- 本机直连与远端 SSH 模式都通过（`pnpm --filter @armadra/desktop test`）；Web 测试覆盖树构造、多仓库车道、游标合并、勾选↔暂存映射；手机 390×844 四级导航可用。
 
 ## 6. 实施与偏离
 
@@ -153,6 +153,6 @@ user.name/user.email`，按检出问，读不到就是两个 `null`。
   的消息区就能把变更树压到零高——页面上有全部的说明文字，唯独没有要提交的
   东西。横幅本身也限高可滚。
 
-截图探针：`tools/probes/git-tool-window.mjs`（真实 Runtime + 真实 Chrome，
+截图探针：`tools/probes/git-tool-window.mjs`（真实 core + 真实 Chrome，
 临时数据目录与随机端口，工作空间含根仓库 + 嵌套仓库（merge 冲突）+ 链接
 worktree）。

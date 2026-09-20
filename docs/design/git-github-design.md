@@ -14,7 +14,7 @@ Git 界面见 [Git 工具窗口](./git-tool-window.md)：底部停靠的两页�
 
 ## 2. 仓库服务与状态模型
 
-Rust Worker 的 RepositoryService 是 Git 命令唯一执行入口。Host 负责操作身份、持久结果及事件。优先调用系统 Git，使用 argv 和结构化解析；不以拼接 Shell 字符串执行用户给的分支、路径或消息。
+core 的 git 域是 Git 命令唯一执行入口，同时负责操作身份、持久结果及事件。优先调用系统 Git，使用 argv 和结构化解析；不以拼接 Shell 字符串执行用户给的分支、路径或消息。
 
 `RepositoryScope`：executionHostId、workspaceId、repositoryId、worktreeId。`RepositoryState`：headOid、branch/detached、indexFingerprint、worktreeFingerprint、remotes、upstream、ahead/behind、operationState、observedAt、revision。
 
@@ -24,7 +24,7 @@ Rust Worker 的 RepositoryService 是 Git 命令唯一执行入口。Host 负责
 
 既有请求（status、diff、stage、unstage、revert、resolve、head-commit、commit 与全部 `/git/repository/*`）都接受 `path`，缺省是工作空间根，所以单仓库工作空间行为不变。
 
-Git 仓库/索引/文件系统是代码状态真相，Host 里的状态是缓存。使用文件监听加节流复核，执行前重新读取。外部 CLI 修改同一仓库时可观察，但内部队列不能锁住外部 Git；版本检查发现变化后冲突返回，不盲目覆盖。
+Git 仓库/索引/文件系统是代码状态真相，core 里的状态是缓存。使用文件监听加节流复核，执行前重新读取。外部 CLI 修改同一仓库时可观察，但内部队列不能锁住外部 Git；版本检查发现变化后冲突返回，不盲目覆盖。
 
 读取可并发；每个 worktree 的索引/工作树写操作串行。改 refs、worktree 管理和网络 ref 更新按 common git dir 加仓库级锁，锁排序固定，避免多 worktree 死锁。已有 Git lock 文件只报忙，不自行删除。
 
@@ -62,15 +62,15 @@ Git 仓库/索引/文件系统是代码状态真相，Host 里的状态是缓存
 
 进阶能力是本设计的完整交付范围，不能只为它们放禁用按钮后标记完成；M4 可按基础、历史、进阶三个子里程碑交付。
 
-Rebase、Sync 与强制推送已在 Runtime `RepositoryService` 与 `apps/web/src/panels/git/` 实现：
+Rebase、Sync 与强制推送已在 core 的 `git/` 域与 `apps/web/src/panels/git/` 实现：
 
-- `StartRebase{onto, expectedStateToken}` 把当前分支重放到已核对的提交上。重放期间 HEAD 游离，所有权因此绑定 Git 自己的 `rebase-merge` 记录（`onto`、`orig-head`、`head-name`）与 `orig-head` 的文件身份，而不是不动的 HEAD。冲突复用现有 Continue/Abort：continue 要求冲突已解决并暂存，且允许在下一个被重放的提交上再次停下；abort 恢复记录的分支与 OID。外部或 Runtime 重启后的序列仍可读、不可驱动。`skip` 仍只属于空 cherry-pick，不用来丢弃整个被重放的提交。
+- `StartRebase{onto, expectedStateToken}` 把当前分支重放到已核对的提交上。重放期间 HEAD 游离，所有权因此绑定 Git 自己的 `rebase-merge` 记录（`onto`、`orig-head`、`head-name`）与 `orig-head` 的文件身份，而不是不动的 HEAD。冲突复用现有 Continue/Abort：continue 要求冲突已解决并暂存，且允许在下一个被重放的提交上再次停下；abort 恢复记录的分支与 OID。外部或 core 重启后的序列仍可读、不可驱动。`skip` 仍只属于空 cherry-pick，不用来丢弃整个被重放的提交。
 - `Sync{remote, branch, expectedRemoteOid}` 在同一个 owned 操作里依次执行 fetch、仅快进 pull、push。任一步失败即停止，并报告停在哪一步、当前 HEAD 与远端 OID；分叉分支不会被自动 merge 或 rebase。
 - 强制推送只有 `Push.forceWithLease{expectedRemoteOid}` 一条路径，映射到 `--force-with-lease=refs/heads/<branch>:<oid>`；`--no-force` 在所有推送上保留，所以不存在不带租约的强制推送，界面另外要求对被覆盖的远端 OID 做二次确认。
 
 Git push 的 lease 使用具体预期 ref 值，避免后台 fetch 改变远端跟踪分支后削弱保护。依据 [Git push 官方文档](https://git-scm.com/docs/git-push)。
 
-M4 补齐的其余部分同样落在 Runtime `RepositoryService` 与 `apps/web/src/panels/git/`：
+M4 补齐的其余部分同样落在 core 的 `git/` 域与 `apps/web/src/panels/git/`：
 
 - `git init` 只对不属于任何仓库的工作区开放，界面先确认再执行；已在仓库内（含祖先仓库、裸仓库）一律拒绝，不嵌套第二个仓库。这是唯一没有 common git dir 队列可排的写路径，因为队列键要等仓库存在才有。
 - amend 需要带上界面展示过的 HEAD OID，HEAD 变过即拒绝；提交已存在于远端跟踪引用时还要再勾一次确认。amend 不推送，也不强推。
@@ -78,7 +78,7 @@ M4 补齐的其余部分同样落在 Runtime `RepositoryService` 与 `apps/web/s
 - 冲突文件有显式「标记已解决」：服务重读文件，仍含冲突标记时拒绝并给出行号，通过后才 `git add` 该路径。
 - Diff 增加并排视图、`--ignore-all-space` 与 diff 内搜索。忽略空白只影响补丁与行数统计，文件列表照旧列出仅空白变化的文件（标注「仅空白差异」），并排视图纯排版、不重算差异。
 - 历史行操作：复制 OID、游离检出、从该提交建分支、cherry-pick、`Revert{targetOid, mainline, expectedStateToken}`、`Reset{mode, targetOid, expectedStateToken, discardChanges}`。revert 与 cherry-pick 共用同一套 owned 序列与 Continue/Abort，没有 skip；hard reset 在工作区不干净时必须显式确认，并先用 stash 后端记录一份含未跟踪文件的快照作为可恢复点。
-- 标签与远端各有独立页签。标签的删除与推送按标签对象本身 CAS，创建不提供 force，推送保留 `--no-force`；远端 URL 走与克隆相同的白名单，其中的凭据在离开 Runtime 前脱敏，界面也不会把脱敏值回填后送回。
+- 标签与远端各有独立页签。标签的删除与推送按标签对象本身 CAS，创建不提供 force，推送保留 `--no-force`；远端 URL 走与克隆相同的白名单，其中的凭据在离开 core 前脱敏，界面也不会把脱敏值回填后送回。
 - 交互式 rebase 提供可审阅的 todo：预览将被重放的提交（最旧在前），支持重排与 `pick`、`reword`、`edit`、`squash`、`fixup`、`drop`，随后用写入仓库 Git 目录的临时文件加 `GIT_SEQUENCE_EDITOR=cp -- '<path>'` 非交互执行。提交的 todo 必须覆盖区间内全部提交，丢弃只能显式写 drop。`reword` 的新信息在提交 todo 时就定下来——运行期没有编辑器可开，这也正是它在列表里可审阅的原因；它写成 `pick` 加一条本服务自己生成的 `exec git commit --amend --file '<路径>'`，信息走文件而不是命令行参数，非 `reword` 的条目带信息是拒绝而不是忽略。`edit` 停下后由 Continue 继续；`squash` 与 `fixup` 都要求前面还有一个保留的提交。`exec` 仍不开放给调用方：它唯一的含义就是「跑一条别人给的命令」。含合并提交的区间不走 todo 编辑器。
 - 暂停中的 rebase 可以 `skip`：丢弃当前停下的那个被重放的提交，其余照常继续，随后与 continue 走同一套完成校验（回到原分支、确认过的目标提交可达）。它不要求先解决冲突——在一个已决定丢弃的改动上先做完工作是没有意义的——但界面在按钮旁写明这是丢弃，并且和其他写一样过确认门。cherry-pick 的 skip 仍只对空提交开放，revert 仍只有 continue/abort。
 
@@ -126,7 +126,7 @@ Git 操作日志可复制，经脱敏后保存至 operation；凭据提示或编
 
 **已实施（G03）**：`FrameBinding { worktreePath, branch, repositoryId, initScript, initScriptState, initScriptNodeId }` 落在 group 节点的 `data.binding` 上，随节点文档一起往返持久化。绑定是**对已存在检出的一条记录**，不是检出本身。Frame 头部的 `WorktreeBindingBadge` 显示分支、路径、脏文件数与初始化脚本状态，脏文件数复用同一份仓库发现结果；检出不在发现结果里时显示 repair 提示，提供重新创建与解绑。
 
-路径继承分两种：终端 `cwd` 用绝对路径（Runtime 直接把它交给子进程，相对路径会相对 Runtime 自己的工作目录解析），编辑器 / 文件树的 `path` 与 Diff 的 `repoPath` 用工作空间相对路径，与 `defaultNodeData` 一致。初始化脚本只跑一次：只有 `pending` 状态会触发，且在写入终端之前先把状态持久化为 `running`。
+路径继承分两种：终端 `cwd` 用绝对路径（core 直接把它交给子进程，相对路径会相对 core 自己的工作目录解析），编辑器 / 文件树的 `path` 与 Diff 的 `repoPath` 用工作空间相对路径，与 `defaultNodeData` 一致。初始化脚本只跑一次：只有 `pending` 状态会触发，且在写入终端之前先把状态持久化为 `running`。
 
 Frame 头部显示分支、路径和脏状态；点击打开 Worktrees 页。创建向导选择新/现有分支、base ref、目录、是否创建 Frame、是否执行初始化脚本。worktree 目录名由用途生成，不能用固定工具名。
 
@@ -141,7 +141,7 @@ Frame 头部显示分支、路径和脏状态；点击打开 Worktrees 页。创
 
 ### 5.3 删除与异常
 
-解绑只清 FrameBinding，保留 worktree、分支和文件。删除 worktree 前检查脏文件、未推提交、活跃 Session、编辑器草稿及计划引用；用户处理后执行。主 worktree 不提供删除，locked worktree 先显示锁原因。远程执行同一套 Worker API。
+解绑只清 FrameBinding，保留 worktree、分支和文件。删除 worktree 前检查脏文件、未推提交、活跃 Session、编辑器草稿及计划引用；用户处理后执行。主 worktree 不提供删除，locked worktree 先显示锁原因。远程执行同一套 API。
 
 删除后的分支独立处理，不隐式删除。外部 Git 已增删 worktree 时重新对账，显示 orphan/prunable；prune 仅清理过期管理记录，不把它当删除目录。依据 [Git worktree 官方文档](https://git-scm.com/docs/git-worktree)。
 
@@ -176,7 +176,7 @@ Projects v2 条目与 Issue 是不同对象：先确保 item 存在，再更新�
 
 ### 7.3 同步语义
 
-读取使用条件请求、分页及退避；支持 webhook 的部署可增量刷新，普通本机 Host 用轮询。Webhook 验证签名并以 delivery ID 去重，参考 [GitHub webhook 验证](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)。
+读取使用条件请求、分页及退避；支持 webhook 的部署可增量刷新，普通本机部署用轮询。Webhook 验证签名并以 delivery ID 去重，参考 [GitHub webhook 验证](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)。
 
 变更请求保存 actionId、远端对象 ID、旧状态、目标状态与客户端预期更新时间。GitHub 不提供对应原子版本锁时，采用执行前重读、执行后核验；文档不宣称拥有强 CAS。失败显示 pending/failed/conflicted，不把 optimistic UI 永久当结果。
 
@@ -206,9 +206,9 @@ PR 创建、编辑及合并语义依据 [GitHub Pull requests REST API](https://
 
 ## 9. 认证与组件边界
 
-Git 的 SSH key/credential helper 由 Worker 执行主机使用；GitHub API 凭据由 Host 凭据服务引用，两者分开。首版支持显式接入现有 `gh` 登录或 token 引用，长期预留 GitHub App/OAuth。GitHub Enterprise 用可配置 API base 与独立认证；远端 URL 检测不得把企业仓库错误发到公共服务。
+Git 的 SSH key/credential helper 由执行 Git 命令的主机使用；GitHub API 凭据由 core 的凭据服务引用，两者分开。首版支持显式接入现有 `gh` 登录或 token 引用，长期预留 GitHub App/OAuth。GitHub Enterprise 用可配置 API base 与独立认证；远端 URL 检测不得把企业仓库错误发到公共服务。
 
-外部内容（Issue 正文、PR 评论、diff）作为资料进入 AI 上下文，不授予额外执行能力。令牌不写进项目 `.armadra`、日志或共享 Protobuf 数据。
+外部内容（Issue 正文、PR 评论、diff）作为资料进入 AI 上下文，不授予额外执行能力。令牌不写进项目 `.armadra`、日志或任何返回的 JSON 数据。
 
 组件建议：`RepositoryScopePicker`、`GitChangesList`、`DiffViewer`、`CommitComposer`、`BranchPicker`、`GitHistoryPanel`、`ConflictCenter`、`WorktreeManager`、`GitHubIssueList`、`IssueDetail`、`StatusMappingEditor`、`PullRequestDetail`、`ReviewComposer`。
 
@@ -216,7 +216,7 @@ Git 的 SSH key/credential helper 由 Worker 执行主机使用；GitHub API 凭
 
 每个写操作携带 repo scope、requestId、expected head/index/ref；返回 operationId 与 affected resources。事件为 RepositoryChanged、OperationProgress、ConflictDetected、WorktreeChanged、IssueChanged、PullRequestChanged。客户端收到事件后局部刷新，不全量重载画布。
 
-Host 重启后的 Git 操作按实际 Git 状态对账：commit 查 OID/index，push 查远端 ref，merge/rebase 查进行中状态；取消只能结束子进程并复核结果，不能保证远端没有接受 push。未知结果显示待确认，不能自动再次 commit。
+core 重启后的 Git 操作按实际 Git 状态对账：commit 查 OID/index，push 查远端 ref，merge/rebase 查进行中状态；取消只能结束子进程并复核结果，不能保证远端没有接受 push。未知结果显示待确认，不能自动再次 commit。
 
 必测仓库：未提交过的仓库、detached HEAD、shallow clone、子模块、二进制/大文件、空格/换行/中文文件名、重命名、冲突、签名失败、Git hooks 失败、不同 OS、SSH 仓库、并发外部 Git、worktree 锁定。
 
@@ -226,51 +226,48 @@ Host 重启后的 Git 操作按实际 Git 状态对账：commit 查 OID/index，
 
 ## 11. G04 实现说明
 
-§7–§10 由 Go Host 实现，前端经 `packages/host-client` 的 `HostGithubClient` 调用；契约在 `proto/armadra/v1/github.proto`（消息与枚举名拼作 `Github`，仅因 prost 与 protobuf-es 只在名称大小写匹配时才裁剪枚举前缀）。
+§7–§10 由 core 的 `github/` 域实现，前端经 `apps/web/src/api/` 直接调用同一套 `/api/`；JSON 契约见 `docs/contracts/core-json-api.md`。
 
-- **凭据**（§9）：`apps/host/internal/githubcred`。两种来源都要用户显式开启——复用本机 `gh` 登录只按需读取、不落库；粘贴的 token 写入 macOS Keychain，其他平台降级为 0600 文件并在状态里如实标注。写钥匙串走工具的交互提示（stdin），不走 `-w` 参数，否则 token 会出现在进程参数里；写完再读回校验。配置先验证再存储，被拒绝的 token 不留痕迹。内存副本最多存活一分钟，撤销即清空。Token 不进数据库、日志与任何返回的 Protobuf 消息。
-- **API base 与远端归属**：`githubapi.NormalizeAPIBase` 只接受 HTTPS；`BelongsTo` 在本地判定远端 URL 属于哪个服务，企业仓库不会被发到公共服务，反之亦然。`GITHUB_API_BASE` 只提供首次配置的默认值，`GITHUB_CA_FILE` 供内部 CA 签发的 Enterprise 使用。
-- **传输**（§7.3）：`githubapi` 统一处理 ETag 条件请求、Link 分页（只取页码，响应无法引导下一次请求）、限速头与退避。写操作永不重试：结果未读即报 `UNKNOWN_OUTCOME`，由调用方重新读取。重定向一律拒绝。
-- **状态映射**（§7.2）：`githubhost.ValidateMapping` 校验单一来源、组 ID/标签/选项唯一，并在两个方向的联动构成环时拒绝（组指向自身是不动点，允许）。同一 Issue 命中多个组显示 conflict，不擅自挑一个。`MoveIssue` 逐项返回 `GithubWriteOutcome`，标签移动只动映射管理的标签，关闭 Issue 只在显式配置联动时发生。
+- **凭据**（§9）：core 的 `github/` 域。两种来源都要用户显式开启——复用本机 `gh` 登录只按需读取、不落库；粘贴的 token 写入 macOS Keychain，其他平台降级为 0600 文件并在状态里如实标注。写钥匙串走工具的交互提示（stdin），不走 `-w` 参数，否则 token 会出现在进程参数里；写完再读回校验。配置先验证再存储，被拒绝的 token 不留痕迹。内存副本最多存活一分钟，撤销即清空。Token 不进数据库、日志与任何返回的 JSON 响应。
+- **API base 与远端归属**：API base 归一化校验只接受 HTTPS；同一逻辑在本地判定远端 URL 属于哪个服务，企业仓库不会被发到公共服务，反之亦然。`GITHUB_API_BASE` 只提供首次配置的默认值，`GITHUB_CA_FILE` 供内部 CA 签发的 Enterprise 使用。
+- **传输**（§7.3）：core 的 `github/` 域统一处理 ETag 条件请求、Link 分页（只取页码，响应无法引导下一次请求）、限速头与退避。写操作永不重试：结果未读即报 `UNKNOWN_OUTCOME`，由调用方重新读取。重定向一律拒绝。
+- **状态映射**（§7.2）：字段映射校验逻辑（`ValidateMapping`）校验单一来源、组 ID/标签/选项唯一，并在两个方向的联动构成环时拒绝（组指向自身是不动点，允许）。同一 Issue 命中多个组显示 conflict，不擅自挑一个。`MoveIssue` 逐项返回 `GithubWriteOutcome`，标签移动只动映射管理的标签，关闭 Issue 只在显式配置联动时发生。
 - **PR 合并**（§8）：`MergePull` 重读 PR 与检查，`expected_head_sha` 或 `expected_check_rollup` 不符即停；仅提供仓库允许的合并策略；结果未读时重读而非重试。
 - **行内评审**（§8「评审」）：`GithubPullFile.patch` 带回远端给的 unified diff（每文件上限 64 KiB，超过就整份丢掉而不是截断——评论锚点是 hunk 头算出来的行号，截断之后的行号会把意见贴到没人读过的行上）。面板据此逐行给评论入口，草稿随同一次 `SubmitReview` 提交，因此在远端是一份评审而不是一堆散评论；远端标了 `outdated` 的历史行内评论不画在当前 diff 上，另起一段并写明位置已经对不上。
 - **检查重跑**（§8「检查」）：`RerunChecks` 只对 `rerunnable` 且没通过的 workflow run 发 `/actions/runs/{id}/rerun[-failed-jobs]`，逐个返回 `GithubWriteOutcome`；发之前重读 PR，head 变了就是 `HEAD_MOVED` 且一条不发；一条都不能重跑时是 `NOT_RERUNNABLE` 而不是静默无事发生。结果未读的那次停在 `PENDING`，永不自动再发——重发一次已经排上的流水线就是第二条流水线。
-- **合并后清理**（§8「清理」）：`DeleteBranch` 只删远端分支，必须带上面板显示的 `expected_sha` 并由 Host 重读比对，分支前进过就是 `REF_MOVED`；已经不在是 `NOT_FOUND` 而不是「删掉了」。本地检出的移除是另一个动作，走仓库面板那条安全移除，成功之后才清 `FrameBinding`（解绑只清画布上的绑定，不动磁盘），运行中的会话一概不碰。fork 的 head 分支不提供删除。
-- **刷新**：本机 Host 无 webhook，Host 在每个列表/详情响应里给出 `poll_interval_ms`，由客户端按这个节奏轮询。
+- **合并后清理**（§8「清理」）：`DeleteBranch` 只删远端分支，必须带上面板显示的 `expected_sha` 并由 core 重读比对，分支前进过就是 `REF_MOVED`；已经不在是 `NOT_FOUND` 而不是「删掉了」。本地检出的移除是另一个动作，走仓库面板那条安全移除，成功之后才清 `FrameBinding`（解绑只清画布上的绑定，不动磁盘），运行中的会话一概不碰。fork 的 head 分支不提供删除。
+- **刷新**：本机部署无 webhook，core 在每个列表/详情响应里给出 `poll_interval_ms`，由客户端按这个节奏轮询。
 - **`ExternalReference`**：迁移 v4 的 `github_references`，ID 由链接语义派生，因此重复关联是同一条记录而不是两个徽标。
 
 已知限制：Issue 全文过滤与 PR 的作者 / draft / review-requested 过滤在 Host 本地完成（search API 属另一套配额）；Projects v2 状态字段每个项目最多读 500 个条目，超出的 Issue 显示未映射；token scopes 只保留上次验证的结果，重启后为空。
 
-## 12. B5 实现说明（写入所有权）
+## 12. B5 实现说明（写入所有权，历史批次）
 
-§2 的「Rust Worker 的 RepositoryService 是 Git 命令唯一执行入口。Host 负责操作身份、持久结果及事件」已由
-[业务所有权迁移](../history/host-business-migration.md) 的 B5 批落地，契约在 `proto/armadra/v1/git.proto`。
+§2 的「core 的 git 域是 Git 命令唯一执行入口，同时负责操作身份、持久结果及事件」在旧的 Go Host + Rust Runtime 架构下曾由
+[业务所有权迁移](../history/host-business-migration.md) 的 B5 批落地；合入 TypeScript core（[core 合一设计](./typescript-core.md)）之后，Host 与 Runtime 的进程边界与写入所有权机制整体消失，下面几条记录的是当时的实现形态，供追溯：
 
-- **队列在 Host，命令在执行主机**：`apps/host/internal/githost` 记操作身份、排序、前置版本与结论；
-  `apps/runtime/src/worker/git.rs` 走的是 HTTP 路由用的同一批代码，所以经 Host 下的提交与经 Runtime 下的
-  提交是同一个提交、同一套校验。
+- **队列与命令执行在同一个 core 进程内**：操作身份、排序、前置版本与结论由 core 的 `git/` 域统一记录，不再有跨进程转发。
 - **锁序**（§2「锁排序固定」）：改 refs、worktree 管理与网络操作先取 common git dir 的锁，再取 worktree 的锁；
   只动索引与工作树的操作只取后者。方向只有一个，所以共用 common dir 的多个检出不会死锁。
-- **前置版本**：写入携带界面读到的 HEAD / 索引 / ref，执行前由执行主机重读比对；外部命令改过就是拒绝，不是覆盖。
+- **前置版本**：写入携带界面读到的 HEAD / 索引 / ref，执行前由 core 重读比对；外部命令改过就是拒绝，不是覆盖。
 - **结果未知**：被打断的操作停在 `UNKNOWN_OUTCOME`，不自动重跑也不折叠成失败——重跑一次已经送达的推送会让远端
-  ref 前进两次。Host 重启后的对账按种类判定：网络类一律未知，提交读 HEAD 判定，其余未知。
+  ref 前进两次。core 重启后的对账按种类判定：网络类一律未知，提交读 HEAD 判定，其余未知。
 - **读不入库**：除 `RepositoryState` 这一份带 `observedAt` 的快照外，转发的读一律不缓存，状态码原样带回。
 
-- **两种 Worker，按活多久分**：写与读各起一个短命 Worker——队列在起进程之前就已经建立了排他，所以每操作一个进程不增加竞态，
-  换来的是隔离：一次卡死的 rebase、一个挂在提示上的凭据助手，倒掉的是跑那一个操作的进程。**克隆例外**：它的 `git` 子进程比启动它的帧活得久，
-  作业在 Worker 自己的注册表里，进程一结束作业就没了——所以 clone 的三个方法走一个**常驻** Worker。每个 Worker 有**自己**的状态目录：
-  状态目录是一个 Worker 私有的日志与 outbox，两个进程开同一个就是一次争用的 SQLite，会直接让一帧失败
-  （`TestRealRustWorkersRunConcurrentlyWithPrivateStateDirectories`）。
-- **进度走上行帧**（§10 进度）：`git --progress` 写到 stderr 的百分比进到操作自己的快照（Runtime 直连模式的面板也读得到），
-  变化时经 `WorkerGitUpcall` 上报，Host 按三条规则应用——已落定的条目不再打开、百分比不倒退、**结论从不取自上报**
-  （`RunGitOperation` 的响应才是结论）。克隆是唯一的例外，因为它没有一个用来落定的响应帧：终态确实来自上报，
-  而 `GetClone` 仍会重读作业，所以丢一帧的代价是慢一拍而不是错一次。
-- **本地镜像可克隆**：Worker 通道接受工作空间根内的本地目录作为克隆源，HTTP 路由不接受。差别在于注册过的根：
+- **按操作隔离，避免互相拖垮**：一次卡死的 rebase、一个挂在提示上的凭据助手，只应该拖垮跑那一个操作的子进程，不影响其余
+  操作；仓库级锁与操作队列本身已提供串行化，隔离靠子进程边界而不是共享状态。**克隆例外**：它的 `git` 子进程可能比发起它的一次请求活得久，
+  作业记录独立保存，因此 clone 的方法走一条常驻处理路径。每个正在跑的操作有**自己**的状态目录（私有日志与 outbox），
+  两个进程共用同一个状态目录会造成争用甚至数据损坏，必须各自隔离。
+- **进度走上行通知**（§10 进度）：`git --progress` 写到 stderr 的百分比进到操作自己的快照（core 直连模式的面板也读得到），
+  变化时经事件总线上报，按三条规则应用——已落定的条目不再打开、百分比不倒退、**结论从不取自上报**
+  （操作本身的响应才是结论）。克隆是唯一的例外，因为它没有一个用来落定的响应帧：终态确实来自上报,
+  客户端仍会重读作业状态，所以丢一次上报的代价是慢一拍而不是错一次。
+- **本地镜像可克隆**：内部执行通道接受工作空间根内的本地目录作为克隆源，HTTP 路由不接受。差别在于注册过的根：
   HTTP 路由克隆到调用方指定的父目录，那里的本地源就是「任意路径复制到任意路径」；这里两端都在某个人注册过的根内。
 - **落在根外的检出按名拒绝**：`ErrOutsideRoot` 与一般的权限失败分开，因为它指出的是可修的那件事——一条漂到项目外的 Frame 绑定
-  不是「设备没有授权」。Host 的判定是两条已规范化绝对路径之间的文本包含（macOS 的 `/private` 前缀先抹平，那是同一个目录的两种拼法），
-  能解符号链接的是执行主机，它做同样的判定。
+  不是「设备没有授权」。core 的判定是两条已规范化绝对路径之间的文本包含（macOS 的 `/private` 前缀先抹平，那是同一个目录的两种拼法），
+  能解符号链接的执行侧做同样的判定。
 - **Frame 绑定有判定**：`GIT_READ_METHOD_WORKTREE_BINDING` 回的是带理由的裁决（`ok` / `pathMissing` / `notAWorktree` /
   `repositoryMismatch` / `branchChanged`），因为修法不同：目录没了可以重建，分支被切走了不能——那个检出还在，重建只会失败。
 
-已知限制：一次操作的帧上限仍是一分钟，超时报 `UNKNOWN_OUTCOME`；进度上报只让这道坎在逼近时可见，并不移动它——那要靠常驻的 git Worker。
+已知限制：一次操作的耗时上限仍是一分钟，超时报 `UNKNOWN_OUTCOME`；进度上报只让这道坎在逼近时可见，并不移动它。
