@@ -109,7 +109,7 @@ export function compareVersions(left: string, right: string): number {
 
 /**
  * First `x.y` / `x.y.z` in a `--version` line. Mirrors `parse_version` in
- * `apps/runtime/src/agent_probe.rs`, which is what actually runs the probe.
+ * the pre-merge implementation, which is what actually runs the probe.
  *
  * CLIs print anything from `1.2.3` to `codex-cli 0.104.0 (rust)` to `v18.1.8`,
  * so the rule is "the first dotted number" with no word boundary in front —
@@ -225,7 +225,7 @@ export function effectiveCapabilities(
  * models.dev catalog second; this table is what answers when the Runtime is
  * unreachable and nothing else has been read yet.
  *
- * Mirrored by `builtin_models` in `apps/runtime/src/models/agents.rs` — the
+ * Mirrored by `builtin_models` in the pre-merge implementation — the
  * same ids, for the same reason. Still suggestions rather than an inventory:
  * each CLI keeps its own account, entitlements and default
  * (docs/guides/agent-collaboration.md), and picking none leaves that default

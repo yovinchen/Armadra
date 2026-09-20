@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * One entry of `settings.ssh.hosts[]` (plan §21).
  *
- * The rules below are the same ones `apps/runtime/src/terminal/ssh.rs`
+ * The rules below are the same ones the pre-merge implementation
  * enforces: the runtime drops entries that fail them, so validating here means
  * the settings form refuses a host instead of losing it silently. The command
  * is always argv, never a shell string — hence "no whitespace, no

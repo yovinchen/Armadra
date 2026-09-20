@@ -2,7 +2,7 @@ import type { BuiltinAgentId } from "./agents.js";
 
 /**
  * Hook event names per provider — single source of truth for the installers
- * (apps/runtime `agent/hooks/<provider>.rs`), the settings UI and the tests.
+ * , the settings UI and the tests.
  * See docs/contracts/v3-agent-terminal-plan.md §5.3.
  *
  * Bumping `HOOK_CLIENT_REVISION` marks every installed configuration as stale:

@@ -11,7 +11,7 @@ import {
  *
  * Pure data plus one pure function. An "agent" is a CLI that we start inside a
  * terminal node; nothing here spawns a process, and the runtime keeps only a
- * mirror of the ids and launch programs (apps/runtime/src/agent.rs).
+ * mirror of the ids and launch programs .
  */
 
 export const AGENT_IDS = [
@@ -308,7 +308,7 @@ export function supportedPermissionModes(
 
 /**
  * Environment variable name. The runtime enforces the same shape and drops
- * anything else (apps/runtime/src/settings.rs), including the `ARMADRA_*` names
+ * anything else , including the `ARMADRA_*` names
  * the hook client owns — a custom agent must not be able to redirect its own
  * hook reports.
  */

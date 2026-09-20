@@ -8,10 +8,10 @@
  * a plausible-looking guess. A wrong denominator is worse than an honest
  * unknown: it turns a 20 % reading into a 95 % warning, or hides a real one.
  *
- * The runtime mirrors this table in `apps/runtime/src/context_models.rs`. Both
- * sides carry the same cases in their tests; a model added here needs adding
- * there too, or the runtime will report an unknown capacity the client would
- * have recognised.
+ * The pre-merge implementation kept a mirror of this table on the backend
+ * side; if a backend copy still exists, it must carry the same cases in its
+ * tests, or it will report an unknown capacity the client would have
+ * recognised.
  */
 
 /** One rule: a matcher over the normalised model id and the window it implies. */
@@ -66,7 +66,7 @@ export function modelContextCapacity(
 /**
  * How the runtime turns transcript text into an approximate token count, and
  * how confident it is in the answer. Mirrors
- * `apps/runtime/src/context_estimate.rs`; the UI renders it verbatim so a
+ * the pre-merge implementation; the UI renders it verbatim so a
  * reader can tell an estimate from a measurement.
  */
 export const ESTIMATE_CONFIDENCES = ["low", "medium"] as const;

@@ -29,7 +29,7 @@ export const MAX_HANDLE_CHARS = 24;
  * looks like an id.
  *
  * This is a mirror of `normalize_handle` in
- * `apps/runtime/src/collab/addressing.rs`, which stays the authority: the
+ * the pre-merge implementation, which stays the authority: the
  * runtime re-validates every handle it reads, so a board written by hand can
  * never register one this schema would reject.
  */
