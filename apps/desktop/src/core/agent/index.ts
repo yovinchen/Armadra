@@ -5,6 +5,7 @@ import {
   setControlDispatcher,
 } from "../collab/control";
 import { runContextLink } from "../collab/context-link";
+import { SendPump } from "../collab/send-pump";
 import { installCollaborationSkill } from "../collab/skill";
 import type { Caller } from "../collab/nodes";
 import { Args } from "../collab/refusals";
@@ -50,6 +51,17 @@ import { installHookBridge } from "./hook-bridge";
 
 let assembled: CollabContext | undefined;
 const usage = new ContextUsageCache();
+
+/**
+ * 出队泵（设计 `agent-delivery.md` §4.6）。上下文现取，因为
+ * `setTerminalBridge` 之后它整个是一个新对象。
+ */
+const pump = new SendPump(() => assembled);
+
+/** 待投队列的出队泵，供用例与装配点使用。 */
+export function sendPump(): SendPump {
+  return pump;
+}
 
 /** The collaboration context of the running core, for the Hook domain. */
 export function collab(): CollabContext | undefined {
@@ -140,6 +152,17 @@ export function install(context: CoreContext): CollabContext {
   // imported by the installer, so a build with no collaboration domain writes
   // no skill instead of writing one that promises verbs nobody answers.
   installCollaborationSkill();
+
+  // 出队挂在 `agent.status` 的发布点上，不轮询（§4.6）。同一条事件回答两个
+  // 问题：谁的一轮结束了（扇出计数清零），以及谁空出来了（该出队了）。
+  context.bus.on("workspace.event", ({ event }) => {
+    if (event.type !== "agent.status") return;
+    const status = event.status as { nodeId?: unknown; state?: unknown };
+    const nodeId = typeof status.nodeId === "string" ? status.nodeId : "";
+    const state = typeof status.state === "string" ? status.state : undefined;
+    pump.noteStatus(nodeId, state);
+  });
+  pump.start();
 
   // A client that was killed mid-wait leaves a pending request and its answer
   // behind, and they contain the tool call the agent wanted to make.
