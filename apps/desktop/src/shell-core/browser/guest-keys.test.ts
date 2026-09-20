@@ -6,10 +6,7 @@ import {
   type GuestKeyInput,
 } from "./guest-keys";
 
-function key(
-  k: string,
-  modifiers: Partial<GuestKeyInput> = {},
-): GuestKeyInput {
+function key(k: string, modifiers: Partial<GuestKeyInput> = {}): GuestKeyInput {
   return {
     type: "keyDown",
     key: k,
@@ -107,8 +104,9 @@ describe("guestKeyRoute", () => {
   });
 
   it("只看按下，不看抬起", () => {
-    expect(guestKeyRoute({ ...key("k", { meta: true }), type: "keyUp" }, MAC))
-      .toBe("page");
+    expect(
+      guestKeyRoute({ ...key("k", { meta: true }), type: "keyUp" }, MAC),
+    ).toBe("page");
   });
 });
 

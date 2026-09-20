@@ -655,7 +655,9 @@ describe("guest 回来的事件", () => {
     });
     expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1);
     const [, options] = vi.mocked(toast.success).mock.calls[0]!;
-    expect((options as { action?: { label: string } })?.action?.label).toBeTruthy();
+    expect(
+      (options as { action?: { label: string } })?.action?.label,
+    ).toBeTruthy();
   });
 
   it("人自己取消的下载不打扰", () => {
@@ -677,8 +679,7 @@ describe("guest 回来的事件", () => {
 
 describe("打不开的页面", () => {
   function fail(guest: HTMLElement, over: Record<string, unknown> = {}) {
-    const event = new Event("did-fail-load") as Event &
-      Record<string, unknown>;
+    const event = new Event("did-fail-load") as Event & Record<string, unknown>;
     Object.assign(event, {
       errorCode: -105,
       errorDescription: "ERR_NAME_NOT_RESOLVED",
@@ -719,7 +720,9 @@ describe("打不开的页面", () => {
     paint();
     const guest = guests()[0]!;
     fail(guest);
-    expect(document.querySelector('[data-slot="browser-failed"]')).not.toBeNull();
+    expect(
+      document.querySelector('[data-slot="browser-failed"]'),
+    ).not.toBeNull();
     act(() => {
       guest.dispatchEvent(new Event("did-start-loading"));
     });

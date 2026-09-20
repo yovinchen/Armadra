@@ -35,7 +35,12 @@ describe("parseForwardedChord", () => {
 
 describe("chordEvent", () => {
   it("造出的事件能被和弦匹配器看懂", () => {
-    const event = chordEvent({ key: "K", code: "KeyK", meta: true, shift: true });
+    const event = chordEvent({
+      key: "K",
+      code: "KeyK",
+      meta: true,
+      shift: true,
+    });
     expect(event.type).toBe("keydown");
     expect(event.key).toBe("K");
     expect(event.code).toBe("KeyK");

@@ -110,9 +110,7 @@ describe("guest 的 before-input-event", () => {
   it("应用和弦：拦下来，并按节点送回页面", () => {
     const platform = process.platform;
     const meta = platform === "darwin";
-    const { prevented } = fire(
-      meta ? { meta: true } : { control: true },
-    );
+    const { prevented } = fire(meta ? { meta: true } : { control: true });
     expect(prevented).toBe(true);
     const sent = vi
       .mocked(tellRenderer)
@@ -167,8 +165,7 @@ describe("guest 的 before-input-event", () => {
       vi
         .mocked(publishEvent)
         .mock.calls.filter(
-          ([event]) =>
-            (event as { event?: string }).event === "humanInput",
+          ([event]) => (event as { event?: string }).event === "humanInput",
         ),
     ).toHaveLength(1);
   });

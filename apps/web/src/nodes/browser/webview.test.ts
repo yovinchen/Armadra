@@ -114,9 +114,9 @@ describe("shouldDiscard", () => {
   it("超出后台上限时不等阈值", () => {
     // 「隐藏着的页面太多了」本身就是现在放掉一个的理由；再等五分钟等于让
     // 上限那一项在这一侧完全不起作用。
-    expect(
-      shouldDiscard({ ...base, hiddenMs: 0, overBudget: true }),
-    ).toBe(true);
+    expect(shouldDiscard({ ...base, hiddenMs: 0, overBudget: true })).toBe(
+      true,
+    );
   });
 
   it("超预算跳过的是阈值，不是四条否决", () => {
