@@ -84,6 +84,12 @@ CANVAS:
   ack --id ID                         acknowledge one received message
   rename --node ID --handle NAME       set this node's name on the board
   link --from ID --to ID [--name-from A --name-to B]  link two nodes, naming either end
+  send --to ID --body TEXT [--key KEY]  type a message into a linked agent's
+                                      terminal and press Enter
+  send --to ID --body TEXT --no-queue   refuse instead of queueing when busy
+  send --to ID --body TEXT --interrupt  stop the current turn first, then send
+  outbox [--to ID] [--limit 20]        your deliveries still waiting to be sent
+  cancel --id QUEUED-ID                drop one of them
   armadra-hook canvas <verb> [--flag value | --flag=value | --flag]...
   Repeated flags become arrays; a bare flag is \`true\`. \`--dry-run\` is passed
   through to the runtime, which then validates without mutating the board.
@@ -131,6 +137,16 @@ ENVIRONMENT:
   ARMADRA_ENDPOINT_FILE    path to the 0600 endpoint file
   ARMADRA_CANVAS_CONTROL   set to 1 when this node may drive the canvas
   ARMADRA_PERM_WAIT_SECS   >0 enables in-hook permission answering (claude only)
+
+SEND:
+  A link on the board is the authorisation: no link, no send — use \`post\`.
+  A busy target is queued, not refused; the reply says \`queued\` with its
+  position and the message goes in the moment that agent is idle again. A
+  target stopped on a permission prompt is never written into under any
+  combination of flags. A person typing in that terminal holds the drive lease
+  and the reply says LEASE_HELD_BY_HUMAN; after they stop the queue resumes.
+  Branch on \`outcome\` (delivered / queued / unknown) and on \`code\`, never on
+  the prose. \`unknown\` means the write failed halfway — do not retry it.
 
 Hook mode always exits 0. \`context\`, \`canvas\` and \`doctor\` exit 1 on failure.
 `;

@@ -129,6 +129,26 @@ armadra-hook canvas rename --node <id> --title "新标题" [--handle <名字>]
 armadra-hook canvas interrupt --to <已连线节点>             # 打断对方当前这一轮（只发一个 Escape，不带正文）
 \`\`\`
 
+## 请对方现在就做一件事 / Send
+
+\`post\` 是留言，对方自己来读；停在空闲提示符上的 CLI 不会来读。要对方**现在**开一轮，用 \`send\`：它把正文打进对方终端并回车。
+\`post\` leaves a note the peer reads when it suits them; \`send\` types into their terminal and presses Enter.
+
+\`\`\`sh
+armadra-hook canvas send --to <已连线节点> --body '复查 src/api 的错误返回，结论写进便签'
+armadra-hook canvas send --to <已连线节点> --body '…' --no-queue      # 忙就直接拒绝，不排队
+armadra-hook canvas send --to <已连线节点> --body '…' --interrupt     # 先打断当前这一轮再投
+armadra-hook canvas outbox                                          # 自己还没投出去的那些
+armadra-hook canvas cancel --id <待投 id>                            # 撤掉一条
+\`\`\`
+
+- 需要画布上已有连线；没有连线只能 \`post\`。正文上限 2000 字符，大产物写文件发路径。
+- 按 \`outcome\` 分支，别解析文案：\`delivered\` 写进去了，\`queued\` 排上了（对方下一次空闲自动投），\`unknown\` 写到一半失败——**不要重试**。
+- 对方忙的时候默认排队，这是对的，不用改成 \`--interrupt\`；\`--interrupt\` 是打断别人正在做的事，只在确实该停下时用。
+- 对方停在权限提示上时一律被拒（\`TARGET_AWAITING_APPROVAL\`）：替人回答那个问题不是你能做的事。有人正在那个终端里打字时回 \`LEASE_HELD_BY_HUMAN\`，等就是了，别循环重试。
+- 同一条边两次投递至少隔 10 秒，一轮里最多四个不同目标，来源链超过 3 跳或成环会被 \`LOOP_DETECTED\` 拦下。**不要**收到一条 \`send\` 就自动回一条 \`send\`——那是环的起点。
+- 送到不是做完。要知道结果就读对方的转录（\`context summary\`），或者请对方 \`post\` 回来。
+
 - \`open-terminal\` / \`open-agent\` / \`sticky\` / \`link\` 支持 \`--dry-run\`，只回报会发生什么，不改画布。
 - 新节点会放在你右边。\`--after\` 让新 Agent 等依赖节点跑完再启动。
 - 关节点需要用户在界面上确认，命令行不能直接关。
