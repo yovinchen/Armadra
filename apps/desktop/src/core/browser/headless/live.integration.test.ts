@@ -27,7 +27,11 @@ const dataDir = mkdtempSync(join(tmpdir(), "armadra-live-browser-"));
 let backend: HeadlessBackend | undefined;
 
 afterAll(() => {
-  backend?.close();
+  try {
+    backend?.close();
+  } catch {
+    // A browser that already died has nothing left to close.
+  }
   rmSync(dataDir, { recursive: true, force: true });
 });
 
