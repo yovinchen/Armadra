@@ -187,6 +187,27 @@ describe("LeftSidebar", () => {
     expect(titlebar.contains(screen.getByLabelText("收起侧栏"))).toBe(false);
   });
 
+  it("侧栏抬到全局拖拽层之上，标题栏那一行自带拖拽、按钮写回 no-drag", () => {
+    // `.material-sidebar` 的 backdrop-filter 把 aside 变成独立层叠上下文，里面的
+    // z 出不来；不抬 aside，搜索与通知按到的就是「拖窗口」。
+    asMacDesktopShell();
+    // 拖拽属性只看 `window.armadra` 在不在（window-region.ts 的 isShell）。
+    (window as { armadra?: unknown }).armadra = {};
+    try {
+      renderSidebar();
+      const titlebar = screen.getByTestId("window-titlebar-inset");
+      const aside = screen.getByRole("complementary", { hidden: true });
+
+      expect(aside.className).toContain("z-[calc(var(--z-pills)+1)]");
+      expect(titlebar.getAttribute("data-app-region")).toBe("drag");
+      expect(
+        screen.getByLabelText("搜索").closest('[data-app-region="no-drag"]'),
+      ).not.toBeNull();
+    } finally {
+      delete (window as { armadra?: unknown }).armadra;
+    }
+  });
+
   it("折叠钮留在标题栏，拖拽交给全局拖拽层，这里不再自带拖拽带", () => {
     renderSidebar();
     const toggle = screen.getByLabelText("收起侧栏");

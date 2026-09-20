@@ -121,7 +121,10 @@ export function createMainWindow(
     // white flash while the bundle parses.
     show: false,
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 14, y: 24 },
+    // The page's title bar is 44px (`--tabbar-h`) with its 28px buttons on the
+    // centre line at y = 22; the lights are 12px tall, so their top sits at
+    // 16 to share that line. 24 put them 8px below the sidebar's icons.
+    trafficLightPosition: { x: 14, y: 16 },
     ...(darwin ? { vibrancy: "sidebar" as const, transparent: false } : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),

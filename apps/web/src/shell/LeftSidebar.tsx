@@ -35,7 +35,11 @@ import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
 import { Separator } from "@/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
-import { noDragProps, trafficLightInset } from "./window-region";
+import {
+  dragRegionProps,
+  noDragProps,
+  trafficLightInset,
+} from "./window-region";
 
 export function LeftSidebar() {
   const t = useT();
@@ -123,7 +127,11 @@ export function LeftSidebar() {
           inert={!open}
           data-state={open ? "open" : "collapsed"}
           style={{ width: open ? "var(--sidebar-w)" : 0 }}
-          className="material-sidebar h-full shrink-0 overflow-hidden border-r border-border transition-[width] duration-[var(--dur-base)] ease-out data-[state=collapsed]:border-r-0"
+          // `.material-sidebar` 的 backdrop-filter 让这个 aside 自成一个层叠上下文：
+          // 里面的按钮无论写多大的 z 都出不来，会被全局拖拽层（--z-pills）整个
+          // 盖住——按搜索、通知按到的是「拖窗口」。于是 aside 自己抬到拖拽层之上，
+          // 标题栏那一行改由 `TitlebarRow` 自带拖拽属性，空白处照样能拖。
+          className="material-sidebar relative z-[calc(var(--z-pills)+1)] h-full shrink-0 overflow-hidden border-r border-border transition-[width] duration-[var(--dur-base)] ease-out data-[state=collapsed]:border-r-0"
         >
           <div className="h-full w-[var(--sidebar-w)]">{content}</div>
         </aside>
@@ -135,8 +143,8 @@ export function LeftSidebar() {
 
 /**
  * 标题栏那 44px：左边留给红绿灯与折叠钮（它是 fixed 的，不在这条流里），
- * 右边是搜索与通知。行本身留在正常流里，只有按钮抬到拖拽层之上，
- * 于是这一行的空白仍然能拖动窗口。
+ * 右边是搜索与通知。aside 整体在全局拖拽层之上（见下面的说明），所以这一行
+ * 自己挂拖拽属性，按钮再写回 no-drag：空白能拖窗口，按钮能按。
  */
 function TitlebarRow({
   agentsOpen,
@@ -156,6 +164,7 @@ function TitlebarRow({
   return (
     <div
       data-testid="window-titlebar-inset"
+      {...dragRegionProps()}
       className="flex h-[var(--tabbar-h)] shrink-0 items-center justify-end gap-0.5 px-2"
     >
       <div
