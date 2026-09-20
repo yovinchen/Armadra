@@ -4,6 +4,7 @@ import { useReducedMotion } from "motion/react";
 import { Bar, BarChart, Cell, XAxis } from "recharts";
 
 import { useT } from "../../app/preferences-store";
+import { ColorDot } from "@/ui/color-dot";
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/ui/chart";
 import { AnimatedNumber } from "./AnimatedNumber";
 import { Donut, type DonutSlice } from "./Donut";
@@ -12,8 +13,10 @@ import {
   MUTED_SERIES_COLOR,
   SERIES_COLORS,
   TOKEN_FIELDS,
+  HEAT_LEVELS,
   formatMetric,
-  intensity,
+  heatLevel,
+  heatThresholds,
   metricValue,
   pointLabel,
   type UsageMetric,
@@ -102,7 +105,8 @@ export function UsageSkyline({
   );
 
   const total = metricValue(point ?? range.totals, metric);
-  const peakValue = Math.max(...rows.map((row) => row.value), 0);
+  const sliceSum = slices.reduce((sum, slice) => sum + slice.value, 0);
+  const levels = heatThresholds(rows.map((row) => row.value));
   const marked = hovered ?? selected;
   const markedRow = rows.find((row) => row.key === marked);
   const tick = Math.max(0, Math.ceil(range.points.length / 6) - 1);
@@ -116,112 +120,53 @@ export function UsageSkyline({
       <h3 className="text-xs font-medium text-muted-foreground">
         {t("usage.skyline.title")}
       </h3>
+
       <div className="flex items-center gap-3">
         <div className="relative size-[104px] shrink-0">
           <Donut slices={slices} metric={metric} />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <AnimatedNumber
               value={total}
+              unit={metric}
               format={(value) => formatMetric(value, metric)}
               className="text-xs font-medium"
             />
           </div>
         </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <div
-            data-slot="usage-skyline-meta"
-            className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground tabular-nums"
-          >
-            {markedRow ? (
-              <span>{`${formatMetric(markedRow.value, metric)} · ${pointLabel(markedRow.key)}`}</span>
-            ) : (
-              <>
-                {range.peak && (
-                  <span>
-                    {t("usage.skyline.peak", {
-                      value: formatMetric(
-                        metricValue(range.peak, metric),
-                        metric,
-                      ),
-                      key: pointLabel(range.peak.key),
-                    })}
-                  </span>
-                )}
-                <span>
-                  {t("usage.skyline.active", {
-                    value: range.activeIntervals,
-                    total: range.points.length,
-                  })}
-                </span>
-                <span>
-                  {t("usage.skyline.streak", { value: range.longestStreak })}
-                </span>
-              </>
-            )}
-          </div>
-          {rangeKey !== "all" && (
-            <ChartContainer
-              config={timelineConfig}
-              data-slot="usage-timeline"
-              className="aspect-auto h-[96px] w-full"
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {slices.map((slice) => (
+            <div
+              key={slice.key}
+              data-slot="usage-donut-legend-item"
+              data-series={slice.key}
+              className="flex items-center gap-1.5 px-1 text-xs"
             >
-              <BarChart
-                data={rows}
-                margin={{ top: 4, right: 8, bottom: 0, left: 8 }}
-                onMouseMove={(state) =>
-                  setHovered(
-                    typeof state.activeLabel === "string"
-                      ? state.activeLabel
-                      : null,
-                  )
-                }
-                onMouseLeave={() => setHovered(null)}
-                className="cursor-pointer"
-              >
-                <XAxis
-                  dataKey="key"
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={4}
-                  interval={tick}
-                  tick={{ fontSize: 10 }}
-                  tickFormatter={pointLabel}
-                />
-                <ChartTooltip cursor={false} content={() => null} />
-                <Bar
-                  dataKey="value"
-                  radius={2}
-                  onClick={(data: unknown) => {
-                    const key = barKey(data);
-                    if (key) onSelect(key);
-                  }}
-                  isAnimationActive={!reduced}
-                  animationDuration={350}
-                  animationEasing="ease-out"
-                >
-                  {rows.map((row) => (
-                    <Cell
-                      key={row.key}
-                      fill="var(--color-value)"
-                      fillOpacity={
-                        row.key === selected
-                          ? 1
-                          : intensity(row.value, peakValue)
-                      }
-                      stroke={
-                        row.key === selected ? "var(--color-value)" : undefined
-                      }
-                      strokeWidth={row.key === selected ? 1.5 : 0}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ChartContainer>
-          )}
+              <ColorDot color={slice.color} size={8} />
+              <span className="min-w-0 flex-1 truncate" title={slice.label}>
+                {slice.label}
+              </span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {t("usage.percent", {
+                  value:
+                    sliceSum > 0
+                      ? Math.round((slice.value / sliceSum) * 100)
+                      : 0,
+                })}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
-      {rangeKey === "all" && (
+
+      <div
+        data-slot="usage-skyline-meta"
+        className="h-4 text-[11px] text-muted-foreground tabular-nums"
+      >
+        {markedRow &&
+          `${formatMetric(markedRow.value, metric)} · ${pointLabel(markedRow.key)}`}
+      </div>
+
+      {rangeKey === "all" ? (
         <Heatmap
           points={range.points as CostPoint[]}
           metric={metric}
@@ -229,6 +174,63 @@ export function UsageSkyline({
           onSelect={onSelect}
           onHover={setHovered}
         />
+      ) : (
+        <ChartContainer
+          config={timelineConfig}
+          data-slot="usage-timeline"
+          className="aspect-auto h-[112px] w-full [&_g:focus]:outline-none"
+        >
+          <BarChart
+            data={rows}
+            margin={{ top: 4, right: 8, bottom: 0, left: 8 }}
+            onMouseMove={(state) =>
+              setHovered(
+                typeof state.activeLabel === "string"
+                  ? state.activeLabel
+                  : null,
+              )
+            }
+            onMouseLeave={() => setHovered(null)}
+            className="cursor-pointer"
+          >
+            <XAxis
+              dataKey="key"
+              tickLine={false}
+              axisLine={false}
+              tickMargin={4}
+              interval={tick}
+              tick={{ fontSize: 10 }}
+              tickFormatter={pointLabel}
+            />
+            <ChartTooltip cursor={false} content={() => null} />
+            <Bar
+              dataKey="value"
+              radius={2}
+              onClick={(data: unknown) => {
+                const key = barKey(data);
+                if (key) onSelect(key);
+              }}
+              isAnimationActive={!reduced}
+              animationDuration={350}
+              animationEasing="ease-out"
+            >
+              {rows.map((row) => (
+                <Cell
+                  key={row.key}
+                  fill={
+                    HEAT_LEVELS[
+                      Math.max(1, heatLevel(row.value, levels))
+                    ] as string
+                  }
+                  stroke={
+                    row.key === selected ? "var(--foreground)" : undefined
+                  }
+                  strokeWidth={row.key === selected ? 1.5 : 0}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ChartContainer>
       )}
     </section>
   );

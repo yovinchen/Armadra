@@ -71,7 +71,10 @@ export function DimensionChart({
     <section aria-label={title} className="flex flex-col gap-2">
       <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
       {series.length > 0 && (
-        <ChartContainer config={config} className="aspect-auto h-[96px] w-full">
+        <ChartContainer
+          config={config}
+          className="aspect-auto h-[96px] w-full [&_g:focus]:outline-none"
+        >
           <AreaChart
             data={rows}
             margin={{ top: 4, right: 10, bottom: 0, left: 10 }}

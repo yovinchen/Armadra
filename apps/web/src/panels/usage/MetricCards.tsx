@@ -35,7 +35,9 @@ export function MetricCards({
       >
         <div className={HEAD}>
           <dt>{t("usage.metric.tokens")}</dt>
-          {point && <span className="tabular-nums">{pointLabel(point.key)}</span>}
+          {point && (
+            <span className="tabular-nums">{pointLabel(point.key)}</span>
+          )}
         </div>
         <dd className="text-sm font-medium tabular-nums">
           <AnimatedNumber

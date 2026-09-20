@@ -91,6 +91,7 @@ function point(key: string, scale: number): CostPoint {
   const summed = models.reduce((acc, model) => add(acc, model.tokens), EMPTY);
   return {
     key,
+    sessions: models.length > 0 ? 1 + Math.round(weight(key, 11) * 4) : 0,
     tokens: summed,
     costUsd: models.reduce((acc, model) => acc + (model.costUsd ?? 0), 0),
     complete: models.every((model) => model.costUsd !== null),
@@ -164,6 +165,7 @@ function rollUp(points: CostPoint[], granularity: "hour" | "day"): CostRange {
       : null,
     activeIntervals: points.filter((entry) => total(entry.tokens) > 0).length,
     longestStreak: longest,
+    sessions: points.reduce((sum, entry) => sum + entry.sessions, 0),
   };
 }
 

@@ -7,6 +7,7 @@ import { DimensionChart, type DimensionSeries } from "./DimensionChart";
 import { MetricCards } from "./MetricCards";
 import { RangeMetricBar } from "./RangeMetricBar";
 import { UsageSkyline } from "./UsageSkyline";
+import { UsageStats } from "./UsageStats";
 import {
   MUTED_SERIES_COLOR,
   SERIES_COLORS,
@@ -26,8 +27,7 @@ export function UsagePanel({ summary }: { summary: CostSummary }) {
 
   const current = summary.ranges[range];
   const agentList = agents.data;
-  const point =
-    current.points.find((entry) => entry.key === selected) ?? null;
+  const point = current.points.find((entry) => entry.key === selected) ?? null;
 
   const modelSeries = useMemo<DimensionSeries[]>(() => {
     const top = current.byModel.slice(0, MODEL_SERIES);
@@ -110,14 +110,13 @@ export function UsagePanel({ summary }: { summary: CostSummary }) {
         metric={metric}
         onClear={() => setSelected(null)}
       />
+      <UsageStats range={current} point={point} metric={metric} />
       <UsageSkyline
         range={current}
         rangeKey={range}
         metric={metric}
         selected={point ? point.key : null}
-        onSelect={(key) =>
-          setSelected((prev) => (prev === key ? null : key))
-        }
+        onSelect={(key) => setSelected((prev) => (prev === key ? null : key))}
       />
       <DimensionChart
         title={t("usage.breakdown.byModel")}

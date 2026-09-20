@@ -69,6 +69,7 @@ function range(points: ReturnType<typeof daily>) {
     granularity: "day" as const,
     points: points.map((day) => ({
       key: day.date,
+      sessions: day.costUsd > 0 ? 3 : 0,
       tokens: day.tokens,
       costUsd: day.costUsd,
       complete: day.complete,
@@ -111,6 +112,7 @@ function range(points: ReturnType<typeof daily>) {
     peak: { key: "2026-08-30", tokens: tokens(1_000_000), costUsd: 5 },
     activeIntervals: 1,
     longestStreak: 1,
+    sessions: 3,
   };
 }
 

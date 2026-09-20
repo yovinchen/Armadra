@@ -4,10 +4,10 @@ import { useReducedMotion } from "motion/react";
 
 import { usePreferencesStore, useT } from "../../app/preferences-store";
 import {
-  INTENSITY_STEPS,
-  SERIES_COLORS,
+  HEAT_LEVELS,
   formatMetric,
-  intensity,
+  heatLevel,
+  heatThresholds,
   metricValue,
   type UsageMetric,
 } from "./metrics";
@@ -62,7 +62,9 @@ export function Heatmap({
         <div className="flex shrink-0 flex-col gap-[3px] pt-[14px] text-[9px] leading-[10px] text-muted-foreground">
           {Array.from({ length: 7 }, (_, row) => (
             <span key={row} className="h-[10px]">
-              {ROW_LABELS[row] ? t(`usage.heatmap.weekday.${ROW_LABELS[row]}`) : ""}
+              {ROW_LABELS[row]
+                ? t(`usage.heatmap.weekday.${ROW_LABELS[row]}`)
+                : ""}
             </span>
           ))}
         </div>
@@ -104,13 +106,10 @@ export function Heatmap({
                         onMouseLeave={() => onHover(null)}
                         style={{
                           backgroundColor:
-                            cell.value > 0
-                              ? SERIES_COLORS[0]
-                              : "var(--muted)",
-                          opacity: intensity(cell.value, grid.peak) || 1,
+                            HEAT_LEVELS[heatLevel(cell.value, grid.levels)],
                           transitionDuration: duration,
                         }}
-                        className={`${CELL} cursor-pointer transition-[background-color,opacity] data-[selected=true]:ring-1 data-[selected=true]:ring-ring`}
+                        className={`${CELL} cursor-pointer transition-[background-color] data-[selected=true]:ring-1 data-[selected=true]:ring-ring`}
                       />
                     ),
                   )}
@@ -122,14 +121,11 @@ export function Heatmap({
       </div>
       <div className="flex items-center justify-end gap-1 text-[9px] text-muted-foreground">
         <span>{t("usage.heatmap.less")}</span>
-        {INTENSITY_STEPS.map((step) => (
+        {HEAT_LEVELS.map((color) => (
           <span
-            key={step}
+            key={color}
             className={CELL}
-            style={{
-              backgroundColor: step > 0 ? SERIES_COLORS[0] : "var(--muted)",
-              opacity: step || 1,
-            }}
+            style={{ backgroundColor: color }}
           />
         ))}
         <span>{t("usage.heatmap.more")}</span>
@@ -146,7 +142,10 @@ function dayTime(key: string): number {
 function buildGrid(points: CostPoint[], metric: UsageMetric) {
   const first = points[0];
   const last = points[points.length - 1];
-  if (!first || !last) return { columns: [], peak: 0 };
+  const levels = heatThresholds(
+    points.map((point) => metricValue(point, metric)),
+  );
+  if (!first || !last) return { columns: [], levels };
 
   const values = new Map(
     points.map((point) => [point.key, metricValue(point, metric)]),
@@ -154,7 +153,7 @@ function buildGrid(points: CostPoint[], metric: UsageMetric) {
   const firstTime = dayTime(first.key);
   const lastTime = dayTime(last.key);
   if (!Number.isFinite(firstTime) || !Number.isFinite(lastTime)) {
-    return { columns: [], peak: 0 };
+    return { columns: [], levels };
   }
 
   const lastWeek = lastTime - new Date(lastTime).getUTCDay() * DAY;
@@ -162,7 +161,6 @@ function buildGrid(points: CostPoint[], metric: UsageMetric) {
   const start = Math.max(firstWeek, lastWeek - (WEEKS - 1) * WEEK);
   const count = Math.round((lastWeek - start) / WEEK) + 1;
 
-  let peak = 0;
   const columns = Array.from({ length: count }, (_, index) => {
     const columnStart = start + index * WEEK;
     let monthStart: Date | null = null;
@@ -172,12 +170,10 @@ function buildGrid(points: CostPoint[], metric: UsageMetric) {
       if (date.getUTCDate() === 1) monthStart = date;
       if (time < firstTime || time > lastTime) return null;
       const key = date.toISOString().slice(0, 10);
-      const value = values.get(key) ?? 0;
-      if (value > peak) peak = value;
-      return { key, value };
+      return { key, value: values.get(key) ?? 0 };
     });
     return { start: columnStart, monthStart, cells };
   });
 
-  return { columns, peak };
+  return { columns, levels };
 }

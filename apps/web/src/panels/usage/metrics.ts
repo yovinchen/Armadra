@@ -51,14 +51,38 @@ export function pointLabel(key: string): string {
   return key.includes("T") && hour ? hour : shortDate(key);
 }
 
-/** 相对峰值分 4 档，柱子与热力格之间有轻重但不至于让小值消失。 */
-export function intensity(value: number, peak: number): number {
-  if (value <= 0) return 0;
-  const ratio = peak > 0 ? value / peak : 0;
-  if (ratio > 0.75) return 1;
-  if (ratio > 0.5) return 0.78;
-  if (ratio > 0.25) return 0.56;
-  return 0.36;
+/** 五档实色，随主题翻转；0 档是「这一格没有活动」的底色。 */
+export const HEAT_LEVELS: readonly string[] = [
+  "var(--heat-0)",
+  "var(--heat-1)",
+  "var(--heat-2)",
+  "var(--heat-3)",
+  "var(--heat-4)",
+];
+
+export type HeatThresholds = readonly [number, number, number];
+
+/**
+ * 非零值的四分位当分档线。
+ *
+ * 不按峰值线性分：一天 11.4B 的极端峰值会把其余每一天都压进最浅一档，
+ * 整张图看起来就只剩一个亮点。四分位让每一档都有大致同样多的格子。
+ */
+export function heatThresholds(values: readonly number[]): HeatThresholds {
+  const sorted = values.filter((value) => value > 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return [0, 0, 0];
+  const at = (quantile: number) =>
+    sorted[
+      Math.min(sorted.length - 1, Math.floor(sorted.length * quantile))
+    ] as number;
+  return [at(0.25), at(0.5), at(0.75)];
 }
 
-export const INTENSITY_STEPS: readonly number[] = [0, 0.36, 0.56, 0.78, 1];
+/** 0（没有活动）到 4（最深）。 */
+export function heatLevel(value: number, thresholds: HeatThresholds): number {
+  if (value <= 0) return 0;
+  if (value <= thresholds[0]) return 1;
+  if (value <= thresholds[1]) return 2;
+  if (value <= thresholds[2]) return 3;
+  return 4;
+}

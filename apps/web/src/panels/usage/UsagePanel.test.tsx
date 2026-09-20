@@ -24,6 +24,7 @@ vi.mock("@/api/client", () => ({
 }));
 
 import { UsagePanel } from "./UsagePanel";
+import { HEAT_LEVELS, heatLevel, heatThresholds } from "./metrics";
 import { sampleCostSummary } from "./cost-fixture";
 import { TestProviders, installDomPolyfills } from "../../app/test-harness";
 import { formatTokens, formatUsd, totalTokens } from "../../lib/cost";
@@ -36,7 +37,9 @@ import { formatTokens, formatUsd, totalTokens } from "../../lib/cost";
  *  3. 没有本地来源的 Agent 走脚注，不画成空面积；
  *  4. 图例点一下聚焦那一条，其余变淡；
  *  5. 点柱子/热力格选中一个时间点，清除按钮与再点一次都能取消；
- *  6. 换范围时图表原地换数据，不重挂载。
+ *  6. 换范围时图表原地换数据，不重挂载；
+ *  7. 统计栏给出会话数等九格，选中一个点时前六格跟着那个点走；
+ *  8. 费用指标下环形图旁的图例列出模型名。
  *
  * jsdom 量不出尺寸，recharts 的 `ResponsiveContainer` 会渲染空；这里把
  * `ResizeObserver` 换成一个立刻回报固定尺寸的桩，图形才有 DOM 可断言。
@@ -130,6 +133,14 @@ function skylineWrapper(): Element {
     '[data-slot="usage-timeline"] .recharts-wrapper',
   );
   if (!node) throw new Error("no timeline wrapper");
+  return node;
+}
+
+function stat(name: string): HTMLElement {
+  const node = document.querySelector<HTMLElement>(
+    `[data-slot="usage-stat"][data-stat="${name}"]`,
+  );
+  if (!node) throw new Error(`no ${name} stat`);
   return node;
 }
 
@@ -297,5 +308,87 @@ describe("用量面板", () => {
     );
     expect(skylineWrapper()).toBe(before);
     expect(document.querySelectorAll('[data-slot="chart"]').length).toBe(areas);
+  });
+
+  it("统计栏给出会话数，选中一个点后换成该点的会话数", async () => {
+    const summary = renderPanel();
+    const seven = summary.ranges["7d"];
+    expect(seven.sessions).toBeGreaterThan(0);
+    await waitFor(() =>
+      expect(stat("sessions").textContent).toContain(String(seven.sessions)),
+    );
+    expect(stat("streak").textContent).toContain(String(seven.longestStreak));
+    expect(stat("active").textContent).toContain(
+      `${seven.activeIntervals}/${seven.points.length}`,
+    );
+
+    const target = seven.points[3];
+    if (!target) throw new Error("no point");
+    expect(target.sessions).not.toBe(seven.sessions);
+    fireEvent.click(document.querySelectorAll(".recharts-bar-rectangle")[3]!);
+
+    await waitFor(() =>
+      expect(stat("sessions").textContent).toContain(String(target.sessions)),
+    );
+    await waitFor(() =>
+      expect(stat("total").textContent).toContain(
+        formatTokens(totalTokens(target.tokens)),
+      ),
+    );
+    // 峰值/活跃/最长连续是范围的性质，选中一个点不改它们。
+    expect(stat("streak").textContent).toContain(String(seven.longestStreak));
+  });
+
+  it("费用指标下环形图图例列出模型名", async () => {
+    const summary = renderPanel();
+    fireEvent.click(screen.getByRole("radio", { name: "费用" }));
+    const top = summary.ranges["7d"].byModel[0];
+    if (!top) throw new Error("no model");
+    await waitFor(() => {
+      const labels = [
+        ...document.querySelectorAll('[data-slot="usage-donut-legend-item"]'),
+      ].map((node) => node.textContent ?? "");
+      expect(labels.some((label) => label.includes(top.model))).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole("radio", { name: "Token" }));
+    await waitFor(() => {
+      const labels = [
+        ...document.querySelectorAll('[data-slot="usage-donut-legend-item"]'),
+      ].map((node) => node.textContent ?? "");
+      expect(labels.some((label) => label.includes("缓存读"))).toBe(true);
+    });
+  });
+
+  it("全部档的格子按四分位上色，不用不透明度", async () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("radio", { name: "全部" }));
+    const cells = await waitFor(() => {
+      const found = document.querySelectorAll<HTMLElement>(
+        '[data-slot="usage-heatmap-cell"]',
+      );
+      if (found.length === 0) throw new Error("no cells");
+      return [...found];
+    });
+    const colors = new Set(cells.map((cell) => cell.style.backgroundColor));
+    expect(colors.size).toBeGreaterThan(2);
+    for (const color of colors) expect(HEAT_LEVELS).toContain(color);
+    expect(cells.every((cell) => cell.style.opacity === "")).toBe(true);
+  });
+});
+
+describe("热力分档", () => {
+  it("按非零值的四分位分 1–4 档，极端峰值不会把其余压成最浅", () => {
+    const levels = heatThresholds([1, 2, 3, 4, 100]);
+    const got = [1, 2, 3, 4, 100].map((value) => heatLevel(value, levels));
+    expect(got).toEqual([1, 1, 2, 3, 4]);
+    expect(new Set(got).size).toBe(4);
+    expect(heatLevel(0, levels)).toBe(0);
+  });
+
+  it("没有非零值时所有格子都是 0 档", () => {
+    const levels = heatThresholds([0, 0, 0]);
+    expect(heatLevel(0, levels)).toBe(0);
+    expect(heatLevel(5, levels)).toBe(4);
   });
 });
