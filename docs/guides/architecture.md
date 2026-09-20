@@ -194,6 +194,13 @@ Hook 时提供独立的按需技能，不再追加全局长指令。详见
   经 `canvas/sync/merge.ts` 合进 `canvas-store`——视口留本地的，本地这一轮动过的
   实体（`store/canvas/pending.ts` 记账）留本地的，其余照收远端的。远端灌入
   **不进也不清**撤销栈，手势进行中先不合，等松手。
+- 控制动词新建节点时，core 在 `board.changed` **之后**再广播一条
+  `node.created{boardId, nodeId, nodeType, originNodeId}`。前者只说「板变新了」，
+  后者说「新出现的是哪一个、谁要的」：正开着这块板的页面据此把新节点选中并把
+  相机对准它，和从新建菜单建出来的一模一样（`canvas/created-node.ts`）。后台
+  标签页、开着别的板的窗口、以及正在拖拽或输入的时候都不跟。
+- 节点的默认尺寸只有一份，在 `apps/web/src/nodes/registry.ts`：控制动词建节点
+  时**不写 `size`**，页面投影时按类型补（`canvas/sync/project.ts`）。
 
 SQLite 的迁移只有一个目录——`apps/desktop/src/core/db/migrations/`，0001–0020 一条
 连续序列，字节由根 `migrations.lock` 守住（R7d 把原先分散在两处的来源合成一处）。
