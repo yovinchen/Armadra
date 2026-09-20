@@ -256,6 +256,7 @@ interface InboxRow {
   readonly id: string;
   readonly source_node_id: string;
   readonly from_title: string;
+  readonly from_handle: string | null;
   readonly message_key: string;
   readonly body: string;
   readonly created_at: number;
@@ -270,15 +271,17 @@ function inbox(
 ): Record<string, unknown> {
   const limit = clamp(args.count(["limit"]) ?? 10, 1, 32);
   const after = Math.max(0, args.count(["after"]) ?? 0);
-  // The sender's title is read back through a LEFT JOIN rather than stored on
-  // the row: a renamed node must read as its current name, and a deleted one
-  // as an empty string instead of holding the whole message back.
+  // The sender's title and name are read back through LEFT JOINs rather than
+  // stored on the row: a renamed node must read as its current name, and a
+  // deleted one as an empty string instead of holding the whole message back.
   const rows = context.database
     .prepare(
       "SELECT m.sequence AS sequence, m.id AS id, m.source_node_id AS source_node_id, " +
-        "COALESCE(n.title, '') AS from_title, m.message_key AS message_key, m.body AS body, " +
+        "COALESCE(n.title, '') AS from_title, h.handle AS from_handle, " +
+        "m.message_key AS message_key, m.body AS body, " +
         "m.created_at AS created_at, m.expires_at AS expires_at " +
         "FROM agent_mailbox m LEFT JOIN nodes n ON n.id = m.source_node_id " +
+        "LEFT JOIN node_handles h ON h.node_id = m.source_node_id " +
         "WHERE m.workspace_id = ? AND m.target_node_id = ? AND m.acknowledged_at IS NULL " +
         "AND m.expires_at > ? AND m.sequence > ? ORDER BY m.sequence LIMIT ?",
     )
@@ -298,6 +301,9 @@ function inbox(
       id: row.id,
       from: row.source_node_id,
       fromTitle: row.from_title,
+      // 署名优先用名字（设计 §2.4）：标题会被自动命名改写，名字不会，所以
+      // 「回给 reviewer」在第二次自动命名之后仍然指向同一个节点。
+      fromHandle: row.from_handle ?? null,
       key: row.message_key,
       // Bodies stay JSON strings, preserving the data boundary even if they
       // contain Markdown fences or forged message headers.

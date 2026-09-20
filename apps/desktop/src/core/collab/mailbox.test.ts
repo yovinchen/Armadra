@@ -218,6 +218,49 @@ describe("inbox and ack", () => {
     expect(body.hasMore).toBe(false);
   });
 
+  /**
+   * 署名优先用名字（设计 §2.4）：标题会被自动命名改写，名字不会，所以「回给
+   * reviewer」在第二次自动命名之后仍然指向同一个节点。
+   */
+  it("names the sender, and answers null when the sender has no name", async () => {
+    await post(sender, { to: receiver, key: "k", body: "anon" });
+    const before = (
+      (await runMailbox(
+        fixture.collab,
+        callerFor(fixture, receiver),
+        "inbox",
+        new Args({}),
+      ).then((body) => body.messages)) as Record<string, unknown>[]
+    )[0];
+    expect(before).toMatchObject({ fromTitle: "Sender", fromHandle: null });
+
+    fixture.name(sender, "planner");
+    const after = (
+      (await runMailbox(
+        fixture.collab,
+        callerFor(fixture, receiver),
+        "inbox",
+        new Args({}),
+      ).then((body) => body.messages)) as Record<string, unknown>[]
+    )[0];
+    expect(after).toMatchObject({ fromHandle: "planner" });
+  });
+
+  /** 名字是 `--to` 的第二优先级（id 之后、标题之前），所以 `post` 也收它。 */
+  it("delivers to a peer addressed by its name", async () => {
+    fixture.name(receiver, "reviewer");
+    const body = await post(sender, {
+      to: "reviewer",
+      key: "k",
+      body: "by name",
+    });
+    expect(body.ok).toBe(true);
+    const stored = fixture.database
+      .prepare("SELECT target_node_id AS target FROM agent_mailbox")
+      .get() as { target: string };
+    expect(stored.target).toBe(receiver);
+  });
+
   it("pages by sequence and does not acknowledge on read", async () => {
     for (let index = 0; index < 3; index += 1) {
       await post(sender, { to: receiver, key: `k${index}`, body: `m${index}` });

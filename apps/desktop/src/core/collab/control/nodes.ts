@@ -2,6 +2,7 @@ import { launchCommand } from "../../agent/launch";
 import { validAgentId } from "../../agent/registry";
 import { getAgentStatus } from "../../agent/status";
 import type { CanvasNode } from "../../canvas/document-types";
+import { handlesFor } from "../../canvas/handles";
 import type { Caller } from "../nodes";
 import { type Args, Refusal, collapseNewlines } from "../refusals";
 import type { CollabContext } from "../service";
@@ -21,16 +22,22 @@ import { type Outcome, result } from "./outcome";
 
 export function list(context: CollabContext, caller: Caller): Outcome {
   const document = load(context, caller);
+  const handles = handlesFor(
+    context.database,
+    document.nodes.map((node) => node.id),
+  );
   const rows: Record<string, unknown>[] = [];
   const lines: string[] = [];
   for (const node of document.nodes) {
     const status = getAgentStatus(context.database, node.id);
     const agent = agentOf(node);
     const state = status?.state;
+    const handle = handles.get(node.id);
     lines.push(
       `- ${node.title} [${node.type}]` +
         (agent === null ? "" : ` ${agent}`) +
         (state === undefined ? "" : ` · ${state}`) +
+        (handle === undefined ? "" : `  名字=${handle}`) +
         `  id=${node.id}` +
         (node.id === caller.node.id ? "  ← 你" : ""),
     );
@@ -39,6 +46,7 @@ export function list(context: CollabContext, caller: Caller): Outcome {
       type: node.type,
       title: node.title,
       agent,
+      handle: handle ?? null,
       state: state ?? null,
       self: node.id === caller.node.id,
     });

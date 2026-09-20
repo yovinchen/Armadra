@@ -5,7 +5,12 @@ import { getAgentStatus } from "../agent/status";
 import type { ContextLink } from "../canvas/context-links";
 import { getContextLinks } from "../canvas/context-links";
 import { resolveInRoot } from "../workspaces/roots";
-import { AddressError, loadHandles, resolveLink } from "./addressing";
+import {
+  AddressError,
+  type Handles,
+  loadHandles,
+  resolveLink,
+} from "./addressing";
 import {
   type Caller,
   type NodeRef,
@@ -75,7 +80,12 @@ export async function runContextLink(
     );
   }
   const document = getContextLinks(context.database, caller.node.id);
-  if (verb === "list") return renderList(document.links);
+  if (verb === "list") {
+    return renderList(
+      document.links,
+      loadHandles(context.database, document.links),
+    );
+  }
 
   const lines = clamp(
     args.count(["n", "lines"]) ?? DEFAULT_LINES,
@@ -166,13 +176,21 @@ export function kindLabel(kind: string): string {
   return kind === "shape" ? "白板内容" : kind;
 }
 
-function renderList(links: readonly ContextLink[]): string {
+/**
+ * `list` 是 Agent 唯一一处「我连着谁、各自叫什么」的答案（设计 §2.3），所以名
+ * 字排在 id 前面：有名字的那些，`--node`、`post --to` 都该用名字而不是 id。
+ */
+function renderList(links: readonly ContextLink[], handles: Handles): string {
   if (links.length === 0) {
     return "这个节点还没有连接任何其他节点。在画布上从右侧把手拖一条线到别的节点即可建立上下文链接。\n";
   }
   let out = `已连接 ${links.length} 个节点：\n`;
   for (const link of links) {
-    out += `- ${link.title}  类型=${kindLabel(link.kind)}  id=${link.id}  可读：${readableAs(link.kind)}\n`;
+    const handle = handles.get(link.id);
+    out +=
+      `- ${link.title}  类型=${kindLabel(link.kind)}` +
+      (handle === undefined ? "" : `  名字=${handle}`) +
+      `  id=${link.id}  可读：${readableAs(link.kind)}\n`;
     const status = link.content?.status;
     if (status !== undefined) {
       const label =

@@ -123,6 +123,8 @@ export interface AgentFixture {
   session(nodeId: string, agentId: string, generation?: number): string;
   /** Writes the two link documents a canvas edge implies. */
   link(left: string, right: string): void;
+  /** Gives `nodeId` a name on the board, table and rendered copy together. */
+  name(nodeId: string, handle: string): void;
   close(): void;
 }
 
@@ -284,6 +286,22 @@ export function agentFixture(): AgentFixture {
             "VALUES (?, ?, ?, ?, 'link', ?, ?)",
         )
         .run(uuidV7(), board.id, left, right, now, now);
+    },
+    // `rename --handle` 走的是板文档的保存；这里直接写，理由与 `link` 一样：
+    // 要测的是读到名字之后的行为，不是再走一遍写名字那条路。表与副本一起写，
+    // 因为产品里它们也只会一起出现。
+    name: (nodeId, handle) => {
+      database
+        .prepare(
+          "INSERT INTO node_handles (board_id, handle, node_id, updated_at) VALUES (?, ?, ?, ?) " +
+            "ON CONFLICT(node_id) DO UPDATE SET handle = excluded.handle",
+        )
+        .run(board.id, handle, nodeId, rfc3339());
+      database
+        .prepare(
+          "UPDATE nodes SET data_json = json_set(data_json, '$.handle', ?) WHERE id = ?",
+        )
+        .run(handle, nodeId);
     },
     close: () => {
       setControlDispatcher(undefined);

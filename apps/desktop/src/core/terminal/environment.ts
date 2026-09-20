@@ -217,16 +217,27 @@ export function asRecord(env: EnvPairs): Record<string, string> {
  * are the other two and are added by {@link contextSessionEnvironment}, which
  * is where the telemetry sequence they index is initialised.
  *
+ * `ARMADRA_NODE_NAME` joins them when this node has a name on its board
+ * (`docs/design/agent-delivery.md` §2.4): the model has to be able to answer
+ * "who am I, to the others?" without asking, and an unset variable is the
+ * honest answer for a node nobody has named. It is not re-injected on a
+ * rename — the variable is the name this session started under, and the live
+ * answer is always `context list`.
+ *
  * Addresses only. The per-node token is deliberately absent.
  */
 export function agentEnvironment(
   nodeId: string,
   agentId: string,
   dataDir: string,
+  nodeName?: string | undefined,
 ): EnvPairs {
   return [
     ["ARMADRA_NODE_ID", nodeId],
     ["ARMADRA_AGENT_ID", agentId],
+    ...(nodeName === undefined || nodeName === ""
+      ? []
+      : ([["ARMADRA_NODE_NAME", nodeName]] as EnvPairs)),
     ["ARMADRA_ENDPOINT_FILE", hookEndpointFile(dataDir)],
     ["ARMADRA_CANVAS_CONTROL", "1"],
   ];

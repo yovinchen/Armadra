@@ -41,7 +41,29 @@ export interface Binding {
   revision: bigint;
 }
 
+/**
+ * What this command prints, which is what Claude draws as the status line.
+ *
+ * Only the node's name, and only when the node has one: the status line is a
+ * single line of the user's own screen, so it gets the one fact the model and
+ * the user both need and nothing else. An unnamed node prints nothing, which
+ * is the same blank line this command has always produced.
+ *
+ * This is **our** status line — `hook/install/claude.ts` writes it only when
+ * the user has none of their own, and a foreign one is never wrapped. So
+ * appending here cannot touch a line somebody else wrote.
+ */
+export function statusLine(name: string | undefined): string {
+  const handle = name?.trim() ?? "";
+  // Re-validated rather than trusted: this is an environment variable, and a
+  // control character in it would move the cursor rather than read as a name.
+  if (!/^[a-z0-9][a-z0-9_-]{0,23}$/.test(handle)) return "";
+  return `@${handle}`;
+}
+
 export async function run(): Promise<number> {
+  const line = statusLine(envVar("ARMADRA_NODE_NAME"));
+  if (line !== "") process.stdout.write(`${line}\n`);
   // Always drain stdin, including outside Armadra and on any local failure.
   const binding = loadBinding();
   const chunks: Buffer[] = [];

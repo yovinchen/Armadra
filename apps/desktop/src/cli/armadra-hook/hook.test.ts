@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { filterData, nextRevision } from "./context-usage.js";
+import { filterData, nextRevision, statusLine } from "./context-usage.js";
 import {
   buildPayload,
   decisionOutput,
@@ -191,6 +191,22 @@ describe("context usage", () => {
     expect(
       field(asObject(filterData(compact))!["context_window"]!, "current_usage"),
     ).toBeNull();
+  });
+
+  /**
+   * 状态行是用户自己那一行屏幕。`hook/install/claude.ts` 只在用户没有自己的状
+   * 态行时才写我们这条，外来的那条一个字节都不包装，所以这里追加什么都不会碰
+   * 到别人写的行（设计 §2.3）。
+   */
+  it("draws the node's name, and nothing at all without one", () => {
+    expect(statusLine("reviewer")).toBe("@reviewer");
+    expect(statusLine(" codex-1 ")).toBe("@codex-1");
+    expect(statusLine(undefined)).toBe("");
+    expect(statusLine("")).toBe("");
+    // 环境变量不是可信输入：一个带转义的「名字」会移动光标，不是画一行字。
+    expect(statusLine("bad[2Jname")).toBe("");
+    expect(statusLine("Reviewer")).toBe("");
+    expect(statusLine("x".repeat(25))).toBe("");
   });
 
   it("keeps revisions monotonic across parallel allocations", () => {

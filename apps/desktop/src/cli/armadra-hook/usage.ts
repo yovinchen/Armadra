@@ -74,14 +74,16 @@ CONTEXT VERBS:
   terminal                  the linked node's terminal screen
 
 CONTEXT OPTIONS:
-  --node <id|title>         which linked node to read (defaults to the only link)
+  --node <name|id|title>    which linked node to read (defaults to the only link)
   -n, --lines <N>           how many entries/lines to return
 
 CANVAS:
   help                      short collaboration guide (no provider configuration needed)
-  post --to ID --key KEY --body TEXT   store a handoff for a linked agent
+  post --to NAME --key KEY --body TEXT store a handoff for a linked agent
   inbox --limit 10 --after 0           read your pending messages without acknowledgement
   ack --id ID                         acknowledge one received message
+  rename --node ID --handle NAME       set this node's name on the board
+  link --from ID --to ID [--name-from A --name-to B]  link two nodes, naming either end
   armadra-hook canvas <verb> [--flag value | --flag=value | --flag]...
   Repeated flags become arrays; a bare flag is \`true\`. \`--dry-run\` is passed
   through to the runtime, which then validates without mutating the board.
@@ -123,6 +125,7 @@ BROWSER OPTIONS:
 ENVIRONMENT:
   ARMADRA_NODE_ID          canvas node id; when unset hook mode is a no-op
   ARMADRA_AGENT_ID         provider id of the CLI running in this terminal
+  ARMADRA_NODE_NAME        this node's name on the board; unset when unnamed
   ARMADRA_SESSION_ID       terminal session binding for context observations
   ARMADRA_SESSION_GENERATION  terminal generation for context observations
   ARMADRA_ENDPOINT_FILE    path to the 0600 endpoint file

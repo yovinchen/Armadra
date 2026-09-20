@@ -64,6 +64,16 @@ This terminal runs inside an Armadra node. Collaboration is pull-only: you leave
 
 \`armadra-hook\` 随 Armadra 一起安装，画布里开的终端已经把它放进 PATH；如果 shell 配置重写了 PATH 而找不到它，用 \`"$ARMADRA_HOOK_BIN"\` 代替命令名。The \`armadra-hook\` command ships with Armadra and is on PATH in terminals opened from the board; if a shell profile rewrote PATH, run \`"$ARMADRA_HOOK_BIN"\` instead.
 
+## 你的名字 / Your name
+
+画布上的每个节点可以有一个**名字**（handle）：一个短、稳定、本画布内唯一的词，例如 \`codex-1\`、\`reviewer\`。名字是 Agent 之间互相称呼用的——标题会被自动命名改写，名字不会。
+Each node can carry a **name**: short, stable, unique on the board. Titles get rewritten by auto-naming; names do not.
+
+- 你自己的名字在环境变量 \`ARMADRA_NODE_NAME\` 里；没有这个变量就是还没人给你起名，那也没关系。
+- \`context list\` 会列出你连着谁、各自叫什么（\`名字=<handle>\`）。
+- 凡是接受 \`--to\` / \`--node\` 的命令都收名字：\`--to reviewer\` 和 \`--to <节点 id>\` 等价，而且名字不会因为标题变了就指向别人。
+- 改名：\`armadra-hook canvas rename --node <id> --handle reviewer\`；连线的同时起名：\`canvas link --from <id> --to <id> --name-from planner --name-to reviewer\`。名字撞了会当场拒绝并告诉你是谁占着，不会静默改写。
+
 ## 读相连节点 / Read linked context
 
 只能读画布上**连到本节点**的节点；没有连线的读不到，这是有意的。
@@ -96,7 +106,7 @@ armadra-hook context terminal --node "<标题或 id>" -n 60    # 对方终端最
 ## 信箱 / Mailbox
 
 \`\`\`sh
-armadra-hook canvas post --to <已连线节点 id> --key <交接 id> --body '结论；文件路径；下一步'
+armadra-hook canvas post --to <名字|已连线节点 id> --key <交接 id> --body '结论；文件路径；下一步'
 armadra-hook canvas inbox --limit 10 --after 0             # 读自己的信箱，读不等于确认
 armadra-hook canvas ack --id <消息 id>                      # 处理完了，标记确认
 armadra-hook canvas handoff-read --id <交接 id>             # 读一份冻结的交接快照
@@ -114,8 +124,8 @@ armadra-hook canvas open-terminal --title "构建"            # 新终端节点
 armadra-hook canvas open-agent --agent claude --title "审阅" --prompt "复查 src/ 的改动"
 armadra-hook canvas open-agent --agent codex --after <id> --after <id>   # 等这些节点完成后再启动
 armadra-hook canvas sticky --title "结论" --content "..."   # 便签
-armadra-hook canvas link --from <id> --to <id>             # 建立上下文链接（双向可读）
-armadra-hook canvas rename --node <id> --title "新标题"
+armadra-hook canvas link --from <id> --to <id> [--name-from A --name-to B]   # 建立上下文链接（双向可读），可顺手起名
+armadra-hook canvas rename --node <id> --title "新标题" [--handle <名字>]
 armadra-hook canvas interrupt --to <已连线节点>             # 打断对方当前这一轮（只发一个 Escape，不带正文）
 \`\`\`
 

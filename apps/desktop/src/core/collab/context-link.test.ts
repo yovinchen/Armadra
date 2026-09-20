@@ -75,6 +75,20 @@ describe("list", () => {
     expect(body).toContain("armadra-hook context summary");
   });
 
+  /**
+   * `list` 是 Agent 唯一一处「我连着谁、各自叫什么」的答案（设计 §2.3）。没有
+   * 它，一个被告知「把结果交给 reviewer」的模型只能猜哪个 id 是 reviewer。
+   */
+  it("carries each peer's name, and leaves the line alone when it has none", async () => {
+    const peer = fixture.agentNode("Codex", "codex");
+    fixture.link(me, peer);
+    // 没起名的那些行一个字都不多：名字是给协作用的，一块只有一个 Agent 的
+    // 画布不需要它。
+    expect(await read(me, "list")).not.toContain("名字=");
+    fixture.name(peer, "reviewer");
+    expect(await read(me, "list")).toContain("名字=reviewer");
+  });
+
   it("labels a whiteboard reference and reports its export state", async () => {
     putContextLinks(fixture.database, fixture.workspaceId, me, [
       {

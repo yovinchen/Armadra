@@ -115,6 +115,21 @@ describe("agent injection", () => {
     }
   });
 
+  /**
+   * 设计 §2.4：模型得能不问就答出「我对别人叫什么」。没起名的节点这个变量不
+   * 存在，而不是空串——空串会让一条 `if [ -n ... ]` 与「叫空字符串」分不开。
+   */
+  it("adds the node's name when it has one, and nothing when it does not", () => {
+    expect(
+      asRecord(agentEnvironment("node-1", "claude", "/data", "reviewer"))
+        .ARMADRA_NODE_NAME,
+    ).toBe("reviewer");
+    for (const absent of [undefined, ""]) {
+      const env = agentEnvironment("node-1", "claude", "/data", absent);
+      expect(env.map(([key]) => key)).not.toContain("ARMADRA_NODE_NAME");
+    }
+  });
+
   it("adds the session pair, and only for a terminal that has a node", () => {
     const withNode = contextSessionEnvironment(
       agentEnvironment("node-1", "claude", "/data"),

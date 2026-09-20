@@ -2,6 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type AgentFixture, agentFixture, callerFor } from "../agent/fixture";
 import { loadBoard } from "../canvas/documents";
 import { getContextLinks } from "../canvas/context-links";
+import { handleForNode } from "../canvas/handles";
+import {
+  type AuditEvent,
+  installAuditSink,
+  resetAuditSink,
+} from "../identity/audit";
 import {
   VERBS,
   answerConfirm,
@@ -340,6 +346,69 @@ describe("the verbs that edit the board", () => {
       await run(me, "rename", { title: "Renamed", handle: "me" }),
     );
     expect(body.result).toMatchObject({ title: "Renamed", handle: "me" });
+  });
+
+  it("writes an audit entry for every name change, and none for a title", async () => {
+    // 设计 §6.3：标题不写、名字写。标题是散文，自动命名每一轮都可能改一次；
+    // 名字是 Agent 之间的称呼，改掉它等于把「交给 codex-2」指向了另一个节点。
+    const written: AuditEvent[] = [];
+    installAuditSink((event) => written.push(event));
+    try {
+      ok(await run(me, "rename", { title: "只是标题" }));
+      expect(written).toHaveLength(0);
+      ok(await run(me, "rename", { handle: "planner" }));
+      ok(await run(me, "rename", { handle: "planner" }));
+      ok(await run(me, "rename", { "no-handle": true }));
+      expect(written.map((event) => event.detail)).toEqual([
+        { from: null, to: "planner" },
+        { from: "planner", to: null },
+      ]);
+      expect(written[0]).toMatchObject({
+        action: "canvas.handle.set",
+        target: me,
+        workspaceId: fixture.workspaceId,
+      });
+    } finally {
+      resetAuditSink();
+    }
+  });
+
+  it("names either end of a new link, and refuses a name somebody holds", async () => {
+    const other = fixture.agentNode("Codex", "codex");
+    const body = ok(
+      await run(me, "link", {
+        to: other,
+        "name-from": "planner",
+        "name-to": "Reviewer",
+      }),
+    );
+    expect(body.result).toMatchObject({
+      handleFrom: "planner",
+      handleTo: "reviewer",
+    });
+    expect(handleForNode(fixture.database, me)).toBe("planner");
+    expect(handleForNode(fixture.database, other)).toBe("reviewer");
+
+    // `--name` 是 `--name-to` 的别名，起的是对面那个。
+    const third = fixture.agentNode("Third", "codex");
+    ok(await run(me, "link", { to: third, name: "third" }));
+    expect(handleForNode(fixture.database, third)).toBe("third");
+
+    const fourth = fixture.agentNode("Fourth", "codex");
+    const refused = refusal(
+      await run(me, "link", { to: fourth, name: "reviewer" }),
+    );
+    expect(refused.status).toBe(400);
+    expect(refused.message).toContain("Codex");
+    // 拒绝之后那条边也没建：起名与连线是同一次保存。
+    expect(getContextLinks(fixture.database, fourth).links).toHaveLength(0);
+  });
+
+  it("puts a node's name in `list`, next to its id", async () => {
+    ok(await run(me, "rename", { handle: "planner" }));
+    const body = ok(await run(me, "list"));
+    expect(String(body.message)).toContain("名字=planner");
+    expect(body.result).toMatchObject([{ id: me, handle: "planner" }]);
   });
 
   it("refuses rename with nothing to change, and the two handle flags together", async () => {
