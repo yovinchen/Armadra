@@ -1,5 +1,6 @@
 > 状态：目标设计。本文是 S03（[平台总纲 §3](./canvas-platform-design.md#3-范围矩阵)）与路线图 [§3.8](../status/feature-roadmap.md#38-github)、[§3.12](../status/feature-roadmap.md#312-桌面壳服务集成与项目结构本轮新增详见-44-45) 中「下载 / 安装 / 签名发布 / 真正注册系统服务」的完整方案；已交付部分以 [实施记录 S03 行](../status/platform-implementation-status.md) 与源码为准。
 > 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
+> 后续变更：Rust Runtime、Go Host、`crates/`、`proto/` 已整体合并重写为 TypeScript core（`apps/desktop/src/core/`），由 Electron 桌面壳与新增的无窗口服务器壳（`apps/server`）装配。本文写于 Go Host 负责签名验证、服务安装与自升级，Rust/Cargo 是构建工具链的阶段：凡是提到 `apps/host`、`armadra-host`、Go 具体文件（`internal/updates/*.go`、`internal/servicedef/*.go`、`cmd/armadra-host/*.go`）的地方，对应职责现在落在服务器壳（`apps/server`）与 core；凡是提到 `Cargo.toml`、`cargo test`、Tauri 相关构建产物的地方，构建与测试现在是 pnpm/Node 工具链。本文的结论与流程设计（唯一发布来源、统一签名、安装需人工确认、兼容范围声明、先替换后停止等）仍然成立，只是承载它们的具体二进制、文件路径与语言未必对得上；不确定新载体的具体文件时用「服务器壳」「core」等笼统说法标注，不编造路径。§5 的 Go/Rust 代码布局表格整体是历史记录，仅供追溯当时的文件分工。
 
 # 应用发布、自动更新与服务器模式安装
 
@@ -21,14 +22,14 @@
 
 ### 1.1 版本与来源
 
-| 项目       | 规则                                                                                                                                                                                                     |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 唯一版本源 | 根 `Cargo.toml` 的 `[workspace.package].version`。`tauri.conf.json`、根与 `apps/desktop` 的 `package.json`、Host `-ldflags -X …/buildinfo.Version` 必须相等，`scripts/release/version.mjs check` 拦截    |
-| 标签       | `v<major>.<minor>.<patch>[-beta.N]`；带预发布后缀的标签在 GitHub 打 `prerelease`，Host 据此归入 BETA（`source.go` 已实现）                                                                               |
-| 通道       | `stable` 只看最终版；`beta` 看最新（含预发布）；`development` 是没有经过 CI 的本地构建，永不更新（`ReasonDevelopment` 已实现）。CI 通过 `ARMADRA_RELEASE_CHANNEL` 注入，桌面壳与 Host 都从构建信息读取   |
-| 发布来源   | `https://api.github.com/repos/yovinchen/Armadra`。Host 用 `--updates-source` 配置；桌面壳在 CI 打包时经 `tauri build --config` 覆盖注入 `plugins.updater.endpoints`，源码里的 `tauri.conf.json` 保持为空 |
-| 发布形态   | CI 只创建 **draft** Release；人工审阅产物清单与说明后点击发布。Host 已跳过 draft，所以未发布前任何客户端都看不到                                                                                         |
-| 说明       | Release body = `CHANGELOG.md` 对应段落 + 一个 ` ```armadra-compatibility ` 围栏（§1.4）。围栏之外的内容 Host 不读                                                                                        |
+| 项目       | 规则                                                                                                                                                                                                                                                                                                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 唯一版本源 | 写于 Rust/Go 阶段：根 `Cargo.toml` 的 `[workspace.package].version`，与 `tauri.conf.json`、各 `package.json`、Host 构建信息里的版本必须相等，一条脚本拦截不一致。`Cargo.toml`、Tauri 与 Go 构建信息已不存在，唯一版本源现状应是根 `package.json`（或等价的单一来源），具体校验脚本以现有 `tools/release/*` 为准 |
+| 标签       | `v<major>.<minor>.<patch>[-beta.N]`；带预发布后缀的标签在 GitHub 打 `prerelease`，Host 据此归入 BETA（`source.go` 已实现）                                                                                                                                                                                      |
+| 通道       | `stable` 只看最终版；`beta` 看最新（含预发布）；`development` 是没有经过 CI 的本地构建，永不更新（`ReasonDevelopment` 已实现）。CI 通过 `ARMADRA_RELEASE_CHANNEL` 注入，桌面壳与 Host 都从构建信息读取                                                                                                          |
+| 发布来源   | `https://api.github.com/repos/yovinchen/Armadra`。Host 用 `--updates-source` 配置；桌面壳在 CI 打包时经 `tauri build --config` 覆盖注入 `plugins.updater.endpoints`，源码里的 `tauri.conf.json` 保持为空                                                                                                        |
+| 发布形态   | CI 只创建 **draft** Release；人工审阅产物清单与说明后点击发布。Host 已跳过 draft，所以未发布前任何客户端都看不到                                                                                                                                                                                                |
+| 说明       | Release body = `CHANGELOG.md` 对应段落 + 一个 ` ```armadra-compatibility ` 围栏（§1.4）。围栏之外的内容 Host 不读                                                                                                                                                                                               |
 
 ### 1.2 产物矩阵
 
@@ -78,7 +79,9 @@ Release 说明中的围栏，由 `scripts/release/compatibility.json` 渲染，�
 
 Go 测试锁定 `compatibility.json.protocolMajor == server.ProtocolMajor`，`minimumProtocolMinor <= server.ProtocolMinor`；`version.mjs check` 锁定 `minimumInstalled <= 当前版本`。围栏缺失的 Release 会被 Host 报 `COMPATIBILITY_REFUSED`（已实现），这是设计意图，不是缺陷。
 
-### 1.5 协议改动（唯一一次）
+### 1.5 协议改动（唯一一次，写于 Protobuf 阶段，已随语言合并作废）
+
+> `proto/` 与生成流程已整体移除，`component` 这个字段的设计意图（同一目标下按组件区分产物）仍然适用，但不再是「改一个 `.proto` 文件、生三端代码」的形状——现在契约就是 TypeScript 类型，改动直接落在类型定义与消费它的代码里，不确定现在具体落在哪个文件。
 
 | 文件                                   | 改动                                                                                                                                                                                            |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -174,6 +177,8 @@ stateDiagram-v2
 密钥轮换：新旧公钥不能同时配置（Tauri 只认一把），所以轮换 = 用旧钥签一版只换公钥的 patch，再用新钥签下一版；Host 的内嵌公钥同批更新。本轮只写入运维文档，不做工具。
 
 ## 3. Host / Worker 独立升级与服务注册
+
+> 「Host」「Worker」在本节沿用写作时的 Go Host / Rust Worker 角色名；服务安装与独立升级这两件事现在由服务器壳（`apps/server`）与 core 承担，`sc.exe` / `launchctl` / `systemd` 这几个系统服务管理器命令与实现语言无关、设计仍然成立，`armadra-host` 这个具体二进制名已不存在。
 
 ### 3.1 注册系统服务
 
@@ -273,11 +278,11 @@ Session Host（Windows）：有活动会话时不替换，报告 `sessionHostDef
 
 `apps/web/src/updates/shell-updater.ts` 封装 Tauri command（`updates_state`、`updates_check`、`updates_download`、`updates_cancel`、`updates_install`）与 `updates://progress`、`updates://staged` 两个事件；非 Tauri 环境返回 `Unsupported`。页面合并 `useUpdatesSession`（Host）与壳状态，合并逻辑放在纯函数 `state.ts` 里测试。
 
-## 5. 代码布局
+## 5. 代码布局（Go / Rust 阶段的历史记录，仅供追溯）
 
-单文件 ≤ 800 行，测试与实现分离；现有超限或将超限的文件先拆再加。
+> 单文件 ≤ 800 行、测试与实现分离这条通用原则仍然适用；下面 §5.1（Go）、§5.2（Rust）两张文件表描述的是 `apps/host`（Go）与 `apps/desktop/src-tauri`（Rust）这两个已不存在的目录，仅保留当时的模块划分思路供追溯，不代表现状文件位置。§5.3（TypeScript）里 `apps/web/src/*` 与 i18n 相关路径仍然有效；`packages/protocol-ts`、`apps/runtime/src/settings` 已随语言合并作废。§5.4 的 `scripts/release/*` 已按仓库结构调整迁到 `tools/release/*`。
 
-### 5.1 Go（`apps/host`）
+### 5.1 Go（`apps/host`，已废弃）
 
 | 文件                                                     | 内容                                                                 | 备注                              |
 | -------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------- |
@@ -297,7 +302,7 @@ Session Host（Windows）：有活动会话时不替换，报告 `sessionHostDef
 | `cmd/armadra-host/service_*_test.go`                     | 对应拆分                                                             | 测试                              |
 | `gen/armadra/v1/command_contract_test.go`                | `component` 字段样本                                                 | 修改                              |
 
-### 5.2 Rust（`apps/desktop/src-tauri`）
+### 5.2 Rust（`apps/desktop/src-tauri`，已废弃）
 
 | 文件                                   | 内容                                                              | 备注                                     |
 | -------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------- |
@@ -314,10 +319,12 @@ Session Host（Windows）：有活动会话时不替换，报告 `sessionHostDef
 
 ### 5.3 TypeScript
 
+> `packages/protocol-ts`、`packages/host-client` 两行是 Protobuf 生成与 Go Host 客户端阶段的记录，已随语言合并作废；`apps/web/src/*` 与 i18n 相关路径仍然有效。
+
 | 文件                                                      | 内容                                                        |
 | --------------------------------------------------------- | ----------------------------------------------------------- |
-| `packages/protocol-ts`（生成）                            | `component` 字段；`test/contract.test.ts` 加样本            |
-| `packages/host-client/src/updates.ts`                     | `check()` 透传 `component`                                  |
+| ~~`packages/protocol-ts`（生成）~~                        | ~~`component` 字段；`test/contract.test.ts` 加样本~~ 已废弃 |
+| ~~`packages/host-client/src/updates.ts`~~                 | ~~`check()` 透传 `component`~~ 已废弃                       |
 | `apps/web/src/updates/shell-updater.ts`                   | Tauri 桥；非 Tauri 返回 `unsupported`                       |
 | `apps/web/src/updates/state.ts`                           | 双来源合并、状态 → 文案键 / 动作 的纯函数                   |
 | `apps/web/src/updates/state.test.ts`                      | 合并表测试：含「任一未知不为最新」                          |
@@ -325,7 +332,7 @@ Session Host（Windows）：有活动会话时不替换，报告 `sessionHostDef
 | `apps/web/src/panels/settings/pages/UpdatesPage.tsx`      | 现有页面接入新状态；通道 / 开关落 Runtime settings          |
 | `apps/web/src/panels/settings/pages/UpdatesPage.test.tsx` | 每个状态一条渲染断言                                        |
 | `apps/web/src/i18n/updates.ts`                            | 新增键，中英同步                                            |
-| `apps/runtime/src/settings`（现有 settings 路由）         | `updates.channel` / `autoCheck` / `autoDownload` 字段与校验 |
+| core 的 settings 域（当时是 `apps/runtime/src/settings`） | `updates.channel` / `autoCheck` / `autoDownload` 字段与校验 |
 
 ### 5.4 脚本与 CI
 

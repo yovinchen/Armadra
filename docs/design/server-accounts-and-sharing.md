@@ -47,7 +47,7 @@ audit_log             id PK, at_ms, principal_id, device_id?, action, target, de
 
 ## 3. 接口预留（现在就按这些形状写，未实现的返回 501）
 
-> 已落地，**路径有一处偏差**：组、共享、审计挂在 `/api/identity/` 下（`identity/groups`、`identity/grants?workspaceId=`、`identity/audit`），不是 `/api/groups`、`/api/workspaces/{id}/grants`、`/api/audit`——`/api/workspaces/*` 属于那张与 Rust Runtime 逐条对账的路由表（契约到 R7）。做实的是 principal、口令凭据与登录、邀请、组、授予、审计只读；passkey、OAuth 绑定、开放注册是 501。
+> 已落地，**路径有一处偏差**：组、共享、审计挂在 `/api/identity/` 下（`identity/groups`、`identity/grants?workspaceId=`、`identity/audit`），不是 `/api/groups`、`/api/workspaces/{id}/grants`、`/api/audit`——`/api/workspaces/*` 属于那张与旧 Runtime 逐条对账的路由表，写这份文档时对账对象还是 Rust Runtime，现在是 core（契约到 R7）。做实的是 principal、口令凭据与登录、邀请、组、授予、审计只读；passkey、OAuth 绑定、开放注册是 501。
 
 | 面   | 路由                                                                                                                                                       | 备注                                                             |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |

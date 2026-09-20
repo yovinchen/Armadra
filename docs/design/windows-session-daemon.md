@@ -2,6 +2,7 @@
 
 > 状态：早期目标设计，已被终端宿主方案取代，保留供现有引用追溯。
 > 后续范围更新：本轮已将 Windows 持久会话纳入实施目标，新的进程归属、Protobuf 协议、阶段与验收以 [终端与主机生命周期设计](./terminal-host-design.md)为准。以下保留早期设计及当时的范围说明，供现有引用追溯。
+> 2026-09-20：本文从头到尾是围绕把 `armadra-session-host` 写成一个独立 Rust crate（命名管道 + Protobuf/JSON 帧协议 + `vt100` 无头终端）展开的，其决策已被 [终端与主机生命周期设计](./terminal-host-design.md) 全面取代，而实现载体也已随整体迁移从 Rust 改为 TS/Node（`apps/desktop/src/session-host/`）。文中具体的 Rust 类型、`#[cfg(windows)]`、crate 文件名（`protocol.rs`/`session.rs` 等）与 Win32 FFI 细节均已作废，不再随本文更新；本文仅保留作为「当时为什么选独立进程持有 ConPTY、为什么不用 tmux/MSYS2」这类决策记录的参考价值。
 
 > 状态：**只是设计，Phase 4 不实现**。日期：2026-09-04。归属：desktop-packaging。
 > 上游契约：[v3-agent-terminal-plan.md §15](../contracts/v3-agent-terminal-plan.md)（终端后端选择树、`TerminalBackend` trait、WS 协议、回收策略）。

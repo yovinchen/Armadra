@@ -4,8 +4,11 @@
 > 2026-09-06：§5 第 1–5 步已实施；第 6 步（大文件拆分）另行进行；第 7 步延后。
 > 目的：让 Desktop、Web、Go 中转服务、Rust 执行层各自打包在固定位置，文档与脚本有统一登记规则，并由一条命令校验仓库完整性。
 > 2026-09-19：桌面壳已换成 Electron，本文提到 Tauri 的部分是换壳之前写下的，只作为当时的方案记录；壳的现状见 [Electron 迁移](./electron-migration.md) 与 [架构](../guides/architecture.md)。
+> 后续变更：Rust Runtime、Go Host、`crates/`、`proto/` 已在之后一轮改造中整体合并重写为一个 TypeScript core（`apps/desktop/src/core/`），由 Electron 桌面壳（`apps/desktop`）与新增的无窗口服务器壳（`apps/server`）装配，仓库里不再有 `.rs` / `.go` / `.proto` 文件。以下 §1、§2 的目标目录树、§3.1–§3.3 的 Rust/Go/Protobuf 具体规则、§4 的 `cargo`/`go` 校验命令与 CI 矩阵、§5 的调整顺序，都是那一轮改造之前写下的方案记录，已被 [TypeScript Core 设计](./typescript-core.md) 的目标目录（`apps/desktop/src/core/*` 与 `apps/server/`）取代；仍然适用的是与语言无关的通用规则——文档登记与链接、`docs/` 分区职责、`tools/` 归属仓库级脚本、根目录白名单、提交信息与分支命名——这些保留在下文，不因语言变化而失效。
 
 ## 1. 现状评估
+
+> 以下是 Rust Runtime / Go Host 多语言阶段的现状记录，仅供追溯；该阶段已结束，现状见顶部「后续变更」。
 
 按层划分的目录（`apps/`、`crates/`、`packages/`、`proto/`）本身是合理的，问题集中在五处：
 
@@ -20,6 +23,8 @@
 结论：层级不必推倒，需要补齐「每类目录的固定规则 + 一条校验命令 + CI」，并在业务迁移时把 Runtime 明确降为 Worker。
 
 ## 2. 目标结构
+
+> 以下目录树是 Rust Runtime / Go Host 阶段写下的目标记录，已被 [TypeScript Core 设计](./typescript-core.md) 顶部列出的目标目录（`apps/desktop/src/core/*` 与新增的 `apps/server/`）取代，仅供追溯。
 
 ```text
 .
@@ -71,33 +76,35 @@
 
 ## 3. 统一规则
 
-规则写入 `repo.rules.json`，由 `tools/repo-check.mjs` 执行；下面是规则的自然语言版本。
+规则写入 `repo.rules.json`，由 `tools/repo-check.mjs` 执行；下面是规则的自然语言版本，写于 Rust Runtime / Go Host 阶段。§3.1 里针对 `crates/*`、Cargo/go.mod 的具体校验与 §3.2 整节（`proto/` 作为唯一来源、`buf lint`、三端契约测试）已随语言合并作废——现在没有跨进程协议，契约就是 TypeScript 类型（见 [TypeScript Core 设计](./typescript-core.md) 与 AGENTS.md）；目录扁平化、单文件行数上限、文档登记、i18n 与仓库卫生这些与语言无关的规则仍然适用，只是校验方式要换成读 `package.json` 而非 `Cargo.toml`/`go.mod`。
 
 ### 3.1 目录与包
 
-| 规则                                                                                         | 校验方式                                     |
-| -------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `apps/*` 每个目录必须有 `README.md`，且提供 `test` 与 `typecheck`/`vet`/`clippy` 之一        | 读取 package.json / Cargo.toml / go.mod      |
-| `packages/*` 目录名等于包名去掉 `@armadra/` 前缀                                             | 比对 `name` 字段                             |
-| `crates/*` 目录名等于 crate 名去掉 `armadra-` 前缀                                           | 比对 `[package].name`                        |
-| `apps/web` 不得导入 `child_process`、`fs`、`net`；`apps/desktop` 的 Rust 不得依赖 sqlx / git | grep import 与 Cargo 依赖                    |
-| 业务写入只在 `apps/host`（迁移完成前允许 `apps/worker` 保留白名单表）                        | 白名单在 rules 文件内，缩减时更新            |
-| 源码单文件不超过 1500 行，测试不与实现同文件（Rust 用 `tests/` 或 `*_test.rs` 子模块）       | 行数统计；现有超限文件登记在豁免表并逐步拆分 |
+| 规则                                                                                                                                   | 校验方式                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `apps/*` 每个目录必须有 `README.md`，且提供 `test` 与 `typecheck` 脚本                                                                 | 读取 `package.json`                          |
+| `packages/*` 目录名等于包名去掉 `@armadra/` 前缀                                                                                       | 比对 `name` 字段                             |
+| ~~`crates/*` 目录名等于 crate 名去掉 `armadra-` 前缀~~                                                                                 | 已废弃：仓库不再有 `crates/`                 |
+| `apps/web` 不得导入 `child_process`、`fs`、`net`；core（`apps/desktop/src/core/`）不得 import `electron`、`../main/`、`../shell-core/` | grep import                                  |
+| 业务写入只在 core                                                                                                                      | 现状即如此，无需白名单表                     |
+| 源码单文件不超过约定行数，测试不与实现同文件                                                                                           | 行数统计；现有超限文件登记在豁免表并逐步拆分 |
 
-### 3.2 协议与生成文件
+### 3.2 协议与生成文件（已废弃，仅供追溯）
 
-| 规则                                                           | 校验方式                             |
-| -------------------------------------------------------------- | ------------------------------------ |
-| `proto/` 是唯一来源；三处生成目录只能由 `protocol:generate` 改 | `protocol:check` 比对生成物 diff     |
-| 字段号不复用、删除字段 `reserved`、枚举 0 为 UNSPECIFIED       | `buf lint`/自定义 lint 读取 `.proto` |
-| 每个 `.proto` 至少一个 `proto/fixtures/*.hex` 与三端契约测试   | 文件名匹配                           |
+> `proto/` 目录与 Protobuf 生成流程已随语言合并移除；跨端契约现在直接是 TypeScript 类型，形状以 `docs/contracts/core-json-api.md` 为准。以下三条规则不再适用。
+
+| 规则                                                               | 校验方式                                 |
+| ------------------------------------------------------------------ | ---------------------------------------- |
+| ~~`proto/` 是唯一来源；三处生成目录只能由 `protocol:generate` 改~~ | ~~`protocol:check` 比对生成物 diff~~     |
+| ~~字段号不复用、删除字段 `reserved`、枚举 0 为 UNSPECIFIED~~       | ~~`buf lint`/自定义 lint 读取 `.proto`~~ |
+| ~~每个 `.proto` 至少一个 `proto/fixtures/*.hex` 与三端契约测试~~   | ~~文件名匹配~~                           |
 
 ### 3.3 数据库与迁移
 
-| 规则                                          | 校验方式                                  |
-| --------------------------------------------- | ----------------------------------------- |
-| 迁移文件编号连续、已发布文件字节不变          | `migrations.lock` 记录 sha256，检查时比对 |
-| 新迁移必须附带 `db.rs`/`schema.go` 的测试用例 | 新增迁移文件时要求同 PR 含对应测试改动    |
+| 规则                                 | 校验方式                                  |
+| ------------------------------------ | ----------------------------------------- |
+| 迁移文件编号连续、已发布文件字节不变 | `migrations.lock` 记录 sha256，检查时比对 |
+| 新迁移必须附带对应域的测试用例       | 新增迁移文件时要求同 PR 含对应测试改动    |
 
 ### 3.4 文档
 
@@ -127,19 +134,20 @@
 
 ## 4. 校验入口
 
+> 下面的命令块是 Rust Runtime / Go Host 阶段写下的，`cargo test`、`go test`、`protocol:check` 已不存在。现状命令以 AGENTS.md 为准：`pnpm repo:check`、`pnpm check`；前端用 `pnpm --filter @armadra/web test` / `typecheck`；core 与桌面壳用 `pnpm --filter @armadra/desktop test`（跑之前先 `pnpm libs:build`）；服务器壳用 `pnpm --filter @armadra/server test`；发布与 CI 脚本用 `pnpm release:test`、`pnpm ci:workflows`、`pnpm release:check`。
+
 ```sh
 pnpm repo:check          # tools/repo-check.mjs：§3 全部静态规则，秒级
-pnpm check               # format:check + typecheck + protocol:check + repo:check
-pnpm test                # web / shared / protocol / host-client / desktop 脚本
-cargo test --workspace   # worker、hook、protocol
-go -C apps/host test ./...
+pnpm check               # format:check + typecheck + repo:check
+pnpm libs:build          # desktop / server 测试依赖的产物，先构建
 ./armadra.sh check       # 本地一键：以上全部
 ```
 
-CI（`.github/workflows/ci.yml`）是一个三平台矩阵作业，不按路径分：平台差异出在
-Runtime（tmux / Unix socket 对 ConPTY / 命名管道），而这类问题只有在三个系统上
-都编译过才暴露，按路径裁剪会正好跳过它。作业内容与发布流水线见
-[CI 与发布](../guides/ci-release.md)。
+CI（`.github/workflows/ci.yml`）在 Rust Runtime / Go Host 阶段是一个三平台矩阵作业，不按路径分：平台差异出在
+终端后端（tmux / Unix socket 对 ConPTY / 命名管道），而这类问题只有在三个系统上
+都跑过才暴露，按路径裁剪会正好跳过它——这条理由本身与语言无关，现状 CI 是否仍是三平台矩阵、具体跑哪些
+`pnpm --filter` 命令，以实际的 `.github/workflows/ci.yml` 与 [CI 与发布](../guides/ci-release.md) 为准；下表与后一段的
+`cargo clippy` / `go vet` 等具体步骤是旧实现，已作废。
 
 | 矩阵行           | 内容                                                  |
 | ---------------- | ----------------------------------------------------- |
@@ -147,16 +155,18 @@ Runtime（tmux / Unix socket 对 ConPTY / 命名管道），而这类问题只�
 | `macos-14`       | 下列全部                                              |
 | `windows-latest` | 下列全部，Go 不开 `-race`（需要 cgo）                 |
 
-每行：`pnpm check`、`pnpm repo:test` / `release:test`、`pnpm -r test` /
+每行（旧实现）：`pnpm check`、`pnpm repo:test` / `release:test`、`pnpm -r test` /
 `typecheck`、web build、`pnpm protocol:test`、`cargo clippy -D warnings`、
 `cargo test`（均 `--exclude armadra-desktop`）、Go `vet` 与 `test`、桌面壳
 `cargo check`。分支保护要求这三行都通过。
 
-平台专属用例用 `cfg(unix)` / `cfg(target_os = ...)` 门控，CI 不做按名字过滤的
+平台专属用例用条件编译或运行时平台判断门控，CI 不做按名字过滤的
 排除；`pnpm ci:workflows` 会校验工作流里没有这类过滤，也会校验 runner 标签与
-发布矩阵的三元组与 `tools/release/artifacts.mjs` 一致。
+发布矩阵的三元组与 `tools/release/artifacts.mjs` 一致（这条校验脚本仍在，具体内容随发布产物演进）。
 
-## 5. 调整顺序
+## 5. 调整顺序（Rust Runtime / Go Host 阶段的历史记录）
+
+> 状态行与开头已记录第 1–5 步已实施；第 6、7 步描述的「拆分 `api.rs`/`git_repository.rs`」「`apps/runtime` → `apps/worker`，Host 成为唯一业务写入方」并未按这个方向走完——实际走向是把 Runtime、Host、crates、proto 整体合并重写成 TypeScript core，而不是把 Runtime 降级为 Worker。以下步骤仅供追溯当时的排期思路。
 
 按风险从低到高，每步单独提交并跑全量检查：
 

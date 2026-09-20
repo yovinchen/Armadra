@@ -19,12 +19,12 @@
 
 ## 2. Windows 方案评估
 
-| 方案                               | 可用性                               | 决定                               |
-| ---------------------------------- | ------------------------------------ | ---------------------------------- |
-| Worker 直接拥有 ConPTY             | 实现简单，但 Worker 退出影响所有会话 | 仅 direct 降级，不满足持久化主目标 |
-| 要求用户安装 Unix 兼容层/tmux      | 增加系统依赖和 CLI 兼容链            | 不作为默认前提                     |
-| 独立 Rust Session Host 拥有 ConPTY | 生命周期独立，可共享终端执行逻辑     | 本轮目标方案                       |
-| Go Host 同时管理 ConPTY            | 将业务服务与终端生命周期重新绑定     | 不采用                             |
+| 方案                                          | 可用性                               | 决定                               |
+| --------------------------------------------- | ------------------------------------ | ---------------------------------- |
+| Worker 直接拥有 ConPTY                        | 实现简单，但 Worker 退出影响所有会话 | 仅 direct 降级，不满足持久化主目标 |
+| 要求用户安装 Unix 兼容层/tmux                 | 增加系统依赖和 CLI 兼容链            | 不作为默认前提                     |
+| 独立 Rust Session Host 拥有 ConPTY            | 生命周期独立，可共享终端执行逻辑     | 本轮目标方案                       |
+| 服务端主进程（当时是 Go Host）同时管理 ConPTY | 将业务服务与终端生命周期重新绑定     | 不采用                             |
 
 独立可执行文件 `armadra-session-host.exe`，每个 Windows 用户一个活动协议主版本实例，通过命名管道服务 Worker；不依赖 Node.js 或桌面壳 UI 存活。只在相同用户上下文运行，默认不以管理员权限运行。
 
@@ -42,15 +42,17 @@ ConPTY 的创建、双向流和子进程必须由宿主维护；输入/输出分
 
 ### 3.1 实现状态（T01，M2）
 
-`crates/session-host` 交付 `armadra-session-host`（Windows）。平台无关的部分——线长前缀帧编解码 `protocol.rs`、会话表与 generation 栅栏 `session.rs`、有界回放缓冲与终端查询应答 `replay.rs`、管道名派生与 SID 判定 `pipe.rs`、客户端序号跟踪 `client.rs`——在任何平台都能跑单测；ConPTY（`conpty.rs`）、Job Object 与 SID（`winsec.rs`）、管道服务端（`host.rs`）与客户端（`link.rs`）在 `#[cfg(windows)]` 下。
+> 以下实现状态写于 `session-host` 还是 Rust crate 的阶段。它之后随整体迁移改写为 TS/Node，路径是 `apps/desktop/src/session-host/`；下文按 Rust 模块划分的文件名（`protocol.rs`、`session.rs` 等）与 `#[cfg(windows)]` 条件编译不再对应现状，具体模块划分以现有 TS 源码为准。
+
+当时的 `crates/session-host` 交付 `armadra-session-host`（Windows）。平台无关的部分——线长前缀帧编解码、会话表与 generation 栅栏、有界回放缓冲与终端查询应答、管道名派生与 SID 判定、客户端序号跟踪——在任何平台都能跑单测；ConPTY、Job Object 与 SID、管道服务端与客户端只在 Windows 下编译。
 
 管道名由「用户 SID + 数据目录 + 协议 major」派生：`\\.\pipe\armadra-session-<sid>-<hash>-v<major>`，不用发现文件，两端各自算出来永远一致。安全描述符是受保护 DACL，只给本用户与 LocalSystem；`first_pipe_instance` 兼作并发闸——两个 Worker 同时冷启动只会有一个宿主，另一个连上它。**每条被接受的连接都按该句柄核对客户端进程 SID**，因为管道名可预测，连上本身不证明任何事。早期设计 §4.2 的 token 文件没有实现：它的 ACL 与管道 ACL 是同一个人，证明不了 SID 检查之外的东西，只多一份可泄漏的密钥。
 
-Session Host 被杀时会话随之结束：每个会话的进程树在一个 `KILL_ON_JOB_CLOSE` 的 Job Object 里（§3 规则 4 的选择——不可控的孤儿比诚实的「宿主没了，这些运行丢了」更糟）。Worker 侧 `apps/runtime/src/terminal/session_host.rs` 是 `BackendKind::SessionHost`，Windows 上 `auto` 即选它；宿主起不来时报错而不是悄悄退回 direct，因为 direct 的会话会随 Runtime 一起死，静默降级等于骗人。宿主的 `instanceId` 变了即说明它重启过，Worker 据此清掉记忆而不是从空列表反推。
+Session Host 被杀时会话随之结束：每个会话的进程树在一个 `KILL_ON_JOB_CLOSE` 的 Job Object 里（§3 规则 4 的选择——不可控的孤儿比诚实的「宿主没了，这些运行丢了」更糟）。当时 Worker（Rust Runtime）侧 `apps/runtime/src/terminal/session_host.rs` 是 `BackendKind::SessionHost`，Windows 上 `auto` 即选它；宿主起不来时报错而不是悄悄退回 direct，因为 direct 的会话会随执行端一起死，静默降级等于骗人。宿主的 `instanceId` 变了即说明它重启过，执行端据此清掉记忆而不是从空列表反推。这套「选择哪个后端」的逻辑现在归 core 的 terminal 域，具体文件路径以现有源码为准。
 
-协议**没有**放进 `proto/`：这条线只有两个说话者、都是 Rust、同一个安装包里，生成 Go 与 TypeScript 只会为一场它们永远不会加入的对话产出代码。出现第三个说话者时再搬。
+协议当时**没有**放进 `proto/`：这条线只有两个说话者、都是 Rust、同一个安装包里，生成 Go 与 TypeScript 只会为一场它们永远不会加入的对话产出代码。这个理由随整体迁移到 TS/Node 后已经不成立——`proto/` 与 Protobuf 生成流程已随语言合并整体移除，session-host 与 core 之间现在同为 TypeScript/Node，协议直接是共享的 TS 类型，不需要另外生成。
 
-未实现 / 未验证：§5 的无头 VT 屏幕仍待选型（[探针记录](../research/m0-executor-probes.md)），当前重附着回放的是最近 200 KiB 原始输出（截断点避开 UTF-8 与转义序列中间），与 direct 后端同一档契约，不是重绘；`capture` 因此也是回放而非读屏。升级 drain 只有协议与状态机、没有接线。**全部 Windows 行为未在真机运行过**：`cargo check --target x86_64-pc-windows-msvc` 对 `armadra-session-host` 通过，对 `armadra-runtime` 因 `aws-lc-sys` 缺 Windows SDK 头文件失败，所以 Worker 侧的 Windows 文件是借一个只含真实 `backend.rs` 的临时 crate 交叉类型检查过的。§12.1 的验收矩阵一条都还没跑。
+未实现 / 未验证（写于 Rust 版实现阶段，已随 TS 重写作废，仅供追溯当时验证到何种程度）：§5 的无头 VT 屏幕仍待选型（[探针记录](../research/m0-executor-probes.md)），当时重附着回放的是最近 200 KiB 原始输出（截断点避开 UTF-8 与转义序列中间），与 direct 后端同一档契约，不是重绘；`capture` 因此也是回放而非读屏。升级 drain 只有协议与状态机、没有接线。全部 Windows 行为在 Rust 版上未在真机运行过（当时 `armadra-session-host` 的交叉编译能过，`armadra-runtime` 因缺 Windows SDK 头文件编译失败，只能靠临时 crate 交叉类型检查）。§12.1 的验收矩阵在当时一条都还没跑；现状以现有 TS/Node 实现与测试为准，不沿用这条记录。
 
 Windows 下 Ctrl+C 作为终端输入/后端中断能力处理；Ctrl+Break、进程树终止另设操作。不套用 Unix kill(-pgid) 语义。PowerShell、cmd、Git Bash、原生 CLI 与 WSL 分别测试；WSL 会话在能力探测后走对应执行环境，不能混用 Linux 路径和 Win32 路径。
 
@@ -123,7 +125,7 @@ xterm 实例用有界 LRU；WebGL context 设设备预算（初始 4 个，可�
 
 `detached` 有两条路：节点折叠满 5 秒（原有），或页面隐藏满 60 秒（新增）。两条都只关 WS，Runtime 会话照跑；重新可见时走原有的 reset + attach，`ensureSession` 不重入，因此不会新建会话。`disconnected`（连接意外断开、正在退避重连）与 `detached` 在节点头部用两个不同的 chip 分开显示，都不表示进程结束。
 
-执行端的会话休眠在 `apps/runtime/src/terminal/mod.rs`：每个会话记附着 socket 数（RAII 租约，socket 的每条退出路径都会释放，包括 `detached()` 到不了的提前返回），连续 `terminal.dormantAfterSeconds`（默认 120 秒，5s–24h，`0` = 关闭）没有任何附着即进入休眠。休眠只改投递节奏——direct 后端的输出批处理窗口从 16 ms 放宽到 500 ms，于是每秒约 60 次唤醒、广播与 `terminal_logs` 写入降到约 2 次；**字节一个不丢**，回放缓冲原样保留，进程完全不受影响。附着即唤醒，且唤醒只是把窗口调回去，永远不是 create。tmux 后端的 detach 本来就结束了 `tmux attach-session` 客户端进程，没有别的可释放，因此 `set_dormant` 对它是显式的空操作而不是假装做了什么。
+执行端的会话休眠当时实现在 Rust Runtime 的 `apps/runtime/src/terminal/mod.rs`，现在归 core 的 terminal 域：每个会话记附着 socket 数（RAII 租约，socket 的每条退出路径都会释放，包括 `detached()` 到不了的提前返回），连续 `terminal.dormantAfterSeconds`（默认 120 秒，5s–24h，`0` = 关闭）没有任何附着即进入休眠。休眠只改投递节奏——direct 后端的输出批处理窗口从 16 ms 放宽到 500 ms，于是每秒约 60 次唤醒、广播与 `terminal_logs` 写入降到约 2 次；**字节一个不丢**，回放缓冲原样保留，进程完全不受影响。附着即唤醒，且唤醒只是把窗口调回去，永远不是 create。tmux 后端的 detach 本来就结束了 `tmux attach-session` 客户端进程，没有别的可释放，因此 `set_dormant` 对它是显式的空操作而不是假装做了什么。
 
 未实现：Eco 模式（对支持 resume 的 Agent 友好退出并保存恢复信息）、`running → idle → hibernate-requested → hibernated → resuming` 状态机与计划 coldStartPolicy 的联动。首版按 §7.2 的默认只回收视图与投递节奏，不自动结束任何 CLI。
 
@@ -144,15 +146,19 @@ RSS 树汇总标记为估计，多个进程共享页可能重复计算，不称�
 
 资源预算：终端屏幕/scrollback、Worker 收据/日志、浏览器进程、前端 LRU 分开配置。日志和转录有保留期与容量上限，清理前排除活跃会话及未完成交接引用。
 
-### 8.1 实现状态（T02，M7）
+### 8.1 实现状态（T02，M7，写于 Rust Runtime 阶段，仅供追溯）
 
-已交付：`apps/runtime/src/resources/` 用锁定版本的 `sysinfo` 采集本机总览（CPU、内存、swap、负载、数据目录所在磁盘、uptime）与每个受管终端会话的进程树 CPU / RSS / 子进程数 / 状态；电源来源在 macOS 读 `pmset -g batt`、Linux 读 `/sys/class/power_supply`，其它平台 unknown。采样是订阅制：`POST …/resources/subscription` 拿带 TTL 的订阅，样本经既有工作空间事件流以 `resource.sample` 推送，最后一份订阅过期后采样循环自行停止；间隔取 `resources.intervalMs`（默认 2s，Runtime 侧夹在 500ms–60s）。所有指标是 `Option`，测不出来发 `null`，前端显示短横线。CPU 靠连续刷新求差，一次性 `GET` 会先垫一次基线再采，所以首屏和刚启动的进程都不会出现假 0。
+> 以下路径（`apps/runtime/src/resources/`）与「Runtime」措辞是 Rust Runtime 时期的实现记录；对应逻辑现在归 core 的 resources 域，具体文件以现有源码为准，本节不逐句更新路径。
 
-孤立会话按两类列出：有行无节点（可认领）与有 tmux 会话无行（只能终止）。认领由 Runtime 把行绑回并回传应使用的 `nodeId`——即会话自己的 key，前端用它建节点，恢复出来的节点拥有的仍是原进程。
+已交付：`apps/runtime/src/resources/` 用锁定版本的 `sysinfo` 采集本机总览（CPU、内存、swap、负载、数据目录所在磁盘、uptime）与每个受管终端会话的进程树 CPU / RSS / 子进程数 / 状态；电源来源在 macOS 读 `pmset -g batt`、Linux 读 `/sys/class/power_supply`，其它平台 unknown。采样是订阅制：`POST …/resources/subscription` 拿带 TTL 的订阅，样本经既有工作空间事件流以 `resource.sample` 推送，最后一份订阅过期后采样循环自行停止；间隔取 `resources.intervalMs`（默认 2s，执行端侧夹在 500ms–60s）。所有指标是可选值，测不出来发 `null`，前端显示短横线。CPU 靠连续刷新求差，一次性 `GET` 会先垫一次基线再采，所以首屏和刚启动的进程都不会出现假 0。
+
+孤立会话按两类列出：有行无节点（可认领）与有 tmux 会话无行（只能终止）。认领由执行端把行绑回并回传应使用的 `nodeId`——即会话自己的 key，前端用它建节点，恢复出来的节点拥有的仍是原进程。
 
 未实现：多执行主机筛选与远端一轮读取、内存 pressure。SSH 会话标为 `remote`、指标 unknown，不用控制机数据冒充远端。
 
-### 8.2 实现状态（§4.3 补齐，M7）
+### 8.2 实现状态（§4.3 补齐，M7，写于 Rust Runtime / Go Host 阶段，仅供追溯）
+
+> 下面这段按「Runtime 进程 + Go Host 祖先/兄弟进程 + Worker 子进程」描述平台组件识别，是当时三进程模型下的实现记录。现在只有 core 一个进程（加上无窗口部署时的服务器壳、Windows 上的 session-host），识别逻辑随之简化，具体实现以现有源码为准，不在此逐句改写。
 
 平台组件在 `apps/runtime/src/resources/platform.rs`，与用户会话分开成一组：Runtime 是本进程，Go Host 是祖先或同一父进程下的兄弟进程，命令 Worker 是二者之中任一个用本可执行文件启动的子进程。发现只按相对本进程的位置，不扫描全机同名进程，所以另一份安装、另一个用户的 Armadra 都不会被认领；从 shell 直接起的 Runtime 就是没有 Host，如实报告而不猜一个。Runtime 那一行只算自己——它的子进程正是用户会话，加进来等于把 Agent 数两遍；命令 Worker 算整棵树，`tree` 字段写明是哪一种。Session Host 与 Browser Worker 尚不存在，因此没有对应行。
 
@@ -162,7 +168,7 @@ RSS 树汇总标记为估计，多个进程共享页可能重复计算，不称�
 
 终端节点头部内存徽标见 `apps/web/src/panels/resources/MemoryBadge.tsx`：显示进程树 RSS 之和（标为估计），测不出来显示 `unknown` 而非 0，超过阈值（`armadra.resources.sessionMemoryWarnBytes`，默认 2 GiB，设置 → 终端可改）变色并按 `sessionId:generation` 提醒一次。提醒只是提醒：不终止、不休眠、不压缩，面板同样只高亮不自动处置。
 
-跨端契约在 `proto/armadra/v1/resources.proto`（`SessionMetrics`、`HostMetrics`、`PlatformComponentMetrics`、Read / Subscribe），三语言契约测试与共享样例已就位；Runtime 与 Web 之间当前仍走既有 camelCase JSON 与工作空间事件流，Worker 协议尚未接线。
+跨端契约当时在 `proto/armadra/v1/resources.proto`（`SessionMetrics`、`HostMetrics`、`PlatformComponentMetrics`、Read / Subscribe），三语言契约测试与共享样例已就位；Runtime 与 Web 之间当时仍走既有 camelCase JSON 与工作空间事件流，Worker 协议尚未接线。`proto/` 已随语言合并移除，这份契约现在直接是 TypeScript 类型，不再有跨语言生成步骤。
 
 ## 9. Agent 工作时防休眠
 
@@ -174,11 +180,13 @@ PowerService 在实际执行主机管理租约：reason、session/runId、expire
 
 设置显示生效的执行主机、原因、结束条件和手动停止入口。电池/低电量策略可覆盖自动申请；覆盖后计划页明确显示宿主可能休眠。手机 Screen Wake Lock 仅是前端体验，与执行主机 PowerService 无关。
 
-### 9.1 实现状态（T02，M7）
+### 9.1 实现状态（T02，M7，写于 Rust Runtime 阶段，仅供追溯）
 
-已交付：`apps/runtime/src/resources/power.rs` 的租约表带 reason、source、可选 sessionId、TTL（默认 300s，夹在 10s–6h）与续期；`GET /api/power`、`POST /api/power/leases`、`…/renew`、`DELETE …`。策略 `power.policy` 有从不 / 有活跃 Agent 会话时 / 有自动化运行时 / 手动四档，默认「手动」；被策略或平台挡下的租约仍然列出，只是 `active: false` 并带 `blockedBy`。释放最后一份有效租约、租约过期（后台每秒检查）或 Runtime 退出时立即解除。
+> 路径 `apps/runtime/src/resources/power.rs` 是 Rust Runtime 时期的记录，对应逻辑现在归 core 的 resources 域；`caffeinate` / `systemd-inhibit` / `SetThreadExecutionState` 这几个操作系统命令与 API 与实现语言无关，描述本身不需要改。
 
-平台机制：macOS 用 `caffeinate -i -w <runtime pid>` 子进程而非进程内 IOKit 断言——`-w` 让 Runtime 被 SIGKILL 时断言随之消失，且断言在 `pmset -g assertions` 里以可见进程出现，用户能自己查和结束；Linux 用 `systemd-inhibit --what=idle --mode=block`，缺失时报 unavailable；Windows 用独立线程上的 `SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED)`，仅交叉编译验证过，未在真实 Windows 上跑过。
+已交付：`apps/runtime/src/resources/power.rs` 的租约表带 reason、source、可选 sessionId、TTL（默认 300s，夹在 10s–6h）与续期；`GET /api/power`、`POST /api/power/leases`、`…/renew`、`DELETE …`。策略 `power.policy` 有从不 / 有活跃 Agent 会话时 / 有自动化运行时 / 手动四档，默认「手动」；被策略或平台挡下的租约仍然列出，只是 `active: false` 并带 `blockedBy`。释放最后一份有效租约、租约过期（后台每秒检查）或执行端退出时立即解除。
+
+平台机制：macOS 用 `caffeinate -i -w <执行端 pid>` 子进程而非进程内 IOKit 断言——`-w` 让执行端被 SIGKILL 时断言随之消失，且断言在 `pmset -g assertions` 里以可见进程出现，用户能自己查和结束；Linux 用 `systemd-inhibit --what=idle --mode=block`，缺失时报 unavailable；Windows 用独立线程上的 `SetThreadExecutionState(ES_CONTINUOUS|ES_SYSTEM_REQUIRED)`，写这段时仅交叉编译验证过，未在真实 Windows 上跑过，现状以实际测试记录为准。
 
 只阻止系统空闲睡眠；不常亮屏幕，不拦合盖与手动睡眠。未实现：电池 / 低电量策略覆盖、按活跃 Agent 会话与自动化运行自动申请（协议已就绪，调用方未接入）、计划期间保持唤醒的单独开关。
 
@@ -227,7 +235,7 @@ PowerService 在实际执行主机管理租约：reason、session/runId、expire
 
 ### 12.1 Windows 最小阶段（M2）
 
-- 建会话 → 终端输出 → 关闭 UI → 重开附着；分别重启 Worker/Go Host，PID 和屏幕确认连续。
+- 建会话 → 终端输出 → 关闭 UI → 重开附着；分别重启执行端与服务端主进程，PID 和屏幕确认连续。
 - PowerShell、cmd、原生 Agent、UTF-8/中文/emoji、Ctrl+C、bracketed paste 和 resize。
 - Host 独立启动与每用户 ACL；两个 Worker 并发发现只产生一个宿主。
 - 断开最后附着者不结束会话；显式 terminate 才关闭 ConPTY。
