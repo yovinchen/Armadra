@@ -4,14 +4,21 @@ Armadra 启动真实 CLI，保留各 CLI 的账户、模型选择、工具策略
 
 ## 六种 CLI
 
-| CLI            | 启动提示             | 恢复指定会话           | 状态通道   | 非默认权限模式               |
-| -------------- | -------------------- | ---------------------- | ---------- | ---------------------------- |
-| Claude Code    | 位置参数             | `--resume ID`          | 命令 Hook  | auto-edit / full-auto / plan |
-| Codex          | 位置参数             | `resume ID`            | 命令 Hook  | auto-edit / full-auto / plan |
-| OpenCode       | `--prompt TEXT`      | `--session ID`         | 插件       | 暂仅 CLI 默认                |
-| Pi             | 位置参数             | `--session PATH_OR_ID` | 进程内扩展 | 仅 CLI 默认                  |
-| Oh My Pi       | 位置参数             | `--resume ID`          | 进程内扩展 | auto-edit / full-auto        |
-| GitHub Copilot | `--interactive TEXT` | `--resume ID`          | 命令 Hook  | auto-edit / full-auto / plan |
+| CLI            | 启动提示（`promptMode`）              | 恢复指定会话           | 状态通道   | 非默认权限模式               |
+| -------------- | ------------------------------------- | ---------------------- | ---------- | ---------------------------- |
+| Claude Code    | 位置参数（`argv`）                    | `--resume ID`          | 命令 Hook  | auto-edit / full-auto / plan |
+| Codex          | 位置参数（`argv`）                    | `resume ID`            | 命令 Hook  | auto-edit / full-auto / plan |
+| OpenCode       | `--prompt TEXT`（`flag-prompt`）      | `--session ID`         | 插件       | 暂仅 CLI 默认                |
+| Pi             | 位置参数（`argv`）                    | `--session PATH_OR_ID` | 进程内扩展 | 仅 CLI 默认                  |
+| Oh My Pi       | 位置参数（`argv`）                    | `--resume ID`          | 进程内扩展 | auto-edit / full-auto        |
+| GitHub Copilot | `--interactive TEXT`（`flag-prompt`） | `--resume ID`          | 命令 Hook  | auto-edit / full-auto / plan |
+
+「启动提示」这一列只描述**人**在这里敲一条带提示词的启动行时会拼成什么。Agent
+新建的节点不走这一列：`canvas open-agent` 的启动行从不带提示词，第一条任务由
+`--task` 经投递队列在节点报出第一条空闲之后投进去（[Agent 投递设计 §8](../design/agent-delivery.md)）。
+自定义 Agent 可以用 `promptMode` 覆盖 base 的形状，第三种取值 `stdin-after-start`
+的意思是「永远不上命令行」。这张表与 `packages/shared/src/agents.ts`、
+`core/agent/registry.ts` 三方一致，由 `launch.test.ts` 的一条用例守着。
 
 Gemini CLI 于 2026-09-19 从产品移除（迁移 `0014_retire_gemini.sql` 清理其会话索引、状态、Hook 安装记录与终端节点上的 agent 绑定）。恢复能力表示可以正确构建已有会话 ID 的启动命令；当前历史会话索引仍只扫描 Claude/Codex，其他 CLI 可用自身会话选择器或上述命令恢复。六种 CLI 都能启动、选择模型、连接节点、主动读上下文、使用收件箱；子 Agent 与额度这类没有实现的能力不显示。CLI 自身扩展提供的工具能力与 Armadra 的适配能力是两件事。
 
