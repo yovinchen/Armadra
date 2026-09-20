@@ -18,7 +18,8 @@ export const usage: MessageModule = {
     "usage.cooldown": "{seconds} 秒后可刷新",
     "usage.cadence": "每 5 分钟自动更新",
     "usage.status.unavailable": "未找到可用的登录凭据",
-    "usage.status.unavailableHint": "在 {provider} 的 CLI 里登录一次，然后回来刷新",
+    "usage.status.unavailableHint":
+      "在 {provider} 的 CLI 里登录一次，然后回来刷新",
     "usage.status.unavailableHint.copilot":
       "在「设置 → 账号与用量」里登录 Copilot，然后回来刷新",
     "usage.recoveryHint": "请稍后刷新，或在对应 CLI 中查看",

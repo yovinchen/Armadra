@@ -242,7 +242,9 @@ describe("applyWebviewPool 的删除判定", () => {
 
     // 切回去还是同一个条目，guest 从未被卸载。
     openBoard("board-1", ["b1"]);
-    expect(webviewIds(applyWebviewPool([browser("b1")], 3_000))).toEqual(["b1"]);
+    expect(webviewIds(applyWebviewPool([browser("b1")], 3_000))).toEqual([
+      "b1",
+    ]);
   });
 
   it("节点还在文档里、只是这一帧没投影出来（折叠分组）时变 ghost", () => {
