@@ -8,6 +8,7 @@ import type {
 } from "@armadra/shared";
 
 import { useCanvasStore } from "@/store/canvas-store";
+import { onNodeNamesRequest } from "@/nodes/node-names";
 import { useFlowNodes } from "./use-flow-nodes";
 
 const now = "2026-01-01T00:00:00.000Z";
@@ -107,5 +108,43 @@ describe("useFlowNodes", () => {
   it("不再向 React Flow 交出 onSelectionChange", () => {
     const { result } = renderHook(() => useFlowNodes());
     expect("onSelectionChange" in result.current).toBe(false);
+  });
+
+  /**
+   * 一条边建立的那一刻，两端才第一次需要互相称呼（设计 §2.2）。被拒绝的那一
+   * 次不问——重复的连线没有建立任何新关系。
+   */
+  it("连上一条新线之后问两端要名字，重复的那次不问", () => {
+    const asked: string[][] = [];
+    const release = onNodeNamesRequest((ids) => asked.push([...ids]));
+    try {
+      const { result } = renderHook(() => useFlowNodes());
+      act(() => {
+        useCanvasStore.getState().addNode("sticky", { id: "c" } as never);
+      });
+      const created = useCanvasStore.getState().document!.nodes.at(-1)!.id;
+      act(() => {
+        result.current.onConnect({
+          source: "a",
+          target: created,
+          sourceHandle: null,
+          targetHandle: null,
+        });
+      });
+      expect(asked).toEqual([["a", created]]);
+
+      // 已经连着的一对：`addEdge` 什么都不做，也就没有新关系要命名。
+      act(() => {
+        result.current.onConnect({
+          source: "a",
+          target: "b",
+          sourceHandle: null,
+          targetHandle: null,
+        });
+      });
+      expect(asked).toHaveLength(1);
+    } finally {
+      release();
+    }
   });
 });

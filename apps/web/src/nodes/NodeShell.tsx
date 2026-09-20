@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { CanvasNode } from "@armadra/shared";
 import {
+  AtSign,
   Check,
   ChevronDown,
   ChevronRight,
@@ -36,6 +37,8 @@ import {
   zoomCanvasByWheel,
 } from "@/canvas/interaction/wheel-zoom";
 import { NodeAnnotationHost, NodeMetaMenuItems } from "@/meta/NodeMeta";
+import { NodeNameBadge } from "./NodeNameBadge";
+import { requestNodeNames } from "./node-names";
 import { COLLAPSED_HEIGHT, DRAG_HANDLE_CLASS, nodeMeta } from "./registry";
 import { HEADER_HEIGHT } from "./geometry";
 
@@ -311,6 +314,10 @@ export function NodeHeader({
 
       <NodeTitle node={node} editing={renaming} onEditing={setRenaming} />
 
+      {/* Agent 之间的名字（设计 §2.3）。没起名就不画，所以它不占没名字的那些
+          节点的头部；有名字时它排在类型自己的徽标之前，因为它是「这是谁」。 */}
+      <NodeNameBadge node={node} />
+
       <span className="node-header-chips flex min-w-0 items-center gap-1">
         {headerChips}
       </span>
@@ -428,6 +435,12 @@ export function NodeMenuContent({
           {t("node.rename")}
         </DropdownMenuItem>
       )}
+      {/* 名字是另一件事：标题是给人看的散文，名字是 Agent 之间的称呼，自动
+          命名只改前者（设计 §2.1）。所以它是菜单里独立的一项。 */}
+      <DropdownMenuItem onSelect={() => requestNodeNames([node.id])}>
+        <AtSign />
+        {t("node.name.edit")}
+      </DropdownMenuItem>
       <DropdownMenuItem
         onSelect={() => {
           focusNode(node.id);

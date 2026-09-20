@@ -21,6 +21,7 @@ import {
   SshPromptDialog,
   UsageDashboard,
 } from "./lazy";
+import { NodeNameDialog } from "@/nodes/NodeNameDialog";
 import { useMountedOnce, useOverlayRequested } from "./overlay-gates";
 
 /**
@@ -30,9 +31,11 @@ import { useMountedOnce, useOverlayRequested } from "./overlay-gates";
  * `React.lazy` 在启动那一刻就把每一个 chunk 都取了回来。闸门的理由写在
  * `overlay-gates.ts`；这里只负责「谁看哪一个开合状态」。
  *
- * 三个例外留在下面无条件挂着，因为它们的触发器是工作空间事件流而不是一个
- * 开合状态：控制确认、SSH 口令、交接对话框都得在事件到达**之前**就已经订阅
- * 上。三个加起来不到 7 kB，放进闸门只会把「谁先订阅」这条规则弄乱。
+ * 四个例外留在下面无条件挂着，因为它们的触发器是一条事件流而不是一个开合
+ * 状态：控制确认、SSH 口令、交接对话框等工作空间事件，起名对话框等用户拉完
+ * 一条线的那一刻。都得在事件到达**之前**就已经订阅上，所以它们连 `lazy` 都
+ * 不是——一个还在取 chunk 的监听器等于没有监听器。加起来不到 8 kB，放进闸门
+ * 只会把「谁先订阅」这条规则弄乱。
  */
 
 function Gate({
@@ -98,8 +101,9 @@ export function Overlays() {
       <Gate open={panels.handoff !== "closed"}>
         <HandoffHistoryDrawer />
       </Gate>
-      {/* 事件流驱动的三个：必须先订阅，不能等状态。 */}
+      {/* 事件流驱动的四个：必须先订阅，不能等状态。 */}
       <ControlConfirmDialog />
+      <NodeNameDialog />
       <SshPromptDialog />
       <HandoffDialog />
     </Suspense>

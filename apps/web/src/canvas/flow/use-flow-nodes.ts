@@ -29,6 +29,7 @@ import {
 } from "../sync/project";
 import { clearDrafts, setDraft, useDrafts } from "./drafts";
 import { applyWebviewPool } from "@/nodes/browser/pool";
+import { requestNodeNames } from "@/nodes/node-names";
 
 /**
  * 投影 + 回调翻译（React Flow 计划 §2.1，归属 canvas）。
@@ -290,7 +291,10 @@ export function useFlowNodes(): FlowBindings {
       return;
     }
     if (verdict.kind !== "link") return;
-    state.addEdge(verdict.source, verdict.target);
+    if (state.addEdge(verdict.source, verdict.target) === null) return;
+    // 一条边建立的那一刻，两端才第一次需要互相称呼（设计 §2.2）。两端各自
+    // 缺名字的才会被问，可以跳过——跳过之后连线照样成立。
+    requestNodeNames([verdict.source, verdict.target]);
   }, []);
 
   /**

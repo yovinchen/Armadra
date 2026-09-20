@@ -44,6 +44,7 @@ import {
 import { openNodeAnnotation } from "@/meta/annotations";
 import { DropdownMenu } from "@/ui/dropdown-menu";
 import { NodeHeader, NodeMenuContent, NodeShell } from "./NodeShell";
+import { onNodeNamesRequest } from "./node-names";
 import { COLLAPSED_HEIGHT, HEADER_HEIGHT } from "./geometry";
 
 beforeAll(installDomPolyfills);
@@ -303,6 +304,45 @@ describe("NodeShell", () => {
     openMenu({ onRename });
     fireEvent.click(screen.getByRole("menuitem", { name: "重命名" }));
     expect(onRename).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * 名字与标题是两件事（设计 §2.1）：自动命名只改标题，名字是 Agent 之间的
+   * 称呼。所以菜单里它们是两项，头部的徽标也只在有名字时出现。
+   */
+  it("offers the name as its own menu item, beside rename", () => {
+    const asked: string[][] = [];
+    const release = onNodeNamesRequest((ids) => asked.push([...ids]));
+    try {
+      openMenu({ onRename: vi.fn() });
+      fireEvent.click(screen.getByRole("menuitem", { name: "名字…" }));
+      expect(asked).toEqual([["n1"]]);
+    } finally {
+      release();
+    }
+  });
+
+  it("draws the name badge only when the node has one, and opens it on click", () => {
+    const plain = makeNode();
+    const { unmount } = render(
+      <NodeHeader node={plain} collapsed={false} maximized={false} />,
+    );
+    expect(screen.queryByLabelText("名字…")).toBeNull();
+    unmount();
+
+    const named = makeNode({
+      data: { kind: "sticky", content: "", handle: "reviewer" },
+    } as Partial<CanvasNode>);
+    const asked: string[][] = [];
+    const release = onNodeNamesRequest((ids) => asked.push([...ids]));
+    try {
+      render(<NodeHeader node={named} collapsed={false} maximized={false} />);
+      fireEvent.click(screen.getByLabelText("名字…"));
+      expect(screen.getByText("@reviewer")).toBeTruthy();
+      expect(asked).toEqual([["n1"]]);
+    } finally {
+      release();
+    }
   });
 
   /** 菜单里那一项翻的是同一个开关：标题当场变成输入框。 */

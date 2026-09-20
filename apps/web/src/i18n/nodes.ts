@@ -26,6 +26,14 @@ const zh = {
   "node.close": "关闭",
   "node.more": "更多",
   "node.rename": "重命名",
+  /* 名字（handle）：Agent 之间互相称呼用的短词，与标题是两件事 */
+  "node.name.edit": "名字…",
+  "node.name.title": "起个名字",
+  "node.name.placeholder": "小写字母、数字、- 或 _",
+  "node.name.invalid":
+    "只能用小写字母、数字、- 或 _，以字母或数字开头，最多 24 个字符。",
+  "node.name.taken": "这个名字属于「{title}」。",
+  "node.name.skip": "跳过",
   "node.color": "颜色",
   "node.title": "标题",
   "node.allow": "允许",
@@ -159,6 +167,13 @@ const en: Record<keyof typeof zh, string> = {
   "node.close": "Close",
   "node.more": "More",
   "node.rename": "Rename",
+  "node.name.edit": "Name…",
+  "node.name.title": "Give it a name",
+  "node.name.placeholder": "lowercase letters, digits, - or _",
+  "node.name.invalid":
+    "Use lowercase letters, digits, - or _, starting with a letter or digit, up to 24 characters.",
+  "node.name.taken": "That name belongs to “{title}”.",
+  "node.name.skip": "Skip",
   "node.color": "Colour",
   "node.title": "Title",
   "node.allow": "Allow",
