@@ -54,6 +54,22 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     updatedAt: z.string(),
   }),
   /**
+   * A control verb added a node on behalf of `originNodeId` — the node whose
+   * agent ran the verb.
+   *
+   * `board.changed` is what makes every client re-read the board; this frame
+   * says which node appeared and who asked for it, which is what a page needs
+   * in order to take the person to it the way the add menu does. Only a page
+   * that is looking at `boardId` acts on it.
+   */
+  z.object({
+    type: z.literal("node.created"),
+    boardId: z.string(),
+    nodeId: z.string(),
+    nodeType: z.string(),
+    originNodeId: z.string(),
+  }),
+  /**
    * `ssh` needs a password or a key passphrase and has no TTY to ask on
    * (remote completion design §3.6). Broadcast rather than answered by the
    * runtime: the secret belongs to a person, and the prompt text has already

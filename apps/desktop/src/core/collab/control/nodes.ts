@@ -5,14 +5,7 @@ import type { CanvasNode } from "../../canvas/document-types";
 import type { Caller } from "../nodes";
 import { type Args, Refusal, collapseNewlines } from "../refusals";
 import type { CollabContext } from "../service";
-import {
-  cleanTitle,
-  defaultSize,
-  load,
-  newNode,
-  placement,
-  save,
-} from "./board";
+import { cleanTitle, load, newNode, placement, save } from "./board";
 import { type Outcome, result } from "./outcome";
 
 /**
@@ -83,11 +76,15 @@ export function openTerminal(
     document.board.id,
     "terminal",
     title,
-    placement(document, caller.node.id, "terminal"),
-    defaultSize("terminal"),
+    placement(document, caller.node.id),
     { kind: "terminal" },
   );
-  save(context, caller, { ...document, nodes: [...document.nodes, node] });
+  save(
+    context,
+    caller,
+    { ...document, nodes: [...document.nodes, node] },
+    node,
+  );
   return result(`已创建终端节点「${title}」。`, {
     id: node.id,
     type: "terminal",
@@ -149,11 +146,15 @@ export function openAgent(
     document.board.id,
     "terminal",
     title,
-    placement(document, caller.node.id, "terminal"),
-    defaultSize("terminal"),
+    placement(document, caller.node.id),
     data,
   );
-  save(context, caller, { ...document, nodes: [...document.nodes, node] });
+  save(
+    context,
+    caller,
+    { ...document, nodes: [...document.nodes, node] },
+    node,
+  );
   const message =
     after.length === 0
       ? `已创建 ${agentId} 节点「${title}」，它会自己启动。`
@@ -189,11 +190,15 @@ export function sticky(
     document.board.id,
     "sticky",
     title,
-    placement(document, caller.node.id, "sticky"),
-    defaultSize("sticky"),
+    placement(document, caller.node.id),
     { kind: "sticky", content },
   );
-  save(context, caller, { ...document, nodes: [...document.nodes, node] });
+  save(
+    context,
+    caller,
+    { ...document, nodes: [...document.nodes, node] },
+    node,
+  );
   return result(`已创建便签「${title}」。`, {
     id: node.id,
     type: "sticky",

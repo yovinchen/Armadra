@@ -27,9 +27,10 @@
 export type OpaquePayload = Readonly<Record<string, unknown>>;
 
 /**
- * The 21 `WorkspaceEvent` variants of 合并前的实现, by their
- * contractual `type` string (contract §5, last paragraph: "21 个
- * `WorkspaceEvent` 的 `type` 字符串逐字不变").
+ * The workspace events, by their `type` string: the 21 contractual ones
+ * (contract §5, last paragraph: "21 个 `WorkspaceEvent` 的 `type` 字符串逐字
+ * 不变" — a rename is the break, an addition is not), plus `node.created`,
+ * which a control verb publishes beside `board.changed` when it adds a node.
  *
  * The value of each entry is the event's **own fields**, not a wrapper. The
  * Rust enum is `#[serde(tag = "type")]` — internally tagged — so a frame on the
@@ -69,6 +70,21 @@ export interface WorkspaceEventPayloads {
     readonly exitCode?: number;
   };
   "board.changed": { readonly boardId: string; readonly updatedAt: string };
+  /**
+   * A control verb added a node to a board on behalf of `originNodeId`.
+   *
+   * `board.changed` already says the board moved on, and it is what makes the
+   * clients re-read it; this one says *what appeared and who asked for it*, so
+   * a page that is looking at that board can take the person to the new node
+   * the same way it does when they add one from the menu. A page that has the
+   * board closed, or is in the background, ignores it.
+   */
+  "node.created": {
+    readonly boardId: string;
+    readonly nodeId: string;
+    readonly nodeType: string;
+    readonly originNodeId: string;
+  };
   /**
    * `ssh` is asking for a password or a key passphrase and there is no TTY to
    * ask on. Broadcast rather than answered: the secret belongs to a person, and
@@ -166,6 +182,7 @@ export const WORKSPACE_EVENT_TYPES = [
   "agent.delivery",
   "terminal.exit",
   "board.changed",
+  "node.created",
   "ssh.prompt",
   "workspace.updated",
   "control.confirm",

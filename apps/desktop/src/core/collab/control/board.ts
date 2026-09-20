@@ -3,7 +3,6 @@ import type {
   BoardDocument,
   CanvasNode,
   Position,
-  Size,
 } from "../../canvas/document-types";
 import { loadBoard, saveBoard } from "../../canvas/documents";
 import { DomainError, rfc3339, uuidV7 } from "../../workspaces/support";
@@ -41,31 +40,23 @@ export const NODE_PALETTE = [
 /** New nodes are placed to the right of the node that asked for them. */
 export const PLACEMENT_GAP = 60;
 
-/** Default geometry per node type. */
-export function defaultSize(nodeType: string): Size {
-  switch (nodeType) {
-    case "terminal":
-      return { width: 640, height: 440 };
-    case "sticky":
-      return { width: 240, height: 200 };
-    case "group":
-      return { width: 520, height: 360 };
-    case "editor":
-      return { width: 660, height: 460 };
-    case "diff":
-      return { width: 860, height: 500 };
-    case "files":
-      return { width: 340, height: 460 };
-    case "browser":
-      return { width: 800, height: 560 };
-    case "automation":
-      return { width: 360, height: 260 };
-    case "agentActivity":
-      return { width: 340, height: 240 };
-    default:
-      return { width: 260, height: 200 };
-  }
-}
+/**
+ * How far down to step when the spot picked for a new node is already taken.
+ *
+ * Deliberately **not** a per-type size table. The one table of default node
+ * geometry lives in the front end (`apps/web/src/nodes/registry.ts`), because
+ * that is where a default size means something — it is the size the node is
+ * drawn at. A second table here is what made an agent-created terminal come
+ * out 640×440 while the one a person adds from the menu is 960×600, so the
+ * control verbs no longer write a size at all: they leave `size` absent and
+ * the page fills it in from that single table when it projects the document
+ * (`canvas/sync/project.ts`). Placement only needs somewhere to stand, and a
+ * constant step is enough for that.
+ */
+export const PLACEMENT_STEP = 640;
+
+/** Width assumed for an anchor node that has never been resized. */
+export const ANCHOR_FALLBACK_WIDTH = 960;
 
 export function load(context: CollabContext, caller: Caller): BoardDocument {
   try {
@@ -88,6 +79,7 @@ export function save(
   context: CollabContext,
   caller: Caller,
   document: BoardDocument,
+  created?: CanvasNode,
 ): void {
   let saved: BoardDocument;
   try {
@@ -115,6 +107,21 @@ export function save(
     boardId: saved.board.id,
     updatedAt: saved.board.updatedAt,
   });
+  // `board.changed` says the board is a version newer; it does not say a node
+  // appeared, and it cannot say which. A page that is looking at this board
+  // wants to be taken to the new node the same way it is when a person adds
+  // one from the menu, so the verb names it. `originNodeId` is the node that
+  // asked — it is what lets a client tell an arrival on the board it is
+  // watching from one on a board nobody has open.
+  if (created !== undefined) {
+    context.publish(caller.node.workspaceId, {
+      type: "node.created",
+      boardId: saved.board.id,
+      nodeId: created.id,
+      nodeType: created.type,
+      originNodeId: caller.node.id,
+    });
+  }
 }
 
 export function asRefusal(error: unknown): Refusal {
@@ -129,12 +136,16 @@ export function asRefusal(error: unknown): Refusal {
   return Refusal.internal(`画布操作失败：${message}`);
 }
 
+/**
+ * A node with no `size`: see {@link PLACEMENT_STEP}. The page supplies the
+ * default for the type, so a node a verb creates and a node a person adds from
+ * the menu come out the same size, and stay that way when that table changes.
+ */
 export function newNode(
   boardId: string,
   nodeType: string,
   title: string,
   position: Position,
-  size: Size,
   data: unknown,
 ): CanvasNode {
   const now = rfc3339();
@@ -145,7 +156,6 @@ export function newNode(
     title,
     color: DEFAULT_NODE_COLOR,
     position,
-    size,
     labels: [],
     note: "",
     data,
@@ -158,20 +168,15 @@ export function newNode(
  * To the right of the caller, same y — and pushed down if something is already
  * standing there, because two nodes at identical coordinates look like one.
  */
-export function placement(
-  document: BoardDocument,
-  callerId: string,
-  nodeType: string,
-): Position {
+export function placement(document: BoardDocument, callerId: string): Position {
   const anchor = document.nodes.find((node) => node.id === callerId);
   let x = PLACEMENT_GAP;
   let y = PLACEMENT_GAP;
   if (anchor !== undefined) {
-    const width = anchor.size?.width ?? defaultSize(anchor.type).width;
+    const width = anchor.size?.width ?? ANCHOR_FALLBACK_WIDTH;
     x = anchor.position.x + width + PLACEMENT_GAP;
     y = anchor.position.y;
   }
-  const height = defaultSize(nodeType).height;
   for (let attempt = 0; attempt < 64; attempt += 1) {
     const taken = document.nodes.some(
       (node) =>
@@ -179,7 +184,7 @@ export function placement(
         Math.abs(node.position.y - y) < 24,
     );
     if (!taken) break;
-    y += height + 40;
+    y += PLACEMENT_STEP;
   }
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
     return { x: PLACEMENT_GAP, y: PLACEMENT_GAP };

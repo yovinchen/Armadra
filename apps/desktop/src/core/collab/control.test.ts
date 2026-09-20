@@ -123,6 +123,104 @@ describe("the verbs that add a node", () => {
     expect(node?.position.x).toBeGreaterThan(0);
   });
 
+  /**
+   * Placement is the one thing here that still needs a number, and it is a
+   * constant rather than a per-type table: two nodes at the same coordinates
+   * look like one, and stepping down by a terminal's height keeps them apart
+   * whatever they turn out to be.
+   */
+  it("stands a second node clear of the first without a size table", async () => {
+    const first = (
+      ok(await run(me, "open-terminal", { title: "One" })).result as {
+        id: string;
+      }
+    ).id;
+    const second = (
+      ok(await run(me, "open-terminal", { title: "Two" })).result as {
+        id: string;
+      }
+    ).id;
+    const document = loadBoard(
+      fixture.database,
+      fixture.workspaceId,
+      fixture.boardId,
+    );
+    const a = document.nodes.find((entry) => entry.id === first)!;
+    const b = document.nodes.find((entry) => entry.id === second)!;
+    expect(a.position.x).toBe(b.position.x);
+    expect(Math.abs(b.position.y - a.position.y)).toBeGreaterThanOrEqual(600);
+  });
+
+  /**
+   * The default size of a node is the size it is drawn at, and the one table
+   * of those lives in the front end (`apps/web/src/nodes/registry.ts`). A
+   * second table here is what made a verb-created terminal come out 640×440
+   * beside a 960×600 one from the add menu, so a verb writes no size at all
+   * and the page fills it in when it projects the document.
+   */
+  it("leaves the size out, so the page gives it the same default a person gets", async () => {
+    const terminal = (
+      ok(await run(me, "open-terminal", { title: "Logs" })).result as {
+        id: string;
+      }
+    ).id;
+    const note = (
+      ok(await run(me, "sticky", { title: "Note", content: "hi" })).result as {
+        id: string;
+      }
+    ).id;
+    const document = loadBoard(
+      fixture.database,
+      fixture.workspaceId,
+      fixture.boardId,
+    );
+    for (const id of [terminal, note]) {
+      const node = document.nodes.find((entry) => entry.id === id);
+      expect(node).toBeDefined();
+      expect(node?.size).toBeUndefined();
+    }
+  });
+
+  /**
+   * `board.changed` says the board is a version newer; it cannot say a node
+   * appeared or which one. Without that, an agent-created node only shows up
+   * in a corner, while one added from the menu is selected and brought into
+   * view.
+   */
+  it("names the new node and the caller so the page can go to it", async () => {
+    const created = (
+      ok(await run(me, "open-terminal", { title: "Logs" })).result as {
+        id: string;
+      }
+    ).id;
+    const published = fixture.events.map((entry) => entry.event);
+    const changed = published.findIndex(
+      (event) => event.type === "board.changed",
+    );
+    const announced = published.findIndex(
+      (event) => event.type === "node.created",
+    );
+    // Order matters: the client re-reads on `board.changed`, so the frame that
+    // names the node must not arrive before the reason to go and fetch it.
+    expect(changed).toBeGreaterThanOrEqual(0);
+    expect(announced).toBeGreaterThan(changed);
+    expect(published[announced]).toEqual({
+      type: "node.created",
+      boardId: fixture.boardId,
+      nodeId: created,
+      nodeType: "terminal",
+      originNodeId: me,
+    });
+    expect(fixture.events[announced]?.workspaceId).toBe(fixture.workspaceId);
+  });
+
+  it("says nothing about a created node when a verb only edits one", async () => {
+    await run(me, "rename", { node: me, title: "Renamed" });
+    expect(
+      fixture.events.some((entry) => entry.event.type === "node.created"),
+    ).toBe(false);
+  });
+
   it("writes an agent node's launch line but never starts a process", async () => {
     const body = ok(
       await run(me, "open-agent", { agent: "codex", prompt: "fix\nthe bug" }),
