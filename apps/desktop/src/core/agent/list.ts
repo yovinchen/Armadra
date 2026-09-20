@@ -1,4 +1,5 @@
 import { state as integrationState } from "../hook/install/integration";
+import { type AgentProbe, storedProbe } from "./probe";
 import {
   type AgentInfo,
   type AgentSettings,
@@ -35,6 +36,13 @@ export interface AgentListRow extends AgentInfo {
   readonly clientRevision?: number;
   readonly skillsRevision?: number;
   readonly launchArgs?: readonly string[];
+  /**
+   * 缓存好的 `--version` 探测（`probe.ts`）。缺席表示这个 CLI 还没被探过，共享
+   * 的求交集把它读成 unknown——**从不**读成「支持」。
+   *
+   * 这里只**读**缓存：探测在后台扫描里跑，一次列表绝不等一个子进程。
+   */
+  readonly probe?: AgentProbe;
 }
 
 export function listAgents(options: ListAgentsOptions): AgentListRow[] {
@@ -68,12 +76,24 @@ function withIntegration(
       ...(options.env === undefined ? {} : { env: options.env }),
     });
   } catch {
-    return row;
+    return { ...row, ...withProbe(row) };
   }
   return {
     ...row,
     ...(state.hook.installed ? { clientRevision: state.hook.revision } : {}),
     ...(state.skill.installed ? { skillsRevision: state.skill.revision } : {}),
     ...(state.launchArgs.length > 0 ? { launchArgs: state.launchArgs } : {}),
+    ...withProbe(row),
   };
+}
+
+/**
+ * 探测那一半。
+ *
+ * 一个 `custom:` 条目**不**借基础适配器的探测：它跑的是自己的启动程序，而版本是
+ * 那个程序的事实。借来的版本会替一个从没被问过的二进制作担保。
+ */
+function withProbe(row: AgentInfo): { probe?: AgentProbe } {
+  const probe = storedProbe(row.id);
+  return probe === undefined ? {} : { probe };
 }

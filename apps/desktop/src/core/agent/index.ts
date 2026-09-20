@@ -23,6 +23,7 @@ import {
 } from "../handoff/store";
 import { ContextUsageCache } from "../usage/context-usage";
 import { ORPHAN_MINUTES, pendingDir, sweepOrphans } from "./approvals";
+import { armProbeSweep } from "./probe";
 import { installRoutes } from "./routes";
 import { installHookBridge } from "./hook-bridge";
 
@@ -169,6 +170,15 @@ export function install(context: CoreContext): CollabContext {
   if (removed > 0) {
     context.log.info("cleared orphaned permission requests", { removed });
   }
+
+  // CLI 版本探测（Agent 自动化设计 §1）。装配一步都不等它：武装一个 `unref` 的
+  // 定时器，扫描在后台跑，`GET /api/agents` 读的永远是缓存。一次探不到只是少一
+  // 条缓存——那一条本身就是「问过了，问不出来」，而那正是 §1 要的答案。
+  armProbeSweep((error) => {
+    context.log.warn("could not probe the agent CLIs", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
   return withHandoff;
 }
 
