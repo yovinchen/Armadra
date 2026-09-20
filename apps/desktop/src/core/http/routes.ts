@@ -688,16 +688,19 @@ export const ROUTES: readonly RouteEntry[] = [
     path: "/api/models/catalog",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/models/catalog/refresh",
     methods: ["POST"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/agents/{agentId}/models",
     methods: ["GET"],
     surface: "runtime",
+    implemented: true,
   },
   {
     path: "/api/agents/{agentId}/integration",

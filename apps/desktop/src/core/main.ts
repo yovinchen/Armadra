@@ -40,6 +40,7 @@ import { install as installRemote } from "./remote";
 import { install as installResources } from "./resources";
 import { install as installTerminals } from "./terminal/install";
 import { install as installAgents } from "./agent";
+import { install as installModels } from "./models";
 import { install as installBrowser } from "./browser";
 import { install as installSchedule } from "./schedule";
 import { install as installGit } from "./git";
@@ -143,6 +144,10 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // cache have to exist before a PTY can report into them, and the terminal
   // domain hands its bridge back through `agent/setTerminalBridge`.
   installAgents,
+  // 模型域在 Agent 域之后：`GET /api/agents/{id}/models` 要问 Agent 注册表这个
+  // id 是谁、启动程序是什么。它自己只读磁盘上的目录缓存，网络那一趟等到第一次
+  // 有人读目录才武装。
+  installModels,
   // Remote before the terminals: an SSH terminal is decorated with this
   // domain's askpass service and host registry, which `remoteDomain()` hands
   // over the same way `settingsDomain()` does. It reads the settings store
