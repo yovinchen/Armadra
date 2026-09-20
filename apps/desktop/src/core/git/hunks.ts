@@ -107,6 +107,15 @@ export async function applyHunk(
     }
     const observed = await observe(guard.context, request.file, request.scope);
     if (!observed.diff.supported) {
+      // `notTrackedModification` is not a property of the file — it means the
+      // change the caller is holding is gone from this scope (already staged,
+      // reverted, or moved by someone else). Answering "this file does not
+      // support hunks" there sends the user looking for a capability problem
+      // that does not exist; the honest answer is the same one a changed
+      // digest gets, which the panel already knows how to recover from.
+      if (observed.diff.unsupportedReason === "notTrackedModification") {
+        throw stale();
+      }
       throw badRequest("This file does not support individual hunk operations");
     }
     if (observed.diff.diffDigest !== request.diffDigest) throw stale();

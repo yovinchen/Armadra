@@ -184,6 +184,32 @@ describe("applying one hunk", () => {
     ).rejects.toThrow("reload its hunks");
   });
 
+  it("reports a change that is already gone as stale, not as unsupported", async () => {
+    const repo = multiHunkFile("hunks-vanished");
+    const repositoryService = service();
+    const diff = await readHunks(
+      repositoryService,
+      repo.path,
+      ".",
+      "code.txt",
+      "worktree",
+    );
+    // Someone else (another panel, the terminal) staged the whole file: the
+    // worktree scope now has nothing in it, which is not a property of the
+    // file and must not be reported as one.
+    repo.git("add", "code.txt");
+    await expect(
+      applyHunk(repositoryService, repo.path, {
+        path: ".",
+        file: "code.txt",
+        scope: "worktree",
+        diffDigest: diff.diffDigest,
+        hunkId: diff.hunks[0]?.id as string,
+        action: "stage",
+      }),
+    ).rejects.toThrow("reload its hunks");
+  });
+
   it("refuses an action the scope does not allow", async () => {
     const repo = multiHunkFile("hunks-scope");
     const repositoryService = service();

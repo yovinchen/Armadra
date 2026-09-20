@@ -20,6 +20,7 @@ import { stashes, stashDetail } from "./repository/stash";
 import { refsSnapshot } from "./repository/tree";
 import { verifyWorktreeBinding, worktrees } from "./repository/worktrees";
 import { invalidateAll, scan } from "./discovery";
+import { DomainError } from "../workspaces/support";
 
 /**
  * Every repository-level read, against real checkouts.
@@ -30,6 +31,17 @@ import { invalidateAll, scan } from "./discovery";
  */
 
 afterAll(cleanupFixtures);
+
+/** The `DomainError` a read refused with, so its status can be asserted. */
+async function failure(run: () => Promise<unknown>): Promise<DomainError> {
+  try {
+    await run();
+  } catch (error) {
+    if (error instanceof DomainError) return error;
+    throw error;
+  }
+  throw new Error("expected a refusal");
+}
 
 describe("branches, tags, remotes and identity", () => {
   it("reports the current branch, its upstream and the divergence", async () => {
@@ -353,6 +365,22 @@ describe("cherry-pick preview", () => {
     await expect(
       cherryPickPreview(service(), repo.path, ".", repo.head(), 1),
     ).rejects.toThrow("only used when picking a merge commit");
+  });
+
+  it("answers 404 for a revision this repository does not have", async () => {
+    // A panel holding an object ID or a branch name that another window has
+    // since removed is asking about something that is not there — not
+    // reporting an internal failure the user should file a bug for.
+    const repo = repository("pick-missing");
+    const repositoryService = service();
+    const gone = await failure(() =>
+      cherryPickPreview(repositoryService, repo.path, ".", "0".repeat(40), null),
+    );
+    expect(gone.status).toBe(404);
+    const onto = await failure(() =>
+      rebaseTodoPreview(repositoryService, repo.path, ".", "no-such-branch"),
+    );
+    expect(onto.status).toBe(404);
   });
 });
 

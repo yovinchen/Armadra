@@ -789,11 +789,34 @@ export function readSnapshot(operation: Operation): OperationSnapshot {
   };
 }
 
+/**
+ * Git's own phrasings for "the revision you named is not in this repository".
+ *
+ * A panel hands us an object ID or a ref name it read a moment ago; a branch
+ * deleted or a history pruned in another window turns that into a git failure
+ * which is not a core failure. Reporting 500 tells the user to file a bug for
+ * a list they only need to refresh, so these answer 404 instead. Everything
+ * else stays a 500: an unrecognised git failure is exactly the case where the
+ * message must not be softened.
+ */
+const MISSING_REVISION = [
+  "needed a single revision",
+  "unknown revision or path not in the working tree",
+  "could not get object info",
+  "not a valid object name",
+  "bad revision",
+  "no such ref",
+  "ambiguous argument",
+];
+
 export function commandError(output: CommandOutput): Error {
   const message = output.stderr.length === 0 ? output.stdout : output.stderr;
-  return internalError(
-    `Git operation failed: ${sanitizeRepository(message.toString("utf8"))}`,
-  );
+  const text = sanitizeRepository(message.toString("utf8"));
+  const lowered = text.toLowerCase();
+  if (MISSING_REVISION.some((phrase) => lowered.includes(phrase))) {
+    return notFound(`Git could not resolve that revision: ${text}`);
+  }
+  return internalError(`Git operation failed: ${text}`);
 }
 
 export function notFoundOperation(): Error {
