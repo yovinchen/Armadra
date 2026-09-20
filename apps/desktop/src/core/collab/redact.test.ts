@@ -39,8 +39,18 @@ const SECRETS: readonly {
   },
   {
     name: "Slack bot token",
-    text: ["xoxb", "123456789012", "1234567890123", "AbCdEfGhIjKlMnOpQrStUvWx"].join("-"),
-    secret: ["xoxb", "123456789012", "1234567890123", "AbCdEfGhIjKlMnOpQrStUvWx"].join("-"),
+    text: [
+      "xoxb",
+      "123456789012",
+      "1234567890123",
+      "AbCdEfGhIjKlMnOpQrStUvWx",
+    ].join("-"),
+    secret: [
+      "xoxb",
+      "123456789012",
+      "1234567890123",
+      "AbCdEfGhIjKlMnOpQrStUvWx",
+    ].join("-"),
   },
   {
     name: "Authorization 头里的 Bearer",
