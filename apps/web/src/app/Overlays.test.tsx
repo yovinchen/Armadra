@@ -102,7 +102,10 @@ afterEach(() => {
     if (key === "sidebar") continue;
     useCanvasStore
       .getState()
-      .setPanel(key, (typeof panels()[key] === "boolean" ? false : "closed") as never);
+      .setPanel(
+        key,
+        (typeof panels()[key] === "boolean" ? false : "closed") as never,
+      );
   }
 });
 
