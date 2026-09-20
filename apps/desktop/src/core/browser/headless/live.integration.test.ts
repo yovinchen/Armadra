@@ -32,7 +32,14 @@ afterAll(() => {
   } catch {
     // A browser that already died has nothing left to close.
   }
-  rmSync(dataDir, { recursive: true, force: true });
+  // Chromium may still be flushing its profile when the pipe closes; a
+  // single-shot rm then meets ENOTEMPTY about one run in three.
+  rmSync(dataDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 200,
+  });
 });
 
 describe.skipIf(found.path === undefined)("a real headless Chromium", () => {
