@@ -26,7 +26,7 @@ import {
 } from "./spec";
 
 /**
- * 服务定义那四条规则的用例，移植自 Go Host 的 `servicedef` 包：
+ * 服务定义那四条规则的用例，移植自合并前实现的 `servicedef` 包：
  * 账号必须显式且非特权、定义里不含凭据、渲染是纯函数、`uninstall` 只删自己的。
  */
 
