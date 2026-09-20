@@ -1,5 +1,5 @@
 import { app } from "electron";
-import { CancellationToken, autoUpdater } from "electron-updater";
+import type { CancellationToken } from "electron-updater";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 
@@ -89,6 +89,28 @@ export interface UpdatesDeps {
   readonly settings: () => Promise<Uint8Array | string>;
   /** The OS notification, which W2.1 owns. Absent = the shell shows none. */
   readonly notify?: (title: string, body: string) => void;
+  /**
+   * electron-updater 本体，第一次真的要用它时才取。
+   *
+   * 默认实现是一次延迟的 `require`，这是本批的内存改动：量出来这个包要
+   * 16.5 MB RSS、159 个模块（`builder-util-runtime`、`js-yaml`、`fs-extra`、
+   * `semver` 整棵树），而绝大多数会话里没有人按过「检查更新」，它从头到尾一次
+   * 也没被调用。挪到下面这个函数之后，这笔常驻只有下载 / 安装那条路径才付。
+   *
+   * 为什么是 `require` 不是 `import()`：主进程的产物是 CJS 且装在 asar 里，
+   * 实测 `import()` 走得通，但 `autoUpdater` 是个 getter，CJS 具名导出探测
+   * 认不出来，拿回来是 `undefined`——更新会悄悄不工作。
+   */
+  readonly updaterModule?: () => typeof import("electron-updater");
+}
+
+declare const require: (id: string) => unknown;
+
+let loaded: typeof import("electron-updater") | null = null;
+
+function loadElectronUpdater(): typeof import("electron-updater") {
+  loaded ??= require("electron-updater") as typeof import("electron-updater");
+  return loaded;
 }
 
 export class UpdatesController {
@@ -100,6 +122,11 @@ export class UpdatesController {
   private readonly stagedListeners = new Set<(staged: Staged) => void>();
 
   constructor(private readonly deps: UpdatesDeps) {}
+
+  /** electron-updater 本体。没人注入就走那次延迟的 `require`。 */
+  private updater(): typeof import("electron-updater") {
+    return (this.deps.updaterModule ?? loadElectronUpdater)();
+  }
 
   /**
    * The staged-update announcement, for the tray item W2.1 adds. The tray
@@ -219,6 +246,7 @@ export class UpdatesController {
     } catch {
       return { ok: false, reason: "sourceMalformed" };
     }
+    const { CancellationToken, autoUpdater } = this.updater();
     // The feed of the release the Host offered, not an address this bundle was
     // built with: that is what lets a beta build update.
     autoUpdater.setFeedURL({
@@ -321,6 +349,8 @@ export class UpdatesController {
       return this.failInstall("installFailed");
     }
     try {
+      // 走到这一步必然已经下载过，模块早就加载好了；这里只是把句柄再取一次。
+      const { autoUpdater } = this.updater();
       this.deps.onBeforeRestart();
       // Never returns: the installer replaces this process.
       autoUpdater.quitAndInstall();

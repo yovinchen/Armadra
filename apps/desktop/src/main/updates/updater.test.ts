@@ -85,21 +85,29 @@ vi.mock("electron", () => ({
   },
 }));
 
-vi.mock("electron-updater", () => ({
-  get autoUpdater() {
-    return updater;
-  },
-  CancellationToken: class {
-    cancelled = false;
-    constructor() {
-      cancellations.push(this);
-    }
-    cancel() {
-      this.cancelled = true;
-      updater.hold?.();
-    }
-  },
-}));
+/**
+ * electron-updater 的替身，经 `UpdatesDeps.updaterModule` 注入。
+ *
+ * 不是 `vi.mock("electron-updater")`：生产代码是延迟 `require` 它的（省下
+ * 16.5 MB 常驻，理由写在 `updater.ts` 的 `updaterModule` 那一条），而
+ * `vi.mock` 拦的是 import。注入是同一件事说得更直白的那种写法。
+ */
+const updaterModule = () =>
+  ({
+    get autoUpdater() {
+      return updater;
+    },
+    CancellationToken: class {
+      cancelled = false;
+      constructor() {
+        cancellations.push(this);
+      }
+      cancel() {
+        this.cancelled = true;
+        updater.hold?.();
+      }
+    },
+  }) as unknown as typeof import("electron-updater");
 
 const sent: { channel: string; payload: unknown }[] = [];
 vi.mock("../window", () => ({
@@ -181,6 +189,7 @@ async function subject(
         restarts += 1;
       },
       settings: async () => "",
+      updaterModule,
       ...overrides,
     }),
   };
