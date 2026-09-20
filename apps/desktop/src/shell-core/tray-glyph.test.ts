@@ -20,7 +20,7 @@ describe("the menu-bar glyph", () => {
     expect(glyphAlpha(30, 30, 30, 255)).toBe(255);
     expect(glyphAlpha(240, 240, 240, 255)).toBe(0);
     expect(glyphAlpha(0, 0, 0, 0)).toBe(0);
-    const mid = glyphAlpha(125, 125, 125, 255);
+    const mid = glyphAlpha(90, 90, 90, 255);
     expect(mid).toBeGreaterThan(0);
     expect(mid).toBeLessThan(255);
   });

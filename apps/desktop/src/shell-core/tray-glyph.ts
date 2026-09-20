@@ -20,15 +20,24 @@ export interface Bitmap {
 }
 
 /** Luminance at or below this is fully part of the glyph… */
-export const DARK_LUMINANCE = 80;
+export const DARK_LUMINANCE = 60;
 /** …and at or above this is fully background; in between is anti-aliasing. */
-export const LIGHT_LUMINANCE = 170;
+export const LIGHT_LUMINANCE = 120;
+/** Source alpha below this is treated as fully transparent. */
+export const NOISE_ALPHA = 16;
 /** Transparent margin kept around the trimmed shape, as a fraction of it. */
 export const PADDING = 0.06;
 
 export function glyphAlpha(b: number, g: number, r: number, a: number): number {
-  if (a === 0) return 0;
-  const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+  // Below the noise floor: the icon carries stray near-transparent black
+  // pixels in its corners, and one of those at (0, 0) would stretch the trim
+  // box to the whole image.
+  if (a < NOISE_ALPHA) return 0;
+  // `toBitmap()` is premultiplied: a half-transparent white corner pixel
+  // arrives as mid grey, which would read as "dark" and drag the tile's
+  // anti-aliased corners into the glyph. Undo the multiplication first.
+  const scale = 255 / a;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) * scale;
   const darkness =
     (LIGHT_LUMINANCE - luminance) / (LIGHT_LUMINANCE - DARK_LUMINANCE);
   return Math.round(a * Math.min(1, Math.max(0, darkness)));
