@@ -228,7 +228,7 @@ TS `armadra-hook` 客户端由安装步骤写成 `<dataDir>/bin/armadra-hook` �
 
 跑通的：tmux 与 direct 两个后端的建/输入/resize/粘贴/Ctrl-C/十万行输出/颜色/中文宽字符/断开重附；`Cmd+Q` 后 tmux 会话存活并在重开后重附（同一个 shell pid）；`context list | summary | terminal`、`canvas list | post | inbox | ack | link | rename | interrupt | sticky --dry-run | handoff-read`、`browser read` 的拒绝；交接 prepare → accept → 收件箱通知 → `handoff-read`；会话索引（真实 CLI 目录下 1,974 条）。
 
-**仍然没有的**：`GET /api/agents/{id}/models` 与 `GET /api/models/catalog` 仍是 501，所以节点头的「模型」子菜单开出来是空的；`agents.probes` 没有写者（`CAPABILITY_MIN_VERSION` 为空，所以今天不影响任何能力判定）。
+**当时仍然没有的**：`GET /api/agents/{id}/models` 与 `GET /api/models/catalog` 仍是 501，所以节点头的「模型」子菜单开出来是空的；`agents.probes` 没有写者。两处都在 §19 补上了。
 
 ## 10. R4 / R5：路由表只剩电源租约与所有权两类未认领
 
@@ -690,3 +690,82 @@ SHA-256——和配置摘要在 0020 那次换掉的理由一样（契约 §4.2�
 - `main/updates/updater.ts` 还有一个 `host` 依赖（装更新前停 Host）。装配处已经
   传了一个永远为 `null` 的实现，那条分支不再触发；真正拆掉它连着
   `shell-core/updates` 的几个函数，留作单独一批。
+
+## 19. 模型目录与 CLI 版本探测
+
+§9.1 记的那两处缺口补上了：三条路由不再是 501，`agents.probes` 有写者了。
+
+### 19.1 三条路由
+
+| 路由                               | 答什么                                                         | 位置                    |
+| ---------------------------------- | -------------------------------------------------------------- | ----------------------- |
+| `GET /api/models/catalog`          | 内存里那份目录：来源、抓取时间、年龄、能算价的模型数、全部条目 | `core/models/index.ts`  |
+| `POST /api/models/catalog/refresh` | 现在就抓一次 models.dev，然后答同一个文档                      | 同上                    |
+| `GET /api/agents/{agentId}/models` | 那个 CLI 的模型菜单，每条注明来源                              | `core/models/agents.ts` |
+
+形状与页面的 zod 一致（`packages/shared/src/api/models.ts` 的 `modelCatalogSchema`、
+`api/agents.ts` 的 `agentModelListSchema`），所以页面一个字节都没改：
+
+```jsonc
+// GET /api/models/catalog
+{
+  "source": "cache",            // network | cache | builtIn
+  "fetchedAt": "2026-09-20T…",  // 从没抓到过时缺席
+  "url": "https://models.dev/api.json",
+  "ageHours": 3,
+  "pricedModels": 21,
+  "refreshError": "offline",    // 只有刚刚那次刷新没成时才有
+  "models": [{ "provider": "anthropic", "modelId": "claude-opus-5", "name": "Claude Opus 5",
+               "cost": { "input": 5, "output": 25, "cacheRead": 0.5, "cacheWrite": 6.25 },
+               "limit": { "context": 200000 }, "releaseDate": "2026-05-01", "reasoning": true }]
+}
+
+// GET /api/agents/claude/models
+[{ "id": "opus", "label": "opus", "source": "cli" },
+ { "id": "claude-opus-5", "label": "Claude Opus 5", "source": "catalog", "releaseDate": "2026-05-01" },
+ { "id": "haiku", "label": "haiku", "source": "builtin" }]
+```
+
+三条决定：
+
+- **抓不到不是失败的请求。** 刷新答 200，`refreshError` 说明原因，其余字段仍然
+  描述内存里那份能用的目录。一个错误状态码会用「什么都没有」顶掉它。
+- **刷新有冷却**（60 秒）。冷却期内返回当前这份、不算失败；后台那趟一天一次，
+  只有数据过期了才真的去抓。同时到的两次刷新共用一次抓取。
+- **网络是惰性武装的。** 装配只读 `<dataDir>/models-catalog.json`，第一次有人读
+  目录才武装定时器，第一抓在那之后 10 秒；定时器 `unref`。理由和用量域那条一样
+  （`core/usage/index.ts`）：core 被大量集成测试反复拉起，一个每次装配都发请求的
+  循环会去下载没人看的东西。
+
+菜单的拼法（`core/models/agents.ts`）：CLI 自己说的 → models.dev 该 provider 的条
+目（按发布日期倒序）→ 离线兜底，去重后分三档排序。CLI 那一档只有两个来源——
+`claude --help` 里 `--model` 说明中被引号括起来的别名，和 `${CODEX_HOME:-~/.codex}/config.toml`
+里顶层与每个 `[profiles.*]` 的 `model`（**只读**，从不写用户的配置）。
+opencode / pi / omp 没有目录那一档：替它们猜一家 provider 会列出这个账号用不了的
+模型。拼好的列表按 `(适配器, 启动程序)` 缓存 10 分钟，目录刷新时作废。
+
+### 19.2 版本探测
+
+`core/agent/probe.ts`，缓存写进 `settings.agents.probes[<agentId>]`（设置的
+`normalize` 不碰这一节，所以它跨重启活着），24 小时过期，**换了启动程序就重探**。
+六个内置适配器加用户的 `custom:` 条目都探，自定义条目探的是它自己的启动程序——借
+基础适配器的版本等于替一个从没被问过的二进制作担保。
+
+- **失败是一个单独的答案。** 程序不在、起不来、超时 → `status: "failed"`；跑起来
+  了但没打印出可认版本 → `status: "ok"`、`version: null`（我们确实问到了）。
+  `resolveAgentCapabilities` 据此把有版本门槛的能力判成 unknown，界面不画按钮。
+  `CAPABILITY_MIN_VERSION` 仍然是空表，所以今天探测只提供「问不出来 → 不承诺」这
+  一半，没有任何能力因此改变。
+- **不阻塞装配。** 装配只武装一个 `unref` 的 3 秒定时器，扫描在后台跑；
+  `GET /api/agents` 永远读缓存，一次列表不等任何子进程。探不到只是少一条缓存，
+  挡不住启动。
+- 除了 `--version` 什么都不执行：不过 shell、不带用户 argv、stdin 关掉、8 秒截止、
+  64 KB 输出上限，跑的是 `resolveCommand` 找到的那个绝对路径。
+
+### 19.3 没做的
+
+- 目录里的价格**还没有**接进成本计算：`core/usage/cost.ts` 仍然只用内置表，所以
+  `pricedModels` 报的是「内置表 ∪ 目录里带价格的条目」去重后的数——目录那一半今天
+  只用于模型菜单与上下文上限的展示。接价格要改用量域，不在本批边界内。
+- Copilot 的 `github-copilot` provider 条目留在目录里（`KEPT_PROVIDERS` 有它），
+  但 `copilot --help` 列不列模型没有验证过，所以它的 CLI 那一档是空的。
