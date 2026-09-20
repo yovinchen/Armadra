@@ -5,6 +5,7 @@ import {
   setControlDispatcher,
 } from "../collab/control";
 import { runContextLink } from "../collab/context-link";
+import { installCollaborationSkill } from "../collab/skill";
 import type { Caller } from "../collab/nodes";
 import { Args } from "../collab/refusals";
 import {
@@ -133,6 +134,12 @@ export function install(context: CoreContext): CollabContext {
   installRoutes({ server: context.server, collab: withHandoff, usage });
   // The hook surface authenticates; these two families answer.
   installHookBridge(context.db.database, contextLinkReader);
+  // The skill half of the install unit (docs/design/agent-integration.md §2).
+  // The body describes *these* verbs, so this domain owns it; the hook domain
+  // only knows where the file goes. Registered at assembly rather than
+  // imported by the installer, so a build with no collaboration domain writes
+  // no skill instead of writing one that promises verbs nobody answers.
+  installCollaborationSkill();
 
   // The index is a convenience, so a provider directory that cannot be read is
   // a warning and an empty palette group, not a startup failure. One pass now;
