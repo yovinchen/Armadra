@@ -37,11 +37,27 @@ export function installHookBridge(
     async (request) => {
       const caller = resolveCaller(database, request.caller);
       if (caller === undefined) return unknownCaller(request);
-      return {
-        kind: "text",
-        status: 200,
-        body: await contextLink(caller, request.verb, request.args),
-      };
+      try {
+        return {
+          kind: "text",
+          status: 200,
+          body: await contextLink(caller, request.verb, request.args),
+        };
+      } catch (error) {
+        // The verbs refuse by throwing; the browser family's dispatcher
+        // already returns its refusals, which is why only this one needed it.
+        // Uncaught, every refusal reached the hook server and came back as a
+        // bare 500 — the agent was told "the core failed" instead of "nothing
+        // is linked to you" or "that node has no terminal", and there is no
+        // way to act on the first sentence.
+        const refusal = asRefusal(error);
+        if (refusal === undefined) throw error;
+        return {
+          kind: "text",
+          status: refusal.status,
+          body: `${refusal.message}\n`,
+        };
+      }
     },
   );
   const releaseControl = registerCollabDispatcher(
@@ -97,6 +113,25 @@ export function installHookBridge(
     releaseControl();
     releaseBrowser();
   };
+}
+
+/**
+ * A refusal the verbs threw, or `undefined` for a genuine failure.
+ *
+ * Matched by shape rather than by `instanceof`: `Refusal` and `Refused` are
+ * two classes with the same two fields, and a third would otherwise have to
+ * be remembered here. Anything else is a bug and keeps going up, where it
+ * becomes the 500 it should be.
+ */
+function asRefusal(
+  error: unknown,
+): { status: number; message: string } | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const status = (error as { status?: unknown }).status;
+  if (typeof status !== "number" || status < 400 || status > 599) {
+    return undefined;
+  }
+  return { status, message: error.message };
 }
 
 export function resolveCaller(

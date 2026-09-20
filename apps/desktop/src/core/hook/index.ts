@@ -129,6 +129,22 @@ export function install(context: CoreContext): HookDomain {
   };
 }
 
+/**
+ * One line of detail for the log.
+ *
+ * `String(detail)` on the object the hook server passes — `{ path, error }` —
+ * is `[object Object]`, and that is what every failed hook request logged:
+ * the path and the reason were both collected and both thrown away. The
+ * fields the caller assembled are worth more than the class of the value.
+ */
 function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (error !== null && typeof error === "object") {
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return Object.prototype.toString.call(error);
+    }
+  }
+  return String(error);
 }

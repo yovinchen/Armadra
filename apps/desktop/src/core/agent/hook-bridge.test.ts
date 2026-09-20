@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { setBrowserVerbs } from "../browser";
 import { setControlDispatcher } from "../collab/control";
+import { Refusal } from "../collab/refusals";
 import { collabDispatcher } from "../hook/collab";
 import { installHookBridge, resolveCaller } from "./hook-bridge";
 
@@ -65,6 +66,48 @@ describe("the two families on the hook surface", () => {
       wantsText: false,
     });
     expect(missing).toMatchObject({ kind: "json", status: 404 });
+  });
+
+  /**
+   * The verbs refuse by throwing. Uncaught, every refusal reached the hook
+   * server and came back as a bare 500 — an agent asking to read a node with
+   * no terminal was told "the core failed", which names nothing it could do
+   * differently.
+   */
+  it("answers a context-link refusal as its own sentence, not as a 500", async () => {
+    const db = database();
+    release = installHookBridge(db, async () => {
+      throw Refusal.notFound("「构建」还没有运行中的终端会话。");
+    });
+    const dispatch = collabDispatcher("context-link")!;
+    expect(
+      await dispatch({
+        verb: "terminal",
+        caller: { nodeId: "n1", verified: true },
+        args: {},
+        wantsText: true,
+      }),
+    ).toEqual({
+      kind: "text",
+      status: 404,
+      body: "「构建」还没有运行中的终端会话。\n",
+    });
+  });
+
+  it("lets a genuine failure keep going up as a failure", async () => {
+    const db = database();
+    release = installHookBridge(db, async () => {
+      throw new TypeError("read of undefined");
+    });
+    const dispatch = collabDispatcher("context-link")!;
+    await expect(
+      dispatch({
+        verb: "terminal",
+        caller: { nodeId: "n1", verified: true },
+        args: {},
+        wantsText: true,
+      }),
+    ).rejects.toThrow("read of undefined");
   });
 
   it("answers control through the registered dispatcher, or 503 before one exists", async () => {
