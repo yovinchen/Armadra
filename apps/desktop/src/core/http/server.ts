@@ -33,6 +33,9 @@ import { type CoreRequest, type HandlerResult, Router } from "./router";
  *   3. **Envelope.** Every answer is JSON; every failure is `{ code, message }`.
  */
 
+/** How long `close()` waits for a listener before giving up on it. */
+export const CLOSE_GRACE_MS = 2_000;
+
 /** What a body may weigh before the core stops reading it. */
 export const MAX_BODY_BYTES = 12 * 1024 * 1024;
 
@@ -264,13 +267,31 @@ export class CoreServer {
     this.streams.set(path, { open: handler, guard });
   }
 
+  /**
+   * Stops listening and drops every connection, upgraded ones included.
+   *
+   * `http.Server#close` waits for its connections to end, and
+   * `closeAllConnections` ends the HTTP ones — but a socket that was upgraded
+   * to a WebSocket is no longer on that list, so with one terminal or event
+   * stream open the callback never came and the core never exited: the shell
+   * waited its twelve seconds, sent SIGKILL and then refused to quit at all.
+   * So the WebSocket clients are terminated first, and the wait is bounded —
+   * a listener that still has not closed after {@link CLOSE_GRACE_MS} is not
+   * worth keeping the process alive for.
+   */
   async close(): Promise<void> {
+    for (const client of this.websockets.clients) client.terminate();
     this.websockets.close();
     await Promise.all(
       this.servers.map(
         (server) =>
           new Promise<void>((resolve) => {
-            server.close(() => resolve());
+            const deadline = setTimeout(resolve, CLOSE_GRACE_MS);
+            deadline.unref();
+            server.close(() => {
+              clearTimeout(deadline);
+              resolve();
+            });
             server.closeAllConnections();
           }),
       ),

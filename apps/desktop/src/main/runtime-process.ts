@@ -205,8 +205,12 @@ export class RuntimeProcess {
     if (child === null) {
       // 开发时的 core 是别人的进程，不归这里杀。
       if (this.shutdownFailed) {
-        throw new Error(
-          "A previous core shutdown failed; managed sessions require inspection",
+        // 上一次超时已经作为一次失败的退出报给用户看过了（对话框）。这一次是
+        // 用户看过之后再次要求退出：core 早已被 SIGKILL，没有什么可再停的，再
+        // 拒绝就是把人锁在一个只能强杀的应用里。放行，但只放行这一次之后的。
+        this.shutdownFailed = false;
+        process.stderr.write(
+          "A previous core shutdown failed; quitting anyway after the user was told\n",
         );
       }
       return;

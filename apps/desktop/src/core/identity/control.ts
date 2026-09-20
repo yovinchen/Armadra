@@ -70,6 +70,9 @@ export async function startControlChannel(
           release(spec);
           resolve();
         });
+        // A keep-alive client on the control socket would otherwise hold
+        // `close` open, and with it the whole core's shutdown.
+        server.closeAllConnections();
       }),
   };
 }

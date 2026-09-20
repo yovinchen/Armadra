@@ -70,13 +70,16 @@ describe.runIf(unix)("停掉这个壳自己起的 core", () => {
     await expect(runtime.stop()).resolves.toBeUndefined();
   });
 
-  it("一次没确认的停止不会在第二次退出时读成成功", async () => {
+  it("一次超时的停止只挡住那一次退出，用户看过之后再退就放行", async () => {
     // 走过 SIGKILL 那一支的 core 留下的状态：这里直接摆出那个状态，因为触发它
-    // 要等满 12 秒的预算，而这条用例守的是**那之后**的事。
+    // 要等满 12 秒的预算，而这条用例守的是**那之后**的事。超时那一次已经抛出
+    // 并弹过对话框；之后 core 早没了，再拒绝就只剩强杀一条路。
     const runtime = new RuntimeProcess();
     (runtime as unknown as { shutdownFailed: boolean }).shutdownFailed = true;
-    await expect(runtime.stop()).rejects.toThrow(/previous core shutdown/);
-    await expect(runtime.stop()).rejects.toThrow(/previous core shutdown/);
+    await expect(runtime.stop()).resolves.toBeUndefined();
+    expect(
+      (runtime as unknown as { shutdownFailed: boolean }).shutdownFailed,
+    ).toBe(false);
   });
 });
 
