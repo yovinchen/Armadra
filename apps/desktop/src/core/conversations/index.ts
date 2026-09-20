@@ -1,8 +1,10 @@
 import { statSync } from "node:fs";
+import { relative, resolve, sep } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import * as claude from "./claude";
 import * as codex from "./codex";
 import { type Parsed, clamp } from "./scan";
+import { settingsDomain } from "../settings";
 
 /**
  * The conversations index — "resume this conversation", across projects.
@@ -69,6 +71,74 @@ export interface ScanReport {
 
 export type Roots = readonly (readonly [Provider, string])[];
 
+/**
+ * 索引扫多大一片（设置 `conversations.scope`）。
+ *
+ * `all` 是磁盘上**所有**项目的会话——一台开发机上那就是别的仓库、别人的实验和
+ * 三个月前的一次性脚本，命令面板把它们和这块画布的会话混在一起列。
+ * `workspaces` 把每条会话按它自己记下来的 `cwd` 过一遍本应用的工作空间根目录，
+ * 不在任何一个根下面的不进索引。
+ *
+ * 过滤发生在**扫描**这一侧而不是查询那一侧：一条被排除的会话不该占着一行、不该
+ * 被 `LIKE` 扫到，也不该在切回 `all` 之前一直留在库里骗人。
+ */
+export interface Scope {
+  readonly mode: "workspaces" | "all";
+  /** `workspaces` 时才读：工作空间根目录，已经 resolve 过。 */
+  readonly roots: readonly string[];
+}
+
+export const ALL_CONVERSATIONS: Scope = { mode: "all", roots: [] };
+
+/**
+ * 当下这一份范围：设置说了算，工作空间根目录从库里读。
+ *
+ * 每次扫描都重新读，所以在设置页改完这一项，下一趟刷新就按新的走——不必重启，
+ * 也不必在两个地方各存一份。
+ */
+export function currentScope(
+  database: DatabaseSync,
+  setting: string | undefined,
+): Scope {
+  if (setting !== "workspaces") return ALL_CONVERSATIONS;
+  return { mode: "workspaces", roots: workspaceRoots(database) };
+}
+
+/** 装配好的设置说的那一份范围。没有设置域时按默认（只本应用的工作空间）。 */
+export function configuredScope(database: DatabaseSync): Scope {
+  const value = settingsDomain()?.settings.get("conversations.scope");
+  return currentScope(
+    database,
+    typeof value === "string" ? value : "workspaces",
+  );
+}
+
+/** 这个库里登记的工作空间根目录。 */
+export function workspaceRoots(database: DatabaseSync): string[] {
+  const rows = database
+    .prepare("SELECT root_path FROM workspaces")
+    .all() as { root_path: string }[];
+  return rows
+    .map((row) => String(row.root_path))
+    .filter((path) => path !== "")
+    .map((path) => resolve(path));
+}
+
+/**
+ * 这个 `cwd` 在不在范围里。根目录本身算在内，它的子目录也算——一个 Agent 常常
+ * 是在仓库的某个子目录里被开起来的。
+ */
+export function inScope(scope: Scope, cwd: string): boolean {
+  if (scope.mode === "all") return true;
+  if (cwd === "") return false;
+  const target = resolve(cwd);
+  return scope.roots.some((root) => {
+    if (target === root) return true;
+    const rest = relative(root, target);
+    return rest !== "" && !rest.startsWith("..") && !rest.startsWith(sep);
+  });
+}
+
 /** Where each provider keeps its transcripts on this machine. */
 export function defaultRoots(): Roots {
   return [
@@ -87,13 +157,14 @@ export function defaultRoots(): Roots {
 export function refresh(
   database: DatabaseSync,
   roots: Roots = defaultRoots(),
+  scope: Scope = ALL_CONVERSATIONS,
 ): ScanReport {
   let scanned = 0;
   let indexed = 0;
   let removed = 0;
   for (const [provider, root] of roots) {
-    const known = knownMtimes(database, provider);
-    const { rows, seen } = scanProvider(provider, root, known);
+    const known = knownRows(database, provider);
+    const { rows, seen } = scanProvider(provider, root, known, scope);
     scanned += seen.length;
     indexed += upsert(database, rows);
     removed += forgetMissing(database, provider, root, seen);
@@ -121,21 +192,29 @@ interface IndexRow {
 function scanProvider(
   provider: Provider,
   root: string,
-  known: Map<string, string>,
+  known: Map<string, KnownRow>,
+  scope: Scope,
 ): { rows: IndexRow[]; seen: string[] } {
   const found =
     provider === "codex" ? codex.candidates(root) : claude.candidates(root);
   const rows: IndexRow[] = [];
   const seen: string[] = [];
   for (const candidate of found) {
-    seen.push(candidate.path);
-    // Unchanged since the row was written: no read, no write.
-    if (known.get(candidate.path) === candidate.updatedAt) continue;
+    const cached = known.get(candidate.path);
+    // Unchanged since the row was written: no read, no write. 范围判定借那一行
+    // 自己记下来的 `cwd`——那正是当初解析出来的那一个，所以收着扫也不必重读。
+    if (cached !== undefined && cached.updatedAt === candidate.updatedAt) {
+      if (inScope(scope, cached.cwd)) seen.push(candidate.path);
+      continue;
+    }
     const parsed: Parsed | undefined =
       provider === "codex"
         ? codex.parse(candidate.path)
         : claude.parse(candidate.path);
     if (parsed === undefined || parsed.sessionId === "") continue;
+    // 范围外的转录不进索引，也不算「见过」：上一轮留下的那一行随后被清掉。
+    if (!inScope(scope, parsed.cwd)) continue;
+    seen.push(candidate.path);
     // A session whose opening message could not be read is still worth a row —
     // it is resumable — so it borrows its directory's name.
     const title =
@@ -155,15 +234,32 @@ function scanProvider(
 
 /* ---------------------------------- store --------------------------------- */
 
-/** `path → updated_at` for one provider: what makes a rescan cheap. */
-function knownMtimes(
+interface KnownRow {
+  readonly updatedAt: string;
+  readonly cwd: string;
+}
+
+/**
+ * `path → { updated_at, cwd }` for one provider: what makes a rescan cheap.
+ *
+ * `cwd` 跟着一起读出来，是因为范围过滤要它，而一个 mtime 没动的文件本来就不该
+ * 被重新打开——那一行里存着的就是它上次解析出来的 `cwd`。
+ */
+function knownRows(
   database: DatabaseSync,
   provider: string,
-): Map<string, string> {
+): Map<string, KnownRow> {
   const rows = database
-    .prepare("SELECT path, updated_at FROM conversations WHERE provider = ?")
-    .all(provider) as { path: string; updated_at: string }[];
-  return new Map(rows.map((row) => [row.path, row.updated_at]));
+    .prepare(
+      "SELECT path, updated_at, cwd FROM conversations WHERE provider = ?",
+    )
+    .all(provider) as { path: string; updated_at: string; cwd: string }[];
+  return new Map(
+    rows.map((row) => [
+      row.path,
+      { updatedAt: row.updated_at, cwd: String(row.cwd ?? "") },
+    ]),
+  );
 }
 
 function upsert(database: DatabaseSync, rows: readonly IndexRow[]): number {

@@ -8,11 +8,15 @@ import { migrationsDir } from "../agent/fixture";
 import * as claude from "./claude";
 import * as codex from "./codex";
 import {
+  ALL_CONVERSATIONS,
   commandFromCapture,
   count,
+  currentScope,
+  inScope,
   listConversations,
   refresh,
   transcriptTitle,
+  workspaceRoots,
 } from "./index";
 import { clamp, collapse, readLines } from "./scan";
 
@@ -270,5 +274,101 @@ describe("the bounded reads", () => {
     // These titles are frequently Chinese, where a byte cut lands
     // mid-character.
     expect(clamp("中文标题很长很长", 4)).toBe("中文标题");
+  });
+});
+
+/**
+ * 索引的范围（设置 `conversations.scope`）。
+ *
+ * 默认只索引本应用工作空间根目录下跑过的会话：一台开发机上的 `~/.claude/projects`
+ * 装着所有仓库的历史，而命令面板问的是「这块画布上的会话」。
+ */
+describe("索引的范围", () => {
+  function workspace(root: string): void {
+    const at = new Date().toISOString();
+    database
+      .prepare(
+        "INSERT INTO workspaces (id, name, root_path, created_at, updated_at) VALUES (?, 'W', ?, ?, ?)",
+      )
+      .run(`ws-${root.length}-${Math.random()}`, root, at, at);
+  }
+
+  it("只留工作空间根目录（含子目录）下的那些会话", () => {
+    const mine = join(directory, "mine");
+    mkdirSync(join(mine, "packages", "web"), { recursive: true });
+    workspace(mine);
+    writeClaude("s-mine", [
+      { type: "user", cwd: mine, message: { content: "本仓库" } },
+    ]);
+    writeClaude("s-sub", [
+      {
+        type: "user",
+        cwd: join(mine, "packages", "web"),
+        message: { content: "子目录" },
+      },
+    ]);
+    writeClaude("s-other", [
+      { type: "user", cwd: "/Users/me/somewhere-else", message: { content: "别处" } },
+    ]);
+    const roots = [["claude", claudeRoot()]] as const;
+
+    const scoped = refresh(database, roots, currentScope(database, "workspaces"));
+    expect(scoped).toMatchObject({ scanned: 2, indexed: 2 });
+    expect(
+      listConversations(database, undefined, 50)
+        .map((row) => row.sessionId)
+        .sort(),
+    ).toEqual(["s-mine", "s-sub"]);
+  });
+
+  it("切到「全部」之后那些会话回来，切回去又被清掉", () => {
+    const mine = join(directory, "mine");
+    mkdirSync(mine, { recursive: true });
+    workspace(mine);
+    writeClaude("s-mine", [
+      { type: "user", cwd: mine, message: { content: "本仓库" } },
+    ]);
+    writeClaude("s-other", [
+      { type: "user", cwd: "/Users/me/elsewhere", message: { content: "别处" } },
+    ]);
+    const roots = [["claude", claudeRoot()]] as const;
+
+    refresh(database, roots, ALL_CONVERSATIONS);
+    expect(count(database)).toBe(2);
+
+    // 范围外的那一行被**清掉**而不是留在库里等着被 LIKE 扫到。
+    refresh(database, roots, currentScope(database, "workspaces"));
+    expect(count(database)).toBe(1);
+
+    refresh(database, roots, ALL_CONVERSATIONS);
+    expect(count(database)).toBe(2);
+  });
+
+  it("mtime 没动的那些行按它自己记下来的 cwd 判，不重新打开文件", () => {
+    const mine = join(directory, "mine");
+    mkdirSync(mine, { recursive: true });
+    workspace(mine);
+    writeClaude("s-mine", [
+      { type: "user", cwd: mine, message: { content: "本仓库" } },
+    ]);
+    const roots = [["claude", claudeRoot()]] as const;
+    const scope = currentScope(database, "workspaces");
+    refresh(database, roots, scope);
+    const again = refresh(database, roots, scope);
+    expect(again).toMatchObject({ scanned: 1, indexed: 0, removed: 0 });
+  });
+
+  it("没有这一项设置时是「全部」，工作空间根目录从库里读", () => {
+    const mine = join(directory, "mine");
+    mkdirSync(mine, { recursive: true });
+    workspace(mine);
+    expect(currentScope(database, "all")).toEqual(ALL_CONVERSATIONS);
+    expect(workspaceRoots(database)).toContain(mine);
+    expect(inScope(ALL_CONVERSATIONS, "/anywhere")).toBe(true);
+    expect(inScope({ mode: "workspaces", roots: [mine] }, "")).toBe(false);
+    // 前缀相同但不是子目录：`/a/b` 不在 `/a/bc` 下面。
+    expect(
+      inScope({ mode: "workspaces", roots: ["/a/bc"] }, "/a/bcd"),
+    ).toBe(false);
   });
 });

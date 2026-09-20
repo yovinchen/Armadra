@@ -12,6 +12,7 @@ import {
 } from "../collab/transcript";
 import {
   commandFromCapture,
+  configuredScope,
   listConversations,
   refresh,
   transcriptTitle,
@@ -373,7 +374,10 @@ export function installRoutes(deps: AgentRouteDeps): void {
   server.router.handle(
     "POST",
     "/api/conversations/refresh",
-    answered(() => ({ status: 200, body: refresh(database) })),
+    answered(() => ({
+      status: 200,
+      body: refresh(database, undefined, configuredScope(database)),
+    })),
   );
 
   /* ------------------------------ context usage --------------------------- */

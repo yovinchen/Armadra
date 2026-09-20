@@ -15,7 +15,10 @@ import {
 } from "../collab/service";
 import { eventStream } from "../events";
 import type { CoreContext } from "../main";
-import { refresh as refreshConversations } from "../conversations";
+import {
+  configuredScope,
+  refresh as refreshConversations,
+} from "../conversations";
 import {
   authorizeMailboxAck,
   noteAcknowledged,
@@ -146,7 +149,11 @@ export function install(context: CoreContext): CollabContext {
   // a warning and an empty palette group, not a startup failure. One pass now;
   // the palette refreshes on demand through `POST /api/conversations/refresh`.
   try {
-    const report = refreshConversations(context.db.database);
+    const report = refreshConversations(
+      context.db.database,
+      undefined,
+      configuredScope(context.db.database),
+    );
     if (report.indexed > 0 || report.removed > 0) {
       context.log.info("refreshed the conversations index", {
         scanned: report.scanned,

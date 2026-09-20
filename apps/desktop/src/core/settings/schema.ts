@@ -73,6 +73,16 @@ export const POWER_POLICIES = [
   "manual",
 ] as const;
 const DEFAULT_POWER_POLICY = "manual";
+
+/**
+ * 对话索引扫多大一片。
+ *
+ * `workspaces` 只索引本应用的工作空间根目录下跑过的那些会话，`all` 是整个
+ * `~/.claude/projects`（以及 codex 的那一份）。默认收着：命令面板列出一台开发
+ * 机上**所有**项目的会话标题，既慢又把与这块画布无关的工作摊在面前。
+ */
+export const CONVERSATION_SCOPES = ["workspaces", "all"] as const;
+const DEFAULT_CONVERSATION_SCOPE = "workspaces";
 const DEFAULT_RESOURCE_INTERVAL_MS = 2_000;
 const MIN_RESOURCE_INTERVAL_MS = 500;
 const MAX_RESOURCE_INTERVAL_MS = 60_000;
@@ -150,6 +160,7 @@ export function normalize(raw: JsonValue): JsonObject {
   normalizeLogs(document);
   normalizeUpdates(document);
   normalizePower(document);
+  normalizeConversations(document);
   normalizeResources(document);
   normalizeBrowser(document);
   // Only the scalars are normalised; `servers` and `probes` are the user's map
@@ -248,6 +259,16 @@ function normalizePower(document: JsonObject): void {
   // machine that refuses to sleep.
   power.policy = choice(power.policy, POWER_POLICIES, DEFAULT_POWER_POLICY);
   document.power = power;
+}
+
+function normalizeConversations(document: JsonObject): void {
+  const conversations = section(document, "conversations");
+  conversations.scope = choice(
+    conversations.scope,
+    CONVERSATION_SCOPES,
+    DEFAULT_CONVERSATION_SCOPE,
+  );
+  document.conversations = conversations;
 }
 
 function normalizeResources(document: JsonObject): void {
