@@ -247,9 +247,26 @@ export interface BrowserControl {
   readonly action: "status" | "takeover" | "release";
 }
 
-/** Main → renderer on `browser:drive`. Everything a verb needs the page to do. */
+/**
+ * Main → renderer on `browser:drive`: everything about a browser node that
+ * only the page can perform or display.
+ *
+ * `tabs`, `lease` and `popup` are the halves of a verb the main process cannot
+ * do itself, because they are React state. `key` and `download` arrive without
+ * any verb behind them and ride the same channel for the same reason a second
+ * channel would not help: they are addressed to one node, the page already
+ * filters this one by `nodeId`, and a browser node has exactly one place that
+ * subscribes.
+ *
+ *   * `key` — a chord that landed inside a guest and belongs to Armadra
+ *     (`shell-core/browser/guest-keys.ts`). The guest is a separate renderer,
+ *     so the host's one capture-phase `keydown` listener never saw it; the
+ *     page replays it.
+ *   * `download` — a download a PERSON started, already saved. The page is the
+ *     only side with somewhere to say so.
+ */
 export interface BrowserDriveCommand {
-  readonly kind: "tabs" | "lease" | "popup";
+  readonly kind: "tabs" | "lease" | "popup" | "key" | "download";
   readonly nodeId: string;
   readonly [field: string]: unknown;
 }

@@ -49,20 +49,24 @@ interface ArmadraBrowserControl {
 }
 
 /**
- * Main → page: the parts of a verb only the page can perform, plus the lease
- * the badge draws.
+ * Main → page: everything about a browser node that only the page can perform
+ * or display. Mirrors `BrowserDriveCommand` in `apps/desktop/src/shared/ipc.ts`.
  *
  * `tabs` and `popup` are React state — a tab is a `<webview>` the page mounts,
  * so "switch to tab three" is something the main process can only ask for.
- * `lease` is the Runtime's answer travelling the last hop.
+ * `lease` is the Runtime's answer travelling the last hop. `key` is a chord
+ * that landed inside a guest and belongs to Armadra (a guest is its own
+ * renderer, so the host's keydown listener never saw it), and `download` is a
+ * download a person started, already saved.
  */
 interface ArmadraBrowserCommand {
-  readonly kind: "tabs" | "lease" | "popup";
+  readonly kind: "tabs" | "lease" | "popup" | "key" | "download";
   readonly nodeId: string;
   readonly action?: string;
   readonly tabId?: string;
   readonly url?: string;
   readonly lease?: unknown;
+  readonly [field: string]: unknown;
 }
 
 interface ArmadraBridge {

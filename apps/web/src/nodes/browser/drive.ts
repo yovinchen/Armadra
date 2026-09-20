@@ -18,12 +18,13 @@ import type { BrowserLease } from "@armadra/shared";
  */
 
 export interface DriveCommand {
-  kind: "tabs" | "lease" | "popup";
+  kind: "tabs" | "lease" | "popup" | "key" | "download";
   nodeId: string;
   action?: string;
   tabId?: string;
   url?: string;
   lease?: unknown;
+  [field: string]: unknown;
 }
 
 function bridge() {
@@ -42,6 +43,15 @@ export interface DriveHandlers {
   onOpenTab(url: string): void;
   /** 关掉某个标签。 */
   onCloseTab(tabId: string): void;
+  /**
+   * guest 里按下的一个属于 Armadra 的和弦（`./keys`）。
+   *
+   * 走这条通道是因为它没有别的路可走：guest 是另一个渲染进程，宿主页面那个
+   * 捕获阶段的 `keydown` 监听器压根不会为它运行。
+   */
+  onKey?(chord: unknown): void;
+  /** 人自己点下来的一个下载，已经存好了。 */
+  onDownload?(notice: unknown): void;
 }
 
 /**
@@ -69,6 +79,12 @@ export function useDrive(
           return;
         case "popup":
           if (command.url) handlersRef.current.onOpenTab(command.url);
+          return;
+        case "key":
+          handlersRef.current.onKey?.(command);
+          return;
+        case "download":
+          handlersRef.current.onDownload?.(command);
           return;
         case "tabs":
           if (command.action === "switch" && command.tabId) {

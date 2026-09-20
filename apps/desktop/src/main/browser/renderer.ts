@@ -14,7 +14,7 @@ import { getMainWindow } from "../window";
  */
 
 export interface RendererCommand {
-  readonly kind: "tabs" | "lease" | "popup";
+  readonly kind: "tabs" | "lease" | "popup" | "key" | "download";
   readonly nodeId: string;
   readonly [field: string]: unknown;
 }
