@@ -1,12 +1,12 @@
 # core 的 JSON 面
 
 > 状态：实施契约。章节 §N 被代码注释引用，编号只增不改。
-> 范围：`/api/github/*`、`/api/automations/*`、`GET /api/identity/hello`，以及自动化域**存进库里**的那份 JSON。它们由 R7a 落地（[实施进度](../status/typescript-core-status.md) §15），在 R7 删掉 `proto/`、`packages/protocol`、`packages/host-client` 与 `/rpc/*` 之后是这三块的唯一说法。
-> 不在范围：`/api/workspaces/*` 那张与 Rust Runtime 逐条对账的 163 条路由（[TypeScript Core](../design/typescript-core.md) §5.1），它们到 R7 为止一个字节都不变。
+> 范围：`/api/github/*`、`/api/automations/*`、`GET /api/identity/hello`，以及自动化域**存进库里**的那份 JSON。它们由 R7a 落地（[实施进度](../status/typescript-core-status.md) §15）；R7 收尾删掉 `proto/`、`packages/protocol`、`packages/host-client` 与 `/rpc/*` 之后，这份文档是这三块的唯一说法。
+> 不在范围：`/api/workspaces/*` 那 163 条路由（[TypeScript Core](../design/typescript-core.md) §5.1）。R7 之前它们与当时并存的 Rust Runtime 逐条对账、一个字节都不变；R7 收尾后 core 已是唯一实现，这张对账表本身随之拆除，但这 163 条路由不属于本文档的编码范围。
 
 ## 1. 为什么有这份文档
 
-R7a 之前 GitHub 与自动化两块面板走的是 `/rpc/armadra.v1.*`：二进制 protobuf 帧，形状由 `proto/` 里的 `.proto` 说了算。R7 要把 `proto/` 与两份生成码一起删掉，所以这两块必须先有一份**不依赖那些文件也读得懂**的说法——否则删除那一步会同时删掉「这条记录长什么样」的唯一定义。
+R7a 之前 GitHub 与自动化两块面板走的是 `/rpc/armadra.v1.*`：二进制 protobuf 帧，形状由当时 `proto/` 里的 `.proto` 说了算。R7 把 `proto/` 与两份生成码一起删掉了，所以这两块在删除之前必须先有一份**不依赖那些文件也读得懂**的说法——否则删除那一步会同时删掉「这条记录长什么样」的唯一定义。
 
 这份文档就是那个说法。它描述线上的字节，不描述任何一端的类型。
 
@@ -64,7 +64,7 @@ R7a 之前 GitHub 与自动化两块面板走的是 `/rpc/armadra.v1.*`：二进
 
 ### 3.3 稳定的 `code`
 
-GitHub 那一面的 `code` 与 `/rpc/` 面逐字相同（UPPER_SNAKE）：
+GitHub 那一面的 `code` 是 UPPER_SNAKE 拼法——这是延续自历史上 `/rpc/` 兼容面（R7 已删除）的拼法，不是新起的一套：
 
 | HTTP | `code`               | 意思                                         |
 | ---- | -------------------- | -------------------------------------------- |
@@ -77,7 +77,7 @@ GitHub 那一面的 `code` 与 `/rpc/` 面逐字相同（UPPER_SNAKE）：
 | 501  | `UNSUPPORTED`        | 这台 core 没有可用的 GitHub 凭据             |
 | 504  | `UNKNOWN_OUTCOME`    | 写出去了而结果没读到——**重新读，不要重试**   |
 
-自动化那一面的 `code` 是 snake_case，和其余 `/api/` 一致：`bad_request`、`unauthenticated`、`forbidden`、`not_found`、`conflict`、`unsupported`、`internal_error`。**两面不同拼法是已知的**：GitHub 那一面要与 `/rpc/` 逐字对上（它活到 R7），自动化那一面从一开始就是 `/api/` 的拼法。
+自动化那一面的 `code` 是 snake_case，和其余 `/api/` 一致：`bad_request`、`unauthenticated`、`forbidden`、`not_found`、`conflict`、`unsupported`、`internal_error`。**两面不同拼法是已知的、历史遗留的**：GitHub 那一面延续了 R7 之前 `/rpc/` 兼容面的拼法（该面已在 R7 删除，拼法留了下来），自动化那一面从一开始就是 `/api/` 的拼法。
 
 ## 4. 自动化：`/api/automations/*`
 
@@ -163,12 +163,12 @@ JSON 本身不定义键的顺序，所以一份「原样 stringify」的文本�
 - `GithubCheckConclusion`：`GITHUB_CHECK_CONCLUSION_{UNSPECIFIED,PENDING,SUCCESS,FAILURE,NEUTRAL,CANCELLED,SKIPPED,TIMED_OUT,ACTION_REQUIRED,STALE}`
 - 其余（`GithubCredentialSource`、`GithubSecretStore`、`GithubIssueStateReason`、`GithubMergeMethod`、`GithubMergeableState`、`GithubReviewState`、`GithubReferenceKind`、`GithubReferenceTargetKind`）同样是 `<ENUM_NAME>_<VALUE>` 的全大写拼法，逐条列在 `apps/web/src/api/github.ts`。
 
-## 6. 两张面说同一句话
+## 6. 历史背景：曾经有两张面说同一句话
 
-`/rpc/armadra.v1.GithubService/*` 与 `/rpc/armadra.v1.AutomationService/*` 活到 R7。在那之前两张面对同一条记录必须说同一句话，各有一条用例逐字段比对：
+`/rpc/armadra.v1.GithubService/*` 与 `/rpc/armadra.v1.AutomationService/*` 是 R7 之前与本文档并存的 protobuf 兼容面。在删除之前，两张面对同一条记录必须说同一句话，各有一条用例逐字段比对：
 
 - `apps/desktop/src/core/github/http.test.ts`「两张面对同一条记录说同一句话」；
 - `apps/desktop/src/core/schedule/api.test.ts`「两张面对同一个计划说同一句话」（连 `configSha256` 一起比）;
 - `apps/desktop/src/core/identity/http.test.ts`「答一份与 HostService/Hello 逐字段相同的能力表」。
 
-R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消失。
+R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消失；现在这三个文件只测本文档描述的 JSON 面本身。

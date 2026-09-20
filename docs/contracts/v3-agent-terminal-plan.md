@@ -9,13 +9,13 @@
 
 ## 0. 一句话结论
 
-保留 `React Flow + React + Rust/Axum + SQLite + Tauri` 骨架不动，做三件事：
+保留 `React Flow + React + core + SQLite` 骨架不动（壳当时是 Tauri），做三件事：
 
 1. **页面改成浮层壳**：五区固定壳改成"顶部标签栏 + 全屏画布 + 浮层"，删掉 Inspector、工作空间轨、状态栏、侧栏；引入 Tailwind v4 + shadcn/ui（Radix 原语）重做全部组件。
 2. **Agent 改为"终端 + Hook"**：不再用 ACP 单轮会话。Agent 节点 = 终端节点里跑 CLI（Claude Code / Codex / Gemini / OpenCode），状态由 Runtime 的 Hook 服务接收各 CLI 的 hook 回报；权限在节点头部直答；Agent 之间通过"上下文链接"读取对方转录、通过"带帧粘贴"互发消息、通过本地控制 API 在画布上开新节点。
 3. **画布精简**：10 种节点 → 8 种，6 种语义连线 → 1 种上下文链接（其余视觉边由状态派生、不入库），删除三态节点/摘要阈值/手绘层/连线选择层/复杂拖拽载荷，补上目前缺的：节点 resize、折叠、最大化、右键菜单、会话侧栏、MiniMap。
 
-兼容性目标同时覆盖三层：**Agent CLI 兼容**（每个 provider 一个 hook 适配器，没有 hook 的 CLI 也能作为普通终端跑）、**平台兼容**（hook 客户端用 Rust 小二进制而不是 `sh + curl`，Windows 无需 tmux/curl）、**渲染兼容**（macOS WKWebView / Windows WebView2 / Linux WebKitGTK 的 CSS 基线明确到版本）。
+兼容性目标同时覆盖三层：**Agent CLI 兼容**（每个 provider 一个 hook 适配器，没有 hook 的 CLI 也能作为普通终端跑）、**平台兼容**（hook 客户端用独立可执行程序而不是 `sh + curl`，Windows 无需 tmux/curl）、**渲染兼容**（macOS WKWebView / Windows WebView2 / Linux WebKitGTK 的 CSS 基线明确到版本）。
 
 ## 1. 术语
 
@@ -210,7 +210,7 @@ Tailwind v4 依赖 `@property`、`color-mix()`、cascade layers，运行时最�
 
 规则：所有颜色只通过变量；状态必须"图标 + 文字"；不加载在线字体；`prefers-reduced-motion` 关闭脉冲光晕。
 
-## 5. Agent 设计（终端 + Hook，Rust 实现）
+## 5. Agent 设计（终端 + Hook，当时以 Rust 实现，现由 core 承接）
 
 ### 5.1 模型
 
@@ -253,14 +253,14 @@ Runtime 在现有 `127.0.0.1:43120` 之外**再监听一个 Unix socket**（`<da
 
 ### 5.3 Hook 客户端与安装器
 
-**客户端用 Rust 小二进制 `armadra-hook`**（随 Runtime 一起作为 sidecar 打包），而不是 `sh + curl`：Windows 无需 curl/sh，行为跨平台一致，也能做常量时间比较和原子文件写。行为：
+**客户端用独立可执行程序 `armadra-hook`**（随壳一起打包），而不是 `sh + curl`：Windows 无需 curl/sh，行为跨平台一致，也能做常量时间比较和原子文件写。行为：
 
 1. 无 `ARMADRA_NODE_ID` → 读空 stdin 并 exit 0（在用户自己的终端里是零副作用）。
 2. 读端点文件；按名字读取 `<tokenDir>/<nodeId>` 令牌（查找，不扫描）。
 3. stdin 全量读入内存（上限 1 MiB），POST `/hook/<agentId>`，body 为 JSON `{nodeId, version, payload, pendingId?, answered?}`，头 `X-Armadra-Hook-Token`、`X-Armadra-Node-Token`、`X-Armadra-Hook-Client: <rev>`。先 socket 后 TCP，连接超时 0.5s、总超时 1.5s，失败静默（fail-open）。
 4. 权限等待模式（§5.5）时前台轮询答案文件并把决定打印到 stdout。
 
-**安装器**（Runtime `agent/hooks/<provider>.rs`，设置页"安装 / 重新安装 / 卸载"）：
+**安装器**（core 的 agent hooks 安装模块，设置页"安装 / 重新安装 / 卸载"）：
 
 | provider | 接缝                                                                                                                         | 事件                                                                                                                                                 |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -288,7 +288,7 @@ AgentEvent {
 
 映射：UserPromptSubmit / BeforeAgent / user message → `working + newTurn`；Pre/PostToolUse → `working`；PermissionRequest / 权限型 Notification → `blocked (+pendingId)`；AskUserQuestion / `request_user_input` → `waiting (+awaitingInput)`；Stop / AfterAgent / `session.idle` → `done`；StopFailure → `done + errored`；claude 的空闲提示 Notification → `done + idle`（仅作"救援"）；SessionStart/End → `session`。
 
-归约器（Runtime `agent/status.rs`，前端 store 用同一套规则做本地镜像）：
+归约器（core 的 agent 状态归约模块，前端 store 用同一套规则做本地镜像）：
 
 - **done 保持 3s**：迟到的非 `newTurn` 的 `working` 不能复活刚结束的回合（claude hook 并行执行）。
 - **idle 救援**只能把 `working` 变为 `done`，不能动 blocked/waiting。
@@ -315,7 +315,7 @@ AgentEvent {
 
 ### 5.7 Agent 互发消息
 
-动词 `send` / `reply` / `notify`（`notify` 正文固定由应用生成，发送方不能注入指令）。管线（Runtime `agent/messaging.rs`）：
+动词 `send` / `reply` / `notify`（`notify` 正文固定由应用生成，发送方不能注入指令）。管线（core 的 agent 消息域）：
 
 1. 路由要求 `verified`。
 2. 作用域：同工作空间；拒绝 `cross-workspace` / `self-send` / `ambiguous-target` / `caller-not-owner`。
@@ -370,7 +370,7 @@ agent_deliveries(trace_id PK, workspace_id, source_node_id, target_node_id, outc
 hook_installs(agent_id PK, client_revision, installed_at, config_path)
 ```
 
-Runtime `db.rs` 的 `valid_node_data` 按新类型收紧；迁移前自动备份 `canvas.db.backup-v2-*`，并用现有真实 v2 库做回归测试。
+数据层的 `valid_node_data` 校验按新类型收紧；迁移前自动备份 `canvas.db.backup-v2-*`，并用现有真实 v2 库做回归测试。
 
 ## 7. API 与 WS
 
@@ -633,7 +633,7 @@ macOS / Linux
 └─ 无 tmux 或设置强制 direct                → DirectPtyBackend（现有 portable-pty）
 Windows
 ├─ 设置显式选择 "tmux (MSYS2)"               → TmuxBackend（默认关；MSYS pty 层与原生 CLI 兼容性差）
-├─ 持久终端（Phase 4）                       → 独立 Rust 守护进程 + ConPTY
+├─ 持久终端（Phase 4）                       → 独立守护进程 + ConPTY
 └─ 其他                                      → DirectPtyBackend
 ```
 
@@ -743,7 +743,7 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 
 ### 15.8 实施位置
 
-本节并入 **Phase 2**，由 `runtime-terminal` agent 独立承担（`apps/runtime/src/terminal/{mod,backend,direct,tmux,gc}.rs`、迁移 0005、路由与 WS 改造）；协议已先落到 `packages/shared/src/api.ts`，Phase 1 的 nodes agent 按协议实现前端。验收：tmux 存在时 Runtime 重启后节点可重新 attach 且画面完整；`capture` 与 `paste` 在 claude 会话中可用；无 tmux 环境自动回退且行为与现在一致；旧 generation 的 WS 帧被拒绝。
+本节并入 **Phase 2**，由 `runtime-terminal` agent 独立承担（core 的终端域：backend/direct/tmux/gc 各部分、迁移 0005、路由与 WS 改造）；协议已先落到共享类型层，Phase 1 的 nodes agent 按协议实现前端。验收：tmux 存在时重启后节点可重新 attach 且画面完整；`capture` 与 `paste` 在 claude 会话中可用；无 tmux 环境自动回退且行为与现在一致；旧 generation 的 WS 帧被拒绝。
 
 ## 16. 目标设计的行为细节（2026-09-04）
 
@@ -759,7 +759,7 @@ REST 新增：`GET /api/terminals/{id}/capture?lines=&escapes=`、`POST /api/ter
 - 终端节点：顶部 3px 节点色条；头部 = 折叠三角、色点、标题、右侧 刷新 / 搜索 / AI 命名 / 评论 / 最大化 / ×；头部下方一行 `+ Label` 标签入口；选中时四角 + 四边中点共 8 个 resize 把手。
 - 看板视图（⌘⇧B）：列 `未分组` / `待办` / … / `+ 添加列`，每列底部 `+ 新建会话`，卡片即会话。
 
-**命令面板（⌘K）分组**：新建（新建终端 / Claude Code / Codex / Gemini / OpenCode / 便签 / 打开文件… / 打开网页… / 新建浏览器 / 新建 worktree…）→ 已打开的终端（跳转到某节点，命中输出内容时标注来源）→ 历史对话（跨项目的转录索引：标题 + 项目名 + 相对时间，可恢复）→ 视图（聚焦节点）。**历史对话分组需要新建能力**：Runtime 扫描各 provider 的转录目录建立标题索引（Phase 3 的 `collab/transcript.rs` 已读转录，可顺势加索引 + `resume` 启动行）。
+**命令面板（⌘K）分组**：新建（新建终端 / Claude Code / Codex / Gemini / OpenCode / 便签 / 打开文件… / 打开网页… / 新建浏览器 / 新建 worktree…）→ 已打开的终端（跳转到某节点，命中输出内容时标注来源）→ 历史对话（跨项目的转录索引：标题 + 项目名 + 相对时间，可恢复）→ 视图（聚焦节点）。**历史对话分组需要新建能力**：扫描各 provider 的转录目录建立标题索引（Phase 3 的协作域转录读取逻辑已经会读转录，可顺势加索引 + `resume` 启动行）。
 
 **设置项（SettingsOverlay 的目标清单）**
 
@@ -876,14 +876,14 @@ wheel（终端体，passive:false）
 
 ## 19. 用量胶囊（2026-09-04 用户确认）
 
-| 项     | 决定                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------- | ---- | --------- | ---------------------------------------------------------- |
-| 位置   | 右下角、MiniMap 上方 14px 的浮动胶囊（`z-[var(--z-pills)]`）；无任何 provider 凭据时整体不渲染                                                                                                                                                                                                                                                                                                                                                            |
-| 数据   | Runtime `src/usage/`：Claude 读 macOS 钥匙串 `Claude Code-credentials`（`security find-generic-password -s ... -w`）或 `~/.claude/.credentials.json` 的 OAuth access token → 官方 OAuth usage 接口（5h / 7d 窗口利用率、重置时间）；Codex 读 `~/.codex/auth.json` 的 access token + account id → ChatGPT 后端用量接口（主/次窗口 `used_percent`、`reset_at`）。接口形状以本机 CLI 实际请求为准（抓包/源码核对），字段不符时该 provider 返回 `unavailable` |
-| 安全   | token 只在 Runtime 内存中使用，绝不写日志、不进 SQLite、不发给前端；`GET /api/usage` 只返回百分比与时间；仅 loopback                                                                                                                                                                                                                                                                                                                                      |
-| 刷新   | 启动后 10s 首查，之后每 5 分钟；`POST /api/usage/refresh`；401/网络错误 → 该 provider `status:"error"` 并带 `reason` 代码（`expired_credentials` / `unauthorized` / `forbidden` / `rate_limited` / `network` / `parse` / `no_windows` / `unreadable_credentials` / `provider_error`，2026-09-15 补），胶囊显示灰色横线，卡片按代码给一句可操作的说明；上游文本只进日志                                                                                    |
-| UI     | `Claude 5h 67% · 7d 72% │ Codex 5h 9%`：provider 名 + 迷你进度条（≥80% 警告色，≥95% 危险色）+ 百分比；点击 Popover：每个窗口一行（名称、进度、重置倒计时）、刷新按钮；设置 → 界面「显示用量」开关（默认开）                                                                                                                                                                                                                                               |
-| shared | `usageSchema {providers: [{id, status:"ok"                                                                                                                                                                                                                                                                                                                                                                                                                | "unavailable" | "error", windows:[{key:"5h" | "7d" | "primary" | "secondary", label, usedPercent, resetsAt}], fetchedAt}]}` |
+| 项     | 决定                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------- | ---- | --------- | ---------------------------------------------------------- |
+| 位置   | 右下角、MiniMap 上方 14px 的浮动胶囊（`z-[var(--z-pills)]`）；无任何 provider 凭据时整体不渲染                                                                                                                                                                                                                                                                                                                                                     |
+| 数据   | core 的用量域：Claude 读 macOS 钥匙串 `Claude Code-credentials`（`security find-generic-password -s ... -w`）或 `~/.claude/.credentials.json` 的 OAuth access token → 官方 OAuth usage 接口（5h / 7d 窗口利用率、重置时间）；Codex 读 `~/.codex/auth.json` 的 access token + account id → ChatGPT 后端用量接口（主/次窗口 `used_percent`、`reset_at`）。接口形状以本机 CLI 实际请求为准（抓包/源码核对），字段不符时该 provider 返回 `unavailable` |
+| 安全   | token 只在 Runtime 内存中使用，绝不写日志、不进 SQLite、不发给前端；`GET /api/usage` 只返回百分比与时间；仅 loopback                                                                                                                                                                                                                                                                                                                               |
+| 刷新   | 启动后 10s 首查，之后每 5 分钟；`POST /api/usage/refresh`；401/网络错误 → 该 provider `status:"error"` 并带 `reason` 代码（`expired_credentials` / `unauthorized` / `forbidden` / `rate_limited` / `network` / `parse` / `no_windows` / `unreadable_credentials` / `provider_error`，2026-09-15 补），胶囊显示灰色横线，卡片按代码给一句可操作的说明；上游文本只进日志                                                                             |
+| UI     | `Claude 5h 67% · 7d 72% │ Codex 5h 9%`：provider 名 + 迷你进度条（≥80% 警告色，≥95% 危险色）+ 百分比；点击 Popover：每个窗口一行（名称、进度、重置倒计时）、刷新按钮；设置 → 界面「显示用量」开关（默认开）                                                                                                                                                                                                                                        |
+| shared | `usageSchema {providers: [{id, status:"ok"                                                                                                                                                                                                                                                                                                                                                                                                         | "unavailable" | "error", windows:[{key:"5h" | "7d" | "primary" | "secondary", label, usedPercent, resetsAt}], fetchedAt}]}` |
 
 ## 20. 用户反馈第二轮（2026-09-04）：比例、左侧栏、首页
 
@@ -901,7 +901,7 @@ wheel（终端体，passive:false）
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 缩放手势 | 触控板捏合 → 缩放；⌘/Ctrl + 滚轮 → 以光标为中心缩放；普通滚轮 → 平移（Shift 横向）；空格 + 拖拽 → 平移；⌘0 = 100%、⌘1 = 适应（maxZoom 1）、⌘= / ⌘- 步进 ×1.2；范围 0.1–3；缩放动画 120ms；Dock 显示当前百分比                                                                                                                                                                                                                                                                                                 |
 | 任意互连 | 所有节点类型都有左 `link-in` / 右 `link-out` 把手（group 除外）；`isValidConnection` 只禁止自连与重复；`addEdge` 不再强制便签为源；渲染：源或目标之一为 terminal 且另一方为内容节点 → 单向箭头指向 terminal（内容 → Agent）；terminal↔terminal → 双向；内容↔内容 → 无箭头细线（仅分组语义）。标签按源类型：便签 / 图片 / 画图 / 文件 / 目录 / 网页 / 差异 / 上下文                                                                                                                                          |
-| 内容可读 | Runtime `collab/context_link.rs` 扩展来源：`editor` → 文件内容（≤ 200 KB，超出截断并说明）；`files` → 目录列表（≤ 500 项）；`image` → 若有 `sourcePath` 给路径，否则把 data URL 落盘到 `<workspace>/.armadra/images/<nodeId>.png` 并给路径；`draw` → 导出 PNG 到 `<workspace>/.armadra/drawings/<nodeId>.png` 并给路径；`browser` → URL；`diff` → 当前 diff 文本（≤ 200 KB）；`list` 动词返回每个链接节点的类型与可读方式；SKILL.md 同步说明                                                                  |
+| 内容可读 | core 的协作域上下文链接逻辑扩展来源：`editor` → 文件内容（≤ 200 KB，超出截断并说明）；`files` → 目录列表（≤ 500 项）；`image` → 若有 `sourcePath` 给路径，否则把 data URL 落盘到 `<workspace>/.armadra/images/<nodeId>.png` 并给路径；`draw` → 导出 PNG 到 `<workspace>/.armadra/drawings/<nodeId>.png` 并给路径；`browser` → URL；`diff` → 当前 diff 文本（≤ 200 KB）；`list` 动词返回每个链接节点的类型与可读方式；SKILL.md 同步说明                                                                        |
 | 画图节点 | 新类型 `draw`（默认 480×360，最小 240×180）：白板底（浅色 `#fffdf7` / 深色 `--surface-deep`），工具条 4 钮（笔 / 橡皮 / 颜色 7 色 / 撤销）放在节点头部右侧（不改 body 高度）；笔迹 `{points:[x,y,p?][], color, width}` 存于 `data.strokes`（上限 500 笔 / 20000 点，世界坐标为节点内像素）；渲染用 `<canvas>`，指针事件用 `nodrag`；`POST /api/workspaces/{id}/nodes/{nodeId}/export-png` 由前端把 canvas `toDataURL` 上传，Runtime 落盘到 `.armadra/drawings/` 供 Agent 读取；迁移 0009 无需（data 是 JSON） |
 | SSH      | 设置 → 新分组「SSH」：主机列表（名称、host、user、port、identity 文件路径、额外参数），存 `settings.json` `ssh.hosts[]`（Runtime `GET/PATCH /api/settings` 已支持）；添加菜单 / 命令面板出现「SSH 终端 → <主机>」；创建 terminal 节点 `data.ssh = {hostId}`，Runtime 创建会话时命令为 `ssh -t -o ServerAliveInterval=30 [-p port] [-i identity] user@host`（在本地 tmux 内运行，断线后节点显示已退出，可重新运行）；节点头部显示 `⇅ host` chip；不做远端文件与远端 hook（后续）                               |
 
