@@ -8,6 +8,7 @@ import {
   terminalWebSocketUrl,
   workspaceEventsUrl,
 } from "./client";
+import { translate } from "../i18n";
 
 const timestamp = "2026-08-13T00:00:00.000Z";
 const workspaceId = "019ff7d1-0d12-7421-833d-2c5e8d64ed21";
@@ -78,11 +79,24 @@ describe("Runtime 连接失败", () => {
     expect(error.message).not.toContain("Load failed");
   });
 
-  it("非 2xx 时抛 Runtime 给的消息而不是状态码", async () => {
+  it("非 2xx 时按 code 取界面文案，core 的原话留在 coreMessage 上", async () => {
     stubJson({ code: "conflict", message: "画布已被其他窗口修改" }, false, 409);
 
+    const error = await runtimeApi
+      .loadBoard(workspaceId, boardId)
+      .catch((cause: unknown) => cause);
+    expect(error).toBeInstanceOf(RuntimeRequestError);
+    const failure = error as RuntimeRequestError;
+    // core 的 message 通篇中文，英文界面上原样透出去就是一句中文。
+    expect(failure.message).toBe(translate("zh-CN", "error.conflict"));
+    expect(failure.coreMessage).toBe("画布已被其他窗口修改");
+    expect(failure.status).toBe(409);
+  });
+
+  it("认不出的 code（和根本没有 code）才落回 core 那句原话", async () => {
+    stubJson({ code: "some_new_code", message: "core 自己的说法" }, false, 400);
     await expect(runtimeApi.loadBoard(workspaceId, boardId)).rejects.toThrow(
-      "画布已被其他窗口修改",
+      "core 自己的说法",
     );
   });
 });
@@ -816,8 +830,9 @@ describe("Git execution permission errors", () => {
       expect((error as Error).message).not.toBe("Internal Git stage label");
       expect((error as Error).message).toMatch(/工作区|Workspace/);
     }
-    expect(new RuntimeRequestError(403, "plain", "forbidden").message).toBe(
-      "plain",
-    );
+    // `forbidden` 在映射表里，所以原话让位给那句界面文案；原话没有丢。
+    const refused = new RuntimeRequestError(403, "plain", "forbidden");
+    expect(refused.message).toBe(translate("zh-CN", "error.forbidden"));
+    expect(refused.coreMessage).toBe("plain");
   });
 });

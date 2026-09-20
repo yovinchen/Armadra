@@ -42,13 +42,61 @@ export class RuntimeConnectionError extends Error {
 }
 
 /**
- * Runtime 回了非 2xx。消息用 Runtime 给的那句（调用方直接 toast），
- * `status` / `code` 留给需要分支的场景——例如保存冲突要提示重新加载，
+ * core 的错误码 → 界面文案（`i18n/errors.ts`）。
+ *
+ * core 的 `message` 是中文，而它不经过 i18n——英文界面上原样透出去就是一句
+ * 中文。所以认得出的码一律取这张表；认不出的才落到 `message`，那是最后一道
+ * 兜底而不是常态。
+ *
+ * 大写那几个是 GitHub 面自己的码（`api/github.ts` 另有一层按用途的分类，
+ * 那一层不受影响：它读的是 `code`，不是 `message`）。
+ */
+const MESSAGE_BY_CODE: Readonly<Record<string, string>> = {
+  not_found: "error.notFound",
+  forbidden: "error.forbidden",
+  bad_request: "error.badRequest",
+  method_not_allowed: "error.methodNotAllowed",
+  conflict: "error.conflict",
+  payload_too_large: "error.payloadTooLarge",
+  unavailable: "error.unavailable",
+  not_implemented: "error.notImplemented",
+  internal: "error.internal",
+  unsupported: "error.unsupported",
+  // 这一条有自己的那句话：要用户做的事不是「去装点什么」，是「工作区在别的
+  // 机器上」——切换执行主机能解决它。
+  unsupported_on_remote: "error.unsupportedOnRemote",
+  git_execution_required: "gitRepo.executionRequired",
+  UNAUTHENTICATED: "error.unauthenticated",
+  PERMISSION_DENIED: "error.permissionDenied",
+  NOT_FOUND: "error.notFound",
+  CONFLICT: "error.conflict",
+  INVALID_ARGUMENT: "error.badRequest",
+  RESOURCE_EXHAUSTED: "error.rateLimited",
+  UNSUPPORTED: "error.unsupported",
+  UNKNOWN_OUTCOME: "error.unknownOutcome",
+};
+
+/** 认得出这个码就是那句话，认不出就是 core 给的原话。 */
+export function localizedFailure(code: string | undefined, fallback: string) {
+  const key = code === undefined ? undefined : MESSAGE_BY_CODE[code];
+  return key === undefined ? fallback : t(key);
+}
+
+/**
+ * Runtime 回了非 2xx。`message` 按 `code` 取界面文案，认不出的码才用 Runtime
+ * 那句；`status` / `code` 留给需要分支的场景——例如保存冲突要提示重新加载，
  * 而不是笼统的"失败"。
  */
 export class RuntimeRequestError extends Error {
   readonly status: number;
   readonly code?: string;
+  /**
+   * core 说的那句原话。
+   *
+   * `message` 被换成本地化的那句之后，具体度是有损失的：`bad_request` 的原话
+   * 常常说得出是哪个字段。原话留在这里而不是丢掉，给要细节的日志与调用点。
+   */
+  readonly coreMessage: string;
   /**
    * 原样的错误 body。有些拒绝不是一句话能表达的——执行主机改绑的 409 里带着
    * 两边的指纹或者还占着旧主机的东西，调用方要拿这些才说得出人能做什么。
@@ -57,14 +105,11 @@ export class RuntimeRequestError extends Error {
   readonly body?: unknown;
 
   constructor(status: number, message: string, code?: string, body?: unknown) {
-    super(
-      code === "git_execution_required"
-        ? t("gitRepo.executionRequired")
-        : message,
-    );
+    super(localizedFailure(code, message));
     this.name = "RuntimeRequestError";
     this.status = status;
     this.code = code;
+    this.coreMessage = message;
     this.body = body;
   }
 }

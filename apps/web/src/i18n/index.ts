@@ -7,6 +7,7 @@ import { canvas } from "./canvas";
 import { collab } from "./collab";
 import { commands } from "./commands";
 import { executionHosts } from "./execution-hosts";
+import { errors } from "./errors";
 import { explorer } from "./explorer";
 import { format } from "./format";
 import { meta } from "./meta";
@@ -103,6 +104,7 @@ export const MESSAGE_MODULES = {
   updates,
   usage,
   desktop,
+  errors,
 } satisfies Record<string, MessageModule>;
 
 const modules: MessageModule[] = Object.values(MESSAGE_MODULES);
