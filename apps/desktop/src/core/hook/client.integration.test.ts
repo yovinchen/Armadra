@@ -18,13 +18,14 @@ import { pendingDir } from "../paths";
  * that answered 500 to every report would look identical to one that worked.
  * This drives the binary itself.
  *
- * The binary is optional: a checkout that has not built it skips rather than
- * fails, because what is being asserted is the core's half of the contract and
- * not which toolchains happen to be installed here.
+ * The bundle is optional: a checkout that has not run the desktop build skips
+ * rather than fails, because what is being asserted is the core's half of the
+ * contract and not whether `out/` happens to exist here.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLIENT = resolve(here, "../../../../../target/debug/armadra-hook");
+/** The TypeScript client as `electron-vite build` bundles it (`out/cli/`). */
+const CLIENT = resolve(here, "../../../out/cli/armadra-hook.js");
 
 function haveClient(): boolean {
   try {
@@ -72,7 +73,7 @@ function run(
   input?: string,
 ): Promise<{ status: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(CLIENT, [...args], { env });
+    const child = spawn(process.execPath, [CLIENT, ...args], { env });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");

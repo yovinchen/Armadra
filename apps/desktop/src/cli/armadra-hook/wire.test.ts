@@ -23,15 +23,6 @@ import { build } from "vite";
 
 const here = import.meta.dirname;
 const desktop = path.resolve(here, "../../..");
-const repository = path.resolve(desktop, "../..");
-// The Rust client's location follows `CARGO_TARGET_DIR` like every cargo
-// invocation in this repository does; a stale binary in the default target
-// directory would otherwise be compared against the current wire format.
-const rustClient = path.join(
-  process.env.CARGO_TARGET_DIR ?? path.join(repository, "target"),
-  "debug/armadra-hook",
-);
-const hasRustClient = fs.existsSync(rustClient);
 
 let bundle = "";
 const temporaries: string[] = [];
@@ -266,14 +257,6 @@ function run(
   stdin: string,
 ): Promise<Output> {
   return runProgram([process.execPath, bundle], args, env, stdin);
-}
-
-function runRust(
-  args: string[],
-  env: Record<string, string>,
-  stdin: string,
-): Promise<Output> {
-  return runProgram([rustClient], args, env, stdin);
 }
 
 /* ---------------------------------- cases --------------------------------- */
@@ -648,158 +631,4 @@ describe("permission wait", () => {
     ).toBe("");
     server.close();
   }, 30_000);
-});
-
-/* ------------------------- byte-for-byte vs. Rust ------------------------- */
-
-describe.skipIf(!hasRustClient)("matches the Rust client byte for byte", () => {
-  it("prints the same usage and version", async () => {
-    for (const args of [
-      ["--help"],
-      ["-h"],
-      ["help"],
-      ["--version"],
-      ["-V"],
-      [],
-    ]) {
-      const [ts, rust] = await Promise.all([
-        run(args, {}, ""),
-        runRust(args, {}, ""),
-      ]);
-      expect(ts.stdout, args.join(" ")).toBe(rust.stdout);
-      expect(ts.stderr, args.join(" ")).toBe(rust.stderr);
-      expect(ts.code, args.join(" ")).toBe(rust.code);
-    }
-  });
-
-  it("prints the same usage errors", async () => {
-    const cases: string[][] = [
-      ["context"],
-      ["context", "nope"],
-      ["context", "summary", "--bogus", "x"],
-      ["context", "summary", "-n", "abc"],
-      ["canvas"],
-      ["canvas", "--oops"],
-      ["canvas", "list", "positional"],
-      ["browser"],
-      ["browser", "nope"],
-      ["-x"],
-    ];
-    for (const args of cases) {
-      const [ts, rust] = await Promise.all([
-        run(args, {}, ""),
-        runRust(args, {}, ""),
-      ]);
-      expect(ts.stderr, args.join(" ")).toBe(rust.stderr);
-      expect(ts.stdout, args.join(" ")).toBe(rust.stdout);
-      expect(ts.code, args.join(" ")).toBe(rust.code);
-    }
-  });
-
-  it("sends the same bytes for a hook report, a canvas call and a context read", async () => {
-    const cases: { args: string[]; stdin: string; response: string }[] = [
-      {
-        args: ["claude"],
-        stdin:
-          '{"hook_event_name":"PreToolUse","tool_name":"Bash","n":1,"f":1.5}',
-        response: "HTTP/1.1 204 No Content\r\n\r\n",
-      },
-      {
-        args: ["canvas", "link", "--to", "a", "--to", "b", "--dry-run"],
-        stdin: "",
-        response:
-          "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nok\n",
-      },
-      {
-        args: ["context", "list"],
-        stdin: "",
-        response:
-          "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 26\r\n\r\n" +
-          '{"message":"two nodes"}\r\n\r\n',
-      },
-      {
-        // `-n` is documented for `browser read` but the flag parser only ever
-        // took `--`-prefixed tokens; both clients reject it identically, which
-        // the usage-error case above covers.
-        args: ["browser", "read", "--mode", "text", "--lines", "5"],
-        stdin: "",
-        response:
-          "HTTP/1.1 409 Conflict\r\nContent-Type: application/json\r\nContent-Length: 34\r\n\r\n" +
-          '{"error":"LEASE_HELD_BY_HUMAN"}\r\n\r\n',
-      },
-    ];
-    for (const { args, stdin, response } of cases) {
-      const label = args.join(" ");
-      const tsDirectory = tempdir();
-      const tsServer = await serve(response);
-      const tsEndpoint = writeEndpointFile(tsDirectory, tsServer.port);
-      const rustDirectory = tempdir();
-      const rustServer = await serve(response);
-      const rustEndpoint = writeEndpointFile(rustDirectory, rustServer.port);
-
-      const tsOutput = await run(
-        args,
-        { ARMADRA_NODE_ID: "node-7", ARMADRA_ENDPOINT_FILE: tsEndpoint },
-        stdin,
-      );
-      const rustOutput = await runRust(
-        args,
-        { ARMADRA_NODE_ID: "node-7", ARMADRA_ENDPOINT_FILE: rustEndpoint },
-        stdin,
-      );
-      expect(tsOutput.stdout, label).toBe(rustOutput.stdout);
-      expect(tsOutput.stderr, label).toBe(rustOutput.stderr);
-      expect(tsOutput.code, label).toBe(rustOutput.code);
-
-      const tsCaptured = await tsServer.request().catch(() => {
-        throw new Error(
-          `${label}: the TypeScript client sent nothing (${JSON.stringify(tsOutput)})`,
-        );
-      });
-      const rustCaptured = await rustServer.request().catch(() => {
-        throw new Error(
-          `${label}: the Rust client sent nothing (${JSON.stringify(rustOutput)})`,
-        );
-      });
-      expect(tsCaptured.head, label).toBe(rustCaptured.head);
-      expect(tsCaptured.body, label).toBe(rustCaptured.body);
-      tsServer.close();
-      rustServer.close();
-    }
-  }, 60_000);
-
-  it("prints the same doctor report", async () => {
-    const directory = tempdir();
-    const server = await serve(
-      "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 2\r\n\r\nok",
-    );
-    const endpoint = writeEndpointFile(directory, server.port);
-    const environment = {
-      ARMADRA_NODE_ID: "node-7",
-      ARMADRA_ENDPOINT_FILE: endpoint,
-    };
-    const [ts, rust] = await Promise.all([
-      run(["doctor"], environment, ""),
-      runRust(["doctor"], environment, ""),
-    ]);
-    expect(ts.stdout).toBe(rust.stdout);
-    expect(ts.stderr).toBe(rust.stderr);
-    expect(ts.code).toBe(rust.code);
-    server.close();
-  });
-
-  it("prints the same doctor report with nothing configured", async () => {
-    const [ts, rust] = await Promise.all([
-      run(["doctor"], {}, ""),
-      runRust(["doctor"], {}, ""),
-    ]);
-    // The isolated data directory differs per invocation, so compare the
-    // shape: every line but the candidate list is identical text.
-    const shape = (text: string): string[] =>
-      text
-        .split("\n")
-        .map((line) => line.replace(/\/[^ ,]*armadra[^ ,]*/gi, "<dir>"));
-    expect(shape(ts.stdout)).toEqual(shape(rust.stdout));
-    expect(ts.code).toBe(rust.code);
-  });
 });
