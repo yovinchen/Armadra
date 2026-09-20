@@ -27,7 +27,8 @@ export interface WebviewElement extends HTMLElement {
   /**
    * 这一帧的位图（Electron `WebviewTag.capturePage`）。
    *
-   * 回收前拍一张，回收后的占位与重新加载期间都用它。**不经 CDP**：
+   * 在**可见且加载完**的时候拍一张，回收后的占位与回来路上的重新加载都用
+   * 它——隐藏之后再拍只会拿到空图（`WebviewGuest.tsx` 写了实测）。**不经 CDP**：
    * `capturePage` 是 webview 元素自己的方法，不 attach debugger，也就不碰
    * 「能力关闭时 attach 次数为零」那条验收闸门。
    *
@@ -52,6 +53,14 @@ export interface WebviewImage {
  * 一眼就知道那不是活着的页面。
  */
 export const SNAPSHOT_WIDTH = 320;
+
+/**
+ * 从「加载完」到拍照之间等多久。
+ *
+ * `did-stop-loading` 早于首帧合成，紧接着拍到的是上一页或者一张空图。半秒
+ * 是肉眼上仍然算「刚才那一页」、又足够一次首屏合成的量。
+ */
+export const SNAPSHOT_DELAY_MS = 500;
 
 /**
  * PURE. 位图 → data URL，拿不到就空串。

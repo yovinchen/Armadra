@@ -18,6 +18,7 @@ import type {
   WebviewNavigationEvent,
 } from "./webview";
 import {
+  SNAPSHOT_DELAY_MS,
   allowGuestNavigation,
   failureKind,
   failureOf,
@@ -328,34 +329,44 @@ export function WebviewGuest({
 
   /* -------------------------------- 回收 --------------------------------- */
   /**
-   * 回收前那一帧的缩略图。
+   * 这一页的缩略图。回收后的占位与回来路上的重新加载都贴它。
    *
    * 回收本身是对的，但「回来时看到一块白，等几秒钟才是原来那一页」不是。
-   * 隐藏的那一刻拍一张，占位与重新加载期间都贴它，人看到的就是自己离开时
-   * 的那一页，只是糊的。
    *
-   * 拍照挂在「变成隐藏」这一拍上，不是回收那一刻：回收发生在五分钟后，那
-   * 时候 guest 早就停止绘制，`capturePage` 回的是一张空图。
+   * ## 为什么在**可见且加载完**的时候拍，而不是变成隐藏的那一刻
+   *
+   * 试过后者，真机上拿到的是空图：池把整个节点标成 `display:none` 与这个
+   * 组件收到 `hidden` 是同一拍，`capturePage` 那时候已经没有在绘制的表面可
+   * 读了（实测 `snapshots: 0`）。所以拍照要赶在还看得见的时候。
+   *
+   * 每加载完一页拍一张，不是按秒轮询：一次 `capturePage` 是一次合成器回读，
+   * 而一张糊到 320 px 的占位图不值得为它每秒付一次。代价是人滚动过之后离
+   * 开，回来看到的缩略图停在页首——对一张模糊的占位图来说，这个误差不影响
+   * 它要回答的那个问题（「我刚才在哪一页」）。
    */
   const [snapshot, setSnapshot] = React.useState("");
   React.useEffect(() => {
-    if (!hidden || discarded) return;
+    if (hidden || discarded || tab.loading) return;
     const guest = ref.current;
     if (!guest || typeof guest.capturePage !== "function") return;
     let live = true;
-    void guestCall(() => guest.capturePage!())
-      ?.then((image) => {
-        const url = snapshotDataUrl(image);
-        if (live && url) setSnapshot(url);
-      })
-      .catch(() => {
-        // 拍不到就没有占位图，节点退回纯文字提示。这不值得报错：
-        // 一个已经在隐藏路上的 guest 拒绝截屏是正常的竞态。
-      });
+    // `did-stop-loading` 之后还要再等一拍：那个事件早于首帧合成，紧接着拍
+    // 到的是上一页，或者干脆是空的。
+    const timer = setTimeout(() => {
+      void guestCall(() => guest.capturePage!())
+        ?.then((image) => {
+          const url = snapshotDataUrl(image);
+          if (live && url) setSnapshot(url);
+        })
+        .catch(() => {
+          // 拍不到就没有占位图，节点退回纯文字提示。不值得报错。
+        });
+    }, SNAPSHOT_DELAY_MS);
     return () => {
       live = false;
+      clearTimeout(timer);
     };
-  }, [hidden, discarded]);
+  }, [hidden, discarded, tab.loading, tab.address]);
 
   /**
    * 正在从回收里回来。缩略图在这段时间里盖着还没画出来的页面。
