@@ -4,6 +4,7 @@ import {
   statSync,
   symlinkSync,
   writeFileSync,
+  rmSync,
 } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -154,6 +155,22 @@ describe("managing workspace entries", () => {
     expect(
       statSync(
         join(root.path, TRASH_DIRECTORY, entry.id, "payload", "old/deep/x.txt"),
+      ).isFile(),
+    ).toBe(true);
+  });
+
+  it("names the missing parent when the original location is gone", () => {
+    mkdirSync(join(root.path, "gone"));
+    writeFileSync(join(root.path, "gone/note.txt"), "n");
+    const entry = trashEntry(root.path, "gone/note.txt");
+    rmSync(join(root.path, "gone"), { recursive: true });
+    const refused = refusal(() => restoreTrash(root.path, entry.id));
+    expect(refused.status).toBe(409);
+    expect(refused.message).toContain("parent folder no longer exists");
+    // The entry is still in the trash, untouched.
+    expect(
+      statSync(
+        join(root.path, TRASH_DIRECTORY, entry.id, "payload", "note.txt"),
       ).isFile(),
     ).toBe(true);
   });

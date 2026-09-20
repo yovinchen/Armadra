@@ -12,7 +12,12 @@ import {
 } from "node:fs";
 import { join as pathJoin } from "node:path";
 import { canonicalDirectory } from "../workspaces/roots";
-import { badRequest, conflict, notFound } from "../workspaces/support";
+import {
+  DomainError,
+  badRequest,
+  conflict,
+  notFound,
+} from "../workspaces/support";
 import {
   type EntryKind,
   MANAGED_DIRECTORY,
@@ -207,7 +212,23 @@ export function restoreTrash(root: string, id: string): EntryResult {
   const slot = pathJoin(base, TRASH_DIRECTORY, id);
   const entry = readManifest(pathJoin(slot, MANIFEST));
   if (entry === undefined) throw notFound("Unknown deleted entry");
-  const { relative, path } = resolveTarget(base, entry.originalPath);
+  let target: { relative: string; path: string };
+  try {
+    target = resolveTarget(base, entry.originalPath);
+  } catch (error) {
+    // The entry is still in the trash; it is the place it came from that is
+    // gone. Said plainly, or the user reads "does not exist" as "lost".
+    if (
+      error instanceof DomainError &&
+      (error.status === 404 || /parent directory/i.test(error.message))
+    ) {
+      throw conflict(
+        `The original location's parent folder no longer exists (${entry.originalPath}); recreate it, then restore`,
+      );
+    }
+    throw error;
+  }
+  const { relative, path } = target;
   refuseReserved(relative);
   if (symlinkMetadata(path) !== undefined) {
     throw conflict("Something else already occupies the original location");

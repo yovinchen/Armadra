@@ -139,7 +139,12 @@ export async function commit(
     const stderr = output.stderr.toString("utf8").trim();
     const detail =
       stderr === "" ? output.stdout.toString("utf8").trim() : stderr;
-    // "nothing to commit" is a user error, not a runtime failure.
+    // "nothing to commit" is a user error, not a runtime failure — and git's
+    // own wording for it is a screenful of porcelain (the whole untracked list
+    // included), so it gets one sentence of ours instead.
+    if (/nothing (added )?to commit|no changes added to commit/i.test(detail)) {
+      throw badRequest("Nothing is staged to commit");
+    }
     throw badRequest(`Git could not commit: ${sanitize(detail)}`);
   }
   const summary = output.stdout.toString("utf8").trim();

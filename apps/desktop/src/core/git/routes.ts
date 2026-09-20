@@ -276,8 +276,8 @@ export function installRoutes(deps: GitRouteDeps): void {
     "GET",
     "/api/workspaces/{workspaceId}/git/message/providers",
     async (match) => {
-      const workspace = readWorkspace(deps, match);
-      requireExecution(workspace.permissions.execute, "AI provider inspection");
+      // Listing providers runs nothing in the workspace; reading it is enough.
+      readWorkspace(deps, match);
       return { status: 200, body: await providers() };
     },
   );

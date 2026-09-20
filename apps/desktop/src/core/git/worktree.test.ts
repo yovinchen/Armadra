@@ -388,6 +388,19 @@ describe("conflict markers", () => {
 });
 
 describe("commit", () => {
+  it("says in one sentence that nothing is staged, not git's whole porcelain", async () => {
+    const repo = repository("commit-nothing");
+    repo.write("seed.txt", "seed\n");
+    repo.commit("seed");
+    repo.write("stray.txt", "untracked\n");
+    await expect(
+      commit(repo.path, ".", "nothing here", undefined, undefined),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: "Nothing is staged to commit",
+    });
+  });
+
   it("commits the named paths and reports the short hash", async () => {
     const repo = repository("commit");
     repo.write("one.txt", "one\n");
@@ -414,13 +427,6 @@ describe("commit", () => {
     await expect(
       commit(repo.path, ".", "x".repeat(10_001), undefined, undefined),
     ).rejects.toThrow("Commit message is invalid");
-  });
-
-  it("reports nothing-to-commit as the caller's mistake", async () => {
-    const repo = repository("commit-empty");
-    await expect(
-      commit(repo.path, ".", "nothing", undefined, undefined),
-    ).rejects.toThrow("Git could not commit");
   });
 
   it("amends only the reviewed commit", async () => {
