@@ -309,7 +309,8 @@ AgentEvent {
 
 - `link` 边即"上下文链接"。前端每次连线变化把每个节点的链接文档 `{nodeId, links:[{id,title,kind}]}` PUT 到 Runtime；Runtime 存 `context_links` 表。
 - Skill：Runtime 把 `~/.claude/skills/armadra-linked-context/SKILL.md` 写入（内容自撰），非 claude 的 CLI 以标记块 `<!-- armadra:linked-context:start/end -->` 合并到 `~/.codex/AGENTS.md`、`~/.gemini/GEMINI.md`、opencode `AGENTS.md`。Skill 指示 Agent 运行 `armadra-hook context <verb> --node <id|title>`。
-- 动词：`list` / `summary [-n N]` / `transcript` / `terminal`，POST `/context-link/<verb>`，回复 `text/plain` 散文。
+- 动词：`list` / `summary` / `transcript` / `terminal`，POST `/context-link/<verb>`，回复 `text/plain` 散文。
+  这四个动词各自的读取上限、增量游标（`--since`）、每条连线的读取预算与脱敏，见 `docs/design/agent-delivery.md` §13：本节写的是当初的形状，`summary` 那一档此后换成了真正的摘要，`-n` 只留给 `transcript` 与 `terminal`。
 - 授权：**只能读自己链接文档里列出的节点**，持有 bearer 也读不到未链接节点。
 - 数据来源：claude 用 hook 上报的 `transcript_path`；codex/gemini 按 sessionId 在各自目录定位；opencode 用 `opencode export <id>`；`terminal` 动词读 PTY 的屏幕快照（阶段二先用最近 N 行回放，§10 的 vt100 快照落地后换成真实屏幕）；sticky 读实时文本。渲染：最近 N 行摘要、工具调用缩写。转录读取上限 5 MiB 尾部；不做 LLM 摘要。
 

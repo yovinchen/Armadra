@@ -514,6 +514,8 @@ CREATE UNIQUE INDEX agent_send_queue_key
 | 单条长度     | `2000` 个字符（与 `MAX_BODY_CHARS` 同值）       | 超了 `BODY_TOO_LONG`：大产物写文件发路径                        |
 | 队列         | 每目标 16 条、TTL 5 分钟（§4.6）                |                                                                 |
 | 串行         | 同一目标同时只有一条在投                        |                                                                 |
+| 读取（分钟） | 同一「读者 → 目标」每分钟最多读走 `64 KB`       | `context_reads` 的和；超了回 `RATE_LIMITED` + `retryAfterMs`（§13.4） |
+| 读取（小时） | 同上，每小时最多 `1 MB`                         | 同上                                                            |
 
 来源链的形状：`trail = ["<发起者 id>", "<它的上游 id>", …]`，投递时把目标 id 追加进去带给下一跳。`via:` 行在信封里用**名字**渲染（§2.4），一个人看到 `via: planner → reviewer → codex-1` 就知道这条指令从哪里来的。
 
@@ -728,6 +730,15 @@ export const NODE_MIN_SIZE: Record<CanvasNodeType, Size>;
 | 验收 | Agent 建的终端节点与手动建的**肉眼同尺寸**；建完相机跟过去、节点选中、键盘焦点在那个终端里                                                                                                                                                                                                         |
 | 风险 | core 依赖 `@armadra/shared` 的装配约束；缓解见 §9.1 的退路                                                                                                                                                                                                                                         |
 
+### 阶段 C+：上下文读取预算（§13）
+
+| 项   | 内容                                                                                                                                                                            |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 文件 | 见 §13.9                                                                                                                                                                       |
+| 测试 | 见 §13.9                                                                                                                                                                       |
+| 验收 | 同一个 Agent 连着三个节点各读一次，进它上下文的是三份 ≤2 KB 的摘要而不是十几万 token；第二次 `--since` 只拿到新的那几条；对方 `.env` 里的密钥读过来是 `[已脱敏]`；节点头数得出被读了几次 |
+| 风险 | 摘要太薄，读者只好接着读原文（等于没省）；缓解：摘要固定六项，其中「碰过的文件」与「最后一条助手回复」是实测里最常被追问的两样                                                    |
+
 阶段之间的依赖：A 独立（可并行）；C 依赖 B；D 依赖 C；E 独立。
 
 ## §12 不做的与开放问题
@@ -751,3 +762,110 @@ export const NODE_MIN_SIZE: Record<CanvasNodeType, Size>;
 | Q4  | 队列在 core 重启后恢复吗                                                                         | 表在库里所以行还在；但恢复出队要等目标报一条新的 `idle`，`restored` 的 `idle` 不算（§4.1）                                     |
 | Q5  | 名字要不要跟着节点跨工作空间移动                                                                 | 跟着走，冲突就拒绝移动（§2.5 第 3 条）。是否改为「自动加后缀」留待实测                                                         |
 | Q6  | `send` 的正文上限 2000 字符够不够传一份任务说明                                                  | 够；不够就写文件发路径，这是 `post` 已经验证过的用法                                                                           |
+
+## §13 上下文读取预算（阶段 C+）
+
+`send` 解决的是「怎么让对方现在开一轮」。这一节解决的是另一半：**一个 Agent 去读别人，代价由谁付**。
+
+### §13.0 问题
+
+到 0024 为止，跨连线的读取是无记名、无上限、无记忆的：
+
+- `context summary` 名不副实——它给的是对方转录最近 40 条**原文**，上限 200 KB；
+- `context transcript` 给整份（尾 5 MB，渲染后 200 KB），而且 `tool_result` 是全文；
+- 没有增量：同一个节点读第二次，拿到的是同一段话再来一遍；
+- 没有节流：一个 Agent 连着三个节点各读一次，十几万 token 就进了它的上下文；
+- 没有脱敏：对方的 `.env`、`Authorization` 头、`export OPENAI_API_KEY=…` 原样过来；
+- 没有痕迹：用户在界面上看不出自己的节点被谁读过。
+
+七条改动，全部落在 `apps/desktop/src/core/collab/`，通道设计一个字不动。
+
+### §13.1 `summary` 变成真正的摘要
+
+新模块 `collab/transcript-summary.ts`，纯函数，目标 ≤ **2 KB**。内容固定六项：
+
+| 项           | 从哪来                                                            |
+| ------------ | ----------------------------------------------------------------- |
+| 名字与状态   | `node_handles` + `agent/target-state.ts` 的五态                   |
+| 最后人类提示 | 转录里最后一条 `user`，截 500 字                                  |
+| 最后助手回复 | 转录里最后一条 `assistant`，截 500 字                             |
+| 碰过的文件   | `tool_use` 参数的 `file_path` / `path`，去重保序，最多 20 条      |
+| 工具调用次数 | 认出来的 `tool_use` / `function_call` 计数                        |
+| 有没有待审批 | `agent/approvals.ts::hasOpenApproval`                             |
+
+`summary` **不再接受 `-n`**：条数是原文读取的参数，一个还能调大的「摘要」只是原文换了个名字。
+
+### §13.2 原文读取三重收口
+
+| 旋钮         | 值                                                         |
+| ------------ | ---------------------------------------------------------- |
+| 条数         | 默认 **20** 条（`-n` 可改）                                |
+| 每条         | 用户/助手各截 **2 KB**                                     |
+| `tool_result` | 只留工具名、字节数与首行（工具名由前文 `tool_use` 的 id 对上） |
+| 单次总量     | **32 KB**                                                  |
+| 抬高         | 显式 `--full --max-kb <n>`，上限 **128**                   |
+
+回复头部写明「本次约 N KB ≈ M token」，按 **3.5 字符/token** 估——一个故意粗的量级，给一个假装精确的数会被当成预算来用。
+
+### §13.3 增量游标 `--since`
+
+`transcript --since` 只回上次读过之后的新条目。游标按 **(读者节点 id, 目标节点 id)** 记，内容是**转录文件路径 + 已读字节偏移**：路径是判据的一半，对方换了 session 就换了文件，那时候偏移指向的是另一段话，只能从头。
+
+游标只走到**真的交出去了的**那一条，不是文件尾：没给出去的条目下次还要给。
+
+### §13.4 每条连线的读取预算
+
+| 闸     | 值             | 落点                                          |
+| ------ | -------------- | --------------------------------------------- |
+| 每分钟 | **64 KB**      | `context_reads` 的和；超了 `RATE_LIMITED`(429) |
+| 每小时 | **1 MB**       | 同上，回执带 `retryAfterMs`                    |
+
+按「读者 → 目标」这一对算，不按目标算：三个 Agent 各读同一个节点一次是正常协作，一个 Agent 读三十次不是。落库而不是落内存（与 `send-limits.ts` 的取舍相反），因为一次读取的代价是读者上下文里的 token，而那个上下文活过重启。
+
+拒绝的那句话必须指出出路（`summary` 是常数大小、`--since` 只给新的），否则模型只会退避后原样重试同样大的读取。
+
+### §13.5 脱敏与审计
+
+跨 Agent 读到的每一段（摘要 / 原文 / 终端画面 / 文件内容）出门前过 `collab/redact.ts`：`sk-…`、`ghp_/gho_/github_pat_`、`Bearer <token>`、`AKIA…`、`xox[abp]-…`、`-----BEGIN … PRIVATE KEY-----` 块，以及 `*_TOKEN|*_SECRET|*_KEY|PASSWORD` 且值长于 16 的 `.env` 风格赋值，一律换成 `[已脱敏]`。表驱动，宁可漏也不错杀：熵检测会把哈希与 base64 全判成密钥，把转录切得读不成句子。
+
+每次读取写一行 `context_reads`。`GET /api/nodes/{id}/context-reads` 回最近 N 条与总次数，供节点头显示「被读取 N 次」。
+
+### §13.6 节点级开关
+
+`data.agent.contextShare`：`"full"`（缺省）或 `"summary"`。为 `summary` 时 `transcript` / `terminal` 与内容节点的文件读取一律 `FORBIDDEN`(403)，只剩 `summary`——一个在做敏感事情的节点应该能在不下线的前提下只交出「我在干什么」。
+
+### §13.7 终端画面
+
+默认仍是 40 行，上限 **400 → 200**；去掉 CSI 与 OSC 转义序列（`capture(…, false)` 只关了 SGR，光标定位与窗口标题照旧写在里面），并过同一道脱敏。
+
+### §13.8 表结构（迁移 `0025_context_reads.sql`）
+
+```sql
+CREATE TABLE context_read_cursors (
+  reader_node_id  TEXT NOT NULL,
+  target_node_id  TEXT NOT NULL,
+  transcript_path TEXT NOT NULL,
+  byte_offset     INTEGER NOT NULL DEFAULT 0,
+  updated_at_ms   INTEGER NOT NULL,
+  PRIMARY KEY (reader_node_id, target_node_id)
+);
+
+CREATE TABLE context_reads (
+  id             TEXT PRIMARY KEY,
+  reader_node_id TEXT NOT NULL,
+  target_node_id TEXT NOT NULL,
+  verb           TEXT NOT NULL,
+  bytes          INTEGER NOT NULL,
+  at_ms          INTEGER NOT NULL
+);
+
+CREATE INDEX context_reads_target_at ON context_reads(target_node_id, at_ms);
+```
+
+### §13.9 落点
+
+| 项   | 内容                                                                                                                                                                                                                              |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 文件 | `collab/transcript-summary.ts`、`collab/redact.ts`、`collab/read-budget.ts`、`collab/context-reads.ts`（均新增）；`collab/context-link.ts`、`collab/transcript.ts`、`collab/skill.ts`；`agent/routes.ts`、`http/routes.ts`、`http/route-scopes.ts`；`cli/armadra-hook/{control,usage}.ts`；`packages/shared/src/domain/node-data.ts` |
+| 测试 | 脱敏表驱动逐条；摘要在超长转录上仍 ≤ 2 KB；20 条 / 32 KB / `--full` 上限；`--since` 的三种情形（有新的、没有新的、换了文件）；预算的分钟与小时两个窗口、按连线隔离；`contextShare` 的四个出口；终端画面去转义                     |
+| 界面 | 节点头「被读取 N 次」与 `contextShare` 开关是页面那一半，core 只备好路由与字段                                                                                                                                                     |

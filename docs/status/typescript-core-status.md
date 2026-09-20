@@ -1323,3 +1323,38 @@ releaseDrive(sessionId, actor): Lease;
 全绿：`@armadra/shared`（29 个文件 163 条）、`@armadra/web`（266 个文件 2,623 条）、`pnpm --filter @armadra/web typecheck`、`pnpm -r typecheck`、`pnpm repo:check`、`pnpm ci:workflows`、`pnpm release:check`。
 
 一处已知的红不在本批改动面上：`pnpm format:check` 对 `apps/web/src/panels/usage/{Heatmap,MetricCards,UsagePanel}.tsx` 报格式问题，这三个文件在本批里**一个字节都没改**，基线 `bc7560c7` 上同样报。
+
+## 28. Agent 投递阶段 C+：上下文读取预算（2026-09-21）
+
+分支 `feature/host-protocol-foundation`，设计 `design/agent-delivery.md` §13。core 这一批做完七条，界面那一半（节点头「被读取 N 次」、`contextShare` 开关）另算。
+
+起因是一句实测：一个 Agent 连着三个节点、各读一次 `context summary`，十几万 token 就进了它的上下文，而它想知道的只有五句话。翻开代码之后发现 `summary` 根本不是摘要——它给的是对方转录**最近 40 条原文**，上限 200 KB，`tool_result` 还是全文。
+
+### 28.1 七条落点
+
+| 条   | 改成什么                                                                                                                           |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 摘要 | `collab/transcript-summary.ts`（新，纯函数）：名字与五态、最后一条人类提示与助手回复（各截 500 字）、碰过的文件（≤20）、工具调用次数、有没有待审批。≤ 2 KB，不再接受 `-n` |
+| 原文 | 默认 20 条、每条 2 KB、`tool_result` 只留工具名/字节数/首行、单次 32 KB；`--full --max-kb <n>`（≤128）才更多；头部写「本次约 N KB ≈ M token」 |
+| 增量 | `transcript --since` 按（读者，目标）记游标 = 转录路径 + 字节偏移；换了文件从头；游标只走到**真交出去**的那一条 |
+| 预算 | 每条连线每分钟 64 KB、每小时 1 MB（`collab/read-budget.ts`），超了 `RATE_LIMITED`(429) 并指回 `summary` / `--since` |
+| 脱敏 | `collab/redact.ts`（新，表驱动）：九种凭据形状换 `[已脱敏]`；四个动词的出口共用一处 |
+| 审计 | 每次读取一行 `context_reads`；`GET /api/nodes/{id}/context-reads` 给最近 N 条与总次数 |
+| 开关 | `data.agent.contextShare = "summary"` 时只剩摘要，其余 `FORBIDDEN`(403) |
+
+外加终端画面：默认仍 40 行，上限 400 → 200，去掉 CSI/OSC 转义序列并过同一道脱敏。
+
+### 28.2 四处值得记的取舍
+
+1. **预算落库，不落内存。** `send-limits.ts` 的窗口在内存里，理由是「一个能活过重启的环，第二跳一样会被拦下」。读取相反：一次读取的代价是**读者上下文里的 token**，而那个上下文活过重启、活过页面刷新。所以这一份的和从 `context_reads` 里算。
+2. **游标存字节偏移，不存条数。** 转录是追加写的 JSONL，条数要重新解析整份文件才数得出来，偏移一次 `stat` 就对得上。路径是判据的另一半：对方换了 session 就换了文件，偏移在新文件里指的是另一段话。
+3. **游标只走到真的交出去了的那一条。** 一开始写的是「走到文件尾」，那样一次超预算的 `--since` 会把没给出去的几十条永久吞掉——增量游标最不该有的失败方式。
+4. **3.5 字符/token 是一个故意粗的数。** 真值随语言与分词器变（中文接近 1.5，英文代码接近 4）。那一行要回答的只有「大概占多大」；给一个假装精确的数，它会被当成预算来用。
+
+一处**没有**改：脱敏只挂在跨连线读取上，不挂在转录渲染里。一个 Agent 读自己的转录是它自己的事，那些密钥本来就是它打出来的。
+
+### 28.3 验证
+
+`pnpm libs:build` 之后：`@armadra/desktop` 全绿（新增 `redact` 17、`transcript-summary` 17、`read-budget` 15、`context-budget` 28 条用例）、`@armadra/web` typecheck、`pnpm -r typecheck`、`pnpm check` 全绿。迁移 `0025_context_reads.sql` 已记进 `migrations.lock`，库里 `migrations` 25 条。
+
+`packages/shared` 的 `test/usage-dashboard.test.ts` 那条红在 26.7 记过，本批未触及。

@@ -172,3 +172,37 @@ JSON 本身不定义键的顺序，所以一份「原样 stringify」的文本�
 - `apps/desktop/src/core/identity/http.test.ts`「答一份与 HostService/Hello 逐字段相同的能力表」。
 
 R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消失；现在这三个文件只测本文档描述的 JSON 面本身。
+
+## 7. 节点的上下文读取记录：`GET /api/nodes/{nodeId}/context-reads`
+
+谁读过这个节点的上下文。节点头的「被读取 N 次」读它；写者是跨连线的四个读取动词（`context list|summary|transcript|terminal`），每读一次落一行（设计 `design/agent-delivery.md` §13）。
+
+不挂在 `/api/workspaces/{id}/` 下，因为它问的是一个节点的历史，而节点标识全局唯一。权限与画布同一档（`canvas:read`）。
+
+| 参数    | 位置   | 默认 | 说明                       |
+| ------- | ------ | ---- | -------------------------- |
+| `limit` | 查询串 | 20   | 最近多少条，上限 200       |
+
+回：
+
+```json
+{
+  "total": 7,
+  "bytes": 91234,
+  "reads": [
+    {
+      "id": "0192…",
+      "readerNodeId": "node-1",
+      "readerHandle": "planner",
+      "readerTitle": "规划",
+      "verb": "summary",
+      "bytes": 1804,
+      "atMs": 1789000000000
+    }
+  ]
+}
+```
+
+- `verb` 是四个值之一：`summary` / `transcript` / `terminal` / `content`（内容类节点）。
+- `readerHandle` 与 `readerTitle` 在读者节点已被删除时缺席；`readerNodeId` 永远在。
+- 从没被读过的节点回 `{"total":0,"bytes":0,"reads":[]}`，不是 404：「没有人读过」是一个答案。
