@@ -6,11 +6,14 @@ import {
   commandKeys,
   type CommandId,
 } from "../keybindings";
+import { TOOL_GROUPS } from "./interaction/tool-store";
 import {
   CANVAS_TOOLS,
   CANVAS_TOOL_IDS,
+  DOCK_TOOL_ITEMS,
   GEO_IDS,
   GEO_OPTIONS,
+  PHONE_DOCK_TOOL_ITEMS,
   PHONE_TOOL_IDS,
   geoIcon,
   isToolDisabledWhenLocked,
@@ -99,6 +102,46 @@ describe("工具键表", () => {
     expect(geoIcon("cloud")).toBe(
       GEO_OPTIONS.find((option) => option.geo === "rectangle")?.icon,
     );
+  });
+
+  it("Dock 排布：选择 / 手 / 笔组 / 形状 / 线组 / 文字，画框不在其中", () => {
+    expect(
+      DOCK_TOOL_ITEMS.map((item) =>
+        item.kind === "group" ? `${item.kind}:${item.group}` : item.tool.id,
+      ),
+    ).toEqual(["select", "hand", "group:pen", "geo", "group:line", "text"]);
+    // 每个工具恰好在排布里出现一次：既没有漏掉的，也没有摆两遍的。
+    const placed = DOCK_TOOL_ITEMS.flatMap((item) =>
+      item.kind === "group"
+        ? item.members.map((member) => member.id)
+        : [item.tool.id],
+    );
+    expect([...placed].sort()).toEqual([...CANVAS_TOOL_IDS].sort());
+  });
+
+  it("两个组的成员与 `tool-store` 是同一张表", () => {
+    const groups = Object.fromEntries(
+      DOCK_TOOL_ITEMS.filter((item) => item.kind === "group").map((item) => [
+        item.group,
+        item.members.map((member) => member.id),
+      ]),
+    );
+    expect(groups).toEqual({
+      pen: [...TOOL_GROUPS.pen],
+      line: [...TOOL_GROUPS.line],
+    });
+  });
+
+  it("手机那一份不变：只有选择与手，没有任何下拉", () => {
+    expect(PHONE_DOCK_TOOL_ITEMS.map((item) => item.kind)).toEqual([
+      "tool",
+      "tool",
+    ]);
+    expect(
+      PHONE_DOCK_TOOL_ITEMS.map((item) =>
+        item.kind === "group" ? item.group : item.tool.id,
+      ),
+    ).toEqual([...PHONE_TOOL_IDS]);
   });
 
   it("锁定时只剩选择可用", () => {

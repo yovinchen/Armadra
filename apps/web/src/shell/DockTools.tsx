@@ -22,15 +22,19 @@ import {
   setNextStyle,
   useNextStyle,
   useTool,
+  useToolGroupChoice,
+  type CanvasToolId,
 } from "@/canvas/interaction/tool-store";
 import {
-  CANVAS_TOOLS,
+  DOCK_TOOL_ITEMS,
   GEO_OPTIONS,
-  IMAGE_TOOL,
-  PHONE_TOOL_IDS,
+  IMPORT_TOOL,
+  PHONE_DOCK_TOOL_ITEMS,
+  TOOL_BY_ID,
   geoIcon,
   isToolDisabledWhenLocked,
   type CanvasToolSpec,
+  type DockToolItem,
 } from "@/canvas/tools";
 import { commandKeysLabel, type CommandId } from "@/keybindings";
 import { useMenuTooltip } from "./menu-tooltip";
@@ -47,9 +51,14 @@ import { useMenuTooltip } from "./menu-tooltip";
  * 置灰只剩一条规则：锁定视图时除「选择」之外全部禁用
  * （`tools.isToolDisabledWhenLocked`）。
  *
+ * 同一件事的两种口味合成一格（2026-09-21 用户反馈：十个按钮里一半是成对
+ * 的）：笔（画笔 / 高亮）、线（直线 / 箭头）各一格，做法与形状那一格一样，
+ * 按钮显示当前成员、下拉换另一种。记忆在 `tool-store` 的
+ * `useToolGroupChoice`，所以快捷键切过去之后图标也跟着变。
+ *
  * 手机（`isCompactLayout()`，≤ 767px）上只留选择与手（F32）：手指画不出
  * 能用的墨迹，而每多一个按钮，390px 宽的 Dock 就少一分能按得中的余量。
- * 图片按钮同样收起——它开的是系统文件选择器，手机上那条路不通。
+ * 引入按钮同样收起——它开的是系统文件选择器，手机上那条路不通。
  */
 export function DockTools() {
   const t = useT();
@@ -61,30 +70,19 @@ export function DockTools() {
   if (!flow) return null;
 
   const disabled = (id: string) => locked && isToolDisabledWhenLocked(id);
-  const tools = phone
-    ? CANVAS_TOOLS.filter((tool) => PHONE_TOOL_IDS.includes(tool.id))
-    : CANVAS_TOOLS;
+  const items = phone ? PHONE_DOCK_TOOL_ITEMS : DOCK_TOOL_ITEMS;
 
   const buttons = (
     <>
-      {tools.map((tool) =>
-        tool.id === "geo" ? (
-          <GeoToolButton
-            key={tool.id}
-            tool={tool}
-            active={currentTool === "geo"}
-            disabled={disabled(tool.id)}
-          />
-        ) : (
-          <ToolButton
-            key={tool.id}
-            tool={tool}
-            active={currentTool === tool.id}
-            disabled={disabled(tool.id)}
-          />
-        ),
-      )}
-      {phone ? null : <ImageToolButton disabled={locked} />}
+      {items.map((item) => (
+        <DockToolSlot
+          key={item.kind === "group" ? item.group : item.tool.id}
+          item={item}
+          currentTool={currentTool}
+          disabled={disabled}
+        />
+      ))}
+      {phone ? null : <ImportToolButton disabled={locked} />}
     </>
   );
 
@@ -110,6 +108,43 @@ export function DockTools() {
         </Popover>
       </div>
     </>
+  );
+}
+
+function DockToolSlot({
+  item,
+  currentTool,
+  disabled,
+}: {
+  item: DockToolItem;
+  currentTool: CanvasToolId;
+  disabled: (id: string) => boolean;
+}) {
+  // hooks 不能挂在分支里，所以这一格的三种形态各自是一个组件。
+  if (item.kind === "geo") {
+    return (
+      <GeoToolButton
+        tool={item.tool}
+        active={currentTool === item.tool.id}
+        disabled={disabled(item.tool.id)}
+      />
+    );
+  }
+  if (item.kind === "group") {
+    return (
+      <ToolGroupButton
+        item={item}
+        currentTool={currentTool}
+        disabled={disabled}
+      />
+    );
+  }
+  return (
+    <ToolButton
+      tool={item.tool}
+      active={currentTool === item.tool.id}
+      disabled={disabled(item.tool.id)}
+    />
   );
 }
 
@@ -221,25 +256,102 @@ function GeoToolButton({ tool, active, disabled }: ToolButtonProps) {
 }
 
 /**
- * 图片：不是工具，所以这里开一次文件选择，把文件交给外部内容处理器
- * （`dnd/external-content.pickFilesForCanvas`）。落点是视口中心。
+ * 笔 / 线那一格：按钮**就是**组里当前那个工具——图标、名字、键位都是它的，
+ * 点一下等于按它的快捷键；下拉里换成另一种，换完 `setTool` 把选择记进
+ * `tool-store`，所以下次这一格显示的还是它。
+ *
+ * 与形状那一格的差别只在下拉里挑的是什么：形状挑 `nextStyle.geo`（工具不
+ * 变），这里挑的是工具本身。
  */
-function ImageToolButton({ disabled }: { disabled: boolean }) {
+function ToolGroupButton({
+  item,
+  currentTool,
+  disabled,
+}: {
+  item: Extract<DockToolItem, { kind: "group" }>;
+  currentTool: CanvasToolId;
+  disabled: (id: string) => boolean;
+}) {
   const t = useT();
-  const Icon = IMAGE_TOOL.icon;
+  const current = TOOL_BY_ID[useToolGroupChoice()[item.group]];
+  const Icon = current.icon;
+  const menu = useMenuTooltip(
+    React.useCallback(
+      (open: boolean) => {
+        if (open) runCanvasCommand(current.command);
+      },
+      [current.command],
+    ),
+  );
+  const active = item.members.some((member) => member.id === currentTool);
+
+  return (
+    <DropdownMenu {...menu.menuProps}>
+      <Tooltip delayDuration={500}>
+        <TooltipTrigger asChild {...menu.tooltipTriggerProps}>
+          <DropdownMenuTrigger asChild>
+            <IconButton
+              size="dock"
+              label={t(current.labelKey)}
+              active={active}
+              disabled={disabled(current.id)}
+            >
+              <Icon />
+            </IconButton>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        {menu.menuOpen ? null : (
+          <TooltipContent>
+            {toolTooltip(current.labelKey, current.command, t)}
+          </TooltipContent>
+        )}
+      </Tooltip>
+      <DropdownMenuContent
+        align="center"
+        side="top"
+        className="z-[var(--z-menu)] w-auto min-w-40"
+      >
+        {item.members.map((member) => {
+          const MemberIcon = member.icon;
+          return (
+            <DropdownMenuItem
+              key={member.id}
+              data-checked={current.id === member.id ? "true" : undefined}
+              onSelect={() => runCanvasCommand(member.command)}
+            >
+              <MemberIcon />
+              <span className="flex-1 truncate">{t(member.labelKey)}</span>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * 引入：不是工具，所以这里开一次文件选择，把文件交给外部内容处理器
+ * （`dnd/external-content.pickFilesForCanvas`）。落点是视口中心。
+ *
+ * 文件选择器不设 `accept`：图片落成白板图片对象、其余落成文件节点，两条路
+ * 都在 `external-content.ts` 里，挡掉非图片等于关掉后一条。
+ */
+function ImportToolButton({ disabled }: { disabled: boolean }) {
+  const t = useT();
+  const Icon = IMPORT_TOOL.icon;
   return (
     <Tooltip delayDuration={500}>
       <TooltipTrigger asChild>
         <IconButton
           size="dock"
-          label={t(IMAGE_TOOL.labelKey)}
+          label={t(IMPORT_TOOL.labelKey)}
           disabled={disabled}
           onClick={() => pickFilesForCanvas()}
         >
           <Icon />
         </IconButton>
       </TooltipTrigger>
-      <TooltipContent>{t(IMAGE_TOOL.labelKey)}</TooltipContent>
+      <TooltipContent>{t(IMPORT_TOOL.labelKey)}</TooltipContent>
     </Tooltip>
   );
 }

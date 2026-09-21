@@ -43,7 +43,7 @@ const zh = {
   "tool.line": "直线",
   "tool.arrow": "箭头",
   "tool.text": "文字",
-  "tool.image": "图片",
+  "tool.import": "引入…",
 
   "geo.rectangle": "矩形",
   "geo.ellipse": "椭圆",
@@ -252,7 +252,7 @@ const en: Record<keyof typeof zh, string> = {
   "tool.line": "Line",
   "tool.arrow": "Arrow",
   "tool.text": "Text",
-  "tool.image": "Image",
+  "tool.import": "Import…",
 
   "geo.rectangle": "Rectangle",
   "geo.ellipse": "Ellipse",

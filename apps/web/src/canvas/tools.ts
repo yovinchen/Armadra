@@ -6,7 +6,7 @@ import {
   Hand,
   Hexagon,
   Highlighter,
-  Image as ImageIcon,
+  Import,
   Minus,
   MousePointer2,
   Pencil,
@@ -19,9 +19,11 @@ import {
 import type { CanvasCommandId } from "./commands";
 import {
   CANVAS_TOOL_IDS,
+  TOOL_GROUPS,
   isCanvasToolId,
   isDrawingTool,
   type CanvasToolId,
+  type ToolGroupId,
 } from "./interaction/tool-store";
 import { GEOS, isItemId, type Geo } from "./whiteboard/model";
 
@@ -32,8 +34,9 @@ import { GEOS, isItemId, type Geo } from "./whiteboard/model";
  * 命令、`FlowWorkspace` 注册的命令实现。工具 id 从旧引擎换成我们自己的
  * （`interaction/tool-store.ts`），集合一个没变，所以这里仍然**没有映射表**。
  *
- * `image` 不是工具：它在 Dock 上是一个触发文件选择的按钮，落到
- * `dnd/external-content.ts` 的图片分支，所以单列在 `IMAGE_TOOL`。
+ * 「引入」不是工具：它在 Dock 上是一个触发文件选择的按钮，落到
+ * `dnd/external-content.ts`（图片成白板对象、其余成文件节点），所以单列在
+ * `IMPORT_TOOL`。
  */
 
 export { CANVAS_TOOL_IDS };
@@ -109,13 +112,56 @@ export const CANVAS_TOOLS: readonly CanvasToolSpec[] = [
 export const PHONE_TOOL_IDS: readonly CanvasToolId[] = ["select", "hand"];
 
 /**
- * 图片：不是工具，所以它没有命令、没有键位。
- * Dock 上那个按钮自己开文件选择，把文件交给外部内容处理器。
+ * 引入：不是工具，所以它没有命令、没有键位。
+ * Dock 上那个按钮自己开文件选择（不限类型），把文件交给外部内容处理器。
  */
-export const IMAGE_TOOL: { labelKey: string; icon: LucideIcon } = {
-  labelKey: "tool.image",
-  icon: ImageIcon,
+export const IMPORT_TOOL: { labelKey: string; icon: LucideIcon } = {
+  labelKey: "tool.import",
+  icon: Import,
 };
+
+/* ------------------------------ Dock 的排布 ------------------------------- */
+
+export const TOOL_BY_ID: Readonly<Record<CanvasToolId, CanvasToolSpec>> =
+  Object.fromEntries(CANVAS_TOOLS.map((tool) => [tool.id, tool])) as Record<
+    CanvasToolId,
+    CanvasToolSpec
+  >;
+
+/**
+ * Dock 工具组里的一格。
+ *
+ *  - `tool`：一个工具一个按钮（选择 / 手 / 文字）；
+ *  - `geo`：形状按钮，下拉挑的是 `nextStyle.geo`；
+ *  - `group`：笔（画笔 / 高亮）与线（直线 / 箭头），下拉挑的是组内成员，
+ *    按钮显示的就是当前成员本身——图标、名字、键位都跟着它走。
+ */
+export type DockToolItem =
+  | { kind: "tool"; tool: CanvasToolSpec }
+  | { kind: "geo"; tool: CanvasToolSpec }
+  | { kind: "group"; group: ToolGroupId; members: readonly CanvasToolSpec[] };
+
+const groupItem = (group: ToolGroupId): DockToolItem => ({
+  kind: "group",
+  group,
+  members: TOOL_GROUPS[group].map((id) => TOOL_BY_ID[id]),
+});
+
+/** Dock 上从左到右的顺序。 */
+export const DOCK_TOOL_ITEMS: readonly DockToolItem[] = [
+  { kind: "tool", tool: TOOL_BY_ID.select },
+  { kind: "tool", tool: TOOL_BY_ID.hand },
+  groupItem("pen"),
+  { kind: "geo", tool: TOOL_BY_ID.geo },
+  groupItem("line"),
+  { kind: "tool", tool: TOOL_BY_ID.text },
+];
+
+/** 手机上那一份：只留 `PHONE_TOOL_IDS` 里的单工具格（F32）。 */
+export const PHONE_DOCK_TOOL_ITEMS: readonly DockToolItem[] =
+  DOCK_TOOL_ITEMS.filter(
+    (item) => item.kind === "tool" && PHONE_TOOL_IDS.includes(item.tool.id),
+  );
 
 /* ------------------------------ 形状下拉 --------------------------------- */
 
