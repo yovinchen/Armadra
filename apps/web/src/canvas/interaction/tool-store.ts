@@ -47,6 +47,72 @@ export function isDrawingTool(tool: CanvasToolId): boolean {
   return tool !== "select" && tool !== "hand";
 }
 
+/* -------------------------------- 工具组 ---------------------------------- */
+
+/**
+ * Dock 上共用一个按钮的两对工具：笔（画笔 / 高亮）与线（直线 / 箭头）。
+ *
+ * 它们做的是同一件事的两种口味，各占一格只是在 Dock 上多摆两个按钮。合成
+ * 一格之后按钮图标跟着「这一组上次选的那种」走，下拉里换另一种——与形状
+ * 按钮跟着 `nextStyle.geo` 是同一套做法。
+ *
+ * 记忆放在这里而不是 Dock 里：快捷键与命令面板也能切到组内成员
+ * （`canvas.tool.draw` 等四条命令照旧），按下去 Dock 的图标必须跟着变。
+ */
+export const TOOL_GROUPS = {
+  pen: ["draw", "highlight"],
+  line: ["line", "arrow"],
+} as const satisfies Record<string, readonly CanvasToolId[]>;
+
+export type ToolGroupId = keyof typeof TOOL_GROUPS;
+
+export type ToolGroupChoice = {
+  [K in ToolGroupId]: (typeof TOOL_GROUPS)[K][number];
+};
+
+const DEFAULT_TOOL_GROUP_CHOICE: ToolGroupChoice = {
+  pen: "draw",
+  line: "line",
+};
+
+/** 工具 → 它所属的组；不在任何组里的工具返回 null。 */
+export function toolGroupOf(id: CanvasToolId): ToolGroupId | null {
+  for (const group of Object.keys(TOOL_GROUPS) as ToolGroupId[]) {
+    if ((TOOL_GROUPS[group] as readonly CanvasToolId[]).includes(id)) {
+      return group;
+    }
+  }
+  return null;
+}
+
+let groupChoice: ToolGroupChoice = DEFAULT_TOOL_GROUP_CHOICE;
+const groupListeners = new Set<() => void>();
+
+export function getToolGroupChoice(): ToolGroupChoice {
+  return groupChoice;
+}
+
+/** 记下某一组当前选的成员；`setTool` 会替所有入口调它。 */
+function rememberToolGroup(id: CanvasToolId): void {
+  const group = toolGroupOf(id);
+  if (!group || groupChoice[group] === id) return;
+  groupChoice = { ...groupChoice, [group]: id };
+  for (const listener of groupListeners) listener();
+}
+
+function subscribeToolGroup(listener: () => void): () => void {
+  groupListeners.add(listener);
+  return () => groupListeners.delete(listener);
+}
+
+export function useToolGroupChoice(): ToolGroupChoice {
+  return React.useSyncExternalStore(
+    subscribeToolGroup,
+    getToolGroupChoice,
+    () => DEFAULT_TOOL_GROUP_CHOICE,
+  );
+}
+
 /* --------------------------------- 工具 ----------------------------------- */
 
 let tool: CanvasToolId = "select";
@@ -57,6 +123,8 @@ export function getTool(): CanvasToolId {
 }
 
 export function setTool(next: CanvasToolId): void {
+  // 记忆在相等判断**之前**更新：下拉里重选当前那一项也要算数。
+  rememberToolGroup(next);
   if (tool === next) return;
   tool = next;
   // 换工具就是新的一轮：样式面板上一次手动改的档位不再当基准。
@@ -180,6 +248,8 @@ export function useNextStyle(): NextStyle {
 /** 仅测试与画布卸载用：工具、样式与档位基准都回到初始值。 */
 export function resetToolStore(): void {
   setTool("select");
+  groupChoice = DEFAULT_TOOL_GROUP_CHOICE;
+  for (const listener of groupListeners) listener();
   preferenceSize = DEFAULT_NEXT_STYLE.size;
   manualSize = null;
   writeStyle(DEFAULT_NEXT_STYLE);
