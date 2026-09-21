@@ -92,12 +92,17 @@ function AppShell() {
 
   return (
     <div className="flex h-full overflow-hidden bg-background">
+      {/* 必须是整棵树的第一个子节点。原生层算可拖拽区域时按 DOM 顺序把
+          `drag` 矩形并进去、`no-drag` 矩形减出来，后出现的覆盖先出现的——
+          它排在侧栏后面时，侧栏标题栏里那几颗 `no-drag` 的按钮先减掉、再被
+          这一整条加回来，点上去就是拖窗口。z 轴与此无关，那只管页面自己的
+          命中。 */}
+      <WindowDragLayer />
       <LeftSidebar />
       <div
         className="workspace-surface relative min-w-0 flex-1"
         data-minimap-collapsed={minimapCollapsed}
       >
-        <WindowDragLayer />
         {workspace && <FlowWorkspace />}
         {workspace && (
           <>

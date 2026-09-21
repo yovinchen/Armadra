@@ -15,6 +15,7 @@ import { cn } from "@/lib/cn";
 import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
 import { ClusterUsage } from "./ClusterUsage";
+import { noDragProps } from "./window-region";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 import { useMenuTooltip } from "./menu-tooltip";
 import type { ReactNode } from "react";
@@ -66,6 +67,9 @@ export function ControlsCluster() {
     <>
       <div
         data-slot="controls-cluster"
+        // 簇的第一格落在窗口顶部 44px 的拖拽带里；不写回 no-drag，那一格按下去
+        // 是拖窗口。
+        {...noDragProps()}
         style={{
           right: drawer
             ? `calc(14px + min(100vw, ${WORK_PANEL_WIDTH[drawer]}))`
