@@ -116,14 +116,20 @@ const EDGE = "33333333-3333-4333-8333-333333333333";
 /* ------------------------------ 样式面板 ---------------------------------- */
 
 describe("shouldShowStylePanel", () => {
-  it("不是选择工具时一律显示：马上要画的东西需要先挑样式", () => {
-    for (const tool of ["draw", "geo", "arrow", "text", "frame", "highlight"]) {
+  it("绘制类工具一律显示：马上要画的东西需要先挑样式", () => {
+    for (const tool of ["draw", "highlight", "geo", "line", "arrow", "text"]) {
       expect(shouldShowStylePanel(tool, [])).toBe(true);
     }
   });
 
-  it("选择工具 + 什么都没选 → 隐藏", () => {
+  it("选择 / 手形 + 什么都没选 → 隐藏", () => {
     expect(shouldShowStylePanel("select", [])).toBe(false);
+    // 手形只平移视口，画不出任何东西（2026-09-21 用户反馈）。
+    expect(shouldShowStylePanel("hand", [])).toBe(false);
+  });
+
+  it("手形 + 选中白板对象 → 仍然显示：面板改的是选中项", () => {
+    expect(shouldShowStylePanel("hand", ["wb:abc"])).toBe(true);
   });
 
   it("选中的全是节点 → 隐藏（节点的颜色走右键菜单）", () => {

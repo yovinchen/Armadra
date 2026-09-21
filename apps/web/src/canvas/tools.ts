@@ -17,7 +17,12 @@ import {
 } from "lucide-react";
 
 import type { CanvasCommandId } from "./commands";
-import { CANVAS_TOOL_IDS, type CanvasToolId } from "./interaction/tool-store";
+import {
+  CANVAS_TOOL_IDS,
+  isCanvasToolId,
+  isDrawingTool,
+  type CanvasToolId,
+} from "./interaction/tool-store";
 import { GEOS, isItemId, type Geo } from "./whiteboard/model";
 
 /**
@@ -158,16 +163,19 @@ export function isToolDisabledWhenLocked(id: string): boolean {
 /**
  * 样式面板显隐（§2.4）。两种情况显示：
  *
- *  1. 当前工具不是选择——马上要画的东西需要先挑颜色粗细；
+ *  1. 当前工具是**绘制类**（`isDrawingTool`）——马上要画的东西需要先挑颜色
+ *     粗细；
  *  2. 选中项里有白板对象——它们真的有样式可改。
  *
- * 选中的全是节点时隐藏：节点的颜色走自己的右键菜单。
+ * 判据以前写的是「不是选择工具」，于是手形也弹出一整块颜色 / 粗细 / 线型 /
+ * 填充（2026-09-21 用户反馈）——手形只平移视口，画不出任何东西，那块面板
+ * 只是挡住左上角。选中的全是节点时同样隐藏：节点的颜色走自己的右键菜单。
  */
 export function shouldShowStylePanel(
   toolId: string,
   selectedIds: readonly string[],
 ): boolean {
-  if (toolId !== "select") return true;
+  if (isCanvasToolId(toolId) && isDrawingTool(toolId)) return true;
   return selectedIds.some(isItemId);
 }
 
