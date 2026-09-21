@@ -372,6 +372,35 @@ targetState(status: AgentStatus | undefined, live: number | undefined): TargetSt
 
 界面上 `--unverified` 投出去的每一条都在连线上标一个不同的图标，并在节点头写「未经证实的投递」。
 
+#### 启动时不上报的 CLI（2026-09-21 实测追加）
+
+上面那张表有一个缺口，实测（Codex CLI 0.155.1，真机）撞上了：**有的 CLI 装好了全部 hook，启动完成却一条事件都不发**。它到了「› Ask Codex to do anything」提示符，`agent_status` 里没有它的行；第一条事件要等人在里面提交一次输入（`user_prompt_submit` → `stop`）才来。
+
+后果不是降级，是**永久卡住**：`targetState()` 对没有上报的节点答 `starting`（§4.1），`send` 与 `open-agent --task` 于是排队等一条「第一条真上报」，而那条上报按定义不会来——每一条投递都停在 `queued / TARGET_STARTING` 直到 TTL 过期。用户实测的现象是「主 Agent 开出的 Codex 一个都没收到任务」。
+
+所以这类 CLI 的**第一次**投递多一条路，判据全在 `agent/target-state.ts::silentStartIdle`，五态本身一个字不改：
+
+| 条件            | 取自                                              | 挡的是                                                                                     |
+| --------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 注册表标了旗    | `registry.startsSilently(base)`（今天只有 codex） | 别的 CLI 没报第一条就是**还没起来**，等着就对                                              |
+| 从未上报过      | `!stateSourceIsReported(stateSource)`             | 报过一条的节点此后永远有上报；`restored` 的行也是 `hook`，所以重启恢复的节点仍按 §4.1 排队 |
+| 会话活着        | 门链更早的一条（没有会话就是 `exited`）           | ——                                                                                         |
+| 安静            | `observedQuiet(…, SILENT_START_QUIET_MS = 3000)`  | 半截没提交的行、刚吐过东西的那一瞬                                                         |
+| 会话建立 ≥ 4 秒 | `SILENT_START_MIN_AGE_MS`                         | 刚起的 PTY 上「安静」恒成立                                                                |
+
+投出去之后 `user_prompt_submit` 自然会到，此后每一条都走上报那条路——这条路只在节点生命周期里用一次。
+
+触发源是**清扫那把定时器**（`SEND_QUEUE_TTL_SECONDS` 的那一把，每 60 秒）捎带的一次探测：泵本身不轮询，它听的是 `agent.status`，而这类目标按定义不发那条事件。探测收窄到「队里有东西 + 标了旗 + 从未上报过」三条同时成立的目标，别的目标一个都不问。代价是首投最坏要等一个清扫周期。
+
+可见性：这条路投出去的每一条，回执里 `targetState` 是 `observed-quiet`，`agent_deliveries.target_state`（迁移 0026）记下同一个词，board-log 的 receipt 也写它。所以一次「按观察放行」的 `delivered` 与一次「有上报」的 `delivered` 在记录面板上分得开（前端徽标后补）。
+
+误判面比 `--unverified` 那条窄（它只用一次、只在从未上报过的节点上），但没有消失，两条要写明白，因为我们接受它：
+
+1. **目录信任提示**。Codex 第一次进一个未信任的目录会先问「Do you trust the files in this folder?」。那个提示停在那里也是安静的，而 `observed` 节点上「在等人」这个事实根本不存在（§4.3 第 3 条）——正文会被打进那个问题里，成为它的答案。
+2. **安静的忙碌**。一个进程在启动阶段跑了几秒无输出的活（索引、拉配置），与一个空闲提示符在这条判据下完全一样，正文会落进一轮已经在跑的对话里。
+
+接受它的理由：另一条路是解析提示符或识别 OSC，而那是 §12 第 3 条明说不做的——那条线一旦越过，每一家 CLI 的每一次界面改版都会变成我们的回归。这里赌的是「三秒无输出 + 会话已经起来四秒 + 这家 CLI 从不主动上报」，赌输的后果是一段文字落错位置，人能在终端里看见并改正；而不赌的后果是这类节点**永远**收不到任务。§12 第 3 条不变，§12 第 5 条也不变——`observed` 仍然没有默认放行，这条路要注册表显式标旗才存在。
+
 ### §4.4 状态存哪
 
 | 东西               | 存哪                                          | 为什么                                         |
@@ -384,13 +413,14 @@ targetState(status: AgentStatus | undefined, live: number | undefined): TargetSt
 
 ### §4.5 `send` 在每个状态下做什么
 
-| 目标状态            | 默认（`queue = true`） | `--no-queue`                    | `--interrupt`                                                                                                   |
-| ------------------- | ---------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `idle`              | 直接投 → `delivered`   | 直接投                          | 退化为普通投递（不发 `ESC`：对空闲提示符它是空操作，发了只是多一次写）                                          |
-| `busy`              | 排队 → `queued`        | 拒绝 `TARGET_BUSY`              | 发 `ESC`，等一条 `idle` 或 `interrupted` 上报（上限 `INTERRUPT_SETTLE_MS = 5000`），到了就投；没等到 → `queued` |
-| `awaiting-approval` | **排队**，不投         | 拒绝 `TARGET_AWAITING_APPROVAL` | **拒绝**，`TARGET_AWAITING_APPROVAL`：`ESC` 落在一个权限提示上的语义是「拒绝这次工具调用」，那是替人做决定      |
-| `starting`          | 排队 → `queued`        | 拒绝 `TARGET_STARTING`          | 同默认（没有「当前这一轮」可打断）                                                                              |
-| `exited`            | 拒绝 `TARGET_GONE`     | 同左                            | 同左                                                                                                            |
+| 目标状态                                  | 默认（`queue = true`）                                                                    | `--no-queue`                         | `--interrupt`                                                                                                   |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `idle`                                    | 直接投 → `delivered`                                                                      | 直接投                               | 退化为普通投递（不发 `ESC`：对空闲提示符它是空操作，发了只是多一次写）                                          |
+| `busy`                                    | 排队 → `queued`                                                                           | 拒绝 `TARGET_BUSY`                   | 发 `ESC`，等一条 `idle` 或 `interrupted` 上报（上限 `INTERRUPT_SETTLE_MS = 5000`），到了就投；没等到 → `queued` |
+| `awaiting-approval`                       | **排队**，不投                                                                            | 拒绝 `TARGET_AWAITING_APPROVAL`      | **拒绝**，`TARGET_AWAITING_APPROVAL`：`ESC` 落在一个权限提示上的语义是「拒绝这次工具调用」，那是替人做决定      |
+| `starting`                                | 排队 → `queued`                                                                           | 拒绝 `TARGET_STARTING`               | 同默认（没有「当前这一轮」可打断）                                                                              |
+| `starting` 且 `startsSilently` 且从未上报 | **投**（`targetState: observed-quiet`），前提是 §4.3 的观察四条都成立；不成立照上一行排队 | 同左，不成立则拒绝 `TARGET_STARTING` | 同默认                                                                                                          |
+| `exited`                                  | 拒绝 `TARGET_GONE`                                                                        | 同左                                 | 同左                                                                                                            |
 
 一条硬规矩，与 `schedule/dispatch.ts:34-39` 同源：**`awaiting-approval` 的节点在任何参数组合下都不会被写入正文。**
 

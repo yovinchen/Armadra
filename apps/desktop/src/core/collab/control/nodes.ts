@@ -273,7 +273,7 @@ export function openAgent(
   );
   if (queued !== undefined) {
     parts.push(
-      "第一条任务已经排上，等它报出第一条空闲就投进去；投不成会出现在 canvas outbox 里。",
+      "第一条任务已经排上，等它报出第一条空闲（起来之后不报状态的 CLI 则等终端安静下来）就投进去；投不成会出现在 canvas outbox 里。",
     );
   }
   return result(parts.join(""), {

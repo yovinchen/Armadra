@@ -1,6 +1,10 @@
+import { baseAgent, startsSilently } from "../agent/registry";
+import { getAgentStatus } from "../agent/status";
+import { stateSourceIsReported } from "../agent/target-state";
 import { attempt } from "./control/send";
+import { loadNode } from "./nodes";
 import { sendLimits } from "./send-limits";
-import { expireQueue, pendingFor } from "./send-queue";
+import { expireQueue, pendingFor, targetsWithPending } from "./send-queue";
 import { type CollabContext, nowSeconds } from "./service";
 import { wakeInbox } from "./wake";
 
@@ -13,6 +17,11 @@ import { wakeInbox } from "./wake";
  *
  * 唯一的定时器是每 60 秒一次的过期清扫，它做的是相反的事：让一条**永远等不到**
  * idle 的排队项有一个明确的死亡时刻，而不是在表里躺到下一次重启。
+ *
+ * 那把定时器上挂着这条规矩的唯一例外（§4.3）：有一类 CLI 启动完成一条事件都不
+ * 发（注册表的 `startsSilently`，今天只有 Codex），它的第一条 `idle` 按定义不
+ * 会来，只听事件就是在等一件不会发生的事。所以清扫时顺带对**那一类目标**各试
+ * 一次出队——收窄到「队里有东西 + 标了旗 + 从未上报过」，其余目标一个都不问。
  *
  * 一次只出一条。串行门在 `send-queue.claim` 那条 SQL 里，这里只是不主动去挤：
  * 投完一条之后目标立刻变 `busy`（它开了一轮），下一条自然等下一次 idle。多条
@@ -102,12 +111,55 @@ export class SendPump {
   sweep(): number {
     const context = this.context();
     if (context === undefined) return 0;
+    // 清扫的同时捎带一次首投探测：这把定时器已经在转了，而那类目标需要的正好
+    // 是「隔一会儿再看一眼」。不等它的结果——清扫的返回值说的是过期，不是投递。
+    void this.probeSilentStarters();
     try {
       return expireQueue(context.database, nowSeconds(context));
     } catch (error) {
       this.onError(error);
       return 0;
     }
+  }
+
+  /**
+   * 「启动时不上报」的那些目标，各试一次出队。返回试了几个。
+   *
+   * 这是这条路唯一的触发源，理由是它**没有别的触发源可用**：泵听的是
+   * `agent.status`，而 Codex 这类 CLI 在人提交第一条输入之前一条状态都不发
+   * （§4.3）。只听事件的话，`open-agent --task` 的第一条任务会一直排到 TTL 过
+   * 期——用户实测到的正是这个。
+   *
+   * 三条一起收窄，轮询没有扩大到所有目标：队里真有东西、目标是这类 CLI、而且
+   * 它**从未上报过**。报过一条的节点此后由事件驱动，与从前一模一样。
+   */
+  async probeSilentStarters(): Promise<number> {
+    const context = this.context();
+    if (context === undefined) return 0;
+    let targets: string[];
+    try {
+      targets = targetsWithPending(
+        context.database,
+        nowSeconds(context),
+      ).filter((nodeId) => this.silentStarter(context, nodeId));
+    } catch (error) {
+      this.onError(error);
+      return 0;
+    }
+    for (const nodeId of targets) {
+      await this.drain(nodeId);
+    }
+    return targets.length;
+  }
+
+  /** 这个目标是不是「标了旗、且从未上报过」。 */
+  private silentStarter(context: CollabContext, nodeId: string): boolean {
+    const node = loadNode(context.database, nodeId);
+    if (node?.agentId == null) return false;
+    if (!startsSilently(baseAgent(context.settings, node.agentId)))
+      return false;
+    const status = getAgentStatus(context.database, nodeId);
+    return !stateSourceIsReported(status?.stateSource);
   }
 
   /** 武装那个 `unref` 的定时器。装配一步都不等它。 */

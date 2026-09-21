@@ -26,6 +26,11 @@ export interface AgentDelivery {
   readonly sourceNodeId: string;
   readonly targetNodeId: string;
   readonly outcome: string;
+  /**
+   * 这一条是按哪种事实放行 / 被拦下的：五态之一，或者 `observed-quiet`（迁移
+   * 0026）。空串是 0026 之前写下的那些行——它们没记过这件事。
+   */
+  readonly targetState: string;
   readonly receipt: string | null;
   readonly bodyChars: number;
   readonly createdAt: string;
@@ -37,6 +42,7 @@ interface DeliveryRow {
   readonly source_node_id: string;
   readonly target_node_id: string;
   readonly outcome: string;
+  readonly target_state: string | null;
   readonly receipt: string | null;
   readonly body_chars: number;
   readonly created_at: string;
@@ -53,7 +59,8 @@ export function listDeliveries(
   const bounded = Math.min(500, Math.max(1, limit));
   const rows = context.database
     .prepare(
-      "SELECT trace_id, workspace_id, source_node_id, target_node_id, outcome, receipt, body_chars, created_at " +
+      "SELECT trace_id, workspace_id, source_node_id, target_node_id, outcome, target_state, " +
+        "receipt, body_chars, created_at " +
         "FROM agent_deliveries WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?",
     )
     .all(workspaceId, bounded) as unknown as DeliveryRow[];
@@ -63,6 +70,7 @@ export function listDeliveries(
     sourceNodeId: row.source_node_id,
     targetNodeId: row.target_node_id,
     outcome: row.outcome,
+    targetState: row.target_state ?? "",
     receipt: row.receipt,
     bodyChars: Number(row.body_chars),
     createdAt: row.created_at,
@@ -75,6 +83,8 @@ export interface NewDelivery {
   readonly sourceNodeId: string;
   readonly targetNodeId: string;
   readonly outcome: string;
+  /** 回执里的那个 `targetState`。没有就记空串。 */
+  readonly targetState?: string | undefined;
   /** 队列项 id，或者别的什么让这一行能被追回去的东西。 */
   readonly receipt?: string | undefined;
   readonly bodyChars: number;
@@ -94,8 +104,8 @@ export function recordDelivery(
     database
       .prepare(
         "INSERT OR REPLACE INTO agent_deliveries (trace_id, workspace_id, source_node_id, " +
-          "target_node_id, outcome, receipt, body_chars, created_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "target_node_id, outcome, target_state, receipt, body_chars, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         delivery.traceId,
@@ -103,6 +113,7 @@ export function recordDelivery(
         delivery.sourceNodeId,
         delivery.targetNodeId,
         delivery.outcome,
+        delivery.targetState ?? "",
         delivery.receipt ?? null,
         delivery.bodyChars,
         rfc3339(),

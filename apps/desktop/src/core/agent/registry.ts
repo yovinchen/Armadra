@@ -101,6 +101,20 @@ export function stateSourceIsReported(source: string | null | undefined) {
   return source === STATE_SOURCE_HOOK || source === STATE_SOURCE_EXTENSION;
 }
 
+/**
+ * 这个 provider 启动完成时会不会一条 hook 事件都不发（`startsSilently`）。
+ *
+ * 与 {@link stateSourceFor} 并排放：两个都是「这家 CLI 的适配长什么样」的事实，
+ * 与此刻的观测无关。自定义 Agent 按 base 问——换一个标签或程序名不会让 Codex
+ * 突然开始发 `session_start`。
+ *
+ * 它**只**回答「第一次空闲能不能靠观察」。有这一位的 CLI 仍然有状态通道：第一
+ * 条投递之后，`user_prompt_submit` 与 `stop` 照常到，此后每一条都走上报那条路。
+ */
+export function startsSilently(provider: string): boolean {
+  return definition(provider)?.startsSilently === true;
+}
+
 /* -------------------------------- definitions ------------------------------ */
 
 export interface AgentDefinition {
@@ -110,6 +124,14 @@ export interface AgentDefinition {
   readonly launchCmd: string;
   readonly promptMode: string;
   readonly capabilities: readonly AgentCapability[];
+  /**
+   * 这家 CLI **启动完成时一条 hook 事件都不发**。
+   *
+   * 不是「没装适配」，也不是「适配坏了」：事件全部 enabled，第一条仍然要等人
+   * 在里面提交过一次输入。所以这种节点的第一次「空闲」不存在于任何上报里，
+   * 只能靠观察（§4.3 的那条路），而后续每一条照常走 hook。
+   */
+  readonly startsSilently?: boolean;
 }
 
 export const AGENT_REGISTRY: readonly AgentDefinition[] = [
@@ -136,6 +158,11 @@ export const AGENT_REGISTRY: readonly AgentDefinition[] = [
     color: "#10a37f",
     launchCmd: "codex",
     promptMode: "argv",
+    // 实测 0.155.1（2026-09-21，真机）：`session_start` 等六个事件全部 enabled，
+    // 进程起到「Ask Codex to do anything」提示符也一条都不发；`agent_status`
+    // 里根本没有这个节点的行，直到人手动提交一次输入
+    // （`user_prompt_submit` → `stop`）。
+    startsSilently: true,
     capabilities: [
       "hooks",
       "resume",

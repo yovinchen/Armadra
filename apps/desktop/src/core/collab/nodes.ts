@@ -82,6 +82,14 @@ export interface SessionRef {
   readonly sessionId: string;
   readonly generation: number;
   readonly status: string;
+  /**
+   * 这个会话是什么时候建起来的（毫秒）；时间戳读不出来时是 `undefined`。
+   *
+   * 只有一个用户：`startsSilently` 的 CLI 那条首投门（§4.3）。「安静」在一个
+   * 刚起的 PTY 上恒成立——它还什么都没来得及输出——所以那条路要问一句「这个
+   * 会话起来多久了」，而这是唯一知道答案的地方。
+   */
+  readonly createdAtMs: number | undefined;
 }
 
 export function loadSession(
@@ -95,18 +103,20 @@ export function loadSession(
       // the session the node opened meanwhile — and ordering by age alone
       // handed `context terminal` a session whose process was gone, which
       // reads as "that node has no terminal" about a node that plainly has.
-      "SELECT id, generation, status FROM terminal_sessions WHERE owner_node_id = ? " +
+      "SELECT id, generation, status, created_at FROM terminal_sessions WHERE owner_node_id = ? " +
         "ORDER BY (status = 'running') DESC, generation DESC, created_at DESC " +
         "LIMIT 1",
     )
     .get(nodeId) as
-    | { id: string; generation: number; status: string }
+    | { id: string; generation: number; status: string; created_at: string }
     | undefined;
   if (row === undefined) return undefined;
+  const createdAtMs = Date.parse(row.created_at);
   return {
     sessionId: row.id,
     generation: Math.max(0, Number(row.generation)),
     status: row.status,
+    createdAtMs: Number.isNaN(createdAtMs) ? undefined : createdAtMs,
   };
 }
 

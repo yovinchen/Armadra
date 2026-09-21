@@ -1,9 +1,15 @@
 import { expectedProcesses, paneRunsAgent } from "../../agent/launch";
-import { baseAgent, hasCapability, stateSourceFor } from "../../agent/registry";
+import {
+  baseAgent,
+  hasCapability,
+  startsSilently,
+  stateSourceFor,
+} from "../../agent/registry";
 import {
   OBSERVED_QUIET,
   type TargetState,
   observedQuiet,
+  silentStartIdle,
   stateSourceIsReported,
 } from "../../agent/target-state";
 import { getContextLinks } from "../../canvas/context-links";
@@ -435,7 +441,16 @@ export async function attempt(
     // 按「没有适配」处理就是把它的第一条任务当场取消掉，而三秒之后同一个节点
     // 会报出一条完好的 `hook` 状态。所以问的是**这个 provider 有没有状态通道**
     // （注册表的事实，与此刻无关），有就排队等第一条上报（§4.1 的 `starting`）。
-    if (hasStateChannel(context, target)) {
+    // 例外一条：注册表标了 `startsSilently` 的 CLI（今天只有 Codex）。它的第
+    // 一条上报**按定义不会来**——实测 0.155.1 装了全部 hook 也不发
+    // `session_start`，第一条事件要等人在里面提交一次输入。所以对这种节点
+    // 「等第一条真上报」等的是一件不会发生的事，`open-agent --task` 的第一条
+    // 任务会一直停在 `queued / TARGET_STARTING` 直到过期。放行判据全在
+    // `silentStartIdle` 里（§4.3），这里只负责把三样事实取给它。
+    if (silentStart(context, live, nowMs)) {
+      state = "idle";
+      targetStateLabel = OBSERVED_QUIET;
+    } else if (hasStateChannel(context, target)) {
       return queueOrRefuse(
         context,
         item,
@@ -444,20 +459,27 @@ export async function attempt(
         options,
         now,
       );
-    }
-    if (options.unverified !== true) {
+    } else if (options.unverified !== true) {
       settle(context.database, item.id, "cancelled", "TARGET_STATE_UNVERIFIED");
       throw refuse(
         "TARGET_STATE_UNVERIFIED",
         `「${target.title}」没有装状态适配，只有 PTY 观测；改用 canvas post，或显式加 --unverified 自负其责。`,
       );
+    } else {
+      const activity = context.terminals?.observed?.(live.session.sessionId);
+      if (activity === undefined || !observedQuiet(activity, nowMs)) {
+        return queueOrRefuse(
+          context,
+          item,
+          target,
+          "TARGET_BUSY",
+          options,
+          now,
+        );
+      }
+      state = "idle";
+      targetStateLabel = OBSERVED_QUIET;
     }
-    const activity = context.terminals?.observed?.(live.session.sessionId);
-    if (activity === undefined || !observedQuiet(activity, nowMs)) {
-      return queueOrRefuse(context, item, target, "TARGET_BUSY", options, now);
-    }
-    state = "idle";
-    targetStateLabel = OBSERVED_QUIET;
   }
 
   // `--interrupt`：只对真的在一轮里的目标有意义。空闲提示符上的 `ESC` 是空
@@ -558,7 +580,14 @@ export async function attempt(
     settle(context.database, item.id, "done", "WRITE_FAILED");
     const message = error instanceof Error ? error.message : String(error);
     const traced = trace(context, item, "unknown", traceId, "write-failed");
-    recordAndAnnounce(context, item, traceId, "unknown", options);
+    recordAndAnnounce(
+      context,
+      item,
+      traceId,
+      "unknown",
+      targetStateLabel,
+      options,
+    );
     return receipt({
       ok: true,
       protocol: DELIVERY_PROTOCOL,
@@ -586,10 +615,28 @@ export async function attempt(
       hops: item.hops,
       bodyChars: [...item.body].length,
       queueId: item.id,
+      targetState: targetStateLabel,
     },
   });
-  const traced = trace(context, item, "delivered", traceId, "written");
-  recordAndAnnounce(context, item, traceId, "delivered", options);
+  const traced = trace(
+    context,
+    item,
+    "delivered",
+    traceId,
+    // 追溯里也要看得出这一条是按观察放行的：一次 `observed-quiet` 的投递与一次
+    // 有上报的投递事后只差这一个词。
+    targetStateLabel === OBSERVED_QUIET
+      ? `written ${OBSERVED_QUIET}`
+      : "written",
+  );
+  recordAndAnnounce(
+    context,
+    item,
+    traceId,
+    "delivered",
+    targetStateLabel,
+    options,
+  );
   return receipt({
     ok: true,
     protocol: DELIVERY_PROTOCOL,
@@ -634,7 +681,14 @@ function queueOrRefuse(
   const repeated = item.state === "queued" && item.lastReason === reason;
   if (!repeated) {
     trace(context, item, "queued", traceId, reason);
-    recordAndAnnounce(context, item, traceId, "queued", options);
+    recordAndAnnounce(
+      context,
+      item,
+      traceId,
+      "queued",
+      QUEUE_STATE[reason],
+      options,
+    );
   }
   return receipt({
     ok: true,
@@ -857,6 +911,37 @@ function hasStateChannel(context: CollabContext, target: NodeRef): boolean {
   );
 }
 
+/**
+ * 「启动时不上报」的 CLI 的首投放行（§4.3）。
+ *
+ * 三样事实取给 `silentStartIdle`：注册表的那一位、终端域对这个会话的观测、会话
+ * 建立到现在多久。判据本身是一个纯函数，放在 `agent/target-state.ts` 与五态并
+ * 排——这条路是那张表的补充说明，不是另一套状态。
+ *
+ * 「从未上报过」由调用点保证：整段只在 `!stateSourceIsReported(stateSource)`
+ * 里跑，而一个报过一条的节点此后永远有 `stateSource`（`restored` 的行也是
+ * `hook`，所以重启恢复的节点不走这条路，仍按 §4.1 排队）。
+ */
+function silentStart(
+  context: CollabContext,
+  live: LiveTarget,
+  nowMs: number,
+): boolean {
+  const agentId = live.target.agentId;
+  if (agentId === null) return false;
+  const session = live.session;
+  return silentStartIdle({
+    startsSilently: startsSilently(baseAgent(context.settings, agentId)),
+    reported: stateSourceIsReported(live.stateSource),
+    observed: context.terminals?.observed?.(session.sessionId),
+    sessionAgeMs:
+      session.createdAtMs === undefined
+        ? undefined
+        : nowMs - session.createdAtMs,
+    nowMs,
+  });
+}
+
 /** 演练用：门链跑不过就当作「看不见」，不抛。 */
 async function peek(
   context: CollabContext,
@@ -1034,6 +1119,7 @@ function recordAndAnnounce(
   item: QueueItem,
   traceId: string,
   outcome: string,
+  targetState: string,
   options: AttemptOptions,
 ): void {
   recordDelivery(context.database, {
@@ -1042,6 +1128,9 @@ function recordAndAnnounce(
     sourceNodeId: item.sourceNodeId,
     targetNodeId: item.targetNodeId,
     outcome,
+    // 「结果如何」之外的另一半：凭什么。一条 `observed-quiet` 的 `delivered`
+    // 与一条有上报的 `delivered` 在面板上不该长得一样（迁移 0026、§4.3）。
+    targetState,
     receipt: item.id,
     bodyChars: [...item.body].length,
   });

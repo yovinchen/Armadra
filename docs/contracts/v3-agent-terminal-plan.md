@@ -367,7 +367,7 @@ ACP 通道整体移除（`acp.rs`、`AcpSurface.tsx`、`timeline.ts`、`/api/age
 agent_status(node_id PK, workspace_id, agent_id, state, unread, session_id, pending_id, verified, restored, updated_at)
 agent_approvals(id PK, node_id, workspace_id, request_json, answer, answered_by, created_at, answered_at)
 context_links(node_id PK, workspace_id, links_json, updated_at)
-agent_deliveries(trace_id PK, workspace_id, source_node_id, target_node_id, outcome, receipt, body_chars, created_at)
+agent_deliveries(trace_id PK, workspace_id, source_node_id, target_node_id, outcome, target_state, receipt, body_chars, created_at)
 hook_installs(agent_id PK, client_revision, installed_at, config_path)
 ```
 

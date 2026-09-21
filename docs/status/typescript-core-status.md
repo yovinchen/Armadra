@@ -1423,3 +1423,31 @@ releaseDrive(sessionId, actor): Lease;
 ### 30.4 验证
 
 `pnpm libs:build` 之后：`@armadra/web` 测试 264 个文件 2619 条全绿，`pnpm --filter @armadra/web typecheck`、`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。
+
+## 31. 启动时不上报的 CLI：首投放行路（2026-09-21）
+
+实测（Codex CLI 0.155.1，真机）：hook 全部装好且 enabled，进程起到「› Ask Codex to do anything」提示符**一条事件都不发**，`agent_status` 里没有这个节点的行；第一条事件要等人在里面提交一次输入才来。于是 `open-agent --task` 与 `send` 对新建的 Codex 节点永远停在 `agent_send_queue` 的 `queued / TARGET_STARTING`——`targetState()` 对没有上报的节点答 `starting`，而那条「第一条真上报」按定义不会来。用户看到的是「主 Agent 开出的 Codex 一个都没收到任务」。
+
+### 31.1 注册表那一位
+
+`AgentDefinition.startsSilently`，今天只有 `codex` 带；读它的是 `registry.startsSilently(provider)`，与 `stateSourceFor` 并排——两个都是「这家 CLI 的适配长什么样」的事实，自定义 Agent 按 base 问。含义写在类型上：**启动完成不发任何 hook 事件，第一次「空闲」只能靠观察**；它不表示「没有状态通道」，投出第一条之后 `user_prompt_submit` 与 `stop` 照常来。
+
+### 31.2 放行判据
+
+五态一个字没改（`targetState()` 对这种节点仍然答 `starting`，它说的是「我们知道什么」）。新判据是 `agent/target-state.ts::silentStartIdle` 这个纯函数，由 `control/send.ts::attempt` 在 `!stateSourceIsReported(stateSource)` 那一支里调用，五条同时成立才当作 `idle`：标了 `startsSilently`、从未上报过、会话活着（门链更早的一条保证）、`observedQuiet(…, SILENT_START_QUIET_MS = 3000)`、会话建立 ≥ `SILENT_START_MIN_AGE_MS = 4000`。「从未上报过」把 `restored` 的行自动排除在外——它的 `stateSource` 是 `hook`，所以重启恢复的节点仍按 §4.1 排队。会话年龄这个事实以前没有人取，`loadSession` 因此多答一个 `createdAtMs`。
+
+### 31.3 触发源
+
+泵不轮询（听 `agent.status` 与租约释放），而这类目标按定义不发那条事件。所以挂在**已有的清扫定时器**上：`SendPump.sweep()` 捎带一次 `probeSilentStarters()`，对「队里有 `queued` + 目标标了旗 + 目标从未上报过」三条同时成立的目标各试一次 `drain`。没有新增定时器，轮询也没有扩大到别的目标；代价是首投最坏等一个清扫周期（60 秒）。
+
+### 31.4 可见性
+
+`agent_deliveries` 多一列 `target_state`（迁移 `0026_delivery_target_state.sql`，缺省空串），记的就是回执里那个 `targetState`：五态之一，或者 `observed-quiet`。`GET …/deliveries` 随之多一个 `targetState` 字段，所以「按观察放行的 `delivered`」与「有上报的 `delivered`」事后分得开；board-log 的 receipt 也写 `written observed-quiet`，`agent.send` 审计的 detail 里带 `targetState`。前端徽标后补。
+
+### 31.5 取舍
+
+误判面两条写进了设计 §4.3 并接受：**目录信任提示**（Codex 首次进未信任目录先问「Do you trust」，那个提示也是安静的，正文会成为它的答案）与**安静的忙碌**。不解析提示符、不识别 OSC 的那条（§12 第 3 条）不变；`observed` 没有默认放行（§12 第 5 条）也不变——这条路要注册表显式标旗才存在，且一个节点一生只用得上一次。
+
+### 31.6 验证
+
+`pnpm libs:build` 之后 `@armadra/desktop` 测试、`@armadra/web` typecheck、`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。新增用例：`collab/silent-start.test.ts` 八条（放行一条，不放行五条：没标旗、半截输入、刚出过输出、会话太新、已上报 busy；探测两条：只挑该挑的目标、清扫那把定时器就是触发源）、`agent/target-state.test.ts` 七条纯函数用例、`collab/first-task.test.ts` 一条端到端形状。

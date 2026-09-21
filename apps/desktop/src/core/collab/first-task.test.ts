@@ -141,6 +141,43 @@ describe("open-agent --task", () => {
     expect(pendingFor(fixture.database, created, 0)).toHaveLength(0);
   });
 
+  it("Codex 那种「启动不上报」的节点，等的是终端安静下来", async () => {
+    // 真机上那条失败的端到端形状（§4.3）：Codex 起到提示符一条 hook 都不发，
+    // 于是 `agent_status` 里没有它的行，第一条任务按 §4.1 会永远排在
+    // `TARGET_STARTING` 上。这条路把它放出去——判据是观察，不是上报。
+    const created = result(
+      await run(me, "open-agent", { agent: "codex", task: "做这件事" }),
+    ).id as string;
+    const sessionId = fixture.session(created, "codex");
+    fixture.terminal.drive.set(created, {
+      nodeId: created,
+      sessionId,
+      state: "starting",
+      stateSource: undefined,
+      lease: freeLease(0),
+      driveGeneration: 0,
+    } as never);
+    fixture.database
+      .prepare("UPDATE terminal_sessions SET created_at = ? WHERE id = ?")
+      .run(new Date(Date.now() - 10_000).toISOString(), sessionId);
+    fixture.terminal.activity.set(sessionId, {
+      pending: false,
+      lastInputAt: undefined,
+      lastOutputAt: Date.now() - 5_000,
+    });
+
+    const pump = new SendPump(() => fixture.collab);
+    // 触发源是清扫那把定时器捎带的探测，不是一条 `agent.status`——那条事件按
+    // 定义不会来。
+    expect(await pump.probeSilentStarters()).toBe(1);
+
+    expect(fixture.terminal.submits).toHaveLength(1);
+    const written = fixture.terminal.submits[0]?.data ?? "";
+    expect(written).toContain("from: planner");
+    expect(written).toContain("做这件事");
+    expect(pendingFor(fixture.database, created, 0)).toHaveLength(0);
+  });
+
   it("过渡期里 --prompt 等价于 --task，并带一行 warning", async () => {
     const body = result(
       await run(me, "open-agent", { agent: "codex", prompt: "做这件事" }),

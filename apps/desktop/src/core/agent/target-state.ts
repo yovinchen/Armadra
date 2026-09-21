@@ -142,3 +142,59 @@ export function observedQuiet(
   if (last === 0) return true;
   return nowMs - last >= quietMs;
 }
+
+/* ---------------------- 启动时不上报的 CLI：第一次投递 --------------------- */
+
+/**
+ * 这条路上要求的安静比 {@link OBSERVED_QUIET_MS} 长一秒。
+ *
+ * 那两秒量的是「我刚打进去一行，它回话了没有」；这里没有人打进去过任何东西，
+ * 量的是一个还在铺开界面的 TUI，所以宁可多等一拍。
+ */
+export const SILENT_START_QUIET_MS = 3_000;
+
+/** 会话建立不满这么久，一律不走这条路。 */
+export const SILENT_START_MIN_AGE_MS = 4_000;
+
+export interface SilentStartGate {
+  /** 注册表说这家 CLI 启动完成不发事件（`registry.startsSilently`）。 */
+  readonly startsSilently: boolean;
+  /** 这个节点**曾经**上报过（`stateSourceIsReported`）。 */
+  readonly reported: boolean;
+  /** 终端域对这个会话的观测；`undefined` 表示它不认识这个会话。 */
+  readonly observed: ObservedActivity | undefined;
+  /** 会话建立到现在多久；`undefined` 表示不知道。 */
+  readonly sessionAgeMs: number | undefined;
+  readonly nowMs: number;
+}
+
+/**
+ * 「从未上报过的 `startsSilently` 节点，此刻可以当作 `idle`」——§4.3 的首投放
+ * 行门。
+ *
+ * 它**不是**第六个状态，也没有动五态本身：`targetState()` 对这种节点仍然答
+ * `starting`（它说的是「我们知道什么」，而我们确实什么都没收到）。这个函数说
+ * 的是另一件事——「不放行的代价是这条队伍永远不动」，因为那第一条上报按定义
+ * 不会来。
+ *
+ * 四个条件缺一不可，每一个都在挡一种具体的误判：
+ *
+ *   1. **注册表标了旗**。只有实测过「装好 hook 也不发 `session_start`」的那几
+ *      家走这条路；别的 CLI 没报第一条就是还没起来，等着就行。
+ *   2. **从未上报过**。报过一条的节点此后永远有上报（包括 `restored` 的行，
+ *      它的 `stateSource` 是 `hook`），那种节点按 §4.1 排队，不走这里。
+ *   3. **安静**。没有半截没提交的行，且 {@link SILENT_START_QUIET_MS} 内没有
+ *      新输出。
+ *   4. **会话不新**。刚起 PTY 的那一瞬间什么都还没输出，「安静」在那里恒成立
+ *      ——{@link SILENT_START_MIN_AGE_MS} 挡的就是这一下。
+ *
+ * 会话活着由调用方保证（它是门链上更早的一条：没有会话就是 `exited`）。
+ */
+export function silentStartIdle(gate: SilentStartGate): boolean {
+  if (!gate.startsSilently) return false;
+  if (gate.reported) return false;
+  if (gate.sessionAgeMs === undefined) return false;
+  if (gate.sessionAgeMs < SILENT_START_MIN_AGE_MS) return false;
+  if (gate.observed === undefined) return false;
+  return observedQuiet(gate.observed, gate.nowMs, SILENT_START_QUIET_MS);
+}

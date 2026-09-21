@@ -4,8 +4,11 @@ import {
   OBSERVED_QUIET_MS,
   TARGET_STATES,
   acceptsDelivery,
+  SILENT_START_MIN_AGE_MS,
+  SILENT_START_QUIET_MS,
   observedQuiet,
   queueable,
+  silentStartIdle,
   stateSourceIsReported,
   targetState,
 } from "./target-state";
@@ -130,5 +133,59 @@ describe("没有 hook 的 CLI 的提示符就绪启发式", () => {
         now,
       ),
     ).toBe(true);
+  });
+});
+
+describe("silentStartIdle", () => {
+  const now = 1_000_000;
+  const quiet = {
+    pending: false,
+    lastInputAt: undefined,
+    lastOutputAt: now - SILENT_START_QUIET_MS,
+  };
+  const gate = {
+    startsSilently: true,
+    reported: false,
+    observed: quiet,
+    sessionAgeMs: SILENT_START_MIN_AGE_MS,
+    nowMs: now,
+  };
+
+  it("四条都成立才放行", () => {
+    expect(silentStartIdle(gate)).toBe(true);
+  });
+
+  it("没标旗的 CLI 一律不走：没报第一条就是还没起来", () => {
+    expect(silentStartIdle({ ...gate, startsSilently: false })).toBe(false);
+  });
+
+  it("上报过的节点不走：包括重启后读回来的那种", () => {
+    expect(silentStartIdle({ ...gate, reported: true })).toBe(false);
+  });
+
+  it("终端域说不出话就不走", () => {
+    expect(silentStartIdle({ ...gate, observed: undefined })).toBe(false);
+  });
+
+  it("有半截没提交的行就不走", () => {
+    expect(
+      silentStartIdle({ ...gate, observed: { ...quiet, pending: true } }),
+    ).toBe(false);
+  });
+
+  it("刚吐过东西就不走", () => {
+    expect(
+      silentStartIdle({
+        ...gate,
+        observed: { ...quiet, lastOutputAt: now - (SILENT_START_QUIET_MS - 1) },
+      }),
+    ).toBe(false);
+  });
+
+  it("会话不够老就不走，年龄不知道也不走", () => {
+    expect(
+      silentStartIdle({ ...gate, sessionAgeMs: SILENT_START_MIN_AGE_MS - 1 }),
+    ).toBe(false);
+    expect(silentStartIdle({ ...gate, sessionAgeMs: undefined })).toBe(false);
   });
 });
