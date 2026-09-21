@@ -20,6 +20,7 @@
 import { useCompactLayout } from "../platform/layout";
 import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/ui/sheet";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { Bell, PanelLeft, Search, Settings } from "lucide-react";
 
 import { useStatusCounts } from "../agent/status-store";
@@ -216,7 +217,12 @@ function SidebarToggle({ open }: { open: boolean }) {
   const keys = commandKeysLabel("app.sidebar");
   const label = open ? t("sidebar.collapse") : t("sidebar.expand");
 
-  return (
+  // 挂到 body 上，而不是留在 App 那个 flex 根容器里。真机实测（2026-09-22）：
+  // 同一个元素、同一个位置、同一份 no-drag，作为根 flex 容器的 fixed 子节点
+  // 时原生层算可拖拽区域漏掉它，真实点击整个被当成拖窗口；搬到 body 下就
+  // 正常。页面内的命中测试与 CDP 注入的点击看不出这个差别，只有系统级的
+  // 鼠标事件会。
+  return createPortal(
     <div
       {...noDragProps()}
       data-slot="sidebar-toggle"
@@ -245,7 +251,8 @@ function SidebarToggle({ open }: { open: boolean }) {
           {keys ? `${label} ${keys}` : label}
         </TooltipContent>
       </Tooltip>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

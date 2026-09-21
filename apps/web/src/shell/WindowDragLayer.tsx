@@ -31,7 +31,11 @@ export function WindowDragLayer() {
       aria-hidden
       data-testid="window-drag-layer"
       {...dragRegionProps()}
-      className="fixed top-0 right-0 left-0 z-[var(--z-pills)] h-[var(--tabbar-h)]"
+      // `pointer-events-none`：这一条只为原生层的可拖拽区域而存在（那是按布局
+      // 矩形算的，与指针事件无关）。页面自己的命中测试不该被它挡住——右上角
+      // 控件簇住在 `isolation: isolate` 的画布面里，z 再大也出不来，一旦这一
+      // 条接指针事件，簇的第一格在页面里就点不到。
+      className="pointer-events-none fixed top-0 right-0 left-0 z-[var(--z-pills)] h-[var(--tabbar-h)]"
     />
   );
 }

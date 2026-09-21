@@ -126,4 +126,11 @@ describe("桌面壳里的拖拽区顺序", () => {
         .compareDocumentPosition(cluster!) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
+
+  it("侧栏折叠钮挂在 body 下，不留在 App 的 flex 根容器里", () => {
+    render(<App />);
+    const toggle = document.querySelector('[data-slot="sidebar-toggle"]');
+    expect(toggle?.parentElement).toBe(document.body);
+    expect(toggle?.getAttribute("data-app-region")).toBe("no-drag");
+  });
 });

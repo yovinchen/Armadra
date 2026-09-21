@@ -75,5 +75,7 @@ describe("WindowDragLayer", () => {
     expect(layer.childNodes.length).toBe(0);
     expect(layer.className).toContain("h-[var(--tabbar-h)]");
     expect(layer.className).toContain("top-0");
+    // 只喂原生层的可拖拽区域，不接页面自己的指针事件。
+    expect(layer.className).toContain("pointer-events-none");
   });
 });
