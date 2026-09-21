@@ -5,7 +5,10 @@ import { type CanvasGet, type CanvasSet, type CanvasStore } from "./types";
 export function createEdgesSlice(
   set: CanvasSet,
   get: CanvasGet,
-): Pick<CanvasStore, "addEdge" | "removeEdges" | "setEdgeRole"> {
+): Pick<
+  CanvasStore,
+  "addEdge" | "removeEdges" | "setEdgeRole" | "reverseEdge"
+> {
   return {
     addEdge: (source, target) => {
       const state = get();
@@ -58,6 +61,41 @@ export function createEdgesSlice(
             ...document,
             edges: document.edges.map((entry) =>
               entry.id === id ? { ...entry, role, updatedAt: stamp } : entry,
+            ),
+          };
+        });
+        return patch ?? state;
+      });
+    },
+
+    /**
+     * 掉头：把 `source` 与 `target` 换个个儿，边 id 不变。
+     *
+     * 主从边是画布上唯一一条有方向的关系，而方向今天由「当时往哪个方向拖」
+     * 决定。拖反了不该只能删线重连——那会连带丢掉这条边上的一切（id 换了，
+     * 投递记录与选区都跟着断）。所以换的是两端，不是这条边。
+     *
+     * `role` 一起传进来时在**同一次提交**里落：菜单里那一项（「设为 从 ← 主」）
+     * 是人眼里的一个动作，撤销也该是一步。
+     */
+    reverseEdge: (id, role) => {
+      set((state) => {
+        const patch = commit(state, (document) => {
+          const edge = document.edges.find((entry) => entry.id === id);
+          if (!edge) return null;
+          const stamp = now();
+          return {
+            ...document,
+            edges: document.edges.map((entry) =>
+              entry.id === id
+                ? {
+                    ...entry,
+                    source: edge.target,
+                    target: edge.source,
+                    ...(role === undefined ? {} : { role }),
+                    updatedAt: stamp,
+                  }
+                : entry,
             ),
           };
         });

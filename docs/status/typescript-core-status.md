@@ -1395,3 +1395,31 @@ releaseDrive(sessionId, actor): Lease;
 ### 29.5 验证
 
 `pnpm libs:build` 之后：`@armadra/shared`、`@armadra/web`、`@armadra/desktop`、`@armadra/server` 全绿，`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。新增用例两条：`claude.test.ts` 断言装与卸都会摘掉我们自己那条旧 statusLine、`repair.test.ts` 断言修复认得当前名字的那条而不动陌生的那条；`wire.test.ts` 的 `context-usage` 一节改成断言它静默且退出 0。
+
+## 30. 连线的角色事后可改（2026-09-21）
+
+真机上拉出来的四条线全是「对等」——连线时的命名对话框里虽然能选「主 → 从」，但它可以跳过，跳过之后没有任何入口改得回来，只能删线重连。对等边只能 `post`，不能往对方终端里打字，所以这不是一个装饰性的字段。
+
+### 30.1 边的右键菜单多三项
+
+`apps/web/src/canvas/menus/edge-menu.tsx` 原来只有「删除连线」。现在上下文连线的那一支是：设为对等 / 设为 主 → 从 / 设为 从 ← 主，分隔线，删除连线。当前那一项 `disabled`（`role` 缺席与 `peer` 同义）。
+
+三项只认**右键命中的那一条**边，不像删除那样跟着选区展开：主从是有方向的，选区里每条边的两端各是各的。引用边（`whiteboard.references`）那一支不变，仍然是重新同步与移除。
+
+### 30.2 `reverseEdge`
+
+「从 ← 主」要的是让 `target` 当主，而方向写在两端上，所以 `store/canvas/edges.ts` 新增 `reverseEdge(id, role?)`：换两端、边 id 不变、`role` 给了就在**同一次 `commit`** 里一起落（撤销一步）。id 不变意味着这条线上的选区与投递记录都还在，而删线重连会把它们一起丢掉。
+
+保存路径不需要配合：`sync/project.projectEdge` 每次从文档现读 `source` / `target`，`commit` 的差分按 id 比对，所以掉头登记成这条边的一次更新（`pending.markPatch`），与改标题走的是同一条路。core 一个字节没动。
+
+### 30.3 文案与测试
+
+`i18n/canvas.ts` 中英各三条：`edge.role.setPeer`、`edge.role.setSupervises`、`edge.role.setSupervisesReverse`。
+
+`CanvasMenus.test.tsx` 断言对等边上「设为对等」不可点、另外两项各自落到 `setEdgeRole(id, "supervises")` 与 `reverseEdge(id, "supervises")`，以及主从边上「设为 主 → 从」不可点、「设为对等」落到 `setEdgeRole(id, "peer")`；`canvas-store.test.ts` 覆盖 `reverseEdge` 的四条（带角色、不带角色、撤销一步、不存在的 id 不换文档）。
+
+边被点选时的反馈（品牌色 + 加粗）与主从边的箭头规则是 `LinkEdge` 已有的，没动。
+
+### 30.4 验证
+
+`pnpm libs:build` 之后：`@armadra/web` 测试 264 个文件 2619 条全绿，`pnpm --filter @armadra/web typecheck`、`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。

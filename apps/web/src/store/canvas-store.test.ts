@@ -760,6 +760,58 @@ describe("addEdge", () => {
   });
 });
 
+describe("reverseEdge", () => {
+  /**
+   * 拖反了的主从边不该只能删线重连：边 id 不变，换的是两端，所以这条线上的
+   * 一切（选区、投递记录）都还在。
+   */
+  it("两端互换，边 id 不变；角色一起传就在同一次提交里落", () => {
+    const a = makeNode("terminal");
+    const b = makeNode("terminal");
+    load([a, b]);
+    const id = state().addEdge(a.id, b.id) as string;
+    state().reverseEdge(id, "supervises");
+    expect(edges()[0]).toMatchObject({
+      id,
+      source: b.id,
+      target: a.id,
+      role: "supervises",
+    });
+  });
+
+  it("不给角色就只掉头，原来的角色留着", () => {
+    const a = makeNode("terminal");
+    const b = makeNode("terminal");
+    load([a, b]);
+    const id = state().addEdge(a.id, b.id) as string;
+    state().setEdgeRole(id, "supervises");
+    state().reverseEdge(id);
+    expect(edges()[0]).toMatchObject({
+      source: b.id,
+      target: a.id,
+      role: "supervises",
+    });
+  });
+
+  it("撤销一步就回到掉头之前", () => {
+    const a = makeNode("terminal");
+    const b = makeNode("terminal");
+    load([a, b]);
+    const id = state().addEdge(a.id, b.id) as string;
+    state().reverseEdge(id, "supervises");
+    state().undo();
+    expect(edges()[0]).toMatchObject({ source: a.id, target: b.id });
+    expect(edges()[0]?.role).toBeUndefined();
+  });
+
+  it("不存在的 id 不换文档", () => {
+    load([], []);
+    const before = state().document;
+    state().reverseEdge("ghost");
+    expect(state().document).toBe(before);
+  });
+});
+
 describe("removeEdges", () => {
   it("按 id 删除", () => {
     const a = makeNode("terminal");

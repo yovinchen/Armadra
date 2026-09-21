@@ -13,7 +13,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/ui/context-menu";
  * 右键菜单的分流（React Flow 计划 F18）。
  *
  * 四种目标各一套内容：空白 = 新建菜单、节点 = 节点菜单、白板对象 = 对象
- * 菜单、边 = 删除连线。分流不靠我们自己命中测试，靠 React Flow 的四个
+ * 菜单、边 = 角色三项加删除。分流不靠我们自己命中测试，靠 React Flow 的四个
  * 回调——所以这里直接调那四个回调，断言展开的是哪一套。
  */
 
@@ -66,6 +66,8 @@ const state = {
   maximized: {} as Record<string, unknown>,
   addNode: vi.fn(),
   removeEdges: vi.fn(),
+  setEdgeRole: vi.fn(),
+  reverseEdge: vi.fn(),
   selectNodes: vi.fn(),
   setParent: vi.fn(),
   duplicateNodes: vi.fn(),
@@ -173,7 +175,10 @@ describe("useCanvasMenus", () => {
     state.selectedNodeIds = [];
     state.selectedItemIds = [];
     state.selectedEdgeIds = [];
+    state.document = { nodes: [node], edges: [edge] };
     state.removeEdges.mockClear();
+    state.setEdgeRole.mockClear();
+    state.reverseEdge.mockClear();
   });
 
   it("空白右键 → 新建菜单", () => {
@@ -195,11 +200,44 @@ describe("useCanvasMenus", () => {
     expect(screen.queryByText("新建终端")).toBeNull();
   });
 
-  it("边右键 → 只有「删除连线」，点它就删", () => {
+  it("边右键 → 删除连线，点它就删", () => {
     openWith(() => handlers.onEdgeContextMenu(mouse, { id: edge.id } as never));
     const remove = screen.getByText("删除连线");
     fireEvent.click(remove);
     expect(state.removeEdges).toHaveBeenCalledWith([edge.id]);
+  });
+
+  /**
+   * 连线角色事后可改（设计 §2.6）：命名对话框可以跳过，跳过之后这里是
+   * 唯一改得回来的地方。三项各自落到一个动作上，当前那一项不可点。
+   */
+  it("对等边的菜单：「设为对等」不可点，另外两项各自落到一个动作", () => {
+    openWith(() => handlers.onEdgeContextMenu(mouse, { id: edge.id } as never));
+    expect(screen.getByText("设为对等").getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+
+    fireEvent.click(screen.getByText("设为 主 → 从"));
+    expect(state.setEdgeRole).toHaveBeenCalledWith(edge.id, "supervises");
+
+    cleanup();
+    openWith(() => handlers.onEdgeContextMenu(mouse, { id: edge.id } as never));
+    fireEvent.click(screen.getByText("设为 从 ← 主"));
+    // 反向是一个动作：两端互换与角色在同一次提交里落，撤销一步。
+    expect(state.reverseEdge).toHaveBeenCalledWith(edge.id, "supervises");
+  });
+
+  it("主从边的菜单：改回对等，「设为 主 → 从」变成不可点", () => {
+    state.document = {
+      nodes: [node],
+      edges: [{ ...edge, role: "supervises" }],
+    };
+    openWith(() => handlers.onEdgeContextMenu(mouse, { id: edge.id } as never));
+    expect(screen.getByText("设为 主 → 从").getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+    fireEvent.click(screen.getByText("设为对等"));
+    expect(state.setEdgeRole).toHaveBeenCalledWith(edge.id, "peer");
   });
 
   it("混合选区的多选框右键给节点菜单", () => {

@@ -673,6 +673,7 @@ export const NODE_MIN_SIZE: Record<CanvasNodeType, Size>;
 | 节点头     | 「正被 <名字> 驱动」徽标 + 「接管」按钮；人持有时显示「你在驱动」+「交还」                                    | 同上；数据来自新事件 `terminal.lease`（形状抄 `browser.lease`）                                    |
 | 节点头     | 「排队 N」小胶囊，点开是该节点的待投列表（可逐条删）                                                          | 同上                                                                                               |
 | 连线       | 最近一次投递的方向箭头闪一下 + 悬停显示 `outcome` / 时间 / `bodyChars`（不显示正文）                          | `canvas/derived-edges.ts`；数据来自已有的 `agent.delivery` 事件（`bus.ts:60`，今天只有交接域在发） |
+| 连线       | 右键菜单：设为对等 / 主 → 从 / 从 ← 主（当前那一项不可点），以及删除连线                                      | `canvas/menus/edge-menu.tsx`；角色事后可改，命名对话框那一次是可以跳过的                           |
 | 节点设置   | 「允许连线的 Agent 投递」三档：关 / 只排队要我确认 / 允许；以及「收件箱唤醒」三档（§5）                       | 节点「更多」菜单 → 设置                                                                            |
 | 收件箱面板 | 两个页签：**未读**（`agent_mailbox`）与 **待投**（`agent_send_queue`），后者可逐条取消                        | 复用已有的交接历史面板位置                                                                         |
 | 命令面板   | 「向节点投递…」：选目标 → 写正文 → 回车，等价于人手动执行一次 `send`（人不受连线限制，走自己的授权）          | `panels/CommandPalette.tsx`                                                                        |
