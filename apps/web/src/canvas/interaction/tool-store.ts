@@ -18,7 +18,7 @@ import type { Dash, Fill, Geo } from "@/canvas/whiteboard/model";
  * 那两项由 `preferences-store` 持久化，挂载时推进来）。
  */
 
-/** 开放给用户的工具。集合与旧引擎相同，id 从此归我们自己。 */
+/** 开放给用户的工具。 */
 export const CANVAS_TOOL_IDS = [
   "select",
   "hand",
@@ -28,7 +28,6 @@ export const CANVAS_TOOL_IDS = [
   "line",
   "arrow",
   "text",
-  "frame",
 ] as const;
 
 export type CanvasToolId = (typeof CANVAS_TOOL_IDS)[number];

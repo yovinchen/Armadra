@@ -3,8 +3,6 @@ import { useReactFlow, useStoreApi } from "@xyflow/react";
 import type { Position } from "@armadra/shared";
 
 import { usePreferencesStore } from "@/app/preferences-store";
-import { useCanvasStore } from "@/store/canvas-store";
-import { defaultNodeSize } from "@/store/defaults";
 import { isCanvasLocked } from "../../canvas-lock";
 import {
   getBaseSize,
@@ -105,14 +103,10 @@ export function useToolPointer(): ToolPointerState {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       if (!drawn) return;
-      if (drawn.kind === "frame") {
-        commitFrame(drawn);
-      } else {
-        const item = commitDraft(drawn, createItemId());
-        if (item) {
-          addItems([item]);
-          select([item.id]);
-        }
+      const item = commitDraft(drawn, createItemId());
+      if (item) {
+        addItems([item]);
+        select([item.id]);
       }
       if (!latest.current.preferences.toolLock) setTool("select");
     };
@@ -199,30 +193,4 @@ export function applyDynamicSize(enabled: boolean, zoom: number): void {
   const base = getBaseSize();
   const size = enabled ? scaledSize(base, zoom) : base;
   if (size !== getNextStyle().size) setDerivedSize(size);
-}
-
-/**
- * 画框（F21 的 `frame` 工具）建的是 `group` 节点，不是白板对象——它要能
- * 绑 worktree、能装节点、能在整理里整块移动，那些都是节点的能力。
- */
-function commitFrame(draft: Draft): void {
-  const rect = {
-    x: Math.min(draft.origin.x, draft.current.x),
-    y: Math.min(draft.origin.y, draft.current.y),
-    width: Math.abs(draft.current.x - draft.origin.x),
-    height: Math.abs(draft.current.y - draft.origin.y),
-  };
-  // 拖得太小当成「点一下」：给分组的默认尺寸，别让用户拿到一个装不下节点的框。
-  const size =
-    rect.width < 40 || rect.height < 40
-      ? defaultNodeSize("group")
-      : { width: rect.width, height: rect.height };
-  const position =
-    rect.width < 40 || rect.height < 40
-      ? {
-          x: draft.origin.x - size.width / 2,
-          y: draft.origin.y - size.height / 2,
-        }
-      : { x: rect.x, y: rect.y };
-  useCanvasStore.getState().addNode("group", { position, size });
 }

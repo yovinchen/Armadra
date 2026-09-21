@@ -477,14 +477,6 @@ export const COMMANDS = [
     allowInTerminal: false,
     allowWhileTyping: false,
   },
-  {
-    id: "canvas.tool.frame",
-    labelKey: "cmd.canvas.tool.frame",
-    scope: "canvas",
-    defaultKeys: both("F"),
-    allowInTerminal: false,
-    allowWhileTyping: false,
-  },
 
   // ── terminal ───────────────────────────────────────────────────
   {

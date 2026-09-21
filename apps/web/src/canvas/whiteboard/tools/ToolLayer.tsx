@@ -39,7 +39,6 @@ const CURSORS: Record<string, string> = {
   line: "crosshair",
   arrow: "crosshair",
   text: "text",
-  frame: "crosshair",
 };
 
 /**

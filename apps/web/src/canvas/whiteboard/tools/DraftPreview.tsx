@@ -56,22 +56,6 @@ function DraftShape({
   draft: Draft;
   scheme: "light" | "dark";
 }) {
-  if (draft.kind === "frame") {
-    const rect = draftRect(draft);
-    return (
-      <rect
-        x={rect.x}
-        y={rect.y}
-        width={rect.w}
-        height={rect.h}
-        fill="none"
-        stroke="var(--brand)"
-        strokeWidth={1.5}
-        strokeDasharray="6 4"
-      />
-    );
-  }
-
   const color = colorHex(draft.style.color, scheme);
   const width = strokeWidth(draft.style.size);
 

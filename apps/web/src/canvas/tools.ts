@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Circle,
   Diamond,
-  Frame,
   Hand,
   Hexagon,
   Highlighter,
@@ -92,12 +91,6 @@ export const CANVAS_TOOLS: readonly CanvasToolSpec[] = [
     command: "canvas.tool.text",
     labelKey: "tool.text",
     icon: Type,
-  },
-  {
-    id: "frame",
-    command: "canvas.tool.frame",
-    labelKey: "tool.frame",
-    icon: Frame,
   },
 ];
 

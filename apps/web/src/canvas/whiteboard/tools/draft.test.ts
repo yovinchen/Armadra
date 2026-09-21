@@ -164,15 +164,6 @@ describe("commitDraft", () => {
       arrowEnd: true,
     });
   });
-
-  it("画框不落成白板对象（它建的是 group 节点）", () => {
-    const draft: Draft = {
-      kind: "frame",
-      origin: at(0, 0),
-      current: at(100, 100),
-    };
-    expect(commitDraft(draft, "f")).toBeNull();
-  });
 });
 
 describe("textItemAt", () => {

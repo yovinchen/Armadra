@@ -102,7 +102,7 @@ describe("手形工具", () => {
  *
  * 框选起点是 `Pane` 的 `onPointerDownCapture`，React 19 从根容器派发整条
  * 捕获路径，工具层装在 `.react-flow` 上的捕获监听器比它晚——所以只能在
- * 这张表里让 React Flow 压根不装那个 handler。七个绘图工具逐个钉住。
+ * 这张表里让 React Flow 压根不装那个 handler。六个绘图工具逐个钉住。
  */
 describe("绘图工具", () => {
   const DRAWING = [
@@ -112,7 +112,6 @@ describe("绘图工具", () => {
     "line",
     "arrow",
     "text",
-    "frame",
   ] as const;
 
   it("框选、节点拖动、拖动平移全关：左键整条归工具层", () => {

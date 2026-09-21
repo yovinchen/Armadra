@@ -52,7 +52,6 @@ export const commands: MessageModule = {
     "cmd.canvas.tool.line": "直线工具",
     "cmd.canvas.tool.arrow": "箭头工具",
     "cmd.canvas.tool.text": "文字工具",
-    "cmd.canvas.tool.frame": "画框工具",
 
     "cmd.terminal.search": "终端内搜索",
 
@@ -119,7 +118,6 @@ export const commands: MessageModule = {
     "cmd.canvas.tool.line": "Line tool",
     "cmd.canvas.tool.arrow": "Arrow tool",
     "cmd.canvas.tool.text": "Text tool",
-    "cmd.canvas.tool.frame": "Frame tool",
 
     "cmd.terminal.search": "Find in terminal",
 

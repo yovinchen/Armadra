@@ -45,7 +45,6 @@ describe("工具键表", () => {
       line: "L",
       arrow: "A",
       text: "T",
-      frame: "F",
     });
   });
 

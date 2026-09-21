@@ -50,11 +50,7 @@ export interface LineDraft extends DraftBase {
   arrowEnd: boolean;
 }
 
-export interface FrameDraft extends DraftBase {
-  kind: "frame";
-}
-
-export type Draft = InkDraft | ShapeDraft | LineDraft | FrameDraft;
+export type Draft = InkDraft | ShapeDraft | LineDraft;
 
 /** 拖出来的矩形（起点与当前点的包围盒），四个方向都成立。 */
 export function draftRect(draft: DraftBase): {
@@ -74,7 +70,6 @@ export function draftRect(draft: DraftBase): {
 /** 点一下没拖动时给的默认尺寸（画布单位）。 */
 export const CLICK_SHAPE_SIZE = { w: 160, h: 120 };
 export const CLICK_TEXT_WIDTH = 240;
-export const CLICK_FRAME_SIZE = { w: 480, h: 320 };
 
 /** 小于这个位移算「点一下」，不算「拖一个框」。 */
 export const DRAG_THRESHOLD = 4;
@@ -118,8 +113,6 @@ export function startDraft(
       return { ...base, kind: "line", style, arrowEnd: false };
     case "arrow":
       return { ...base, kind: "line", style, arrowEnd: true };
-    case "frame":
-      return { ...base, kind: "frame" };
     default:
       return null;
   }
@@ -144,7 +137,6 @@ export function extendDraft(
  * 松手：草稿 → 一条白板对象。
  *
  * 返回 null 表示这一笔不落成（拖出来的框太小、墨迹只有一个点又没移动）。
- * Frame 不在这里落成——它建的是 `group` 节点，不是白板对象。
  */
 export function commitDraft(
   draft: Draft,
@@ -152,8 +144,7 @@ export function commitDraft(
 ): Exclude<Item, { kind: "image" }> | null {
   if (draft.kind === "ink") return commitInk(draft, id);
   if (draft.kind === "shape") return commitShape(draft, id);
-  if (draft.kind === "line") return commitLine(draft, id);
-  return null;
+  return commitLine(draft, id);
 }
 
 function commitInk(draft: InkDraft, id: string): InkItem | null {
