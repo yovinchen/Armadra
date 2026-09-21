@@ -151,10 +151,15 @@ export function observedQuiet(
  * 那两秒量的是「我刚打进去一行，它回话了没有」；这里没有人打进去过任何东西，
  * 量的是一个还在铺开界面的 TUI，所以宁可多等一拍。
  */
-export const SILENT_START_QUIET_MS = 3_000;
+/**
+ * 曾经这里还有一条「3 秒内没有新输出」。真机上它永远不成立：Codex 0.155 的空闲
+ * 屏有一层一直在动的背景动画，每秒都有几行在变。所以这条门不看输出，只看有
+ * 没有半截没提交的行、以及会话够不够老。
+ */
+export const SILENT_START_QUIET_MS = 0;
 
 /** 会话建立不满这么久，一律不走这条路。 */
-export const SILENT_START_MIN_AGE_MS = 4_000;
+export const SILENT_START_MIN_AGE_MS = 6_000;
 
 export interface SilentStartGate {
   /** 注册表说这家 CLI 启动完成不发事件（`registry.startsSilently`）。 */
@@ -183,10 +188,10 @@ export interface SilentStartGate {
  *      家走这条路；别的 CLI 没报第一条就是还没起来，等着就行。
  *   2. **从未上报过**。报过一条的节点此后永远有上报（包括 `restored` 的行，
  *      它的 `stateSource` 是 `hook`），那种节点按 §4.1 排队，不走这里。
- *   3. **安静**。没有半截没提交的行，且 {@link SILENT_START_QUIET_MS} 内没有
- *      新输出。
- *   4. **会话不新**。刚起 PTY 的那一瞬间什么都还没输出，「安静」在那里恒成立
- *      ——{@link SILENT_START_MIN_AGE_MS} 挡的就是这一下。
+ *   3. **没有半截没提交的行**。投进去就是拼接。不看最近有没有输出：Codex 的
+ *      空闲屏一直在动（背景动画），「安静」在它身上永远不成立。
+ *   4. **会话不新**。起 PTY 之后 CLI 要几秒才到提示符——
+ *      {@link SILENT_START_MIN_AGE_MS} 挡的就是这一段。
  *
  * 会话活着由调用方保证（它是门链上更早的一条：没有会话就是 `exited`）。
  */
@@ -196,5 +201,5 @@ export function silentStartIdle(gate: SilentStartGate): boolean {
   if (gate.sessionAgeMs === undefined) return false;
   if (gate.sessionAgeMs < SILENT_START_MIN_AGE_MS) return false;
   if (gate.observed === undefined) return false;
-  return observedQuiet(gate.observed, gate.nowMs, SILENT_START_QUIET_MS);
+  return !gate.observed.pending;
 }

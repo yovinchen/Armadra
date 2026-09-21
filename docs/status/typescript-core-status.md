@@ -1434,7 +1434,7 @@ releaseDrive(sessionId, actor): Lease;
 
 ### 31.2 放行判据
 
-五态一个字没改（`targetState()` 对这种节点仍然答 `starting`，它说的是「我们知道什么」）。新判据是 `agent/target-state.ts::silentStartIdle` 这个纯函数，由 `control/send.ts::attempt` 在 `!stateSourceIsReported(stateSource)` 那一支里调用，五条同时成立才当作 `idle`：标了 `startsSilently`、从未上报过、会话活着（门链更早的一条保证）、`observedQuiet(…, SILENT_START_QUIET_MS = 3000)`、会话建立 ≥ `SILENT_START_MIN_AGE_MS = 4000`。「从未上报过」把 `restored` 的行自动排除在外——它的 `stateSource` 是 `hook`，所以重启恢复的节点仍按 §4.1 排队。会话年龄这个事实以前没有人取，`loadSession` 因此多答一个 `createdAtMs`。
+五态一个字没改（`targetState()` 对这种节点仍然答 `starting`，它说的是「我们知道什么」）。新判据是 `agent/target-state.ts::silentStartIdle` 这个纯函数，由 `control/send.ts::attempt` 在 `!stateSourceIsReported(stateSource)` 那一支里调用，五条同时成立才当作 `idle`：标了 `startsSilently`、从未上报过、会话活着（门链更早的一条保证）、没有半截没提交的行（不看输出——真机上 Codex 的空闲屏有背景动画，每秒都有几行在变，「安静」永远不成立，第一版按输出安静判定在真机上一条都投不出去）、会话建立 ≥ `SILENT_START_MIN_AGE_MS = 6000`。「从未上报过」把 `restored` 的行自动排除在外——它的 `stateSource` 是 `hook`，所以重启恢复的节点仍按 §4.1 排队。会话年龄这个事实以前没有人取，`loadSession` 因此多答一个 `createdAtMs`。
 
 ### 31.3 触发源
 

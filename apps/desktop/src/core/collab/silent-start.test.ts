@@ -157,7 +157,7 @@ describe("a CLI that reports nothing at startup", () => {
     expect(pendingCountFor(fixture.database, codex.id, 0)).toBe(1);
   });
 
-  it("刚吐过东西就不投：那可能是一轮正在跑", async () => {
+  it("刚吐过东西照样投：Codex 的空闲屏一直在动，输出不是信号", async () => {
     const codex = silentNode("codex");
     fixture.terminal.foreground = { command: "codex" };
     age(codex.sessionId, 10_000);
@@ -165,7 +165,7 @@ describe("a CLI that reports nothing at startup", () => {
 
     ok(await run(me, "send", { to: codex.id, body: "做这件事" }));
     await new SendPump(() => fixture.collab).drain(codex.id);
-    expect(fixture.terminal.submits).toHaveLength(0);
+    expect(fixture.terminal.submits).toHaveLength(1);
   });
 
   it("会话刚建起来也不投：那一瞬间「安静」恒成立", async () => {

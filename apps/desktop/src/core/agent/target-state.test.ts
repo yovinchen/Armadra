@@ -173,13 +173,13 @@ describe("silentStartIdle", () => {
     ).toBe(false);
   });
 
-  it("刚吐过东西就不走", () => {
+  it("刚吐过东西照样走：Codex 的空闲屏一直在动，输出不是信号", () => {
     expect(
       silentStartIdle({
         ...gate,
         observed: { ...quiet, lastOutputAt: now - (SILENT_START_QUIET_MS - 1) },
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("会话不够老就不走，年龄不知道也不走", () => {

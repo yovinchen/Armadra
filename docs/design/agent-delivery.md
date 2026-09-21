@@ -385,8 +385,8 @@ targetState(status: AgentStatus | undefined, live: number | undefined): TargetSt
 | 注册表标了旗    | `registry.startsSilently(base)`（今天只有 codex） | 别的 CLI 没报第一条就是**还没起来**，等着就对                                              |
 | 从未上报过      | `!stateSourceIsReported(stateSource)`             | 报过一条的节点此后永远有上报；`restored` 的行也是 `hook`，所以重启恢复的节点仍按 §4.1 排队 |
 | 会话活着        | 门链更早的一条（没有会话就是 `exited`）           | ——                                                                                         |
-| 安静            | `observedQuiet(…, SILENT_START_QUIET_MS = 3000)`  | 半截没提交的行、刚吐过东西的那一瞬                                                         |
-| 会话建立 ≥ 4 秒 | `SILENT_START_MIN_AGE_MS`                         | 刚起的 PTY 上「安静」恒成立                                                                |
+| 没有半截输入    | `observed.pending === false`                      | 投进去就是拼接。**不看输出**：Codex 的空闲屏有一直在动的背景动画，「安静」永远不成立       |
+| 会话建立 ≥ 6 秒 | `SILENT_START_MIN_AGE_MS`                         | 起 PTY 到提示符那几秒                                                                      |
 
 投出去之后 `user_prompt_submit` 自然会到，此后每一条都走上报那条路——这条路只在节点生命周期里用一次。
 
@@ -397,7 +397,7 @@ targetState(status: AgentStatus | undefined, live: number | undefined): TargetSt
 误判面比 `--unverified` 那条窄（它只用一次、只在从未上报过的节点上），但没有消失，两条要写明白，因为我们接受它：
 
 1. **目录信任提示**。Codex 第一次进一个未信任的目录会先问「Do you trust the files in this folder?」。那个提示停在那里也是安静的，而 `observed` 节点上「在等人」这个事实根本不存在（§4.3 第 3 条）——正文会被打进那个问题里，成为它的答案。
-2. **安静的忙碌**。一个进程在启动阶段跑了几秒无输出的活（索引、拉配置），与一个空闲提示符在这条判据下完全一样，正文会落进一轮已经在跑的对话里。
+2. **启动慢**。机器慢、登录或 MCP 初始化拖过 6 秒，正文会在提示符出现之前打进去；Codex 的输入框会把它当作预填，多数情况下只是多了一次回车。
 
 接受它的理由：另一条路是解析提示符或识别 OSC，而那是 §12 第 3 条明说不做的——那条线一旦越过，每一家 CLI 的每一次界面改版都会变成我们的回归。这里赌的是「三秒无输出 + 会话已经起来四秒 + 这家 CLI 从不主动上报」，赌输的后果是一段文字落错位置，人能在终端里看见并改正；而不赌的后果是这类节点**永远**收不到任务。§12 第 3 条不变，§12 第 5 条也不变——`observed` 仍然没有默认放行，这条路要注册表显式标旗才存在。
 
