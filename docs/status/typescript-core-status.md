@@ -1451,3 +1451,45 @@ releaseDrive(sessionId, actor): Lease;
 ### 31.6 验证
 
 `pnpm libs:build` 之后 `@armadra/desktop` 测试、`@armadra/web` typecheck、`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。新增用例：`collab/silent-start.test.ts` 八条（放行一条，不放行五条：没标旗、半截输入、刚出过输出、会话太新、已上报 busy；探测两条：只挑该挑的目标、清扫那把定时器就是触发源）、`agent/target-state.test.ts` 七条纯函数用例、`collab/first-task.test.ts` 一条端到端形状。
+
+## 32. Dock 白板工具组收纳与画框工具下线（2026-09-21）
+
+用户实测提的三件事：抓手也弹样式面板、十个按钮里一半是成对的、画框工具看不出用处。
+
+### 32.1 手形不再弹样式面板
+
+`canvas/tools.ts` 的 `shouldShowStylePanel` 原来写的是 `toolId !== "select"`，于是选中手形也会在左上角弹出颜色 / 粗细 / 线型 / 填充那一整块。判据换成 `isDrawingTool`（`interaction/tool-store.ts`，与 `flow-options` 关框选、`use-tool-pointer` 接管指针共用的那一个），手形和选择一样只在「选中项里有白板对象」时显示。
+
+### 32.2 成对的工具各收成一格
+
+Dock 的排布从「一个工具一个按钮」改成一张 `DOCK_TOOL_ITEMS`（`canvas/tools.ts`）：
+
+| 格                 | 内容                         |
+| ------------------ | ---------------------------- |
+| 选择 / 手形 / 文字 | 单个工具，照旧               |
+| 笔                 | 画笔 / 高亮，下拉切换        |
+| 形状               | 六种几何形，下拉切换（不变） |
+| 线                 | 直线 / 箭头，下拉切换        |
+| 引入               | 不是工具，开文件选择器       |
+
+笔与线那两格的按钮**就是**组里当前那个工具：图标、`aria-label`、tooltip 上的键位都取自它，点一下等于按它的快捷键。`canvas.tool.draw / highlight / line / arrow` 四条命令与键位（`D` / `Shift+D` / `L` / `A`）原样保留，记忆由 `tool-store.setTool` 统一维护（`TOOL_GROUPS` + `getToolGroupChoice`），所以命令面板或快捷键切过去时 Dock 上那一格也跟着换人。手机那一份（`PHONE_TOOL_IDS` = 选择 + 手形）不变。
+
+### 32.3 「图片」改成「引入」
+
+图标换成 lucide `Import`，文案 `tool.import`（「引入…」/ "Import…"），行为仍是 `pickFilesForCanvas()`。文件选择器本来就没设 `accept`，所以图片落成白板图片对象、其余落成文件节点这两条路都通——这次只是把按钮的名字改成它真正做的事。
+
+### 32.4 画框工具删除清单
+
+「新建画框」留在 Dock 的「新建」菜单里（`menus/add-menu.ts` 的 `addFrameShape` 自己建 `group` 节点），工具这一份全部删掉：
+
+- `interaction/tool-store.ts`：`CANVAS_TOOL_IDS` 去掉 `"frame"`；
+- `canvas/tools.ts`：工具表里那一条；
+- `keybindings/commands.ts`：`canvas.tool.frame`（`F` 键释放）；
+- `i18n/canvas.ts`：`tool.frame`；`i18n/commands.ts`：`cmd.canvas.tool.frame`（中英各一）；
+- `whiteboard/tools/draft.ts`：`FrameDraft`、`CLICK_FRAME_SIZE`、`startDraft` 的 `frame` 分支（`commitDraft` 因此不再有「落成不了」的第四种）；
+- `whiteboard/tools/use-tool-pointer.ts`：`commitFrame` 与 `finish` 里那个分叉，连带不再 import `canvas-store` 与 `defaults`；
+- `whiteboard/tools/DraftPreview.tsx`：虚线框预览；`ToolLayer.tsx`：光标表里那一行。
+
+### 32.5 验证
+
+`pnpm libs:build` 之后 `pnpm --filter @armadra/web test`、`typecheck`、`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。新增 `canvas/interaction/tool-store.test.ts`（组记忆：默认值、两组互不影响、组外工具不动记忆、重置）与 `shell/DockTools.test.tsx`（六格排布、两组下拉各切一次、快捷键切换后按钮跟着换）；`canvas/tools.test.ts` 补了排布与显隐的用例，`flow-options.test.ts`、`draft.test.ts` 去掉画框那一份。
