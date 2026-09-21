@@ -381,7 +381,18 @@ async function sendTo(
   if (inserted.kind === "duplicate") {
     return receipt(duplicateBody(context, inserted.item, now));
   }
-  return attempt(context, inserted.item, options);
+  const outcome = await attempt(context, inserted.item, options);
+  // 没投出去而是排上了：推一下泵。目标若是「启动不上报」的那一类，它的第一条
+  // 空闲只能靠探（§4.3），而排队项自己不会再被任何事件想起。
+  const reply = outcome.raw ?? outcome.result;
+  if (
+    reply !== null &&
+    typeof reply === "object" &&
+    (reply as { outcome?: unknown }).outcome === "queued"
+  ) {
+    context.nudge?.(target.id);
+  }
+  return outcome;
 }
 
 /* ------------------------------ 一次投递尝试 ------------------------------ */

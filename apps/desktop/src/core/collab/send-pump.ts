@@ -32,8 +32,16 @@ import { wakeInbox } from "./wake";
 /** 过期清扫的间隔。与出队无关：出队是事件驱动的。 */
 export const SWEEP_INTERVAL_MS = 60_000;
 
+/**
+ * 「启动不上报」目标的快探间隔。只在队里真有这类目标时才转，一轮探完没有
+ * 候选就停：静默启动的判据要求会话满 4 秒、安静 3 秒，等 60 秒的清扫来放行
+ * 是让人干瞪眼的那种慢。
+ */
+export const SILENT_PROBE_INTERVAL_MS = 2_000;
+
 export class SendPump {
   private timer: NodeJS.Timeout | undefined;
+  private probeTimer: NodeJS.Timeout | undefined;
   private readonly running = new Set<string>();
 
   /**
@@ -69,6 +77,20 @@ export class SendPump {
   noteFree(nodeId: string): void {
     if (nodeId === "") return;
     void this.drain(nodeId);
+  }
+
+  /**
+   * 有人往这个目标的队里放了一条（`send` 排队、`open-agent --task`、`post`
+   * 的唤醒）。先照常试一次出队；若目标是「启动不上报」的那一类，再把快探
+   * 转起来——它的第一条空闲不会以事件的形式到来。
+   */
+  noteQueued(nodeId: string): void {
+    if (nodeId === "") return;
+    void this.drain(nodeId);
+    const context = this.context();
+    if (context !== undefined && this.silentStarter(context, nodeId)) {
+      this.armProbe();
+    }
   }
 
   /**
@@ -146,10 +168,21 @@ export class SendPump {
       this.onError(error);
       return 0;
     }
+    // 还有候选就再探一轮；没有了就让它停，下一次入队再转起来。
+    if (targets.length > 0) this.armProbe();
     for (const nodeId of targets) {
       await this.drain(nodeId);
     }
     return targets.length;
+  }
+
+  private armProbe(): void {
+    if (this.probeTimer !== undefined) return;
+    this.probeTimer = setTimeout(() => {
+      this.probeTimer = undefined;
+      void this.probeSilentStarters();
+    }, SILENT_PROBE_INTERVAL_MS);
+    this.probeTimer.unref?.();
   }
 
   /** 这个目标是不是「标了旗、且从未上报过」。 */
@@ -172,6 +205,10 @@ export class SendPump {
   }
 
   stop(): void {
+    if (this.probeTimer !== undefined) {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = undefined;
+    }
     if (this.timer === undefined) return;
     clearInterval(this.timer);
     this.timer = undefined;

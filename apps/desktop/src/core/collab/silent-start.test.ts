@@ -4,7 +4,7 @@ import { getContextLinks, putContextLinks } from "../canvas/context-links";
 import { freeLease } from "../drive/lease";
 import { listDeliveries } from "./deliveries";
 import { controlDispatcher, type ControlOutcome } from "./control";
-import { SendPump } from "./send-pump";
+import { SILENT_PROBE_INTERVAL_MS, SendPump } from "./send-pump";
 import { resetSendLimits } from "./send-limits";
 import { pendingCountFor } from "./send-queue";
 
@@ -244,5 +244,24 @@ describe("the sweep's probe", () => {
       setTimeout(resolve, 20);
     });
     expect(fixture.terminal.submits).toHaveLength(1);
+  });
+
+  it("入队那一下推起快探：不用等 60 秒的清扫", async () => {
+    const codex = silentNode("codex");
+    fixture.terminal.foreground = { command: "codex" };
+    const pump = new SendPump(() => fixture.collab);
+    // 泵挂成 `nudge`，与 agent 域的装配一致。
+    (fixture.collab as { nudge?: (nodeId: string) => void }).nudge = (nodeId) =>
+      pump.noteQueued(nodeId);
+    ok(await run(me, "send", { to: codex.id, body: "做这件事" }));
+    // 入队时会话还太新，没投；快探已经转起来了。
+    expect(fixture.terminal.submits).toHaveLength(0);
+    age(codex.sessionId, 10_000);
+    quiet(codex.sessionId, 5_000);
+    await new Promise((resolve) => {
+      setTimeout(resolve, SILENT_PROBE_INTERVAL_MS + 200);
+    });
+    expect(fixture.terminal.submits).toHaveLength(1);
+    pump.stop();
   });
 });

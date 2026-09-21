@@ -120,7 +120,7 @@ export function install(context: CoreContext): CollabContext {
     // 所以唤醒要么现在发生，要么等到它下一次跑完一轮——而那正是它最不需要被
     // 提醒的时刻（§5）。
     nudge: (nodeId) => {
-      void pump.drain(nodeId);
+      pump.noteQueued(nodeId);
     },
   });
   const withHandoff: CollabContext = {

@@ -329,6 +329,8 @@ function queueFirstTask(
       "第一条任务没有排上；新节点已经建好了，可以用 canvas send 再投一次。",
     );
   }
+  // 推一下泵：目标若是「启动不上报」的那一类，它的第一条空闲只能靠探（§4.3）。
+  context.nudge?.(node.id);
   return inserted.item.id;
 }
 

@@ -390,7 +390,7 @@ targetState(status: AgentStatus | undefined, live: number | undefined): TargetSt
 
 投出去之后 `user_prompt_submit` 自然会到，此后每一条都走上报那条路——这条路只在节点生命周期里用一次。
 
-触发源是**清扫那把定时器**（`SEND_QUEUE_TTL_SECONDS` 的那一把，每 60 秒）捎带的一次探测：泵本身不轮询，它听的是 `agent.status`，而这类目标按定义不发那条事件。探测收窄到「队里有东西 + 标了旗 + 从未上报过」三条同时成立的目标，别的目标一个都不问。代价是首投最坏要等一个清扫周期。
+触发源有两个：入队那一下（`send` 排上队、`open-agent --task`、`post` 的唤醒都经 `nudge` 推泵）会把一把 **2 秒的快探**转起来，只在队里真有这类目标时转、探完没有候选就停；清扫那把定时器（每 60 秒）捎带一次同样的探测作兜底。泵本身仍不轮询：它听的是 `agent.status`，而这类目标按定义不发那条事件。探测收窄到「队里有东西 + 标了旗 + 从未上报过」三条同时成立的目标，别的目标一个都不问。代价是首投最坏比判据成立晚 2 秒。
 
 可见性：这条路投出去的每一条，回执里 `targetState` 是 `observed-quiet`，`agent_deliveries.target_state`（迁移 0026）记下同一个词，board-log 的 receipt 也写它。所以一次「按观察放行」的 `delivered` 与一次「有上报」的 `delivered` 在记录面板上分得开（前端徽标后补）。
 

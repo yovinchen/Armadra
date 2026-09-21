@@ -1438,7 +1438,7 @@ releaseDrive(sessionId, actor): Lease;
 
 ### 31.3 触发源
 
-泵不轮询（听 `agent.status` 与租约释放），而这类目标按定义不发那条事件。所以挂在**已有的清扫定时器**上：`SendPump.sweep()` 捎带一次 `probeSilentStarters()`，对「队里有 `queued` + 目标标了旗 + 目标从未上报过」三条同时成立的目标各试一次 `drain`。没有新增定时器，轮询也没有扩大到别的目标；代价是首投最坏等一个清扫周期（60 秒）。
+泵不轮询（听 `agent.status` 与租约释放），而这类目标按定义不发那条事件。所以两处触发：入队经 `context.nudge` → `SendPump.noteQueued()`，目标若标了旗就转起一把 2 秒的快探（`SILENT_PROBE_INTERVAL_MS`），探完没有候选自动停；清扫定时器（60 秒）捎带一次同样的 `probeSilentStarters()` 兜底。探测只对「队里有 `queued` + 目标标了旗 + 目标从未上报过」三条同时成立的目标各试一次 `drain`，轮询没有扩大到别的目标。真机复现过：Codex 到提示符后 `agent_status` 无行，`--task` 停在 `TARGET_STARTING`。
 
 ### 31.4 可见性
 
