@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import { signHello } from "../core/terminal/session-host/auth";
 import { type LinkEvent, Link } from "../core/terminal/session-host/link";
 import {
+  PIPE_PREFIX,
   RequestIds,
   createMessage,
   resizeMessage,
@@ -24,6 +25,11 @@ import { AlreadyServing, SessionHost } from "./server";
  * between the two ends is identical** — the frame codec, the handshake, the
  * generation fence, the replay, the flow gate, the request dispatch — so all
  * of it is exercised here rather than waiting for a Windows machine.
+ *
+ * On Windows the suite runs too, against a real named pipe: a path under
+ * `%TEMP%` is not an endpoint there — `listen()` answers `EACCES` — so the
+ * name comes from the pipe namespace instead. Nothing else changes, which is
+ * the point.
  *
  * What is *not* exercised is the part that is genuinely Windows: ConPTY
  * itself, the pipe's namespace and `FILE_FLAG_FIRST_PIPE_INSTANCE`. Those
@@ -52,7 +58,12 @@ interface Harness {
 async function serve(options: { idleExitMs?: number } = {}): Promise<Harness> {
   const dataDir = mkdtempSync(join(tmpdir(), "armadra-host-"));
   // Short, because a Unix socket path has about a hundred bytes to live in.
-  const endpoint = join(dataDir, "s");
+  // Windows has no sockets in the filesystem at all: a pipe lives in its own
+  // flat namespace, and a name per harness keeps two tests off one pipe.
+  const endpoint =
+    process.platform === "win32"
+      ? `${PIPE_PREFIX}test-${randomBytes(8).toString("hex")}`
+      : join(dataDir, "s");
   const key = randomBytes(32);
   const spawner = fakeSpawner();
   const host = new SessionHost({
