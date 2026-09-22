@@ -81,6 +81,13 @@ export function repositoryAt(path: string, seed = true): Repo {
 
 function initialize(path: string, seed: boolean): Repo {
   run(path, "init", "-q", "-b", "main");
+  // The tests write LF and read the bytes back after Git has checked the file
+  // out again. A Windows machine whose global `core.autocrlf` is `true` — the
+  // default on the CI runner — would hand back CRLF, which says nothing about
+  // the code under test. Pinned per repository so a developer's own setting is
+  // left alone.
+  run(path, "config", "core.autocrlf", "false");
+  run(path, "config", "core.eol", "lf");
   const repo: Repo = {
     path,
     git: (...args) => run(path, ...args),
