@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { AgentId } from "../agent/registry";
@@ -65,11 +66,13 @@ describe("采集适配器", () => {
     process.env.CLAUDE_CONFIG_DIR = "/tmp/elsewhere-claude";
     process.env.CODEX_HOME = "/tmp/elsewhere-codex";
     try {
+      // The leaf is appended with this platform's separator; only the
+      // override itself is spelled by the test.
       expect(costSource("claude")?.roots()).toEqual([
-        "/tmp/elsewhere-claude/projects",
+        join("/tmp/elsewhere-claude", "projects"),
       ]);
       expect(costSource("codex")?.roots()).toEqual([
-        "/tmp/elsewhere-codex/sessions",
+        join("/tmp/elsewhere-codex", "sessions"),
       ]);
     } finally {
       if (previous.claude === undefined) delete process.env.CLAUDE_CONFIG_DIR;

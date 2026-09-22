@@ -57,7 +57,9 @@ describe("the ssh options", () => {
     const files = given.find((value) =>
       value.startsWith("UserKnownHostsFile="),
     );
-    expect(files).toBe(`UserKnownHostsFile=${data}/ssh/known_hosts`);
+    expect(files).toBe(
+      `UserKnownHostsFile=${join(data, "ssh", "known_hosts")}`,
+    );
   });
 
   /** A user with no HOME gets one file, not a path ending in `undefined`. */

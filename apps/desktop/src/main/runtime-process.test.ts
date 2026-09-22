@@ -230,7 +230,9 @@ describe("the external development Runtime", () => {
 
 describe("壳启动的 core", () => {
   it("finds the core bundle beside the main bundle in both layouts", () => {
-    expect(coreEntry({}, "/app/out/main")).toBe("/app/out/core/main.js");
+    expect(coreEntry({}, "/app/out/main")).toBe(
+      join("/app/out", "core", "main.js"),
+    );
     expect(coreEntry({ ARMADRA_CORE_ENTRY: "/elsewhere/main.js" })).toBe(
       "/elsewhere/main.js",
     );

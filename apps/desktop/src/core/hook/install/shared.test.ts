@@ -151,7 +151,7 @@ describe("the config home", () => {
     expect(configHomeWith("codex", overridden, HOME)).toBe("/tmp/codex-home");
     // XDG_CONFIG_HOME is a directory of config directories, not opencode's.
     expect(configHomeWith("opencode", overridden, HOME)).toBe(
-      "/tmp/xdg/opencode",
+      join("/tmp/xdg", "opencode"),
     );
     expect(configHomeWith("copilot", overridden, HOME)).toBe(
       "/tmp/copilot-home",

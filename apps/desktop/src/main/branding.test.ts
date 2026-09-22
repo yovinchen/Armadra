@@ -1,3 +1,4 @@
+import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -99,6 +100,10 @@ describe("the About panel", () => {
 describe("iconPath", () => {
   it("resolves under the repository's build/icons/icon.png", () => {
     const resolved = iconPath("/repo/apps/desktop/out/main");
-    expect(resolved).toBe("/repo/apps/desktop/build/icons/icon.png");
+    // `repoRoot` resolves, which on Windows means the answer carries a drive
+    // letter and backslashes; the expectation is built the same way.
+    expect(resolved).toBe(
+      join(resolve("/repo"), "apps", "desktop", "build", "icons", "icon.png"),
+    );
   });
 });

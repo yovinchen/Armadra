@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 /**
  * The two ways out of the sandbox, against a stand-in `shell`.
@@ -92,7 +92,9 @@ describe("revealing a path in the file manager", () => {
   });
 
   it("opens a window on a file inside the downloads directory", () => {
-    const file = join("/home/somebody/Downloads", "report.pdf");
+    // `resolve`, because the reveal guard canonicalises before it hands the
+    // path to Electron and an absolute POSIX spelling has no drive on Windows.
+    const file = join(resolve("/home/somebody/Downloads"), "report.pdf");
     showItemInFolder(file);
     expect(revealed).toEqual([file]);
   });

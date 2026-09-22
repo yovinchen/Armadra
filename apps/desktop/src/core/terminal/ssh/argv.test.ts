@@ -5,6 +5,7 @@
  * has no Rust counterpart because the Rust Worker is a static binary.
  */
 
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { SshHost, SshWorker } from "../../settings/ssh-hosts";
 import {
@@ -173,10 +174,10 @@ describe("the ssh command lines", () => {
       value.startsWith("UserKnownHostsFile="),
     );
     const files = (option ?? "").slice("UserKnownHostsFile=".length).split(" ");
-    expect(files[0]).toBe(`${DATA}/ssh/known_hosts`);
+    expect(files[0]).toBe(join(DATA, "ssh", "known_hosts"));
     expect(files).toHaveLength(process.env.HOME === undefined ? 1 : 2);
     if (process.env.HOME !== undefined) {
-      expect(files[1]).toBe(`${process.env.HOME}/.ssh/known_hosts`);
+      expect(files[1]).toBe(join(process.env.HOME, ".ssh", "known_hosts"));
     }
   });
 });

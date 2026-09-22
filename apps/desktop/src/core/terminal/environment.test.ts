@@ -108,7 +108,9 @@ describe("agent injection", () => {
       "ARMADRA_ENDPOINT_FILE",
       "ARMADRA_CANVAS_CONTROL",
     ]);
-    expect(asRecord(env).ARMADRA_ENDPOINT_FILE).toBe("/data/hook-endpoint.env");
+    expect(asRecord(env).ARMADRA_ENDPOINT_FILE).toBe(
+      join("/data", "hook-endpoint.env"),
+    );
     for (const [key, value] of env) {
       expect(key).not.toMatch(/TOKEN|SECRET|PASSWORD/i);
       expect(value).not.toMatch(/TOKEN|SECRET/i);

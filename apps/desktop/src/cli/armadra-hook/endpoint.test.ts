@@ -101,9 +101,9 @@ describe("loading", () => {
   });
 
   it("puts the pending directory next to the endpoint file", () => {
-    expect(pendingDir({ path: "/data/armadra/hook-endpoint.env" })).toBe(
-      "/data/armadra/pending",
-    );
+    expect(
+      pendingDir({ path: path.join("/data/armadra", "hook-endpoint.env") }),
+    ).toBe(path.join("/data/armadra", "pending"));
   });
 });
 
