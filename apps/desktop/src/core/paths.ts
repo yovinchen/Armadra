@@ -1,7 +1,7 @@
 import { closeSync, fsyncSync, openSync, writeSync } from "node:fs";
 import { chmodSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix, win32 } from "node:path";
 
 /**
  * Where the core keeps everything that is not in the database.
@@ -31,17 +31,23 @@ export function dataDir(
   platform: PlatformName = process.platform,
   env: PathEnvironment = process.env,
 ): string {
+  // The separator belongs to the platform being *asked about*, not to the one
+  // running: this function answers for all three so the resolution can be
+  // tested anywhere, and `node:path`'s own `join` would answer every question
+  // with backslashes on a Windows machine.
+  const { join: on } = platform === "win32" ? win32 : posix;
   if (env.ARMADRA_DATA_DIR) return env.ARMADRA_DATA_DIR;
   if (platform === "darwin" && env.HOME) {
-    return join(env.HOME, "Library/Application Support/Armadra");
+    return on(env.HOME, "Library/Application Support/Armadra");
   }
   if (platform === "win32" && env.LOCALAPPDATA) {
-    return join(env.LOCALAPPDATA, "Armadra");
+    return on(env.LOCALAPPDATA, "Armadra");
   }
   const base =
-    env.XDG_DATA_HOME ??
-    (env.HOME ? join(env.HOME, ".local/share") : undefined);
-  return join(base ?? tmpdir(), "armadra");
+    env.XDG_DATA_HOME ?? (env.HOME ? on(env.HOME, ".local/share") : undefined);
+  // The last resort is this machine's own temporary directory, so it is the
+  // running platform that spells it — not the one being asked about.
+  return base === undefined ? join(tmpdir(), "armadra") : on(base, "armadra");
 }
 
 /**

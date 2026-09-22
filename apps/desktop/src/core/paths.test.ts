@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   dataDir,
@@ -40,9 +40,11 @@ describe("the data directory", () => {
     expect(dataDir("darwin", { HOME: "/Users/dev" })).toBe(
       "/Users/dev/Library/Application Support/Armadra",
     );
+    // Spelled out rather than built with `join`: the answer must carry the
+    // separator of the platform being asked about on every host.
     expect(
       dataDir("win32", { LOCALAPPDATA: "C:\\Users\\dev\\AppData\\Local" }),
-    ).toBe(join("C:\\Users\\dev\\AppData\\Local", "Armadra"));
+    ).toBe("C:\\Users\\dev\\AppData\\Local\\Armadra");
     expect(dataDir("linux", { XDG_DATA_HOME: "/data" })).toBe("/data/armadra");
     expect(dataDir("linux", { HOME: "/home/dev" })).toBe(
       "/home/dev/.local/share/armadra",
@@ -53,7 +55,7 @@ describe("the data directory", () => {
     // The Rust `cfg!` chain does exactly this rather than failing.
     expect(dataDir("darwin", { XDG_DATA_HOME: "/data" })).toBe("/data/armadra");
     expect(dataDir("win32", { HOME: "/home/dev" })).toBe(
-      "/home/dev/.local/share/armadra",
+      "\\home\\dev\\.local\\share\\armadra",
     );
     expect(dataDir("linux", {})).toBe(join(tmpdir(), "armadra"));
   });
@@ -68,7 +70,10 @@ describe("the data directory", () => {
   });
 
   it("keeps every contractual file inside the data directory", () => {
-    const base = "/data";
+    // `resolve` so the base is a real absolute path on this platform: on
+    // Windows a bare "/data" has no drive, and `join` would then answer with
+    // one the prefix test could not see.
+    const base = resolve("/data");
     for (const path of [
       endpointsFile(base),
       hookEndpointFile(base),
@@ -78,11 +83,13 @@ describe("the data directory", () => {
       workerSettingsFile(base),
       databaseFile(base),
     ]) {
-      expect(path.startsWith(`${base}/`)).toBe(true);
+      expect(path.startsWith(`${base}${sep}`)).toBe(true);
     }
-    expect(endpointsFile(base)).toBe("/data/endpoints.json");
-    expect(hookEndpointFile(base)).toBe("/data/hook-endpoint.env");
-    expect(databaseFile(base)).toBe("/data/canvas.db");
+    // These take a directory that already exists on this machine, so they are
+    // spelled with the running platform's separator rather than a literal.
+    expect(endpointsFile(base)).toBe(join(base, "endpoints.json"));
+    expect(hookEndpointFile(base)).toBe(join(base, "hook-endpoint.env"));
+    expect(databaseFile(base)).toBe(join(base, "canvas.db"));
   });
 });
 
