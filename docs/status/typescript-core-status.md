@@ -1521,4 +1521,12 @@ Dock 的排布从「一个工具一个按钮」改成一张 `DOCK_TOOL_ITEMS`（
 - **TOML 的转义。** `hook/install/codex.test.ts` 拿 `stateKeys` 的逻辑键去 `toContain` 文件正文；TOML basic string 要转义反斜杠，Windows 路径写进去是 `C:\\Users\\…`。断言改走一个 `asWritten`，安装器本身是对的。
 - **`URL.pathname` 不是路径。** `tmux.test.ts` 那条扫源文件的守卫用 `new URL(".", import.meta.url).pathname`，Windows 上得到 `/D:/…`。改 `fileURLToPath`，和 9172826c 同一个坑。
 - **`armadra-hook` 的旁车名字。** `launcher-client.test.ts` 建的是无扩展名的文件，Windows 上安装器找的是 `armadra-hook.cmd`。
-- **`EBUSY`。** `language/routes.integration.test.ts` 的 teardown：Windows 不让删还被进程占着的目录，`rmSync` 加重试。
+- **`EBUSY`。** `language/routes.integration.test.ts` 的 teardown：Windows 不让删还被进程占着的目录，`rmSync` 加重试。重试不够——真原因见 33.4。
+
+### 33.4 第二轮：`ServerProcess.terminate` 不等进程真的死
+
+第一轮推上去后 Windows 只剩两条，仍是 `language/routes.integration.test.ts` 的 `EBUSY`。重试加到 2 秒也没用，因为句柄根本不会被放开：语言服务器的子进程以工作空间根目录为 cwd，而 `terminate()` 在 Windows 上发完 `taskkill /T /F` 就返回了——`taskkill` 在目标真的消失之前就退出。调用方 `await` 了这个 Promise，却拿不到它字面上承诺的那件事。
+
+`ServerProcess` 现在持一个在 `exit` / `error` 上兑现的 `reaped`，`terminate()` 在两个平台上都等它（上限 5 秒，杀不掉的进程不该把关停挂住）。POSIX 上 `SIGKILL` 之后这一等几乎不花时间，但契约从此在两个平台上都是真的。
+
+同一轮里 macOS 挂在 `browser/headless/live.integration.test.ts` 的 teardown：用例本身过了，Chromium 在管道关掉之后还在刷它的 profile，`rmSync` 撞上 `ENOTEMPTY`。这条与 Windows 无关，是一直存在的偶发；重试放宽并包上 `catch`——`$TMPDIR` 里剩一个目录是操作系统要扫的,不是测试结论。
