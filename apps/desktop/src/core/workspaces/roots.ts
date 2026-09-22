@@ -45,13 +45,26 @@ export function isProtected(path: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => contains(prefix, path));
 }
 
-/** `true` when `path` is `parent` itself or sits underneath it. */
-function contains(parent: string, path: string): boolean {
+/**
+ * `true` when `path` is `parent` itself or sits underneath it.
+ *
+ * Compared with `relative` rather than with a `startsWith` on `${parent}/`,
+ * which is wrong twice on Windows: the separator there is `\\`, and two paths
+ * on different drives have no prefix in common at all — `relative` answers
+ * such a pair with the absolute target, which is why `isAbsolute` is part of
+ * the test rather than decoration.
+ */
+export function contains(parent: string, path: string): boolean {
   if (path === parent) return true;
   const step = relative(parent, path);
   return (
     step !== "" && !step.startsWith("..") && !isAbsolute(step) && step !== path
   );
+}
+
+/** `contains`, but the parent itself does not count. */
+export function containsStrictly(parent: string, path: string): boolean {
+  return path !== parent && contains(parent, path);
 }
 
 /** `realpath`, without the `\\?\` prefix Windows answers with. */

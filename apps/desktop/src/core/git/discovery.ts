@@ -1,8 +1,17 @@
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
-import { canonicalDirectory, canonicalize } from "../workspaces/roots";
+import {
+  canonicalDirectory,
+  canonicalize,
+  containsStrictly,
+} from "../workspaces/roots";
 import { dirtyEntryCount } from "./status";
 import { internalError, nowRfc3339, sha256Hex } from "./support";
+
+/** Segment count, counted with the separator this platform actually uses. */
+function pathDepth(path: string): number {
+  return path.split(/[/\\]/).length;
+}
 
 /**
  * Workspace repository discovery.
@@ -193,10 +202,10 @@ export async function scan(
       let best: (typeof found)[number] | undefined;
       for (const candidate of found) {
         if (candidate.path === entry.path) continue;
-        if (!entry.path.startsWith(`${candidate.path}/`)) continue;
+        if (!containsStrictly(candidate.path, entry.path)) continue;
         if (
           best === undefined ||
-          candidate.path.split("/").length > best.path.split("/").length
+          pathDepth(candidate.path) > pathDepth(best.path)
         ) {
           best = candidate;
         }

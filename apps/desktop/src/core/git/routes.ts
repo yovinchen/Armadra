@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { CoreServer } from "../http/server";
 import type { CoreRequest, HandlerResult, RouteMatch } from "../http/router";
-import { canonicalDirectory } from "../workspaces/roots";
+import { canonicalDirectory, contains } from "../workspaces/roots";
 import {
   DomainError,
   badRequest as workspaceBadRequest,
@@ -792,7 +792,7 @@ export function installRoutes(deps: GitRouteDeps): void {
       } catch {
         continue;
       }
-      if (parent !== root && !parent.startsWith(`${root}/`)) continue;
+      if (!contains(root, parent)) continue;
       if (!summary.permissions.read || !summary.permissions.write) {
         throw forbidden(
           "An ancestor workspace does not allow cloning into this destination",

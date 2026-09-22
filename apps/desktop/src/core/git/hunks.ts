@@ -5,6 +5,7 @@ import { gitEnvironment, runGit } from "./command";
 import type { RepositoryContext } from "./repository/service";
 import type { RepositoryService } from "./repository/service";
 import { splitNul } from "./repository/parse";
+import { containsStrictly } from "../workspaces/roots";
 import {
   badRequest,
   conflict,
@@ -168,7 +169,7 @@ async function observe(
     unsupportedReason: null,
     hunks: [],
   };
-  if (!file.startsWith(`${context.repository}/`)) {
+  if (!containsStrictly(context.repository, file)) {
     throw badRequest("File is outside the Git repository");
   }
   const relative = file
@@ -342,7 +343,7 @@ function safeFile(context: RepositoryContext, raw: string): string {
       throw forbidden("Git hunk paths must not traverse symlinks");
     }
   }
-  if (!current.startsWith(`${context.repository}/`)) {
+  if (!containsStrictly(context.repository, current)) {
     throw forbidden("File is outside the Git repository");
   }
   const info = lstatSync(current, { throwIfNoEntry: false });

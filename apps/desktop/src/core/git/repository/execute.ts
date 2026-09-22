@@ -1,4 +1,4 @@
-import { canonicalize, resolveInRoot } from "../../workspaces/roots";
+import { canonicalize, contains, resolveInRoot } from "../../workspaces/roots";
 import {
   badRequest,
   conflict,
@@ -345,10 +345,7 @@ export async function execute(
     }
     case "removeWorktree": {
       const target = resolveInRoot(context.workspaceRoot, action.path);
-      if (
-        target === context.commonDir ||
-        target.startsWith(`${context.commonDir}/`)
-      ) {
+      if (contains(context.commonDir, target)) {
         throw forbidden(
           "Git administration directories cannot be removed as worktrees",
         );

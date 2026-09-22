@@ -1,5 +1,9 @@
 import { statSync } from "node:fs";
-import { canonicalDirectory, resolveInRoot } from "../../workspaces/roots";
+import {
+  canonicalDirectory,
+  contains,
+  resolveInRoot,
+} from "../../workspaces/roots";
 import { gitArguments } from "../access";
 import {
   type CommandOutput,
@@ -836,7 +840,7 @@ export function notFoundOperation(): Error {
 }
 
 function startsInside(parent: string, path: string): boolean {
-  return path === parent || path.startsWith(`${parent}/`);
+  return contains(parent, path);
 }
 
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;

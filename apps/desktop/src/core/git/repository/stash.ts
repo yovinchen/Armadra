@@ -9,7 +9,7 @@ import {
   constants as fsConstants,
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative } from "node:path";
-import { canonicalize } from "../../workspaces/roots";
+import { canonicalize, contains } from "../../workspaces/roots";
 import {
   badRequest,
   conflict,
@@ -614,7 +614,7 @@ function hashUntracked(
   }
   const path = join(root, name);
   const parent = canonicalize(dirname(path));
-  if (parent !== root && !parent.startsWith(`${root}/`)) {
+  if (!contains(root, parent)) {
     throw badRequest("Untracked path escapes the repository");
   }
   const resolved = join(parent, basename(name));

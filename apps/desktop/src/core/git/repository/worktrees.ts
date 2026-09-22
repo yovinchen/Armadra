@@ -9,6 +9,7 @@ import { basename, dirname, join, relative } from "node:path";
 import {
   canonicalDirectory,
   canonicalize,
+  contains,
   resolveInRoot,
   validDirectoryName,
 } from "../../workspaces/roots";
@@ -58,9 +59,7 @@ export async function worktreeRecords(
     } catch {
       continue;
     }
-    record.accessible =
-      canonical === context.workspaceRoot ||
-      canonical.startsWith(`${context.workspaceRoot}/`);
+    record.accessible = contains(context.workspaceRoot, canonical);
     if (record.accessible && !record.bare) {
       const status = await service.read(
         canonical,
@@ -120,7 +119,7 @@ export async function verifyWorktreeBinding(
     } catch {
       throw notFound("The bound worktree directory does not exist");
     }
-    if (candidate !== root && !candidate.startsWith(`${root}/`)) {
+    if (!contains(root, candidate)) {
       throw forbidden("The bound worktree is outside the workspace");
     }
     relativePath = relative(root, candidate).replace(/\\/g, "/");
@@ -253,17 +252,11 @@ export function newWorktreePath(
     ancestor = parent;
   }
   let target = canonicalDirectory(ancestor);
-  if (
-    target !== context.workspaceRoot &&
-    !target.startsWith(`${context.workspaceRoot}/`)
-  ) {
+  if (!contains(context.workspaceRoot, target)) {
     throw forbidden("Worktree path is outside the workspace");
   }
   for (const segment of missing.reverse()) target = join(target, segment);
-  if (
-    target === context.commonDir ||
-    target.startsWith(`${context.commonDir}/`)
-  ) {
+  if (contains(context.commonDir, target)) {
     throw forbidden(
       "Worktrees cannot be created inside Git administration directories",
     );
@@ -300,10 +293,7 @@ export function createWorktreeParents(
   if (parent === target) {
     throw badRequest("Worktree needs a parent directory");
   }
-  if (
-    parent !== context.workspaceRoot &&
-    !parent.startsWith(`${context.workspaceRoot}/`)
-  ) {
+  if (!contains(context.workspaceRoot, parent)) {
     throw forbidden("Worktree is outside the workspace");
   }
   const step = relative(context.workspaceRoot, parent);
@@ -338,7 +328,7 @@ export function protectNestedWorktree(
   target: string,
   operation: Operation,
 ): void {
-  if (target !== repositoryRoot && !target.startsWith(`${repositoryRoot}/`)) {
+  if (!contains(repositoryRoot, target)) {
     return;
   }
   const step = relative(repositoryRoot, target);
