@@ -133,6 +133,9 @@ export class ServerProcess {
   private readonly child: ChildProcess;
   private readonly stderr = new Tail();
   private closed = false;
+  /** Resolves when the OS has actually reaped the child. */
+  private readonly reaped: Promise<void>;
+  private reap: () => void = () => {};
 
   private constructor(
     child: ChildProcess,
@@ -141,6 +144,9 @@ export class ServerProcess {
     this.child = child;
     this.pid = child.pid ?? null;
     this.startTimeUnixMs = Date.now();
+    this.reaped = new Promise((resolve) => {
+      this.reap = resolve;
+    });
 
     const decoder = new Decoder();
     child.stdout?.on("data", (chunk: Buffer) => {
@@ -170,11 +176,13 @@ export class ServerProcess {
     child.stdout?.on("error", () => {});
     child.stderr?.on("error", () => {});
     child.on("error", () => {
+      this.reap();
       if (this.closed) return;
       this.closed = true;
       onEvent({ kind: "exited", code: null });
     });
     child.on("exit", (code) => {
+      this.reap();
       if (this.closed) return;
       this.closed = true;
       onEvent({ kind: "exited", code: code ?? null });
@@ -252,19 +260,35 @@ export class ServerProcess {
       spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
         windowsHide: true,
       });
-      return;
+    } else {
+      // The whole group, not just the leader.
+      killGroup(pid, "SIGTERM");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      killGroup(pid, "SIGKILL");
+      try {
+        this.child.kill("SIGKILL");
+      } catch {
+        // Already gone.
+      }
     }
-    // The whole group, not just the leader.
-    killGroup(pid, "SIGTERM");
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    killGroup(pid, "SIGKILL");
-    try {
-      this.child.kill("SIGKILL");
-    } catch {
-      // Already gone.
-    }
+    // Signalling a process is not the same as it being gone, and `taskkill`
+    // returns before the target does. A caller that awaits this has to be able
+    // to act on the server's absence — remove its workspace directory, most
+    // of all, which Windows refuses while the process still has it as its
+    // working directory. Bounded, because an unkillable process must not hang
+    // a shutdown that has already done everything it can.
+    await Promise.race([
+      this.reaped,
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, REAP_TIMEOUT_MS);
+        timer.unref?.();
+      }),
+    ]);
   }
 }
+
+/** How long `terminate` waits for the exit it just asked for. */
+const REAP_TIMEOUT_MS = 5_000;
 
 function killGroup(pid: number, signal: NodeJS.Signals): void {
   try {
