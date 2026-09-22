@@ -1493,3 +1493,32 @@ Dock 的排布从「一个工具一个按钮」改成一张 `DOCK_TOOL_ITEMS`（
 ### 32.5 验证
 
 `pnpm libs:build` 之后 `pnpm --filter @armadra/web test`、`typecheck`、`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。新增 `canvas/interaction/tool-store.test.ts`（组记忆：默认值、两组互不影响、组外工具不动记忆、重置）与 `shell/DockTools.test.tsx`（六格排布、两组下拉各切一次、快捷键切换后按钮跟着换）；`canvas/tools.test.ts` 补了排布与显隐的用例，`flow-options.test.ts`、`draft.test.ts` 去掉画框那一份。
+
+## 33. Windows CI：真 bug 与按平台的门控（2026-09-22）
+
+`ci.yml` 的三平台矩阵里 `windows-x86_64` 在 `pnpm -r --if-present test` 上红着：`apps/desktop` 有 25 个文件、73 条用例失败，Linux 与 macOS 全绿。按原因分成三类。
+
+### 33.1 修掉的真 bug（Windows 是发布目标，这些路径线上会跑到）
+
+- **路径包含判断写死了 `/`。** `core/git/` 的十来处边界检查形如 `path.startsWith(`${parent}/`)`。Windows 的分隔符是 `\`，所以「仓库在工作空间里」「文件在仓库里」「worktree 不在 Git 管理目录里」这些判断全部答错——`hunks`、`routes`、`repository-reads`、`operations` 的失败都源于这一处。`workspaces/roots.ts` 里本来就有一个用 `relative` 写对了的 `contains`，现在导出它（另加 `containsStrictly`），`git/{hunks,routes,discovery}` 与 `git/repository/{service,worktrees,stash,execute}` 一律改用它。`discovery.ts` 里按 `"/"` 数层级的排序也改成按两种分隔符数。
+- **跨盘符时 `relative` 会答出绝对路径。** `conversations/index.ts` 的 `inScope` 用 `relative(root, target)` 判断范围，但只挡了 `..` 与前导分隔符。Windows 上 `C:\…` 与 `D:\…` 之间 `relative` 返回的是绝对的目标路径，两条都不触发，范围外的会话于是全被收进索引。补上 `isAbsolute` 这一项——`roots.ts` 的 `contains` 一直是这么写的。
+- **`dataDir(platform, env)` 用的是宿主的分隔符。** 这个函数带 `platform` 参数，注释写明「so the resolution for all three platforms can be tested on any one of them」，但拼接用的是 `node:path` 的 `join`，在 Windows 上问 darwin 会答出 `\Users\dev\Library\…`。改成按被问的平台取 `posix` / `win32` 的 `join`；只有兜底的 `tmpdir()` 那一支仍用宿主的，因为它本来就是这台机器的目录。
+
+### 33.2 按平台门控（Windows 上没有这件事）
+
+每处一句注释说明为什么，粒度是用例而不是整个文件：
+
+- `core/main.test.ts` 两条 `--listen unix:`：`listen.ts` 在 Windows 上明确拒绝 Unix socket，让人改用 `pipe:NAME`。健康文档那条改成按平台断言 `hook.sock` 在不在——`HookService.socketPath()` 在 Windows 上返回 `undefined` 是设计。
+- `core/files/watch.test.ts` 的原子替换：`replaced` 与 `modified` 靠 dev+inode 区分，Windows 不便宜地给这个号，`watch.ts` 在那里如实报 `modified`。
+- `core/git/message.test.ts` 两条走 `fakeClaude`：夹具是 `#!/bin/sh` 加 `chmod 0755`，Windows 按扩展名挑解释器、也没有执行位。
+
+`session-host/server.test.ts` **没有**门控。它原先把 `%TEMP%` 下的一个文件路径当端点，Windows 上 `listen()` 回 `EACCES`；改成在 Windows 上从命名管道命名空间取名字（`PIPE_PREFIX` + 随机后缀），27 条用例于是在三个平台上都真的跑。ConPTY 那一半仍在 `windows.integration.test.ts`，它本来就是绿的——session-host 的产品代码没有 bug。
+
+### 33.3 测试假设（源码没问题）
+
+- **写死 POSIX 字面量的期望值。** `paths`、`cost-sources`、`hook/install/shared`、`terminal/environment`、`terminal/ssh/{argv,known-hosts}`、`cli/armadra-hook/endpoint`、`main/{branding,external,runtime-process}`：源码用 `join` / `resolve`，是对的；期望值改成同样拼出来。`paths.test.ts` 里问别的平台的那几条反过来写死那个平台的拼法——现在它们在哪台机器上都该是同一个答案。
+- **CRLF。** `git/fixture.ts` 初始化后补 `core.autocrlf=false` 与 `core.eol=lf`：runner 的全局配置是 `autocrlf=true`，夹具写 LF、经 Git 检出再读回来就成了 CRLF。`.gitattributes` 早就把仓库自己的文件钉成 LF（`* text=auto eol=lf`），所以 `migrations.lock` 的 SHA-256 本来就没问题——`migrations.test.ts` 那条是按 `lastIndexOf("/")` 取文件名，改用 `basename`。
+- **TOML 的转义。** `hook/install/codex.test.ts` 拿 `stateKeys` 的逻辑键去 `toContain` 文件正文；TOML basic string 要转义反斜杠，Windows 路径写进去是 `C:\\Users\\…`。断言改走一个 `asWritten`，安装器本身是对的。
+- **`URL.pathname` 不是路径。** `tmux.test.ts` 那条扫源文件的守卫用 `new URL(".", import.meta.url).pathname`，Windows 上得到 `/D:/…`。改 `fileURLToPath`，和 9172826c 同一个坑。
+- **`armadra-hook` 的旁车名字。** `launcher-client.test.ts` 建的是无扩展名的文件，Windows 上安装器找的是 `armadra-hook.cmd`。
+- **`EBUSY`。** `language/routes.integration.test.ts` 的 teardown：Windows 不让删还被进程占着的目录，`rmSync` 加重试。
