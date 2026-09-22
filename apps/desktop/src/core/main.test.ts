@@ -87,18 +87,23 @@ describe("the core process", () => {
     expect(document.runtime?.websocket).toBe(base(core).replace("http", "ws"));
   });
 
-  it("withdraws the record and removes its socket when it stops", async () => {
-    const dataDir = temporary();
-    const socket = join(dataDir, "core.sock");
-    const { core } = await start(dataDir, `unix:${socket}`);
-    expect(existsSync(socket)).toBe(true);
-    await core.stop();
-    running.length = 0;
-    expect(read(endpointsFile(dataDir)).runtime).toBeUndefined();
-    expect(existsSync(socket)).toBe(false);
-    // The file itself stays: it is a shared document, not ours to delete.
-    expect(existsSync(endpointsFile(dataDir))).toBe(true);
-  });
+  // `--listen unix:` is refused on Windows by design (`listen.ts` names
+  // `pipe:NAME` instead), so there is no socket to withdraw there.
+  it.skipIf(process.platform === "win32")(
+    "withdraws the record and removes its socket when it stops",
+    async () => {
+      const dataDir = temporary();
+      const socket = join(dataDir, "core.sock");
+      const { core } = await start(dataDir, `unix:${socket}`);
+      expect(existsSync(socket)).toBe(true);
+      await core.stop();
+      running.length = 0;
+      expect(read(endpointsFile(dataDir)).runtime).toBeUndefined();
+      expect(existsSync(socket)).toBe(false);
+      // The file itself stays: it is a shared document, not ours to delete.
+      expect(existsSync(endpointsFile(dataDir))).toBe(true);
+    },
+  );
 
   it.skipIf(process.platform === "win32")(
     "keeps the data directory and the endpoint file private",
@@ -110,27 +115,37 @@ describe("the core process", () => {
     },
   );
 
-  it("listens on several transports at once", async () => {
-    const dataDir = temporary();
-    const socket = join(dataDir, "core.sock");
-    const core = await run({
-      argv: [
-        "--listen",
-        `unix:${socket}`,
-        "--listen",
-        "tcp:127.0.0.1:0",
-        "--data-dir",
-        dataDir,
-      ],
-      env: { ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir, ARMADRA_LOG: "error" },
-      stdout: () => {},
-    });
-    running.push(core);
-    expect(core.bound.map((spec) => spec.kind).sort()).toEqual(["tcp", "unix"]);
-    const document = read(endpointsFile(dataDir));
-    expect(document.runtime?.socket).toBe(socket);
-    expect(document.runtime?.http).toBeDefined();
-  });
+  // Same reason: the second transport here is a Unix socket.
+  it.skipIf(process.platform === "win32")(
+    "listens on several transports at once",
+    async () => {
+      const dataDir = temporary();
+      const socket = join(dataDir, "core.sock");
+      const core = await run({
+        argv: [
+          "--listen",
+          `unix:${socket}`,
+          "--listen",
+          "tcp:127.0.0.1:0",
+          "--data-dir",
+          dataDir,
+        ],
+        env: {
+          ARMADRA_CORE_MIGRATIONS_DIR: migrationsDir,
+          ARMADRA_LOG: "error",
+        },
+        stdout: () => {},
+      });
+      running.push(core);
+      expect(core.bound.map((spec) => spec.kind).sort()).toEqual([
+        "tcp",
+        "unix",
+      ]);
+      const document = read(endpointsFile(dataDir));
+      expect(document.runtime?.socket).toBe(socket);
+      expect(document.runtime?.http).toBeDefined();
+    },
+  );
 
   it("creates the database in the data directory it was given", async () => {
     const dataDir = temporary();
@@ -202,8 +217,13 @@ describe("what the core answers", () => {
       instanceId: core.instanceId,
       build: expect.any(String) as string,
       // R3 brought the hook service up with the core: the endpoint file names
-      // this data directory's socket, which is what `ok` reports on.
-      hook: { ok: true, sock: join(core.dataDir, "hook.sock") },
+      // this data directory's socket, which is what `ok` reports on. Windows
+      // has no such socket — the hook service reports no `sock` there and the
+      // clients reach the core over its TCP listener instead.
+      hook:
+        process.platform === "win32"
+          ? { ok: true }
+          : { ok: true, sock: join(core.dataDir, "hook.sock") },
     });
   });
 

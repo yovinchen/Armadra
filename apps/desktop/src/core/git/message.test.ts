@@ -164,43 +164,50 @@ describe("what the capture excludes", () => {
 });
 
 describe("the provider", () => {
-  it("says why it is unavailable rather than only that it is", async () => {
-    const [missing] = await providers({
-      binary: undefined,
-      key: undefined,
-      endpointSupported: true,
-      timeoutMs: 1_000,
-    });
-    expect(missing?.id).toBe("claude-bare");
-    expect(missing?.available).toBe(false);
-    expect(missing?.reason).toBe("notInstalled");
+  // The two cases below run `fakeClaude`, a `#!/bin/sh` script made
+  // executable with `chmod`. Windows honours neither: it picks an interpreter
+  // by file extension and has no executable bit, so a shell-script stand-in
+  // for a CLI is a fact that does not exist there.
+  it.skipIf(process.platform === "win32")(
+    "says why it is unavailable rather than only that it is",
+    async () => {
+      const [missing] = await providers({
+        binary: undefined,
+        key: undefined,
+        endpointSupported: true,
+        timeoutMs: 1_000,
+      });
+      expect(missing?.id).toBe("claude-bare");
+      expect(missing?.available).toBe(false);
+      expect(missing?.reason).toBe("notInstalled");
 
-    const binary = fakeClaude("provider-help", "{}");
-    const [noKey] = await providers({
-      binary,
-      key: undefined,
-      endpointSupported: true,
-      timeoutMs: 5_000,
-    });
-    expect(noKey?.reason).toBe("missingCredentials");
+      const binary = fakeClaude("provider-help", "{}");
+      const [noKey] = await providers({
+        binary,
+        key: undefined,
+        endpointSupported: true,
+        timeoutMs: 5_000,
+      });
+      expect(noKey?.reason).toBe("missingCredentials");
 
-    const [redirected] = await providers({
-      binary,
-      key: "private-key",
-      endpointSupported: false,
-      timeoutMs: 5_000,
-    });
-    expect(redirected?.reason).toBe("unsupportedEndpoint");
+      const [redirected] = await providers({
+        binary,
+        key: "private-key",
+        endpointSupported: false,
+        timeoutMs: 5_000,
+      });
+      expect(redirected?.reason).toBe("unsupportedEndpoint");
 
-    const [ready] = await providers({
-      binary,
-      key: "private-key",
-      endpointSupported: true,
-      timeoutMs: 5_000,
-    });
-    expect(ready?.available).toBe(true);
-    expect(ready?.reason).toBeNull();
-  });
+      const [ready] = await providers({
+        binary,
+        key: "private-key",
+        endpointSupported: true,
+        timeoutMs: 5_000,
+      });
+      expect(ready?.available).toBe(true);
+      expect(ready?.reason).toBeNull();
+    },
+  );
 
   it("reads the environment for its own configuration", () => {
     const config = environmentProvider({
@@ -258,43 +265,46 @@ describe("the provider", () => {
     expect(message).toBe("feat: add one\n\nIt adds one.");
   });
 
-  it("drafts end to end through a CLI that answers like the real one", async () => {
-    const repo = repository("message-generate");
-    repo.write("src/main.ts", "export const one = 1;\n");
-    repo.git("add", "-A");
-    const repositoryService = service();
-    const captured = await source(repositoryService, repo.path);
-    const binary = fakeClaude(
-      "generate-cli",
-      JSON.stringify({
-        type: "result",
-        subtype: "success",
-        is_error: false,
-        result: "feat: add one",
-      }),
-    );
-    const draft = await generate(
-      repositoryService,
-      repo.path,
-      {
-        provider: "claude-bare",
-        expectedHead: captured.expectedHead,
-        indexDigest: captured.indexDigest,
-        language: "en",
-        conventional: true,
-      },
-      {
-        binary,
-        key: "private-key",
-        endpointSupported: true,
-        timeoutMs: 10_000,
-      },
-    );
-    expect(draft.message).toBe("feat: add one");
-    expect(draft.provider).toBe("claude-bare");
-    expect(draft.conventional).toBe(true);
-    expect(draft.includedFiles).toEqual(["src/main.ts"]);
-  });
+  it.skipIf(process.platform === "win32")(
+    "drafts end to end through a CLI that answers like the real one",
+    async () => {
+      const repo = repository("message-generate");
+      repo.write("src/main.ts", "export const one = 1;\n");
+      repo.git("add", "-A");
+      const repositoryService = service();
+      const captured = await source(repositoryService, repo.path);
+      const binary = fakeClaude(
+        "generate-cli",
+        JSON.stringify({
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          result: "feat: add one",
+        }),
+      );
+      const draft = await generate(
+        repositoryService,
+        repo.path,
+        {
+          provider: "claude-bare",
+          expectedHead: captured.expectedHead,
+          indexDigest: captured.indexDigest,
+          language: "en",
+          conventional: true,
+        },
+        {
+          binary,
+          key: "private-key",
+          endpointSupported: true,
+          timeoutMs: 10_000,
+        },
+      );
+      expect(draft.message).toBe("feat: add one");
+      expect(draft.provider).toBe("claude-bare");
+      expect(draft.conventional).toBe(true);
+      expect(draft.includedFiles).toEqual(["src/main.ts"]);
+    },
+  );
 
   it("refuses a draft whose source moved while the model ran", async () => {
     const repo = repository("message-stale");

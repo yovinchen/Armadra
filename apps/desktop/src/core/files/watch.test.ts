@@ -141,18 +141,24 @@ describe("watching open editor files", () => {
     expect(await next(fixture)).toMatchObject({ kind: "replaced" });
   });
 
-  it("reports an atomic replace by another tool as replaced", async () => {
-    const root = workspace();
-    const fixture = await open(root, "one\n");
-    opened.push(fixture.id);
-    const staged = join(root.path, "their-tmp");
-    writeFileSync(staged, "theirs\n");
-    renameSync(staged, fixture.path);
-    expect(await next(fixture)).toMatchObject({
-      path: "note.txt",
-      kind: "replaced",
-    });
-  });
+  // `replaced` is told from `modified` by the file's device+inode, which
+  // Windows does not hand out cheaply; `watch.ts` reports `modified` there by
+  // design rather than guessing, so there is nothing to assert.
+  it.skipIf(process.platform === "win32")(
+    "reports an atomic replace by another tool as replaced",
+    async () => {
+      const root = workspace();
+      const fixture = await open(root, "one\n");
+      opened.push(fixture.id);
+      const staged = join(root.path, "their-tmp");
+      writeFileSync(staged, "theirs\n");
+      renameSync(staged, fixture.path);
+      expect(await next(fixture)).toMatchObject({
+        path: "note.txt",
+        kind: "replaced",
+      });
+    },
+  );
 
   it("stops pushing once the workspace is released", async () => {
     const fixture = await open(workspace(), "one\n");
