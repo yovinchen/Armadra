@@ -3,6 +3,13 @@ import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+/**
+ * 服务器壳只装在 Linux / macOS 上（systemd / launchd）。NTFS 没有 POSIX 权限位，
+ * Windows 也不按 shebang 执行脚本，这几条断言在那里没有对应的事实——CI 的
+ * windows-x86_64 会跑这份用例，所以显式跳过，而不是让它们报一个没有意义的红。
+ */
+const posixOnly = it.skipIf(process.platform === "win32");
+
 import { oid, tlv } from "./der";
 import {
   SELF_SIGNED_CERT,
@@ -57,7 +64,7 @@ describe("自签名证书", () => {
     expect(parsed.checkPrivateKey(createPrivateKey(key))).toBe(true);
   });
 
-  it("没给证书就在数据目录里生成一张，私钥 0600，并标注自签名", () => {
+  posixOnly("没给证书就在数据目录里生成一张，私钥 0600，并标注自签名", () => {
     const dataDir = temporary();
     const material = resolveTls({
       dataDir,

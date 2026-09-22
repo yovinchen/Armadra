@@ -3,6 +3,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+/**
+ * 服务器壳只装在 Linux / macOS 上（systemd / launchd）。NTFS 没有 POSIX 权限位，
+ * Windows 也不按 shebang 执行脚本，这几条断言在那里没有对应的事实——CI 的
+ * windows-x86_64 会跑这份用例，所以显式跳过，而不是让它们报一个没有意义的红。
+ */
+const posixOnly = it.skipIf(process.platform === "win32");
+
 import { type MainIo, main } from "./main";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -193,7 +200,7 @@ describe("install / uninstall / status", () => {
 });
 
 describe("upgrade", () => {
-  it("没有 --confirm 只打印计划，磁盘一个字节都不动", async () => {
+  posixOnly("没有 --confirm 只打印计划，磁盘一个字节都不动", async () => {
     const directory = temporary();
     const candidate = join(directory, "candidate");
     writeFileSync(
@@ -209,7 +216,7 @@ describe("upgrade", () => {
     expect(readFileSync(candidate, "utf8")).toBe(before);
   });
 
-  it("期望版本对不上就拒绝", async () => {
+  posixOnly("期望版本对不上就拒绝", async () => {
     const directory = temporary();
     const candidate = join(directory, "candidate");
     writeFileSync(

@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   cacheControlFor,
@@ -26,16 +26,20 @@ function fixture(): { root: string; outside: string } {
 
 describe("静态托管", () => {
   it("字符串上的收敛：解码、塌缩、落在根外就没有下一步", () => {
-    const root = "/srv/web";
-    expect(resolveWithinRoot(root, "/index.html")).toBe("/srv/web/index.html");
+    // `resolve` 而不是写死 `/srv/web`：Windows 上根会带盘符、分隔符是反斜杠，
+    // 收敛逻辑本身是跨平台的，断言也该按平台的拼法来。
+    const root = resolve("/srv/web");
+    expect(resolveWithinRoot(root, "/index.html")).toBe(
+      join(root, "index.html"),
+    );
     expect(resolveWithinRoot(root, "/a//b/../index.html")).toBe(
-      "/srv/web/a/index.html",
+      join(root, "a", "index.html"),
     );
     // 编码过的 `..` 与直接写的 `..` 塌缩成同一个答案，而它在根外。
     expect(resolveWithinRoot(root, "/%2e%2e%2f%2e%2e%2fetc")).toBeUndefined();
     expect(resolveWithinRoot(root, "/../../etc")).toBeUndefined();
     expect(resolveWithinRoot(root, "/index.html?v=1")).toBe(
-      "/srv/web/index.html",
+      join(root, "index.html"),
     );
     expect(resolveWithinRoot(root, "/%ff")).toBeUndefined();
     expect(resolveWithinRoot(root, "/a\0b")).toBeUndefined();
