@@ -19,8 +19,12 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, readdirSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const here = dirname(new URL(import.meta.url).pathname);
+// `fileURLToPath`，不是 `URL.pathname`：Windows 上后者是 `/D:/a/...`，带着
+// 开头的斜杠，`require.resolve` 从这个目录起找 node-pty 一定找不到
+// （CI 的 windows-x86_64 就是这样挂的）。
+const here = dirname(fileURLToPath(import.meta.url));
 const app = join(here, "..");
 const require = createRequire(import.meta.url);
 

@@ -10,6 +10,7 @@
  * "Error: Electron uninstall". Three separate checkouts hit this in one day,
  * so the check lives here rather than in a README.
  */
+import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -59,7 +60,7 @@ function brandDevBundle() {
   const plist = join(appDir, "Contents", "Info.plist");
   const icns = join(appDir, "Contents", "Resources", "electron.icns");
   const brandIcon = join(
-    dirname(new URL(import.meta.url).pathname),
+    dirname(fileURLToPath(import.meta.url)),
     "..",
     "build",
     "icons",
