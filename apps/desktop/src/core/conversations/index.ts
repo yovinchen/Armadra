@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import * as claude from "./claude";
 import * as codex from "./codex";
@@ -135,7 +135,10 @@ export function inScope(scope: Scope, cwd: string): boolean {
   return scope.roots.some((root) => {
     if (target === root) return true;
     const rest = relative(root, target);
-    return rest !== "" && !rest.startsWith("..") && !rest.startsWith(sep);
+    // `isAbsolute` is the Windows half: two paths on different drives share no
+    // prefix, and `relative` answers such a pair with the absolute target —
+    // which passes every "does not climb out" test there is.
+    return rest !== "" && !rest.startsWith("..") && !isAbsolute(rest);
   });
 }
 
