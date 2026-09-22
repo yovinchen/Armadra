@@ -1,5 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import type { CoreContext } from "../main";
 import { fixture, type Fixture } from "../workspaces/fixture";
 import { install as installWorkspaces } from "../workspaces/routes";
@@ -311,6 +314,19 @@ describeUnix("the terminal routes", () => {
    * happen, and the decorator refuses rather than falling back.
    */
   it("runs `ssh` for a terminal that names a stored host", async () => {
+    // 真的 `ssh` 连 127.0.0.1:22 在 CI 的 runner 上瞬间被拒、进程立刻退出，
+    // `ps` 看到的就是一个僵尸 `[ssh]`——命令行没了，断言就成了掷骰子。放一个
+    // 同名的假 `ssh` 在 PATH 最前面，它只是站着不动，命令行于是一直看得见。
+    const fakeBin = mkdtempSync(join(tmpdir(), "armadra-fake-ssh-"));
+    writeFileSync(join(fakeBin, "ssh"), "#!/bin/sh\nsleep 60\n", {
+      mode: 0o755,
+    });
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}${delimiter}${previousPath ?? ""}`;
+    onTestFinished(() => {
+      process.env.PATH = previousPath;
+      rmSync(fakeBin, { recursive: true, force: true });
+    });
     const { fixture: core_, workspaceId } = await core(true);
     await core_.call("PATCH", "/api/settings", {
       ssh: {
