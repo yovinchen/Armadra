@@ -35,7 +35,7 @@ import {
   logLevel,
   nodePlatform,
 } from "./platform";
-import { install as installLanguage } from "./language";
+import { install as installLanguage, languageDomain } from "./language";
 import { install as installRemote } from "./remote";
 import { install as installResources } from "./resources";
 import { install as installTerminals } from "./terminal/install";
@@ -262,6 +262,10 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
     log,
   };
   for (const install of options.domains ?? DOMAINS) install(context);
+  // Captured here rather than read at shutdown: the accessor is a module-level
+  // singleton, so a second core started in the same process would otherwise be
+  // the one this core stops.
+  const language = languageDomain();
 
   // Step 3.
   const listeners: { server: Server; spec: ListenSpec }[] = [];
@@ -299,6 +303,17 @@ export async function run(options: RunOptions = {}): Promise<RunningCore> {
   // Step 4 — armed before step 5 publishes anything about this process.
   const stop = async (): Promise<void> => {
     await server.close();
+    // Language servers are child processes of this one, and nothing else ends
+    // them: a core that exits without this leaves one running per workspace it
+    // opened. They are also the only domain that holds an OS resource outside
+    // this process, which is why the shutdown is here and not a general hook.
+    try {
+      await language?.stop();
+    } catch (error) {
+      log.warn("could not stop the language servers", {
+        error: describe(error),
+      });
+    }
     opened.close();
     releaseAll();
   };

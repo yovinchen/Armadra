@@ -1530,3 +1530,13 @@ Dock 的排布从「一个工具一个按钮」改成一张 `DOCK_TOOL_ITEMS`（
 `ServerProcess` 现在持一个在 `exit` / `error` 上兑现的 `reaped`，`terminate()` 在两个平台上都等它（上限 5 秒，杀不掉的进程不该把关停挂住）。POSIX 上 `SIGKILL` 之后这一等几乎不花时间，但契约从此在两个平台上都是真的。
 
 同一轮里 macOS 挂在 `browser/headless/live.integration.test.ts` 的 teardown：用例本身过了，Chromium 在管道关掉之后还在刷它的 profile，`rmSync` 撞上 `ENOTEMPTY`。这条与 Windows 无关，是一直存在的偶发；重试放宽并包上 `catch`——`$TMPDIR` 里剩一个目录是操作系统要扫的,不是测试结论。
+
+### 33.5 第三轮：core 关停时根本没停语言服务器
+
+Windows 仍剩那两条 `EBUSY`，而 33.4 的等待把那个文件从 12 秒拖到 28 秒——等的是一个永远不会退出的进程。真原因在 `core/main.ts`：`stop()` 只做了 `server.close()`、`opened.close()` 和 `releaseAll()`，从没调用 `languageDomain()?.stop()`。`Manager.shutdown()` 一直在那儿，注释还写着「Called when the core shuts down」，只是没人叫它。
+
+所以**核心退出会漏掉每一个语言服务器进程**，每开过一个工作空间就漏一个。POSIX 上看不出来（目录照删不误，进程被 init 收养），Windows 上那个进程以工作空间根目录为 cwd，目录就删不掉——测试撞见的是这个泄漏的影子。
+
+修法是在 `stop()` 里 `await language?.stop()`。`language` 在装配循环之后就地取下来而不是关停时再读：那个访问器是模块级单例，同一进程里起第二个 core 会把它改掉，关停时再读就会停错人。
+
+第三轮之后 `apps/desktop` 在 Windows 上全绿。
