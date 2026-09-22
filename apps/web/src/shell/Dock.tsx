@@ -19,6 +19,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/ui/context-menu";
 import { IconButton } from "@/ui/icon-button";
 import { runCanvasCommand } from "@/canvas/commands";
 import { Separator } from "@/ui/separator";
@@ -50,7 +57,6 @@ export function Dock() {
   const canRedo = useCanRedo();
   const agents = useEnabledAgents();
   const addMenu = useMenuTooltip();
-  const zoomMenu = useMenuTooltip();
 
   if (!workspace) return null;
 
@@ -169,31 +175,27 @@ export function Dock() {
 
         <SaveDot />
 
-        <DropdownMenu {...zoomMenu.menuProps}>
+        {/* 单击 = 适应视图（用户反馈 2026-09-22：这一格该像「适应全屏」那样
+            一下到位）；右键才是缩放档位。⌘ / Ctrl + 滚轮的缩放走画布自己那条。 */}
+        <ContextMenu>
           <Tooltip delayDuration={500}>
-            <TooltipTrigger asChild {...zoomMenu.tooltipTriggerProps}>
-              <DropdownMenuTrigger asChild>
+            <TooltipTrigger asChild>
+              <ContextMenuTrigger asChild>
                 <IconButton
                   size="dock"
-                  label={t("dock.zoom")}
-                  active={zoomMenu.menuOpen}
+                  label={t("dock.zoomFit")}
                   className="w-[52px] text-[length:var(--text-caption)] font-medium tabular-nums"
+                  onClick={fitView}
                 >
                   {Math.round(zoom * 100)}%
                 </IconButton>
-              </DropdownMenuTrigger>
+              </ContextMenuTrigger>
             </TooltipTrigger>
-            {zoomMenu.menuOpen ? null : (
-              <TooltipContent>{t("dock.zoom")}</TooltipContent>
-            )}
+            <TooltipContent>{t("dock.zoomFitHint")}</TooltipContent>
           </Tooltip>
-          <DropdownMenuContent
-            align="center"
-            side="top"
-            className="z-[var(--z-menu)] w-auto min-w-32"
-          >
+          <ContextMenuContent className="z-[var(--z-menu)] w-auto min-w-32">
             {ZOOM_STEPS.map((step) => (
-              <DropdownMenuItem
+              <ContextMenuItem
                 key={step}
                 data-checked={
                   Math.abs(zoom - step) < 0.005 ? "true" : undefined
@@ -201,14 +203,14 @@ export function Dock() {
                 onSelect={() => zoomToLevel(step)}
               >
                 {Math.round(step * 100)}%
-              </DropdownMenuItem>
+              </ContextMenuItem>
             ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={fitView}>
+            <ContextMenuSeparator />
+            <ContextMenuItem onSelect={fitView}>
               {t("dock.zoomFit")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
       </div>
     </div>
   );

@@ -77,6 +77,7 @@ import {
   splitSelectionForDelete,
 } from "./tools";
 import { MAX_ZOOM, MIN_ZOOM } from "./zoom";
+import { isZoomWheel, zoomCanvasByWheel } from "./interaction/wheel-zoom";
 
 /**
  * 画布本体（React Flow 计划 §2.1）。
@@ -162,6 +163,22 @@ function FlowWorkspaceInner() {
   const [pendingDelete, setPendingDelete] =
     React.useState<PendingDelete | null>(null);
   const container = React.useRef<HTMLDivElement>(null);
+  // ⌘ / Ctrl + 滚轮在画布任何地方都是缩放，自己在捕获阶段算，不靠 React Flow
+  // 的 `useKeyPress`：焦点落在终端或 webview 里时它收不到 keydown，于是
+  // Ctrl + 滚轮变成了平移（用户反馈 2026-09-22）。原生监听而不是 React 的
+  // `onWheel`：后者是被动的，`preventDefault` 拦不住页面缩放。
+  React.useEffect(() => {
+    const stage = container.current;
+    if (!stage) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!isZoomWheel(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      zoomCanvasByWheel(event);
+    };
+    stage.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    return () => stage.removeEventListener("wheel", onWheel, { capture: true });
+  }, []);
 
   const bindings = useFlowNodes();
   // 右键菜单插槽（§5.3）：`handlers` 摊给 `<ReactFlow>`，`menus` 摆在
