@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { checksum, loadMigrations, resolveMigrationsDir } from "./migrations";
@@ -49,7 +49,7 @@ describe("the migration set", () => {
       string
     >;
     for (const migration of loadMigrations(migrationsDir)) {
-      const name = migration.file.slice(migration.file.lastIndexOf("/") + 1);
+      const name = basename(migration.file);
       expect(
         createHash("sha256").update(readFileSync(migration.file)).digest("hex"),
         name,

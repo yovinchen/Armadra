@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { SESSION_PREFIX, sessionKey } from "../backend";
 import { childEnvironment } from "../environment";
@@ -270,7 +271,9 @@ describe("isolation", () => {
    */
   it("finds no bare -L socket in this directory", () => {
     const bareSocket = /["']-L["']/;
-    const directory = new URL(".", import.meta.url).pathname;
+    // `pathname`, not `fileURLToPath`, would hand Windows "/D:/…" — a string
+    // no `existsSync` will ever agree with.
+    const directory = fileURLToPath(new URL(".", import.meta.url));
     const files = ["backend.ts", "config.ts", "control.ts"];
     const offenders = files.filter((name) => {
       const path = join(directory, name);

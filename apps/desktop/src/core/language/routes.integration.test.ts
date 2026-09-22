@@ -35,7 +35,15 @@ afterEach(async () => {
   for (const socket of sockets.splice(0)) socket.close();
   for (const core of running.splice(0)) await core.stop();
   for (const directory of directories.splice(0)) {
-    rmSync(directory, { recursive: true, force: true });
+    // Retries because Windows refuses to remove a directory a process still
+    // has open — the language server's own exit is not instantaneous, and the
+    // alternative is an `EBUSY` in teardown that says nothing about the test.
+    rmSync(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 20,
+      retryDelay: 100,
+    });
   }
 });
 

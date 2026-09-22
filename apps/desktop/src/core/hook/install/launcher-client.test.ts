@@ -10,6 +10,11 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { launcherClientBinary, resolveClientBinary } from "./shared";
 
+/** What `resolveClientBinary` looks for next to the executable. */
+function clientName(): string {
+  return process.platform === "win32" ? "armadra-hook.cmd" : "armadra-hook";
+}
+
 const dirs: string[] = [];
 function temporary(): string {
   const dir = mkdtempSync(join(tmpdir(), "armadra-launcher-"));
@@ -57,7 +62,9 @@ describe("the TypeScript client's launcher", () => {
     ).toBe(undefined);
     expect(existsSync(join(dataDir, "bin"))).toBe(false);
     const sidecarDir = temporary();
-    const sidecar = join(sidecarDir, "armadra-hook");
+    // Windows resolves an executable by extension: the sidecar the installer
+    // looks for is `armadra-hook.cmd` there, not the extensionless name.
+    const sidecar = join(sidecarDir, clientName());
     writeFileSync(sidecar, "");
     expect(
       resolveClientBinary({
@@ -73,7 +80,7 @@ describe("the TypeScript client's launcher", () => {
     const bundle = join(temporary(), "armadra-hook.js");
     writeFileSync(bundle, "");
     const sidecarDir = temporary();
-    writeFileSync(join(sidecarDir, "armadra-hook"), "");
+    writeFileSync(join(sidecarDir, clientName()), "");
     const resolved = resolveClientBinary({
       env: {},
       executableDir: sidecarDir,

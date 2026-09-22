@@ -39,6 +39,16 @@ function keySourceOf(config: string): string {
   return (key ?? "").slice(0, -":stop:0:0".length);
 }
 
+/**
+ * A `hooks.state` key as it is *spelled in the file*: TOML basic strings
+ * escape the backslash, so a Windows path is written `C:\\Users\\…`.
+ * `stateKeys` answers with the logical key, which is the right answer for
+ * every use except matching the document's own bytes.
+ */
+function asWritten(key: string): string {
+  return key.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 describe("the Codex installer", () => {
   /**
    * Locks the trust algorithm. It was verified byte-for-byte against the
@@ -119,7 +129,9 @@ describe("the Codex installer", () => {
     const config = readFileSync(configPath(directory), "utf8");
     const keySource = keySourceOf(config);
     expect(keySource).not.toBe("");
-    expect(config).toContain(`[hooks.state."${keySource}:stop:0:0"]`);
+    expect(config).toContain(
+      `[hooks.state."${asWritten(`${keySource}:stop:0:0`)}"]`,
+    );
     expect(config).toContain("enabled = true");
     // SessionEnd hashes with the 1s timeout, not the 600s default.
     expect(config).toContain(
@@ -187,8 +199,8 @@ describe("the Codex installer", () => {
       .find((key) => key.endsWith(":stop:1:0"))
       ?.slice(0, -":stop:1:0".length) as string;
     // Their handler is at index 0 and we did not invent a hash for it.
-    expect(config).not.toContain(`${keySource}:stop:0:0`);
-    expect(config).toContain(`${keySource}:stop:1:0`);
+    expect(config).not.toContain(asWritten(`${keySource}:stop:0:0`));
+    expect(config).toContain(asWritten(`${keySource}:stop:1:0`));
 
     uninstall(directory);
     const after = readHooks(hooksPath(directory));
