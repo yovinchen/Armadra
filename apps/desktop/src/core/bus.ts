@@ -86,6 +86,17 @@ export interface WorkspaceEventPayloads {
     readonly nodeId?: string;
     readonly lease: OpaquePayload;
   };
+  /**
+   * Eco 休眠的状态变了（终端宿主设计 §7.2）：`hibernated` 是进程已经确认结束，
+   * `resuming` 是正在用 CLI 的 resume 接回来，`running` 是接回来了，`failed`
+   * 是没接回来、要人处理。节点头的「休眠中」从这里翻，不靠页面自己猜。
+   */
+  "terminal.hibernation": {
+    readonly sessionId: string;
+    readonly nodeId: string;
+    readonly state: "hibernated" | "resuming" | "running" | "failed";
+    readonly reason?: string;
+  };
   "board.changed": { readonly boardId: string; readonly updatedAt: string };
   /**
    * 谁在看这块画布、谁持有写租约（契约 §9.4）。有人来、有人走、租约换手时
@@ -216,6 +227,7 @@ export const WORKSPACE_EVENT_TYPES = [
   "agent.delivery",
   "terminal.exit",
   "terminal.lease",
+  "terminal.hibernation",
   "board.changed",
   "canvas.presence",
   "node.created",

@@ -135,9 +135,9 @@ describe("WorkspaceEventStream", () => {
     expect(changed.mtime).toBeNull();
   });
 
-  it("carries the 21 contractual type strings, plus node.created, terminal.lease and canvas.presence, and no others", () => {
-    expect(WORKSPACE_EVENT_TYPES).toHaveLength(24);
-    expect(new Set(WORKSPACE_EVENT_TYPES).size).toBe(24);
+  it("carries the 21 contractual type strings, plus node.created, terminal.lease, canvas.presence and terminal.hibernation, and no others", () => {
+    expect(WORKSPACE_EVENT_TYPES).toHaveLength(25);
+    expect(new Set(WORKSPACE_EVENT_TYPES).size).toBe(25);
     // A rename here is a break in `packages/shared`'s discriminated union and
     // in every front-end reducer that switches on it (contract §5).
     expect([...WORKSPACE_EVENT_TYPES]).toEqual([
@@ -148,6 +148,7 @@ describe("WorkspaceEventStream", () => {
       "agent.delivery",
       "terminal.exit",
       "terminal.lease",
+      "terminal.hibernation",
       "board.changed",
       "canvas.presence",
       "node.created",

@@ -69,6 +69,17 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     nodeId: z.string().optional(),
     lease: driveLeaseSchema,
   }),
+  /**
+   * Eco 休眠的状态变了（终端宿主设计 §7.2）。`hibernated` 只在进程确认结束之后
+   * 才发；`failed` 表示没能用 CLI 的 resume 接回来，要人处理。
+   */
+  z.object({
+    type: z.literal("terminal.hibernation"),
+    sessionId: z.string(),
+    nodeId: z.string(),
+    state: z.enum(["hibernated", "resuming", "running", "failed"]),
+    reason: z.string().optional(),
+  }),
   z.object({
     type: z.literal("board.changed"),
     boardId: z.string(),
@@ -228,6 +239,10 @@ export type CanvasPresenceEvent = Extract<
 export type TerminalLeaseEvent = Extract<
   WorkspaceEvent,
   { type: "terminal.lease" }
+>;
+export type TerminalHibernationEvent = Extract<
+  WorkspaceEvent,
+  { type: "terminal.hibernation" }
 >;
 export type BrowserLeaseEvent = Extract<
   WorkspaceEvent,

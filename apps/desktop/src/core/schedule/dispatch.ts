@@ -31,6 +31,11 @@ import {
 import type { TerminalBridge } from "../collab/service";
 import { PASTE_END, PASTE_START, sanitizePaste } from "../terminal/backend";
 import {
+  type HibernationWaker,
+  hibernatedSession,
+  hibernationWaker,
+} from "../terminal/hibernate";
+import {
   type AgentLauncher,
   ColdStarts,
   agentLauncher,
@@ -155,6 +160,16 @@ export class TerminalDispatcher implements Dispatcher {
         coldStart &&
         target.coldStartPolicy === AutomationColdStartPolicy.LAUNCH_FROZEN
       ) {
+        // 休眠着的节点（终端宿主设计 §7.2）用 CLI 的 resume 接回原来那段对话，
+        // 不按冻结定义另起一个——那会是同一个节点上第二段互不相识的会话。
+        // 没有唤醒入口就是没有终端域，也就没有谁会休眠。
+        const wake = hibernationWaker();
+        if (
+          wake !== undefined &&
+          hibernatedSession(this.context.database, node.id) !== undefined
+        ) {
+          return this.resumeHibernated(node, wake);
+        }
         return this.coldStart(target, node);
       }
       return { state: "offline", generation: 0 };
@@ -272,6 +287,31 @@ export class TerminalDispatcher implements Dispatcher {
     );
     // 刚起来的 CLI 还没铺完界面，更没有结束过一回合。
     return { state: "busy", generation: started.generation };
+  }
+
+  /**
+   * 计划授权了冷启动、而目标休眠着：叫终端域把它接回来，报 `busy`。
+   *
+   * 与冷启动共用冷却窗口与「起来之后要等一条新上报」那道门（`coldStarts`）：
+   * 接回来的 CLI 同样还没结束过一回合。会话 id 不变，所以不用写回节点。没授权
+   * 冷启动的计划走不到这里——它们如实答离线，这一次运行被跳过（§7.2）。
+   */
+  private async resumeHibernated(
+    node: NodeRef,
+    wake: HibernationWaker,
+  ): Promise<TargetStatus> {
+    const offline: TargetStatus = { state: "offline", generation: 0 };
+    const nowMs = this.now();
+    if (this.coldStarts.cooling(node.id, nowMs)) return offline;
+    this.coldStarts.claim(node.id, nowMs);
+    let woken: { sessionId: string; generation: number };
+    try {
+      woken = await wake(node.id, "schedule");
+    } catch {
+      return offline;
+    }
+    this.coldStarts.note(node.id, woken.sessionId, nowMs);
+    return { state: "busy", generation: woken.generation };
   }
 
   /** 命令目标：一个被冻结过的终端会话，代数必须完全一致。 */

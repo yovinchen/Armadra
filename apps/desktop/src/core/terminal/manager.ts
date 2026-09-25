@@ -48,6 +48,7 @@ import {
   type DriveSessionRef,
 } from "./drive";
 import { getAgentStatus } from "../agent/status";
+import { HIBERNATE_INTENT, rowHibernated } from "./hibernate";
 import {
   type ObservedActivity,
   type TargetState,
@@ -114,6 +115,11 @@ export interface TerminalSession {
   readonly generation: number;
   readonly attachState: string;
   readonly lastOutputAt: string | null;
+  /**
+   * 这一行以 Eco 休眠结束（终端宿主设计 §7.2）：进程已经不在，节点上的会话可以
+   * 用 CLI 自己的 resume 接回来。活着的行恒为 `null`。
+   */
+  readonly hibernation: "hibernated" | null;
 }
 
 /**
@@ -505,6 +511,7 @@ export class TerminalManager {
         generation: handle.generation,
         attachState: "detached",
         lastOutputAt: null,
+        hibernation: null,
       };
     });
   }
@@ -588,6 +595,128 @@ export class TerminalManager {
     });
   }
 
+  /* --------------------------- Eco 休眠的两个钩子 --------------------------- */
+
+  /**
+   * 结束会话以释放内存，行记成休眠（终端宿主设计 §7.2）。判据不在这里——
+   * `hibernator.ts` 判完才叫它；这里只保证「确认退出之后才写 hibernated」：
+   * 后端 `terminate` 抛了，就当它还活着，记录原样退回去。
+   */
+  async hibernate(sessionId: string): Promise<void> {
+    const first = this.require(sessionId);
+    return this.withKey(first.key, async () => {
+      const record = this.require(sessionId);
+      // 与 `terminate` 同一个次序：先标记，随之而来的退出是这一次结束，不是
+      // 一次独立的退出，退出监视器不该把它记成 `exited` 并广播出去。
+      record.exited = true;
+      try {
+        await this.backend(record.kind).terminate(record.key, "session");
+      } catch (error) {
+        record.exited = false;
+        throw error;
+      }
+      this.database
+        .prepare(
+          `UPDATE terminal_sessions SET status = 'terminated', attach_state = 'exited',
+               termination_intent = ?, ended_at = ? WHERE id = ? AND status = 'running'`,
+        )
+        .run(HIBERNATE_INTENT, this.now(), sessionId);
+      this.inputs.forget(sessionId);
+      this.drives.forget(sessionId);
+    });
+  }
+
+  /**
+   * 把一个休眠的会话在**同一个会话 id**上起回来，代次加一。
+   *
+   * 与 `recycle` 是同一种操作（同一个 `session_key`、下一个代次），区别只在起
+   * 点：recycle 的旧进程还在，这里的早就没了，而且重启之后内存里连记录都没有，
+   * 所以规格从行上重建。环境由调用方给——节点令牌与地址变量归装配层
+   * （`install.ts` 的 `ownedEnvironment`），行上不存环境。
+   *
+   * 会话 id 不变是有意的：节点数据里记的就是它，页面照原样重新附着即可，不需要
+   * 往画布里写一笔。同一个 key 上已经有别的活会话（有人在这期间起了新的），就
+   * 拒绝——休眠已经被取代了，再起一个就是同一个节点上的第二个 CLI。
+   */
+  async revive(sessionId: string, env: EnvPairs): Promise<TerminalSession> {
+    const row = this.database
+      .prepare("SELECT * FROM terminal_sessions WHERE id = ?")
+      .get(sessionId) as Record<string, unknown> | undefined;
+    if (row === undefined) throw notFound("Terminal session not found");
+    const key = String(row.session_key) as SessionKey;
+    return this.withKey(key, async () => {
+      const current = this.database
+        .prepare(
+          "SELECT status, termination_intent, generation FROM terminal_sessions WHERE id = ?",
+        )
+        .get(sessionId) as Record<string, unknown> | undefined;
+      if (current === undefined) throw notFound("Terminal session not found");
+      if (!rowHibernated(current)) {
+        throw conflict("Terminal session is not hibernated");
+      }
+      const holder = this.byKey.get(key);
+      if (
+        holder !== undefined &&
+        holder !== sessionId &&
+        this.isAlive(holder)
+      ) {
+        throw conflict("Another session is running for this node");
+      }
+      const nextGeneration = Number(current.generation ?? 0) + 1;
+      const workspaceId = String(row.workspace_id);
+      const command = (row.command as string | null) ?? undefined;
+      const spec: TerminalSpec = {
+        sessionKey: key,
+        workspaceId,
+        generation: nextGeneration,
+        cwd: String(row.cwd),
+        shell: String(row.shell),
+        ...(command === undefined ? {} : { command }),
+        args: [],
+        env: contextSessionEnvironment(
+          withUtf8Locale(env),
+          sessionId,
+          nextGeneration,
+        ),
+        size: { cols: DEFAULT_COLS, rows: DEFAULT_ROWS },
+      };
+      const kind = this.effective;
+      const handle = await this.backend(kind).create(spec);
+      this.database
+        .prepare(
+          `UPDATE terminal_sessions SET generation = ?, backend_kind = ?, backend_ref = ?,
+               status = 'running', exit_code = NULL, ended_at = NULL,
+               attach_state = 'detached', termination_intent = 'none',
+               last_output_at = NULL WHERE id = ?`,
+        )
+        .run(handle.generation, kind, handle.backendRef ?? null, sessionId);
+      this.inputs.forget(sessionId);
+      this.drives.forget(sessionId);
+      this.remember({
+        id: sessionId,
+        key,
+        workspaceId,
+        ownerNodeId: (row.owner_node_id as string | null) ?? null,
+        kind,
+        generation: handle.generation,
+        pid: handle.pid,
+        cols: DEFAULT_COLS,
+        rows: DEFAULT_ROWS,
+        exited: false,
+        inputRevision: 0,
+        inputSafety: new InputSafety(),
+        lastActivity: undefined,
+        spec,
+      });
+      return this.session(sessionId);
+    });
+  }
+
+  /** 这个进程里每个还活着的会话记录，给休眠巡检逐个判。 */
+  liveRecords(): readonly SessionRecord[] {
+    return [...this.records.values()].filter((record) => !record.exited);
+  }
+
   private remember(record: SessionRecord): void {
     this.byKey.set(record.key, record.id);
     // 创建者今天恒为本机 owner（空串）。会话与工作空间的这一对是 drive 判定
@@ -639,6 +768,7 @@ export class TerminalManager {
       generation: Number(row.generation ?? 0),
       attachState: String(row.attach_state),
       lastOutputAt: (row.last_output_at as string | null) ?? null,
+      hibernation: rowHibernated(row) ? "hibernated" : null,
     };
   }
 

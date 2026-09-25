@@ -9,7 +9,7 @@ import { color, link, rename } from "./edits";
 import { interrupt } from "./interrupt";
 import { list, openAgent, openTerminal, sticky, team } from "./nodes";
 import { outbox } from "./outbox";
-import { send } from "./send";
+import { resolveTarget, send } from "./send";
 import { type Outcome, outcomeBody, raw, result } from "./outcome";
 
 export { outcomeBody };
@@ -200,6 +200,7 @@ export async function run(
     case "close":
       return close(context, caller, args);
     case "send":
+      await wakeTarget(context, caller, args);
       return send(context, caller, args);
     case "outbox":
       return outbox(context, caller, args);
@@ -209,6 +210,35 @@ export async function run(
       return team(context, caller, args);
     default:
       throw Refusal.badRequest(`未知的画布动词 \`${verb}\`。`);
+  }
+}
+
+/**
+ * 投给一个休眠节点（Eco 模式，终端宿主设计 §7.2）：先把它接回来，再走 `send`
+ * 自己的整条门链。
+ *
+ * 放在 `send` 外面而不是里面：`send` 的门链一个字都不改，接回来的节点在它看来
+ * 就是一个刚起来、还没报过第一条状态的目标——排队等它报 idle，与
+ * `open-agent --task` 同一条路。目标解析不出来、演练、接不回来，都交给 `send`
+ * 自己如实拒绝，这里不另写一套理由。
+ */
+async function wakeTarget(
+  context: CollabContext,
+  caller: Caller,
+  args: Args,
+): Promise<void> {
+  const wake = context.terminals?.wakeNode;
+  if (wake === undefined || args.flag("dry-run")) return;
+  let targetId: string;
+  try {
+    targetId = resolveTarget(context, caller, args).id;
+  } catch {
+    return;
+  }
+  try {
+    await wake(targetId);
+  } catch {
+    // 没接回来：`send` 会以「没有在运行的会话」拒绝，那正是实情。
   }
 }
 

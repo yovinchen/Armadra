@@ -367,3 +367,13 @@ R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消�
 - **成员会话的授权快照只有 `identity:read`**，共享得来的授权每次判定时现编（`Authorizer.permits` = 快照 ∪ 现编）。所以撤销一条共享之后的**下一个请求**就是 403，不用等会话过期。`GET session` 报的 `scopes` 是现编之后的那份。
 - **路由门**（`core/identity/route-access.ts`，挂在 `core/http/server.ts` 分发之前与升级之前）：路由表声明的 scope（`core/http/route-scopes.ts`）按这次请求的主体判，不够是 403 `{ "code": "forbidden", "message" }`。只在服务器壳上有请求主体；桌面壳里一律放行。成员在全局路由（设置、Agent 目录、执行主机……）上一律 403；`GET /api/workspaces` 放行但只留他有 `canvas:read` 的；`PATCH/DELETE /api/workspaces/{id}` 要 `workspace:share`；终端：创建要 `terminal:create@workspace`（按请求体的 `workspaceId`），写自己开的要 `terminal:create`、写别人的（含附着 `…/ws`）要 `terminal:drive`。
 - **事件流**：升级前要 `events:read@workspace`；授权一变（授予、撤销、组成员、停用、撤销设备、登出）已开的订阅当场复核，不再有权的以关闭码 **4403** 关掉，重连在升级前拿到 403。
+
+## 11. 节能休眠：`POST /api/terminals/{sessionId}/wake`
+
+空闲的 Agent 会话被结束以释放内存、之后用 CLI 自己的 resume 接回来（设计 `design/terminal-host-design.md` §7.2）。没有新表：休眠就是那一行 `terminal_sessions` 以 `termination_intent = 'hibernate'` 结束，恢复要的 cwd、shell、Agent、provider 会话 id（`agent_status.session_id`）、权限模式与模型都已经在库里。权限与其余终端路由同一档（`terminal:write`）。
+
+- `GET /api/terminals/{sessionId}` 与其余回会话行的路由多一个字段 `hibernation`：以休眠结束的行是 `"hibernated"`，其余恒为 `null`。页面据此不替节点新建会话。
+- `POST /api/terminals/{sessionId}/wake`：在**同一个会话 id** 上起下一代，敲 CLI 的恢复行（Claude `--resume <id>`、Codex `resume <id>`……形状来自 `agent/launch.ts` 的注册表），等前台变成这个 Agent，回会话行（`status: "running"`、`generation` 加一）。节点已经醒着（别处先叫醒了，或者有人重新起过）就回它现在的那一行，不起第二个。接不回来是 409 `{ "code": "wake_failed", "message" }`；会话不属于任何节点、节点没有休眠也没有活会话是 409 `not_hibernated`。
+- 工作空间事件 `terminal.hibernation`：`{ "type": "terminal.hibernation", "sessionId", "nodeId", "state", "reason"? }`，`state` 是 `hibernated`（进程确认结束之后才发）/ `resuming` / `running` / `failed`。`reason` 在 `resuming` / `running` 时是唤醒来源（`focus` / `delivery` / `schedule`），在 `failed` 时是稳定码（`noProviderSession`、`spawnFailed`、`agentDidNotStart` 等），不翻译。
+- 资源采样里休眠的会话照列，`unknownReason: "hibernated"`、`alive: false`、各项数字为 `null`。
+- 设置：`terminal.ecoMode`（布尔，缺省 `true`）、`terminal.ecoIdleMinutes`（5–1440，缺省 30）。

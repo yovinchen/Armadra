@@ -14,7 +14,16 @@ import { nodeRole } from "../canvas/context-links";
 import { handleForNode } from "../canvas/handles";
 import { type EnvPairs, agentEnvironment, setHookClient } from "./environment";
 import { launcherClientBinary } from "../hook/install/shared";
-import { setTerminalBridge } from "../agent";
+import { collab, setTerminalBridge } from "../agent";
+import { listAgents } from "../agent/list";
+import { parseCustomAgents } from "../settings/custom-agents";
+import {
+  HIBERNATE_INTERVAL_MS,
+  ecoPolicy,
+  hibernatedSession,
+  setHibernationWaker,
+} from "./hibernate";
+import { Hibernator } from "./hibernator";
 import { setAgentLauncher } from "../schedule/cold-start";
 import { terminalBridge } from "./bridge";
 import { SshBackend } from "./ssh/backend";
@@ -61,6 +70,7 @@ import { detect } from "./tmux/config";
 export interface TerminalDomain {
   readonly manager: TerminalManager;
   readonly backends: ReadonlyMap<BackendKind, TerminalBackend>;
+  readonly hibernator: Hibernator;
   stop(): Promise<void>;
 }
 
@@ -266,6 +276,50 @@ export function install(
     ];
   };
 
+  /* ------------------------------ Eco 休眠 -------------------------------- */
+
+  // 终端宿主设计 §7.2。设置每次现读：开关与阈值改了下一轮巡检就生效。
+  const agentSettings = () =>
+    collab()?.settings ?? {
+      customAgents: () =>
+        parseCustomAgents(settingsDomain()?.settings.snapshot() ?? {}),
+    };
+  const hibernator = new Hibernator({
+    database: context.db.database,
+    manager,
+    settings: agentSettings,
+    policy: () =>
+      ecoPolicy((path) => settingsDomain()?.settings.get(path) ?? undefined),
+    environment: (nodeId, agentId) => ownedEnvironment(nodeId, agentId),
+    // 与依赖编排拼启动行时同一个来源：本机解析到的程序路径，与集成要求的
+    // argv（Claude 的 `--settings <文件>`，少了它 hook 不上报）。
+    program: (agentId) => {
+      try {
+        const row = listAgents({
+          dataDir: context.dataDir,
+          settings: agentSettings(),
+        }).find((entry) => entry.id === agentId);
+        return { path: row?.resolvedPath ?? undefined, args: row?.launchArgs };
+      } catch {
+        return {};
+      }
+    },
+    publish: (workspaceId, event) => {
+      context.bus.emit("workspace.event", { workspaceId, event });
+    },
+    nudge: (nodeId) => collab()?.nudge?.(nodeId),
+    log: (message, fields) => context.log.info(message, fields),
+  });
+  setHibernationWaker((nodeId, reason) => hibernator.wake(nodeId, reason));
+  const hibernateTimer = setInterval(() => {
+    void ready
+      .then(() => hibernator.tick())
+      .catch((failure: unknown) => {
+        context.log.warn("Eco 休眠巡检失败", { error: describe(failure) });
+      });
+  }, HIBERNATE_INTERVAL_MS);
+  hibernateTimer.unref?.();
+
   route("POST", "/api/terminals", async (_params, request) => {
     const body = json<CreateTerminalRequest>(request);
     const invalid = validateCreate(body);
@@ -424,6 +478,25 @@ export function install(
   });
 
   /**
+   * 页面上点了（或聚焦了）一个休眠中的节点：用 CLI 自己的 resume 在同一个会话
+   * id 上接回来（终端宿主设计 §7.2）。已经醒着就答它现在的样子——两台设备同时
+   * 点、或者投递先一步叫醒了它，都不会起第二个 CLI。
+   */
+  route("POST", "/api/terminals/{sessionId}/wake", async (params) => {
+    const sessionId = params.sessionId as string;
+    const row = manager.session(sessionId);
+    if (row.ownerNodeId === null) {
+      throw new TerminalError(
+        409,
+        "not_hibernated",
+        "This terminal does not belong to a node",
+      );
+    }
+    const woken = await hibernator.wake(row.ownerNodeId, "focus");
+    return { status: 200, body: manager.session(woken.sessionId) };
+  });
+
+  /**
    * 人按节点头的「接管」/「交还」（设计 `agent-delivery.md` §6.1、§10）。
    *
    * 接管与抢占不是一回事，所以它需要一条自己的门而不是一次空写入：抢占是人
@@ -503,6 +576,16 @@ export function install(
   // on a canvas whose panes are running.
   setTerminalBridge({
     ...terminalBridge(manager, context.db.database),
+    // 投给休眠节点的消息：先叫醒再走 `send` 的整条门链（§7.2）。不是休眠着的
+    // 节点立刻答 `false`，只多一次库查询。
+    wakeNode: async (nodeId) => {
+      await ready;
+      if (hibernatedSession(context.db.database, nodeId) === undefined) {
+        return false;
+      }
+      await hibernator.wake(nodeId, "delivery");
+      return true;
+    },
     // 依赖编排在页面没开时替节点起终端（Agent 自动化设计 §6）。与
     // `POST /api/terminals` 同一套环境与令牌，只是请求来自 core 自己。
     spawnForNode: async (request) => {
@@ -551,12 +634,15 @@ export function install(
   return {
     manager,
     backends,
+    hibernator,
     stop: async () => {
       // Withdrawn before the panes go: a verb that reached a bridge over a
       // manager that is shutting down would be told a session is missing
       // rather than that there is nothing to talk to.
       setTerminalBridge(undefined);
       setAgentLauncher(undefined);
+      setHibernationWaker(undefined);
+      clearInterval(hibernateTimer);
       await manager.shutdown();
     },
   };

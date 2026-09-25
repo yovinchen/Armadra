@@ -79,6 +79,8 @@ export const resourceUnknownReasonSchema = z.enum([
   "no-pid",
   "not-found",
   "warming-up",
+  // Eco 休眠：进程已经结束，恢复信息留着，不占内存（终端宿主设计 §7.2）。
+  "hibernated",
 ]);
 
 /**

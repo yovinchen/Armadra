@@ -143,7 +143,7 @@ export function sessionTargets(
       `${SESSION_COLUMNS} WHERE workspace_id = ? AND status = 'running' ORDER BY id`,
     )
     .all(workspaceId) as Record<string, unknown>[];
-  const targets = rows.map((raw) => {
+  const targets: SessionTarget[] = rows.map((raw) => {
     const row = toRow(raw);
     const pid = row.backendRef === null ? undefined : pids.get(row.backendRef);
     return {
@@ -159,10 +159,38 @@ export function sessionTargets(
       remote: isRemoteExecutable(row.shell),
     } satisfies SessionTarget;
   });
+  // Eco 休眠的会话（终端宿主设计 §7.2）：进程没了，但节点还挂着它、点一下就会
+  // 接回来，面板该看得见它、并且看得出它不占内存。节点后来又起了一个活会话的
+  // 不列——那时休眠已经被取代了。
+  const hibernated = database
+    .prepare(
+      `${SESSION_COLUMNS} s WHERE s.workspace_id = ? AND s.status <> 'running' ` +
+        "AND s.termination_intent = 'hibernate' AND s.owner_node_id IS NOT NULL " +
+        "AND NOT EXISTS (SELECT 1 FROM terminal_sessions r " +
+        "WHERE r.owner_node_id = s.owner_node_id AND r.status = 'running') ORDER BY s.id",
+    )
+    .all(workspaceId) as Record<string, unknown>[];
+  for (const raw of hibernated) {
+    const row = toRow(raw);
+    targets.push({
+      sessionId: row.id,
+      sessionKey: row.sessionKey,
+      workspaceId: row.workspaceId,
+      nodeId: row.ownerNodeId,
+      generation: row.generation,
+      backend: row.backendKind,
+      cwd: row.cwd,
+      pid: null,
+      exited: false,
+      remote: isRemoteExecutable(row.shell),
+      hibernated: true,
+    });
+  }
+  const rank = (target: SessionTarget): number =>
+    target.hibernated === true ? 2 : Number(target.exited);
   targets.sort(
     (left, right) =>
-      Number(left.exited) - Number(right.exited) ||
-      left.sessionId.localeCompare(right.sessionId),
+      rank(left) - rank(right) || left.sessionId.localeCompare(right.sessionId),
   );
   return targets;
 }

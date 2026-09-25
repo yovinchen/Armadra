@@ -66,6 +66,11 @@ export const terminalSessionSchema = z.object({
   generation: z.number().int().nonnegative().optional(),
   attachState: terminalAttachStateSchema.optional(),
   lastOutputAt: z.string().datetime({ offset: true }).nullable().optional(),
+  /**
+   * 这一行以节能休眠结束（终端宿主设计 §7.2）：进程已经不在，用 CLI 的 resume
+   * 可以在同一个会话 id 上接回来。旧 core 不报这个字段。
+   */
+  hibernation: z.enum(["hibernated"]).nullable().optional(),
 });
 
 /** `GET /api/terminals/backend` — which backend is in effect (plan §15.1). */

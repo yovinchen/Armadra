@@ -682,6 +682,12 @@ export const ROUTES: readonly RouteEntry[] = [
     implemented: true,
   },
   {
+    path: "/api/terminals/{sessionId}/wake",
+    methods: ["POST"],
+    surface: "runtime",
+    implemented: true,
+  },
+  {
     path: "/api/terminals/{sessionId}/ws",
     methods: ["GET"],
     surface: "runtime",

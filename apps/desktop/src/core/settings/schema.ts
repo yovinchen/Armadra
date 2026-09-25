@@ -34,6 +34,16 @@ const MAX_DETACHED_GRACE_MINUTES = 525_600;
 const DEFAULT_DORMANT_AFTER_SECONDS = 120;
 const MAX_DORMANT_AFTER_SECONDS = 86_400;
 const MIN_DORMANT_AFTER_SECONDS = 5;
+/**
+ * `terminal.ecoMode` / `terminal.ecoIdleMinutes`——Eco 休眠（终端宿主设计 §7.2）。
+ * 空闲满阈值、而且能用 CLI 自己的 resume 接回来的 Agent 会话被结束以释放内存。
+ * 与上面的 `dormantAfterSeconds` 不同，这一条真的结束进程，所以阈值以分钟计。
+ * 范围与默认值和 `core/terminal/hibernate.ts` 的读取一致。
+ */
+const DEFAULT_ECO_MODE = true;
+const DEFAULT_ECO_IDLE_MINUTES = 30;
+const MIN_ECO_IDLE_MINUTES = 5;
+const MAX_ECO_IDLE_MINUTES = 1_440;
 
 /* ----------------------------------- usage --------------------------------- */
 
@@ -201,6 +211,14 @@ function normalizeTerminal(document: JsonObject): void {
         dormant <= MAX_DORMANT_AFTER_SECONDS))
       ? dormant
       : DEFAULT_DORMANT_AFTER_SECONDS;
+  terminal.ecoMode = asBool(terminal.ecoMode) ?? DEFAULT_ECO_MODE;
+  const eco = asUnsigned(terminal.ecoIdleMinutes);
+  terminal.ecoIdleMinutes =
+    eco !== undefined &&
+    eco >= MIN_ECO_IDLE_MINUTES &&
+    eco <= MAX_ECO_IDLE_MINUTES
+      ? eco
+      : DEFAULT_ECO_IDLE_MINUTES;
   document.terminal = terminal;
 }
 

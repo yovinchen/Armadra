@@ -89,6 +89,12 @@ export interface TerminalBridge {
     readonly shell?: string | undefined;
     readonly sshHostId?: string | undefined;
   }): Promise<{ readonly sessionId: string; readonly generation: number }>;
+  /**
+   * 这个节点休眠着（Eco 模式，终端宿主设计 §7.2）就把它接回来，答 `true`；
+   * 醒着答 `false`。`send` 在走门链之前问它一次：投给一个休眠节点的消息，本来
+   * 会因为「没有在运行的会话」被当场拒绝。
+   */
+  wakeNode?(nodeId: string): Promise<boolean>;
 }
 
 /**

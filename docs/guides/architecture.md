@@ -291,6 +291,11 @@ core 启动时把 PATH 换成补齐过的版本（Homebrew、mise shims、mise N
 它持有 ConPTY 会话，使之比壳活得更久。早期方案见
 [windows-session-daemon.md](../design/windows-session-daemon.md)。
 
+节能休眠（`core/terminal/hibernate.ts` 判据、`hibernator.ts` 执行）：空闲满阈值、
+能用 CLI 自己的 resume 接回来的 Agent 会话被结束以释放内存，行以
+`termination_intent = 'hibernate'` 记下；页面聚焦、投递或计划冷启动时在同一个会话
+id 上起下一代并敲恢复行。设计见 [terminal-host-design.md](../design/terminal-host-design.md) §7.2。
+
 ## 7. 安全边界
 
 - 桌面壳里的 core 只绑回环地址；CORS 只放行回环 HTTP 来源（`http://127.0.0.1:*`、

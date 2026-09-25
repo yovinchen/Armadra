@@ -149,7 +149,7 @@ export interface SessionResources {
   /** 树里最重的在前，截到 {@link MAX_LISTED_CHILDREN}。 */
   readonly children: readonly ProcessSample[];
   /**
-   * 数字缺席时的原因：`remote`、`no-pid` 或 `warming-up`。另外两个意思是「这个进程
+   * 数字缺席时的原因：`remote`、`no-pid`、`warming-up` 或 `hibernated`。另外两个意思是「这个进程
    * 已经不在这台机器上了」的原因——`exited` 与 `not-found`——**永远不到客户端**：
    * {@link GONE_REASONS} 把那些行从样本里丢掉。
    */
@@ -176,6 +176,11 @@ export interface SessionTarget {
   readonly exited: boolean;
   /** 会话的进程是 `ssh`，活儿发生在另一台主机上。 */
   readonly remote: boolean;
+  /**
+   * Eco 休眠着（终端宿主设计 §7.2）：进程已经结束，恢复信息留在库里。面板照列
+   * 这一行、写明「已休眠」，但它不占内存，数字恒为空。
+   */
+  readonly hibernated?: boolean;
 }
 
 /** `ps` 一行读出来的东西。 */
@@ -538,6 +543,9 @@ export function sessionResources(
 
   // SSH 会话的树住在另一台主机上。把本地那个 `ssh` 客户端的几兆报成这个会话的
   // 占用是撒谎。
+  if (target.hibernated === true) {
+    return { ...unknown("hibernated"), pid: null, alive: false };
+  }
   if (target.remote) return unknown("remote");
   if (target.exited) return unknown("exited");
   if (target.pid === null || target.pid <= 0) return unknown("no-pid");
