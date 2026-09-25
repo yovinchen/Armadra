@@ -1574,3 +1574,37 @@ S01 剩下的三项补上了，存储形状只加不改，旧数据不需要迁�
 - `pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test`：2653 过、1 失败，失败的是 `i18n.test.ts` 的未引用键检查，报的是 `integration.legacy.list`，基线 77b62763 上就已存在，与本节无关。
 - `pnpm --filter @armadra/desktop test`：2829 过、13 跳过，无失败（其中 `src/main/updates` 与 `src/shell-core/updates` 8 个文件 265 条）。
 - `pnpm check`、`pnpm format:check` 通过。
+
+## 35. 冷启动、半截输入门、工作时防休眠与投递依据徽标（2026-09-26）
+
+### 35.1 `LAUNCH_FROZEN` 冷启动（自动化设计 §4.2、§5）
+
+计划早就接受这个策略，探到空节点却只会答离线、整次运行跳过。现在 `TerminalDispatcher.supports(target, { coldStart })` 多一个选项，**只有**引擎的运行探测传 `coldStart: true`——激活时的探测与写入前的复核都不起进程。授权了冷启动、节点上没有活会话时：
+
+- 程序按 `agentId` 从注册表（含自定义 Agent）解析，冻结的参数逐个 shell 引用后拼成启动行（`schedule/cold-start.ts::launchLine`）；工作目录取冻结的那个，缺省用工作空间根目录。
+- 起会话走终端域经接缝交回的启动器（`setAgentLauncher`，在 `terminal/install.ts` 装配）：与 `POST /api/terminals` 同一份节点环境（地址变量、节点令牌、审批等待），shell 出声并安静 400ms（最多 3 秒）后敲启动行，与页面挂载终端节点时的时序一致。
+- 新会话写回节点 `data.sessionId`（画布同一条 CAS，撞上并发重读一次）并发 `board.changed`，然后报 `busy`，运行进入 `WAITING_TARGET`，由既有的 busy TTL 兜底过期。
+- 冷启动的会话，旧会话留下的那行 `agent_status` 不算数：要一条晚于冷启动的真上报（非 `restored`、来自 hook/extension、`idle`/`done`/`error`），启动时不上报的 CLI 走 §4.3 的首投门（会话满 6 秒、没有半截的行）。
+- 同一节点 60 秒内只冷启动一次，起之前就占住窗口；窗口里又探到空节点答离线，起来就退的 CLI 不会变成循环。
+
+`/automation/*` 九条 hook 面路由是跨进程年代的私有门，同进程后没有任何调用者，也用不上：从 `ROUTES`、`route-scopes` 与 `hook/server.test.ts` 的注释里删掉。
+
+已知限制：页面上**已挂载**的那个终端节点不会因为 `board.changed` 自动贴到新会话上（`TerminalSurface` 只在挂载与「重新运行」时找会话），要重新挂载才看得见；core 这一侧的投递不受影响。
+
+### 35.2 `send` 的半截输入门
+
+租约只管「人此刻在不在打字」，停手十秒就过期；输入行上的半行还在，而 hook 目标报的 `idle` 说的是这一轮结束了，不是输入行是空的。门链在租约之后、串行门之前加一条：`observed(sessionId).pending` 时排队（`--no-queue` 时拒绝），码 `TARGET_INPUT_PENDING`（409，回执 `targetState: idle`），设计 §3.5 的码表与页面的 `error.delivery.*` 同步。自动化的 Agent 目标探测同样把 pending 算作 `busy`。判据仍是 `terminal/input.ts` 的输入围栏，77b62763 对终端查询应答的豁免原样保留。
+
+### 35.3 工作时防休眠（终端宿主设计 §9）
+
+新文件 `core/resources/keep-awake.ts`：订阅 `agent.status` 与 `terminal.exit`，有节点在 `working` 时持一把 `session` 租约；另有运行占着目标门（`ScheduleEngine.hasActiveRuns()`，数 `automation_gates.active_run_id`）时持一把 `automation` 租约；TTL 120 秒、30 秒一拍续期与复查。`blocked`/`waiting` 不算在干活；30 分钟没有新上报的 `working` 不再算数；租约被人在面板上放掉而仍在干活时重新申请。开关 `power.keepAwakeWhileWorking`（默认开，与 `power.policy` 一样存本机那一半），界面在「终端」设置页防休眠策略下面，用 Switch。它只决定申不申请，生不生效仍由 `power.policy` 裁决。
+
+### 35.4 投递记录的依据
+
+shared 的 `agentDeliverySchema` 加 `targetState`（缺省空串）。投递队列浮层打开时读一次投递记录，列出最近投进这个节点的三条，并标「有上报」或「按观察放行」（`observed-quiet`）；0026 之前的行不标。
+
+### 35.5 验证
+
+- `pnpm --filter @armadra/desktop test`：243 文件 / 2848 条通过（新增 `schedule/dispatch.test.ts` 冷启动 6 条、`collab/send.test.ts` 半截输入 1 条、`resources/keep-awake.test.ts` 7 条、settings 默认值断言）。
+- `pnpm --filter @armadra/server test`：通过。
+- `pnpm --filter @armadra/web typecheck` 通过；`test` 只剩 `i18n.test.ts` 一条失败，是基线 b1811c85 留下的 `integration.legacy.list` 未被引用，与本节无关。
