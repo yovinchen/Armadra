@@ -34,12 +34,25 @@ export interface TargetStatus {
   readonly generation: number;
 }
 
+/** 一次探测允许做什么。 */
+export interface ProbeOptions {
+  /**
+   * 这是运行的目标探测：run 已认领、授权刚复查过。只有这一处可以按计划的
+   * `LAUNCH_FROZEN` 冷启动一个 Agent（自动化设计 §4.2）；激活时的探测与写入前
+   * 的复核都不起进程。
+   */
+  readonly coldStart?: boolean;
+}
+
 /**
  * 投递方。实现必须尊重超时；`lookup` 的「不知道」包括日志本身读不到，
  * 而「没投递」必须有肯定的、持久的证据。
  */
 export interface Dispatcher {
-  supports(target: AutomationTarget): Promise<TargetStatus>;
+  supports(
+    target: AutomationTarget,
+    options?: ProbeOptions,
+  ): Promise<TargetStatus>;
   dispatch(run: AutomationRun): Promise<AutomationReceipt | undefined>;
   /** 拿整个运行而不只是操作标识：哪本日志记着这张收据是目标的性质。 */
   lookup(run: AutomationRun): Promise<AutomationReceipt | undefined>;

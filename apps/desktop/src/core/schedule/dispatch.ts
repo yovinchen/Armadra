@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import {
+  AutomationColdStartPolicy,
   AutomationOutcome,
   AutomationReceiptSchema,
   type AutomationReceipt,
@@ -9,13 +10,36 @@ import {
   create,
 } from "./types";
 
-import { getAgentStatus } from "../agent/status";
-import { loadNode, loadSession } from "../collab/nodes";
+import {
+  type AgentSettings,
+  baseAgent,
+  startsSilently,
+} from "../agent/registry";
+import { type AgentStatus, getAgentStatus } from "../agent/status";
+import {
+  type ObservedActivity,
+  silentStartIdle,
+  stateSourceIsReported,
+} from "../agent/target-state";
+import type { WorkspaceEvent } from "../bus";
+import {
+  type NodeRef,
+  loadNode,
+  loadSession,
+  workspaceRoot,
+} from "../collab/nodes";
 import type { TerminalBridge } from "../collab/service";
 import { PASTE_END, PASTE_START, sanitizePaste } from "../terminal/backend";
+import {
+  type AgentLauncher,
+  ColdStarts,
+  agentLauncher,
+  launchLine,
+  rememberSession,
+} from "./cold-start";
 import { ScheduleError, agentTarget, big, num } from "./plan";
 import { COMMAND_SESSION_READY, ScheduleStore } from "./store";
-import type { Dispatcher, TargetStatus } from "./engine";
+import type { Dispatcher, ProbeOptions, TargetStatus } from "./engine";
 
 /**
  * 把一次到期的投递真的写出去。
@@ -58,34 +82,55 @@ export interface DispatchContext {
    */
   readonly terminals: () => TerminalBridge | undefined;
   readonly clock?: () => number;
+  /**
+   * 冷启动要的三样（自动化设计 §4.2），都每次现取，理由与 {@link terminals}
+   * 相同。缺哪一样，授权了冷启动的计划遇到空节点就如实答离线。
+   *
+   *   * `settings`：按 `agentId` 解析程序名的注册表（含自定义 Agent）；
+   *   * `launcher`：终端域交回来的启动器，默认读 `cold-start.ts` 的那个接缝；
+   *   * `publish`：把新会话写回节点之后告诉页面重读画布。
+   */
+  readonly settings?: () => AgentSettings | undefined;
+  readonly launcher?: () => AgentLauncher | undefined;
+  readonly publish?: () =>
+    | ((workspaceId: string, event: WorkspaceEvent) => void)
+    | undefined;
 }
 
 const unsupported = (why: string): ScheduleError =>
   new ScheduleError("unsupported", why);
 
 export class TerminalDispatcher implements Dispatcher {
+  private readonly coldStarts = new ColdStarts();
+
   constructor(private readonly context: DispatchContext) {}
 
   private now(): number {
     return (this.context.clock ?? (() => Date.now()))();
   }
 
-  async supports(target: AutomationTarget): Promise<TargetStatus> {
+  async supports(
+    target: AutomationTarget,
+    options: ProbeOptions = {},
+  ): Promise<TargetStatus> {
     if (target.executionHostId !== this.context.hostId) {
       return { state: "unsupported", generation: 0 };
     }
     return agentTarget(target)
-      ? this.supportsAgent(target)
+      ? this.supportsAgent(target, options.coldStart === true)
       : this.supportsCommand(target);
   }
 
   /**
    * Agent 目标的探测。
    *
-   * 节点存在、是这个 Agent、当前有一个活着的会话，并且那个会话不在等人——四件事
-   * 都成立才叫 `ready`。
+   * 节点存在、是这个 Agent、当前有一个活着的会话，并且那个会话不在等人、输入
+   * 行上没有人留下的半行——都成立才叫 `ready`。
    */
-  private supportsAgent(target: AutomationTarget): TargetStatus {
+  private async supportsAgent(
+    target: AutomationTarget,
+    coldStart: boolean,
+  ): Promise<TargetStatus> {
     const launch = target.agentLaunch;
     if (target.nodeId === "" || launch === undefined || launch.agentId === "") {
       return { state: "unsupported", generation: 0 };
@@ -103,12 +148,15 @@ export class TerminalDispatcher implements Dispatcher {
       session === undefined
         ? undefined
         : terminals.generation(session.sessionId);
-    if (live === undefined) {
+    if (live === undefined || session === undefined) {
       // 节点没事，只是上面什么都没跑：离线，不是不支持。没授权冷启动的计划因此
-      // 是跳过而不是一直等。
-      //
-      // 授权了冷启动的计划今天也走同一条路：拉起一个 CLI 是一次有副作用的动
-      // 作，这个 core 里还没有谁有权替人做它。冷启动接上时只改这一个分支。
+      // 是跳过而不是一直等；授权了的，只在运行的目标探测里起一个。
+      if (
+        coldStart &&
+        target.coldStartPolicy === AutomationColdStartPolicy.LAUNCH_FROZEN
+      ) {
+        return this.coldStart(target, node);
+      }
       return { state: "offline", generation: 0 };
     }
     // 停在一个问题上的 pane 算忙。写进去就是替人回答了那个问题。
@@ -117,7 +165,113 @@ export class TerminalDispatcher implements Dispatcher {
       return { state: "busy", generation: live };
     }
     if (status?.state === "working") return { state: "busy", generation: live };
+    // 人打了一半的输入：租约过期之后那半行还在，写进去就接在它后面一起提交。
+    // 与 `send` 的 `TARGET_INPUT_PENDING` 是同一条（终端域的输入围栏）。
+    const observed = terminals.observed?.(session.sessionId);
+    if (observed?.pending === true) return { state: "busy", generation: live };
+    // 我们冷启动的会话：旧会话留下的那行状态不算，要等它起来之后自己报一条。
+    const startedAt = this.coldStarts.startedAt(node.id, session.sessionId);
+    if (
+      startedAt !== undefined &&
+      !this.settledSince(node, status, startedAt, observed)
+    ) {
+      return { state: "busy", generation: live };
+    }
     return { state: "ready", generation: live };
+  }
+
+  /**
+   * 冷启动的会话「上一回合已结束」了没有。
+   *
+   * 两条路，各对应一种 CLI：会报的，要一条晚于冷启动的真上报（`idle` / `done` /
+   * `error`，不是 `restored` 读回来的行）；启动时一条都不报的（§4.3 的
+   * `startsSilently`），走同一道首投门——会话够老、没有半截的行。
+   */
+  private settledSince(
+    node: NodeRef,
+    status: AgentStatus | undefined,
+    startedAtMs: number,
+    observed: ObservedActivity | undefined,
+  ): boolean {
+    const reportedAt = Date.parse(status?.lastEventAt ?? "");
+    // 时间戳可能只精确到秒：按冷启动那一秒比，而不是那一毫秒。
+    const fresh =
+      status !== undefined &&
+      !status.restored &&
+      stateSourceIsReported(status.stateSource) &&
+      Number.isFinite(reportedAt) &&
+      reportedAt >= Math.floor(startedAtMs / 1000) * 1000;
+    if (fresh) {
+      return (
+        status.state === "idle" ||
+        status.state === "done" ||
+        status.state === "error"
+      );
+    }
+    const settings = this.context.settings?.();
+    if (settings === undefined || node.agentId === null) return false;
+    const nowMs = this.now();
+    return silentStartIdle({
+      startsSilently: startsSilently(baseAgent(settings, node.agentId)),
+      reported: false,
+      observed,
+      sessionAgeMs: nowMs - startedAtMs,
+      nowMs,
+    });
+  }
+
+  /**
+   * 按冻结的定义起一个会话，写回节点，报 `busy`。
+   *
+   * 起不来（没有启动器、没有目录、终端域拒绝）答离线：这一次运行照常跳过，而
+   * 冷却窗口已经占上了，所以下一个计划不会紧接着再试一遍。
+   */
+  private async coldStart(
+    target: AutomationTarget,
+    node: NodeRef,
+  ): Promise<TargetStatus> {
+    const offline: TargetStatus = { state: "offline", generation: 0 };
+    const nowMs = this.now();
+    if (this.coldStarts.cooling(node.id, nowMs)) return offline;
+    const spec = target.agentLaunch;
+    const launch = (this.context.launcher ?? agentLauncher)();
+    const settings = this.context.settings?.();
+    if (spec === undefined || launch === undefined || settings === undefined) {
+      return offline;
+    }
+    let line: string;
+    try {
+      line = launchLine(settings, spec);
+    } catch {
+      return { state: "unsupported", generation: 0 };
+    }
+    const cwd =
+      (spec.workingDirectory ?? "") !== ""
+        ? spec.workingDirectory
+        : rootOf(this.context.database, node.workspaceId);
+    if (cwd === "") return offline;
+    this.coldStarts.claim(node.id, nowMs);
+    let started: { sessionId: string; generation: number };
+    try {
+      started = await launch({
+        workspaceId: node.workspaceId,
+        nodeId: node.id,
+        agentId: spec.agentId,
+        cwd,
+        line,
+      });
+    } catch {
+      return offline;
+    }
+    this.coldStarts.note(node.id, started.sessionId, nowMs);
+    rememberSession(
+      this.context.database,
+      node,
+      started.sessionId,
+      this.context.publish?.(),
+    );
+    // 刚起来的 CLI 还没铺完界面，更没有结束过一回合。
+    return { state: "busy", generation: started.generation };
   }
 
   /** 命令目标：一个被冻结过的终端会话，代数必须完全一致。 */
@@ -247,6 +401,15 @@ export class TerminalDispatcher implements Dispatcher {
       observedAtUnixMs: big(Math.max(1, this.now())),
       reasonCode,
     });
+  }
+}
+
+/** 工作空间的根目录；读不到就是空串，冷启动因此答离线而不是抛。 */
+function rootOf(database: DatabaseSync, workspaceId: string): string {
+  try {
+    return workspaceRoot(database, workspaceId) ?? "";
+  } catch {
+    return "";
   }
 }
 

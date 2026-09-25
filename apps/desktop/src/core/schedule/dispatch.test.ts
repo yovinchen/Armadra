@@ -11,6 +11,7 @@
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import {
+  AutomationColdStartPolicy,
   AutomationOutcome,
   AutomationRunSchema,
   AutomationTargetKind,
@@ -21,7 +22,9 @@ import {
 } from "./types";
 import { describe, expect, it } from "vitest";
 
+import { NO_CUSTOM_AGENTS } from "../agent/registry";
 import type { TerminalBridge } from "../collab/service";
+import { type AgentLaunchRequest, COLD_START_COOLDOWN_MS } from "./cold-start";
 import { TerminalDispatcher } from "./dispatch";
 import { HOST_ID, config, openStore } from "./fixture";
 import { num } from "./plan";
@@ -289,5 +292,162 @@ describe("投递", () => {
     const receipt = await dispatcher.lookup(run);
     expect(receipt?.outcome).toBe(AutomationOutcome.UNKNOWN);
     expect(receipt?.reasonCode).toBe("NO_RECEIPT");
+  });
+});
+
+describe("冷启动", () => {
+  const NOW = 1_700_000_000_000;
+
+  function coldSetUp(options: { policy?: string } = {}) {
+    const { database, store } = openStore();
+    canvasTables(database);
+    database.prepare("DELETE FROM terminal_sessions").run();
+    const written: Written[] = [];
+    const launches: AgentLaunchRequest[] = [];
+    const sessions = new Map<string, number>();
+    const pending = new Set<string>();
+    let clock = NOW;
+    const terminals: TerminalBridge = {
+      ...bridge(written),
+      generation: (sessionId) => sessions.get(sessionId),
+      observed: (sessionId) =>
+        sessions.has(sessionId)
+          ? {
+              pending: pending.has(sessionId),
+              lastInputAt: undefined,
+              lastOutputAt: undefined,
+            }
+          : undefined,
+    };
+    const dispatcher = new TerminalDispatcher({
+      database,
+      store,
+      hostId: HOST_ID,
+      terminals: () => terminals,
+      clock: () => clock,
+      settings: () => NO_CUSTOM_AGENTS,
+      launcher: () => async (request) => {
+        launches.push(request);
+        const sessionId = `cold-${launches.length}`;
+        database
+          .prepare(
+            "INSERT INTO terminal_sessions (id, owner_node_id, generation, status, created_at) " +
+              "VALUES (?, 'node-1', 1, 'running', '2026-09-20T00:00:00Z')",
+          )
+          .run(sessionId);
+        sessions.set(sessionId, 1);
+        return { sessionId, generation: 1 };
+      },
+    });
+    const target = agentTargetOf();
+    target.coldStartPolicy = (options.policy ??
+      AutomationColdStartPolicy.LAUNCH_FROZEN) as AutomationColdStartPolicy;
+    target.agentLaunch = {
+      agentId: "claude",
+      workingDirectory: "/tmp/ws",
+      args: ["--model", "it's"],
+      permissionMode: "default",
+      modelId: "",
+      accountId: "default",
+    };
+    return {
+      database,
+      dispatcher,
+      target,
+      launches,
+      sessions,
+      pending,
+      advance: (ms: number) => {
+        clock += ms;
+      },
+    };
+  }
+
+  function report(
+    database: DatabaseSync,
+    value: string,
+    lastEventAt: string,
+  ): void {
+    database.prepare("DELETE FROM agent_status").run();
+    database
+      .prepare(
+        "INSERT INTO agent_status (node_id, workspace_id, agent_id, state, state_source, updated_at, last_event_at) " +
+          "VALUES ('node-1', 'ws', 'claude', ?, 'hook', ?, ?)",
+      )
+      .run(value, lastEventAt, lastEventAt);
+  }
+
+  it("只在运行的目标探测里起进程，激活与写入前的复核不起", async () => {
+    const { dispatcher, target, launches } = coldSetUp();
+    expect((await dispatcher.supports(target)).state).toBe("offline");
+    expect(launches).toHaveLength(0);
+  });
+
+  it("没授权冷启动的计划遇到空节点照样跳过", async () => {
+    const { dispatcher, target, launches } = coldSetUp({
+      policy: AutomationColdStartPolicy.SKIP,
+    });
+    expect((await dispatcher.supports(target, { coldStart: true })).state).toBe(
+      "offline",
+    );
+    expect(launches).toHaveLength(0);
+  });
+
+  it("按冻结的定义起一个，程序由注册表解析、参数逐个引用，然后报忙", async () => {
+    const { dispatcher, target, launches } = coldSetUp();
+    expect(await dispatcher.supports(target, { coldStart: true })).toEqual({
+      state: "busy",
+      generation: 1,
+    });
+    expect(launches).toEqual([
+      {
+        workspaceId: "ws",
+        nodeId: "node-1",
+        agentId: "claude",
+        cwd: "/tmp/ws",
+        line: `claude '--model' 'it'\\''s'`,
+      },
+    ]);
+  });
+
+  it("旧会话留下的那行空闲不算，要等冷启动之后的一条真上报", async () => {
+    const { database, dispatcher, target, advance } = coldSetUp();
+    report(database, "idle", new Date(NOW - 60_000).toISOString());
+    await dispatcher.supports(target, { coldStart: true });
+    advance(5_000);
+    expect((await dispatcher.supports(target, { coldStart: true })).state).toBe(
+      "busy",
+    );
+    report(database, "idle", new Date(NOW + 4_000).toISOString());
+    expect((await dispatcher.supports(target, { coldStart: true })).state).toBe(
+      "ready",
+    );
+  });
+
+  it("有人留了半行没提交也算忙", async () => {
+    const { database, dispatcher, target, pending, advance } = coldSetUp();
+    await dispatcher.supports(target, { coldStart: true });
+    advance(5_000);
+    report(database, "idle", new Date(NOW + 4_000).toISOString());
+    pending.add("cold-1");
+    expect((await dispatcher.supports(target, { coldStart: true })).state).toBe(
+      "busy",
+    );
+  });
+
+  it("起来就退出的 CLI 在冷却窗口里不会被再起一次", async () => {
+    const { dispatcher, target, launches, sessions, advance } = coldSetUp();
+    await dispatcher.supports(target, { coldStart: true });
+    sessions.clear();
+    advance(10_000);
+    expect((await dispatcher.supports(target, { coldStart: true })).state).toBe(
+      "offline",
+    );
+    expect(launches).toHaveLength(1);
+    advance(COLD_START_COOLDOWN_MS);
+    expect((await dispatcher.supports(target, { coldStart: true })).state).toBe(
+      "busy",
+    );
+    expect(launches).toHaveLength(2);
   });
 });

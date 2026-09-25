@@ -896,7 +896,9 @@ export class ScheduleEngine {
     let status: TargetStatus;
     try {
       status = await this.withTimeout(
-        this.dispatcher.supports(frozen.target as AutomationTarget),
+        this.dispatcher.supports(frozen.target as AutomationTarget, {
+          coldStart: true,
+        }),
       );
     } catch {
       status = { state: "unknown", generation: 0 };
@@ -1412,6 +1414,7 @@ export type {
   Dispatcher,
   EngineOptions,
   PlanSnapshot,
+  ProbeOptions,
   RunSnapshot,
   TargetState,
   TargetStatus,

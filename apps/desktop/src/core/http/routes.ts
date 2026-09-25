@@ -947,49 +947,4 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     implemented: true,
   },
-  {
-    path: "/automation/agent-target",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/agent-prompt",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/agent-prompt/lookup",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/session-start",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/session-signal",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/session-reclaim",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/session-capture",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/session-title",
-    methods: ["POST"],
-    surface: "hook",
-  },
-  {
-    path: "/automation/agent-approval",
-    methods: ["POST"],
-    surface: "hook",
-  },
 ];

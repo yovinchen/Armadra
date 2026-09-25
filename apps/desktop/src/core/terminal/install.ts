@@ -15,6 +15,7 @@ import { handleForNode } from "../canvas/handles";
 import { agentEnvironment, setHookClient } from "./environment";
 import { launcherClientBinary } from "../hook/install/shared";
 import { setTerminalBridge } from "../agent";
+import { setAgentLauncher } from "../schedule/cold-start";
 import { terminalBridge } from "./bridge";
 import { SshBackend } from "./ssh/backend";
 import { permissionWaitEnvironment } from "../hook/approvals";
@@ -229,46 +230,55 @@ export function install(
 
   /* --------------------------------- create -------------------------------- */
 
+  // The agent's four address variables, when a node owns this terminal. The
+  // per-node token is *minted* here and never travels here: it goes into
+  // `<data>/node-tokens/<nodeId>`, 0600, because any process of the same
+  // user can read another process' environment (contract §5 item 5).
+  //
+  // Shared by the route and the scheduler's cold start: a session the core
+  // starts on its own has to report exactly like one the page started, or the
+  // delivery gate would wait for a status that never comes.
+  const ownedEnvironment = (nodeId: string, agentId: string) => {
+    try {
+      issueNodeToken(context.dataDir, nodeId);
+    } catch (failure) {
+      // A token we could not write downgrades every report from this
+      // terminal to `legacy`; it must not stop the terminal opening.
+      context.log.warn("could not mint the node token", {
+        nodeId,
+        error: failure instanceof Error ? failure.message : String(failure),
+      });
+    }
+    return [
+      ...agentEnvironment(
+        nodeId,
+        agentId,
+        context.dataDir,
+        handleForNode(context.db.database, nodeId),
+        nodeRole(context.db.database, nodeId),
+      ),
+      // Contract §5.5: the one variable that switches the hook client from
+      // "report and exit" to "wait for the canvas' answer".
+      ...permissionWaitEnvironment(
+        agentId,
+        settingsDomain()?.settings.get("hooks.replyApprovals") !== false,
+      ),
+    ];
+  };
+
   route("POST", "/api/terminals", async (_params, request) => {
     const body = json<CreateTerminalRequest>(request);
     const invalid = validateCreate(body);
     if (invalid !== undefined) {
       throw new TerminalError(400, "bad_request", invalid);
     }
-    // The agent's four address variables, when a node owns this terminal. The
-    // per-node token is *minted* here and never travels here: it goes into
-    // `<data>/node-tokens/<nodeId>`, 0600, because any process of the same
-    // user can read another process' environment (contract §5 item 5).
     const owned = body.agent !== undefined && body.nodeId !== undefined;
     const env = owned
-      ? [
-          ...agentEnvironment(
-            body.nodeId as string,
-            (body.agent as { id: string }).id,
-            context.dataDir,
-            handleForNode(context.db.database, body.nodeId as string),
-            nodeRole(context.db.database, body.nodeId as string),
-          ),
-          // Contract §5.5: the one variable that switches the hook client from
-          // "report and exit" to "wait for the canvas' answer".
-          ...permissionWaitEnvironment(
-            (body.agent as { id: string }).id,
-            settingsDomain()?.settings.get("hooks.replyApprovals") !== false,
-          ),
-        ]
+      ? ownedEnvironment(
+          body.nodeId as string,
+          (body.agent as { id: string }).id,
+        )
       : [];
-    if (owned) {
-      try {
-        issueNodeToken(context.dataDir, body.nodeId as string);
-      } catch (failure) {
-        // A token we could not write downgrades every report from this
-        // terminal to `legacy`; it must not stop the terminal opening.
-        context.log.warn("could not mint the node token", {
-          nodeId: body.nodeId,
-          error: failure instanceof Error ? failure.message : String(failure),
-        });
-      }
-    }
     const session = await manager.spawn({
       workspaceId: body.workspaceId as string,
       // Resolved, so a relative `cwd` cannot mean two directories. The
@@ -492,6 +502,30 @@ export function install(
   // scheduled delivery — refuses with "the terminal domain is not assembled",
   // on a canvas whose panes are running.
   setTerminalBridge(terminalBridge(manager, context.db.database));
+  // 定时任务的冷启动（自动化设计 §4.2）：同一条建会话的路，外加敲一行启动行。
+  setAgentLauncher(async (request) => {
+    const session = await manager.spawn({
+      workspaceId: request.workspaceId,
+      cwd: resolve(request.cwd),
+      args: [],
+      kind: "terminal",
+      ownerNodeId: request.nodeId,
+      agentId: request.agentId,
+      env: ownedEnvironment(request.nodeId, request.agentId),
+    });
+    void typeLaunchLine(
+      manager,
+      session.id,
+      session.generation,
+      request.line,
+    ).catch((failure: unknown) => {
+      context.log.warn("could not type the cold-start launch line", {
+        nodeId: request.nodeId,
+        error: failure instanceof Error ? failure.message : String(failure),
+      });
+    });
+    return { sessionId: session.id, generation: session.generation };
+  });
 
   return {
     manager,
@@ -501,9 +535,41 @@ export function install(
       // manager that is shutting down would be told a session is missing
       // rather than that there is nothing to talk to.
       setTerminalBridge(undefined);
+      setAgentLauncher(undefined);
       await manager.shutdown();
     },
   };
+}
+
+/** How long a fresh shell may stay silent before the launch line goes in anyway. */
+const LAUNCH_COLD_MS = 3_000;
+/** How long its output has to settle once it has said something. */
+const LAUNCH_QUIET_MS = 400;
+const LAUNCH_POLL_MS = 100;
+
+/**
+ * 在一个刚起的 shell 里敲启动行——页面挂载终端节点时做的同一件事
+ * （`apps/web/src/terminal/surface/use-launch.ts`）：等提示符画完、安静下来再
+ * 敲；一直不出声就在冷启动上限到了之后照敲。敲早了，有些 shell 的初始化会把
+ * 预输入的字吞掉。
+ */
+async function typeLaunchLine(
+  manager: TerminalManager,
+  sessionId: string,
+  generation: number,
+  line: string,
+): Promise<void> {
+  const started = Date.now();
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, LAUNCH_POLL_MS));
+    const activity = manager.observedActivity(sessionId);
+    if (activity === undefined) return;
+    const now = Date.now();
+    const last = activity.lastOutputAt;
+    if (last !== undefined && now - last >= LAUNCH_QUIET_MS) break;
+    if (now - started >= LAUNCH_COLD_MS) break;
+  }
+  await manager.input(sessionId, generation, `${line}\r`);
 }
 
 /**

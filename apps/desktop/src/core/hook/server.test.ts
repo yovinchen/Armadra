@@ -192,7 +192,7 @@ describe("the collaboration routes", () => {
  * hook 面的路由表对账，和主监听器那条（`core/main.test.ts`）成对。
  *
  * 这一面的 handler 全在 `HookServer` 的构造里注册，所以起一个服务器就够——
- * 不必装配整个 core。`/automation/*` 那十条今天没有写者，表里也没打标记。
+ * 不必装配整个 core。
  */
 describe("hook 面的路由表", () => {
   it("表里说答得出来的那些，构造之后真的有人接", () => {

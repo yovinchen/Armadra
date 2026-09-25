@@ -70,6 +70,10 @@ export function install(context: CoreContext): ScheduleDomain | undefined {
     store,
     hostId,
     terminals: () => collab()?.terminals,
+    // 冷启动（自动化设计 §4.2）：程序名按协作域那份注册表解析，写回节点之后
+    // 经同一条事件流告诉页面重读画布。启动器本身由终端域经接缝交回。
+    settings: () => collab()?.settings,
+    publish: () => collab()?.publish,
   };
   const dispatcher = new TerminalDispatcher(dispatchContext);
   // 内核要一个授权方，而授权方是服务层——两者互相需要，所以先留一个转发。
