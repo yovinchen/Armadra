@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,7 +119,23 @@ export function fixture(
     },
     close: () => {
       opened.close();
+      killTmuxServer(directory);
       rmSync(directory, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * Stops the tmux server a test started under `dataDir`. A core keeps its
+ * sessions on shutdown by design, so deleting the directory alone only
+ * removes the socket and leaves the server and its shells running for good.
+ */
+export function killTmuxServer(dataDir: string): void {
+  const socket = join(dataDir, "tmux.sock");
+  if (!existsSync(socket)) return;
+  try {
+    execFileSync("tmux", ["-S", socket, "kill-server"], { stdio: "ignore" });
+  } catch {
+    // Already gone: `exit-empty on` got there first.
+  }
 }

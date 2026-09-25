@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -13,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { SESSION_PREFIX, sessionKey } from "../backend";
 import { childEnvironment } from "../environment";
+import { killTmuxServer } from "../../workspaces/fixture";
 import {
   MINIMUM_VERSION,
   defaultTerminal,
@@ -51,6 +51,7 @@ function tempDir(): string {
 
 afterEach(() => {
   for (const directory of temporaries.splice(0)) {
+    killTmuxServer(directory);
     rmSync(directory, { recursive: true, force: true });
   }
 });
@@ -313,18 +314,6 @@ describe.skipIf(!tmuxAvailable)("against a real tmux", () => {
 
     await backend.terminate(key, "session");
     expect(await backend.list()).toEqual([]);
-    // Leave nothing running behind us.
-    try {
-      execFileSync(
-        "tmux",
-        ["-S", join(directory, "tmux.sock"), "kill-server"],
-        {
-          stdio: "ignore",
-        },
-      );
-    } catch {
-      // Already gone; `exit-empty on` does this for us.
-    }
   }, 30_000);
 
   it("refuses an attach that carries a stale generation", async () => {

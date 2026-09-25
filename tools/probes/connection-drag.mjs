@@ -103,6 +103,12 @@ async function main() {
     );
   const data = join(workspace, "runtime");
   mkdirSync(data, { recursive: true });
+  // core 关停时保留 tmux 会话；不先停掉服务器，删目录只会删掉 socket，shell 永远留着
+  cleanups.push(() =>
+    execFileSync("tmux", ["-S", join(data, "tmux.sock"), "kill-server"], {
+      stdio: "ignore",
+    }),
+  );
   const environment = {
     ...process.env,
     ARMADRA_DATA_DIR: data,

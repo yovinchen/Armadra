@@ -12,7 +12,7 @@
  * and the page's own state machine (`apps/web/src/terminal/transport.ts`) is
  * exercised by its own tests against these exact frames.
  */
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -203,6 +203,13 @@ async function main() {
     );
   } finally {
     await core.stop();
+    try {
+      execFileSync("tmux", ["-S", join(dataDir, "tmux.sock"), "kill-server"], {
+        stdio: "ignore",
+      });
+    } catch {
+      // `exit-empty on` usually got there first.
+    }
     rmSync(dataDir, { recursive: true, force: true });
   }
   if (failure) {
