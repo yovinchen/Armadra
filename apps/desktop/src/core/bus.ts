@@ -269,6 +269,11 @@ export interface CoreEvents {
       readonly write: boolean;
       readonly execute: boolean;
     } | null;
+    /**
+     * 只在工作空间换了执行主机或根目录时出现，是新的执行主机（本机为空串）。
+     * 授权没变也要说：按旧根起的进程——语言服务器——看的已经不是这个工作空间了。
+     */
+    readonly executionHostId?: string;
   };
 }
 

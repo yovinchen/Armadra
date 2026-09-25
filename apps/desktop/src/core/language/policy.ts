@@ -170,8 +170,21 @@ export type GrantChange =
   | { readonly kind: "readOnly" }
   | { readonly kind: "keep" };
 
-export function grantChange(grants: WorkspaceGrants | null): GrantChange {
+export function grantChange(
+  grants: WorkspaceGrants | null,
+  movedTo?: string,
+): GrantChange {
   if (grants === null) return { kind: "stop", reason: reason.WORKSPACE_CLOSED };
+  // 换了执行主机或根目录：跑着的服务器读的是旧根。搬到别的机器上时说
+  // `unsupported_remote`（远端不起语言服务），留在本机只是换了目录就按关闭说，
+  // 下一次开会话会在新根上重新起。
+  if (movedTo !== undefined) {
+    return {
+      kind: "stop",
+      reason:
+        movedTo === "" ? reason.WORKSPACE_CLOSED : reason.UNSUPPORTED_REMOTE,
+    };
+  }
   if (!grants.execute) {
     return { kind: "stop", reason: reason.EXECUTION_NOT_GRANTED };
   }

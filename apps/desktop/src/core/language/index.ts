@@ -17,11 +17,10 @@
  * The Rust Runtime reaches a remote language server over a *second* `ssh`
  * connection to `armadra-runtime worker`, carrying protobuf `LanguageFrame`s
  * with a credit window and a link epoch (the pre-merge implementation).
- * The core's remote domain (`core/remote`) brings up the control connection
- * and its version handshake, but the Worker *service* surface those frames
- * ride on is not connected yet — `registerRoot`, `listDirectory` and the
- * rest are still unimplemented there. Three things are missing before the
- * remote path can be written:
+ * The core's Worker (`core/remote/server.ts`) serves files, repositories and
+ * root registration over the control connection, but that connection is a
+ * serial request/response queue, and `worker --language-link` is refused
+ * outright. Three things are missing before the remote path can be written:
  *
  *   1. a framed, full-duplex channel on top of `core/remote`'s stdio frames
  *      that is not the serial request/response queue the control connection
@@ -33,8 +32,10 @@
  *      the session that replaced them.
  *
  * Until then `language-service` lists every language as `unsupported` with
- * `link_lost`, and `POST …/language/sessions` refuses with the same reason,
- * which is honest in a way that a silently empty panel is not.
+ * `unsupported_remote`, and `POST …/language/sessions` refuses with the same
+ * reason — not `link_lost`, which would promise that reconnecting helps. A
+ * workspace that moves to another host mid-session hears it through
+ * `workspace.grants` and stops its local servers with that reason.
  */
 
 import type { WorkspaceEvent } from "../bus";
@@ -265,7 +266,11 @@ export function install(context: CoreContext): LanguageDomain {
   // 按旧授权起的，等空闲清扫就等于在撤销之后还让它跑上好几分钟。
   const offGrants = context.bus.on("workspace.grants", (change) => {
     void manager
-      .applyGrants(change.workspaceId, change.permissions)
+      .applyGrants(
+        change.workspaceId,
+        change.permissions,
+        change.executionHostId,
+      )
       .catch((error: unknown) =>
         context.log.warn("could not apply language grants", {
           workspaceId: change.workspaceId,

@@ -336,6 +336,75 @@ describe("language routes", () => {
     expect(again.status).toBe(403);
   }, 60_000);
 
+  it("moving the workspace to another root stops its servers with the same grants", async () => {
+    const { core, root } = await start();
+    const elsewhere = mkdtempSync(join(tmpdir(), "armadra-language-moved-"));
+    directories.push(elsewhere);
+    createWorkspace(core, "ws-1", root, {
+      read: true,
+      write: true,
+      execute: true,
+    });
+    plantMockServer();
+    const frames: JsonObject[] = [];
+    core.bus.on("workspace.event", ({ workspaceId, event }) => {
+      if (workspaceId === "ws-1") frames.push(event as unknown as JsonObject);
+    });
+    const grants: unknown[] = [];
+    core.bus.on("workspace.grants", (change) => grants.push(change));
+    const opened = await post(core, "/api/workspaces/ws-1/language/sessions", {
+      languageId: "markdown",
+      clientId: "node-1",
+    });
+    expect(opened.status).toBe(200);
+    const sessionId = ((await opened.json()) as JsonObject)[
+      "sessionId"
+    ] as string;
+
+    // 两个互不相干的目录，只有强制才能越过核对；授权原样不动。
+    const switched = await fetch(
+      `${origin(core)}/api/workspaces/ws-1/execution-host`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          executionHostId: "",
+          rootPath: elsewhere,
+          force: true,
+        }),
+      },
+    );
+    expect(switched.status).toBe(200);
+    expect(grants).toEqual([
+      {
+        workspaceId: "ws-1",
+        permissions: { read: true, write: true, execute: true },
+        executionHostId: "",
+      },
+    ]);
+    const told = await waitFor(
+      frames,
+      (frame) =>
+        frame["type"] === "language.session" &&
+        frame["sessionId"] === sessionId &&
+        frame["state"] === "stopped",
+    );
+    expect(told["reason"]).toBe("workspace_closed");
+    expect(languageDomain()?.manager.hubsFor("ws-1")).toEqual([]);
+
+    // 原地「切换」到同一个根不是一次搬家，不再发。
+    const again = await fetch(
+      `${origin(core)}/api/workspaces/ws-1/execution-host`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ executionHostId: "", rootPath: elsewhere }),
+      },
+    );
+    expect(again.status).toBe(200);
+    expect(grants).toHaveLength(1);
+  }, 60_000);
+
   it("restart needs the execute grant and stop answers a descriptor", async () => {
     const { core, root } = await start();
     createWorkspace(core, "ws-1", root, {

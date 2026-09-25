@@ -214,4 +214,16 @@ describe("language/policy grant changes", () => {
       kind: "keep",
     });
   });
+
+  it("stops when the workspace moved, even with the same grants", () => {
+    const full = { write: true, execute: true };
+    expect(grantChange(full, "host-a")).toEqual({
+      kind: "stop",
+      reason: "unsupported_remote",
+    });
+    expect(grantChange(full, "")).toEqual({
+      kind: "stop",
+      reason: "workspace_closed",
+    });
+  });
 });

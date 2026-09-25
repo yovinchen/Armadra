@@ -243,16 +243,33 @@ export function install(context: CoreContext): void {
     "PATCH",
     "/api/workspaces/{workspaceId}/execution-host",
     answered(async (match, request) => {
+      const id = workspaceId(match);
+      const before = getWorkspace(database, id);
       const outcome = await switchExecutionHost(
         context,
-        workspaceId(match),
+        id,
         switchRequestOf(jsonObject(request.body)),
       );
       // A refusal is structured rather than `{ code, message }` alone: a person
       // can only act on *which* directories differ or *what* is still open.
-      return outcome.kind === "refused"
-        ? { status: 409, body: outcome.refusal }
-        : { status: 200, body: outcome.workspace };
+      if (outcome.kind === "refused") {
+        return { status: 409, body: outcome.refusal };
+      }
+      // 真的换了主机或根目录才说：授权没变，但按旧根起的进程（语言服务器）
+      // 看的已经不是这个工作空间了。原样返回的「无变化」不发。
+      const after = outcome.workspace;
+      const toHost = after.executionHostId ?? "";
+      if (
+        toHost !== (before.executionHostId ?? "") ||
+        after.rootPath !== before.rootPath
+      ) {
+        context.bus.emit("workspace.grants", {
+          workspaceId: after.id,
+          permissions: after.permissions,
+          executionHostId: toHost,
+        });
+      }
+      return { status: 200, body: after };
     }),
   );
 }
