@@ -26,9 +26,9 @@
  *     naming a machine nobody can reach, and the files are on it.
  *
  * `POST …/{id}/validate` is **not** here. It reaches a machine — `ssh … true`
- * plus the Worker version handshake — and reaching a machine is the terminal
- * and remote domains' half, which lands later. The route stays 501 with its
- * feature name until then, which is exactly what the 501 is for.
+ * plus the Worker version handshake — so `core/remote` registers it, next to
+ * the host-key file, the askpass helper and the Worker connections it needs.
+ * This file only owns the registry that route reads.
  */
 
 import { badRequest, coreError, type ErrorResponse } from "../http/errors";
