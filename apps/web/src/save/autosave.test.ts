@@ -41,6 +41,8 @@ vi.mock("../api/client", () => ({
     (error as { status?: number } | null)?.status === 409,
   isLeaseHeld: (error: unknown) =>
     (error as { code?: string } | null)?.code === "canvas_lease_held",
+  isForbidden: (error: unknown) =>
+    (error as { status?: number } | null)?.status === 403,
 }));
 
 const { useCanvasStore } = await import("../store/canvas-store");
@@ -324,6 +326,22 @@ describe("autosave", () => {
   it("423 不亮红灯：丢掉本地这份并通知画布同步", async () => {
     saveBoard.mockRejectedValueOnce(
       new RuntimeRequestError(423, "held", "canvas_lease_held"),
+    );
+    const lost = vi.fn();
+    window.addEventListener(LEASE_LOST_EVENT, lost);
+    useCanvasStore.getState().addNode("sticky");
+    await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS);
+    window.removeEventListener(LEASE_LOST_EVENT, lost);
+    expect(lost).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().saveState).toBe("saved");
+    expect(useCanvasStore.getState().saveError).toBeNull();
+  });
+
+  it("403 也不亮红灯：没有写权限（只读共享）与租约被占同样处理", async () => {
+    // 服务器壳上的查看者：一次排版副产物的保存被 403 拒，此前是「画布保存
+    // 失败 · 重试」的红条，重试只会再撞一次。
+    saveBoard.mockRejectedValueOnce(
+      new RuntimeRequestError(403, "forbidden", "forbidden"),
     );
     const lost = vi.fn();
     window.addEventListener(LEASE_LOST_EVENT, lost);

@@ -32,6 +32,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
  * **只有自己时什么都不画**：单设备、单窗口是最常见的用法，那时这里一个像素
  * 都不占。有别的设备在看时每台一个小圆点，持有写租约的那台是主色；租约在
  * 别人手里时多一句「某设备正在编辑」和一个「接管」，接管要二次确认。
+ * 这个人对这块工作空间没有写权限（服务器壳上的只读共享）时，哪怕只有自己
+ * 也要画出来，写一句「只读」，不给「接管」——接管了也存不进去。
  */
 
 /** 工具簇 14px 边距 + 38px 宽 + 8px 间距。 */
@@ -47,7 +49,8 @@ export function PresenceBar() {
   const me = presenceClientId();
 
   const others = presence?.clients.filter((client) => client.clientId !== me);
-  if (!presence || !others || others.length === 0) return null;
+  const denied = presence?.writable === false;
+  if (!presence || !others || (others.length === 0 && !denied)) return null;
 
   const lease = presence.lease;
   const nameOf = (deviceName: string) =>
@@ -110,7 +113,11 @@ export function PresenceBar() {
             );
           })}
         </div>
-        {readOnly && lease ? (
+        {denied ? (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {t("presence.readOnly")}
+          </span>
+        ) : readOnly && lease ? (
           <>
             <span className="text-xs text-muted-foreground whitespace-nowrap">
               {t("presence.editing", { device: holder })}

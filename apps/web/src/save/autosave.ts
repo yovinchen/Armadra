@@ -5,7 +5,12 @@ import {
   type Viewport,
 } from "@armadra/shared";
 import { t } from "../app/preferences-store";
-import { isConflict, isLeaseHeld, runtimeApi } from "../api/client";
+import {
+  isConflict,
+  isForbidden,
+  isLeaseHeld,
+  runtimeApi,
+} from "../api/client";
 import { serializeWhiteboard } from "../canvas/whiteboard/serialize";
 import { useCanvasStore } from "../store/canvas-store";
 import { clearLocalEdits, localEdits } from "../store/canvas/pending";
@@ -131,9 +136,11 @@ function boardQueue(): CanvasSaveQueue {
     },
     (workspaceId, boardId, cause) => {
       if (useCanvasStore.getState().boardId !== boardId) return;
-      // 423 = 别的设备拿着编辑租约。不是故障，不亮红灯：本地这份作废，
-      // 转成只读，由画布同步按远端重载。
-      if (isLeaseHeld(cause)) {
+      // 423 = 别的设备拿着编辑租约；403 = 这个人没有写权限（服务器壳上的
+      // 只读共享，或者刚被收回）。都不是故障，不亮红灯——重试只会再撞一次：
+      // 本地这份作废，马上补一拍心跳，回答里的租约 / `writable` 让画布转成
+      // 只读并按远端重载。
+      if (isLeaseHeld(cause) || isForbidden(cause)) {
         clearLocalEdits();
         useCanvasStore.setState({ saveState: "saved", saveError: null });
         window.dispatchEvent(new Event(LEASE_LOST_EVENT));

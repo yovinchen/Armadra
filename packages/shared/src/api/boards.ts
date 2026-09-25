@@ -35,6 +35,11 @@ export const boardPresenceSchema = z.object({
   boardId: z.string(),
   clients: z.array(presenceClientSchema),
   lease: boardLeaseSchema.nullable(),
+  /**
+   * 只在心跳的回答里（契约 §9.1）：发这次心跳的人能不能写这块画布。事件里
+   * 没有——同一帧发给所有人，而能不能写因人而异。
+   */
+  writable: z.boolean().optional(),
 });
 
 export const presenceHeartbeatRequestSchema = z.object({

@@ -115,6 +115,23 @@ describe("presence", () => {
     expect(screen.getByText("iPad 正在编辑")).toBeTruthy();
   });
 
+  it("goes read-only without write access even alone, keeps it across events, and says so", () => {
+    // 服务器壳上只读共享的成员：心跳回答 writable 为假，租约空着也不能写。
+    const change = applyPresence({ ...presence(null, [ME]), writable: false });
+    expect(change).toEqual({ lost: true, gained: false });
+    expect(isReadOnly(useCanvasStore.getState())).toBe(true);
+    expect(useCanvasStore.getState().addNode("sticky")).toBe("");
+    // 事件里没有 writable：别人来了的那一帧不能把只读冲掉。
+    applyPresence(presence(null, [ME, OTHER]));
+    expect(isReadOnly(useCanvasStore.getState())).toBe(true);
+    mount();
+    expect(screen.getByText("只读")).toBeTruthy();
+    // 改成可写之后的下一拍心跳解除只读。
+    const regained = applyPresence({ ...presence(ME, [ME]), writable: true });
+    expect(regained).toEqual({ lost: false, gained: true });
+    expect(isReadOnly(useCanvasStore.getState())).toBe(false);
+  });
+
   it("ignores a snapshot of another board", () => {
     applyPresence({ ...presence(OTHER, [ME, OTHER]), boardId: "elsewhere" });
     expect(isReadOnly(useCanvasStore.getState())).toBe(false);

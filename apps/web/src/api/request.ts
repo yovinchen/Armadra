@@ -119,6 +119,11 @@ export function isConflict(error: unknown): boolean {
   return error instanceof RuntimeRequestError && error.status === 409;
 }
 
+/** core 按这个人的授权拒绝了（服务器壳上的共享成员）。 */
+export function isForbidden(error: unknown): boolean {
+  return error instanceof RuntimeRequestError && error.status === 403;
+}
+
 /**
  * 这个动作只能在 Armadra 自己所在的机器上跑，而当前工作区在另一台
  * （远端补全设计 §3.1）。

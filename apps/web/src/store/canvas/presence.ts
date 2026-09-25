@@ -115,11 +115,16 @@ export function currentPresence(
   return presence;
 }
 
-/** 租约在别人手里：编辑动作一律不落。 */
+/**
+ * 编辑动作一律不落：租约在别人手里，或者这个人对这块工作空间没有写权限
+ * （服务器壳上的只读共享，心跳回答 `writable: false`）。
+ */
 export function isReadOnly(
   state: Pick<CanvasState, "boardId" | "presence">,
 ): boolean {
-  const lease = currentPresence(state)?.lease;
+  const current = currentPresence(state);
+  if (current?.writable === false) return true;
+  const lease = current?.lease;
   return Boolean(lease && lease.clientId !== presenceClientId());
 }
 
@@ -141,10 +146,14 @@ export function applyPresence(presence: BoardPresence): {
   const state = useCanvasStore.getState();
   if (presence.boardId !== state.boardId) return { lost: false, gained: false };
   const before = isReadOnly(state);
+  // `writable` 只在心跳的回答里；事件帧没有它，沿用这块画布上一拍的判定，
+  // 否则别人来了的那一帧会把只读冲掉。
+  const writable = presence.writable ?? currentPresence(state)?.writable;
   const snapshot: BoardPresence = {
     boardId: presence.boardId,
     clients: presence.clients,
     lease: presence.lease,
+    ...(writable === undefined ? {} : { writable }),
   };
   state.setPresence(snapshot);
   const after = isReadOnly(useCanvasStore.getState());

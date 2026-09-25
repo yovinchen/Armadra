@@ -220,6 +220,7 @@ const zh = {
   "presence.unnamed": "未命名设备",
   "presence.editing": "{device} 正在编辑",
   "presence.takeover": "接管",
+  "presence.readOnly": "只读",
   "presence.takeoverTitle": "接管编辑？",
   "presence.takeoverDescription":
     "{device} 会变为只读，它还没保存的改动会丢失。",
@@ -417,6 +418,7 @@ const en: Record<keyof typeof zh, string> = {
   "presence.unnamed": "Unnamed device",
   "presence.editing": "{device} is editing",
   "presence.takeover": "Take over",
+  "presence.readOnly": "Read-only",
   "presence.takeoverTitle": "Take over editing?",
   "presence.takeoverDescription":
     "{device} becomes read-only and loses any unsaved changes.",

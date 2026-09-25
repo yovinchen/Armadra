@@ -31,6 +31,7 @@ export {
   RuntimeConnectionError,
   RuntimeRequestError,
   isConflict,
+  isForbidden,
   isUnsupportedOnRemote,
 } from "./request";
 export {
