@@ -12,9 +12,11 @@ import { corsHeaders, websocketOriginAllowed } from "./cors";
 import {
   type ErrorResponse,
   badRequest,
+  forbidden,
   internal,
   payloadTooLarge,
 } from "./errors";
+import { routeGuard } from "../identity/gate";
 import { type HookHealth, NO_HOOK_SERVICE, healthDocument } from "./health";
 import { type CoreRequest, type HandlerResult, Router } from "./router";
 
@@ -148,21 +150,39 @@ export class CoreServer {
           : badRequest(body.reason);
       } else {
         const core = coreRequest(request, url, body.body);
-        // Raw routes come before the table: they own their own request and
-        // response handling, so the JSON envelope must not touch them.
-        // Origin and the body ceiling still apply — they ran above.
-        const raw = this.rawRoutes.find((route) =>
-          path.startsWith(route.prefix),
-        );
-        if (raw !== undefined) {
-          await raw.handler(core, response, headers);
-          return;
-        }
-        answer = await this.router.dispatch(
-          request.method ?? "GET",
-          path,
+        // 共享权限的路由门（设计 S3）：路由表声明要什么，门按这次请求的主体
+        // 判。本机壳没有请求主体，门恒放行；服务器壳上成员在这里被拦下。
+        const verdict = routeGuard()(
           core,
+          this.router.requiredScope(core.method, path),
         );
+        if (!verdict.allowed) {
+          answer = forbidden("没有这项权限");
+        } else {
+          // Raw routes come before the table: they own their own request and
+          // response handling, so the JSON envelope must not touch them.
+          // Origin and the body ceiling still apply — they ran above.
+          const raw = this.rawRoutes.find((route) =>
+            path.startsWith(route.prefix),
+          );
+          if (raw !== undefined) {
+            await raw.handler(core, response, headers);
+            return;
+          }
+          answer = await this.router.dispatch(
+            request.method ?? "GET",
+            path,
+            core,
+          );
+          if (
+            verdict.filter !== undefined &&
+            answer.status >= 200 &&
+            answer.status < 300 &&
+            !("raw" in answer && answer.raw !== undefined)
+          ) {
+            answer = { ...answer, body: verdict.filter(answer.body) };
+          }
+        }
       }
     } catch (error) {
       this.options.platform.log.error("request failed", {
@@ -275,6 +295,12 @@ export class CoreServer {
       return;
     }
     const core = coreRequest(request, url, Buffer.alloc(0));
+    // 升级前和 HTTP 同一道路由门：终端的 socket 能写，事件流能读，都得先过它。
+    if (!routeGuard()(core, this.router.requiredScope("GET", path)).allowed) {
+      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     void (async () => {
       // The guard answers BEFORE the upgrade, as the Rust runtime does: a
       // missing workspace is an HTTP 404, not a socket that opens and closes.

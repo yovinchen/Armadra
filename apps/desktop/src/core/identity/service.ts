@@ -1,5 +1,5 @@
-import { compileGrants } from "./authorize";
 import { IdentityError } from "./errors";
+import { accessChanged } from "./gate";
 import { validOrigin } from "./origin";
 import { CURRENT_KDF, derivePassword, verifyPassword } from "./passwords";
 import {
@@ -398,13 +398,12 @@ export class IdentityService {
           },
         );
       }
+      // 成员的快照只有底线：共享得来的授权**不进快照**，每次判定现编
+      // （`Authorizer.permits` 是「快照 ∪ 现编的授予」）。进了快照，撤销一条
+      // 共享要等这个会话过期才生效；设计 §2 那句「撤销后下一次请求重新编译」
+      // 说的就是这件事。
       const granted =
-        principal.kind === "owner"
-          ? allScopes()
-          : [
-              scope("identity:read"),
-              ...compileGrants(tx.accounts, principal.principalId),
-            ];
+        principal.kind === "owner" ? allScopes() : [scope("identity:read")];
       const encoded = encodeScopes(granted);
       const device: IdentityDevice = {
         deviceId,
@@ -571,6 +570,7 @@ export class IdentityService {
       }
       tx.revokeSession(sessionId, now);
     });
+    accessChanged();
   }
 
   revokeDevice(
@@ -625,6 +625,7 @@ export class IdentityService {
         detailJson: JSON.stringify({ epoch: device.epoch }),
       });
     });
+    accessChanged();
   }
 
   revokeSession(actor: AccessRequest, sessionId: string): void {
@@ -650,6 +651,7 @@ export class IdentityService {
       if (session.revokedAtMs !== 0) return;
       tx.revokeSession(sessionId, now);
     });
+    accessChanged();
   }
 
   listDevices(actor: AccessRequest, afterId = "", limit = 50): DevicePage {
@@ -668,7 +670,8 @@ export class IdentityService {
     return this.store.transaction((tx) => {
       const now = this.now();
       const principal = this.authenticateIn(tx, request, now);
-      const values = tx.devices(afterId, limit + 1);
+      // 只列自己的：服务器上有了成员之后，设备表里是好几个人的设备。
+      const values = tx.devices(afterId, limit + 1, principal.principalId);
       const hasMore = values.length > limit;
       const page = hasMore ? values.slice(0, limit) : values;
       const devices: PublicDevice[] = [];

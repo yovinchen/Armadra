@@ -5,9 +5,9 @@ import { AccountsService } from "./accounts";
 import { installAuditSink } from "./audit";
 import { Authorizer } from "./authorize";
 import { startControlChannel } from "./control";
-import { installAccessGate } from "./gate";
+import { currentSubject, installAccessGate, installRouteGuard } from "./gate";
 import { API_PREFIX, IdentityHttp } from "./http";
-import { allScopes } from "./scopes";
+import { createRouteGuard } from "./route-access";
 import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
 
@@ -21,12 +21,21 @@ export { audit, installAuditSink, resetAuditSink } from "./audit";
 export type { AuditEvent } from "./audit";
 export {
   OWNER_GATE,
+  accessChanged,
   accessGate,
   allows,
+  currentSubject,
   installAccessGate,
+  installRouteGuard,
+  onAccessChanged,
+  requestIdentity,
   resetAccessGate,
+  resetRouteGuard,
+  routeGuard,
+  runAs,
 } from "./gate";
-export type { AccessGate } from "./gate";
+export type { AccessGate, RequestIdentity, RouteVerdict } from "./gate";
+export { createRouteGuard } from "./route-access";
 export { SHARE_ROLES, rolePermissions, roleScopes } from "./roles";
 export type { ShareRole } from "./roles";
 export {
@@ -81,11 +90,19 @@ export function installIdentity(context: CoreContext): void {
   // 动作各写一条——真正变了的只有「问的是库，而不是那个恒真的兜底实现」。
   const authorizer = new Authorizer(store);
   installAccessGate({
-    // 域路由今天还不携带会话（服务器壳才会让匿名请求成为可能），所以主体恒为
-    // 本机 owner，授权是配对时签给壳的那一份。
-    subject: () => ({ principalId: "", kind: "owner", scopes: allScopes() }),
+    // 主体是这次请求的身份：服务器壳认证完请求后用 `runAs` 放进来；桌面壳里
+    // 没有，问到的就是本机 owner，授权是配对时签给壳的那一份。
+    subject: currentSubject,
     permits: (subject, required) => authorizer.permits(subject, required),
   });
+  // 路由门：路由表声明的 scope 在这里按请求主体落地。没有请求身份时它放行，
+  // 所以桌面壳的行为一个字节都没变。
+  installRouteGuard(
+    createRouteGuard({
+      database: context.db.database,
+      permits: (subject, required) => authorizer.permits(subject, required),
+    }),
+  );
   installAuditSink((event) => {
     store.transaction((tx) => {
       tx.accounts.appendAudit({

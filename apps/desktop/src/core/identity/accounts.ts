@@ -2,10 +2,12 @@ import type {
   AccountsTx,
   GrantSubjectKind,
   GroupRole,
+  InvitationRow,
   PrincipalKind,
 } from "./accounts-store";
 import { type AuthorizationSubject, compileGrants } from "./authorize";
 import { IdentityError } from "./errors";
+import { accessChanged } from "./gate";
 import { derivePassword, validPassword } from "./passwords";
 import { type ShareRole, parseShareRole, rolePermissions } from "./roles";
 import { type Scope, scope } from "./scopes";
@@ -129,6 +131,10 @@ export class AccountsService {
     if (!ID_PATTERN.test(principalId)) throw new IdentityError("invalid");
     this.options.store.transaction((tx) => {
       this.require(tx.accounts, actor, [scope("identity:manage")]);
+      const row = tx.accounts.principal(principalId);
+      if (row === undefined) throw new IdentityError("notFound");
+      // 停用 owner 等于把这台服务器锁在门外：没有人再能管理它。
+      if (row.kind === "owner") throw new IdentityError("invalid");
       const now = this.now();
       tx.accounts.disablePrincipal(principalId, now);
       this.note(tx.accounts, actor, now, {
@@ -136,6 +142,7 @@ export class AccountsService {
         target: principalId,
       });
     });
+    accessChanged();
   }
 
   /* ------------------------------ credentials ----------------------------- */
@@ -335,60 +342,180 @@ export class AccountsService {
     actor: AuthorizationSubject,
     input: { invitationId: string; token: string },
   ): { role: ShareRole; groupId: string; workspaceId: string } {
-    const parsed = parseToken(input.token);
-    if (
-      !ID_PATTERN.test(input.invitationId) ||
-      parsed !== input.invitationId ||
-      !ID_PATTERN.test(actor.principalId)
-    ) {
+    if (!ID_PATTERN.test(actor.principalId)) {
       throw new IdentityError("unauthenticated");
     }
-    return this.options.store.transaction((tx) => {
+    const accepted = this.options.store.transaction((tx) => {
       const now = this.now();
-      const row = tx.accounts.invitation(input.invitationId);
-      if (
-        row === undefined ||
-        row.consumedAtMs !== 0 ||
-        now >= row.expiresAtMs ||
-        !matches("bootstrap", input.token, row.tokenHash)
-      ) {
-        // 不存在、用过、过期、令牌不对：同一个 401，不泄露是哪一种。
-        throw new IdentityError("unauthenticated");
-      }
+      const row = this.redeemable(tx.accounts, input, now);
       if (tx.accounts.principal(actor.principalId) === undefined) {
         throw new IdentityError("unauthenticated");
       }
-      if (row.targetGroupId !== "") {
-        tx.accounts.putGroupMember({
-          groupId: row.targetGroupId,
-          principalId: actor.principalId,
-          role: "member",
-          joinedAtMs: now,
-        });
-      }
-      if (row.targetWorkspaceId !== "") {
-        this.put(tx.accounts, {
-          subjectKind: "principal",
-          subjectId: actor.principalId,
-          workspaceId: row.targetWorkspaceId,
-          role: row.role,
-          grantedBy: row.issuedBy,
-          nowMs: now,
-        });
-      }
-      tx.accounts.consumeInvitation(input.invitationId, actor.principalId, now);
-      this.note(tx.accounts, actor, now, {
-        action: "identity.invitation.accept",
-        target: input.invitationId,
-        workspaceId: row.targetWorkspaceId,
-        detail: { role: row.role },
-      });
-      return {
-        role: row.role,
-        groupId: row.targetGroupId,
-        workspaceId: row.targetWorkspaceId,
-      };
+      return this.redeem(tx.accounts, actor, row, now);
     });
+    accessChanged();
+    return accepted;
+  }
+
+  /**
+   * 拿着邀请注册：建一个成员、设口令、兑换邀请，一笔事务。
+   *
+   * 设计 §3 的「注册仅当开放注册或持邀请」里持邀请的那一半。一个新来的人手里
+   * 只有邀请链接，还没有账号可以登录，所以「先登录再接受」这条路对他不存在；
+   * 三步放在同一笔事务里，是为了不留下一个没兑换到任何东西的空账号，也不让同
+   * 一张邀请被两个同时注册的人各用一次。会话由调用方随后照口令登录那条路发。
+   */
+  registerWithInvitation(input: {
+    invitationId: string;
+    token: string;
+    displayName: string;
+    password: string;
+  }): {
+    principalId: string;
+    role: ShareRole;
+    groupId: string;
+    workspaceId: string;
+  } {
+    if (!validName(input.displayName) || !validPassword(input.password)) {
+      throw new IdentityError("invalid");
+    }
+    const derived = derivePassword(input.password);
+    const registered = this.options.store.transaction((tx) => {
+      const now = this.now();
+      const row = this.redeemable(tx.accounts, input, now);
+      const principalId = newId();
+      tx.accounts.createPrincipal({
+        principalId,
+        kind: "member",
+        displayName: input.displayName,
+        createdAtMs: now,
+        disabledAtMs: 0,
+      });
+      tx.accounts.createCredential({
+        credentialId: newId(),
+        principalId,
+        kind: "password",
+        provider: "",
+        subject: "",
+        secretHash: derived.hash,
+        salt: derived.salt,
+        kdf: derived.parameters.kdf,
+        cost: derived.parameters.cost,
+        block: derived.parameters.block,
+        parallel: derived.parameters.parallel,
+        length: derived.parameters.length,
+        createdAtMs: now,
+        revokedAtMs: 0,
+      });
+      const actor: AuthorizationSubject = {
+        principalId,
+        kind: "member",
+        scopes: [],
+      };
+      this.note(tx.accounts, actor, now, {
+        action: "identity.principal.register",
+        target: principalId,
+        detail: { invitationId: input.invitationId },
+      });
+      return { principalId, ...this.redeem(tx.accounts, actor, row, now) };
+    });
+    accessChanged();
+    return registered;
+  }
+
+  /** 作废一张还没用掉的邀请。库里记成「被空主体用掉」，一次性的那道闸照旧。 */
+  revokeInvitation(actor: AuthorizationSubject, invitationId: string): void {
+    if (!ID_PATTERN.test(invitationId)) throw new IdentityError("invalid");
+    this.options.store.transaction((tx) => {
+      const row = tx.accounts.invitation(invitationId);
+      if (row === undefined) throw new IdentityError("notFound");
+      this.require(
+        tx.accounts,
+        actor,
+        row.targetWorkspaceId === ""
+          ? [scope("identity:manage")]
+          : [scope("workspace:share", row.targetWorkspaceId)],
+      );
+      if (row.consumedAtMs !== 0) return;
+      const now = this.now();
+      tx.accounts.consumeInvitation(invitationId, "", now);
+      this.note(tx.accounts, actor, now, {
+        action: "identity.invitation.revoke",
+        target: invitationId,
+        workspaceId: row.targetWorkspaceId,
+      });
+    });
+  }
+
+  /**
+   * 这张邀请现在还能不能兑换。
+   *
+   * 不存在、用过、过期、令牌不对：同一个 401，不泄露是哪一种。
+   */
+  private redeemable(
+    accounts: AccountsTx,
+    input: { invitationId: string; token: string },
+    now: number,
+  ): InvitationRow {
+    const parsed = parseToken(input.token);
+    if (!ID_PATTERN.test(input.invitationId) || parsed !== input.invitationId) {
+      throw new IdentityError("unauthenticated");
+    }
+    const row = accounts.invitation(input.invitationId);
+    if (
+      row === undefined ||
+      row.consumedAtMs !== 0 ||
+      now >= row.expiresAtMs ||
+      !matches("bootstrap", input.token, row.tokenHash)
+    ) {
+      throw new IdentityError("unauthenticated");
+    }
+    return row;
+  }
+
+  /**
+   * 兑换：入组、或拿到一条工作空间授予，两者都有就都做。
+   *
+   * 一次性与过期都在同一笔事务里判：`consumeInvitation` 的 `consumed_at_ms = 0`
+   * 条件让第二次接受改不动任何行，于是整笔回滚——第二个人什么也拿不到，哪怕
+   * 两次接受是同时发生的。
+   */
+  private redeem(
+    accounts: AccountsTx,
+    actor: AuthorizationSubject,
+    row: InvitationRow,
+    now: number,
+  ): { role: ShareRole; groupId: string; workspaceId: string } {
+    if (row.targetGroupId !== "") {
+      accounts.putGroupMember({
+        groupId: row.targetGroupId,
+        principalId: actor.principalId,
+        role: "member",
+        joinedAtMs: now,
+      });
+    }
+    if (row.targetWorkspaceId !== "") {
+      this.put(accounts, {
+        subjectKind: "principal",
+        subjectId: actor.principalId,
+        workspaceId: row.targetWorkspaceId,
+        role: row.role,
+        grantedBy: row.issuedBy,
+        nowMs: now,
+      });
+    }
+    accounts.consumeInvitation(row.invitationId, actor.principalId, now);
+    this.note(accounts, actor, now, {
+      action: "identity.invitation.accept",
+      target: row.invitationId,
+      workspaceId: row.targetWorkspaceId,
+      detail: { role: row.role },
+    });
+    return {
+      role: row.role,
+      groupId: row.targetGroupId,
+      workspaceId: row.targetWorkspaceId,
+    };
   }
 
   /* --------------------------------- groups ------------------------------- */
@@ -473,6 +600,7 @@ export class AccountsService {
         target: groupId,
       });
     });
+    accessChanged();
   }
 
   putGroupMember(
@@ -509,6 +637,7 @@ export class AccountsService {
         detail: { role },
       });
     });
+    accessChanged();
   }
 
   removeGroupMember(
@@ -527,6 +656,7 @@ export class AccountsService {
         target: `${groupId}/${principalId}`,
       });
     });
+    accessChanged();
   }
 
   /* --------------------------------- grants ------------------------------- */
@@ -569,7 +699,7 @@ export class AccountsService {
     ) {
       throw new IdentityError("invalid");
     }
-    return this.options.store.transaction((tx) => {
+    const granted = this.options.store.transaction((tx) => {
       this.require(tx.accounts, actor, [
         scope("workspace:share", input.workspaceId),
       ]);
@@ -602,6 +732,9 @@ export class AccountsService {
         permissions: rolePermissions(role),
       };
     });
+    // 降级（driver → viewer）同样是一次收权：已经开着的事件流要复核。
+    accessChanged();
+    return granted;
   }
 
   revokeGrant(
@@ -638,6 +771,7 @@ export class AccountsService {
         detail: { subjectKind: input.subjectKind, subjectId: input.subjectId },
       });
     });
+    accessChanged();
   }
 
   /** 一个 principal 今天从授予里拿到的全部 scope，界面用它显示「有效权限」。 */

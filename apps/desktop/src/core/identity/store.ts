@@ -188,13 +188,26 @@ export class IdentityTx {
     if (Number(changes) !== 1) throw new IdentityError("conflict");
   }
 
-  devices(afterId: string, limit: number): IdentityDevice[] {
-    const rows = this.database
-      .prepare(
-        "SELECT device_id, principal_id, name, role, epoch, created_at_ms, revoked_at_ms " +
-          "FROM identity_devices WHERE device_id > ? ORDER BY device_id LIMIT ?",
-      )
-      .all(afterId, limit) as Record<string, unknown>[];
+  devices(
+    afterId: string,
+    limit: number,
+    principalId?: string,
+  ): IdentityDevice[] {
+    const rows = (
+      principalId === undefined
+        ? this.database
+            .prepare(
+              "SELECT device_id, principal_id, name, role, epoch, created_at_ms, revoked_at_ms " +
+                "FROM identity_devices WHERE device_id > ? ORDER BY device_id LIMIT ?",
+            )
+            .all(afterId, limit)
+        : this.database
+            .prepare(
+              "SELECT device_id, principal_id, name, role, epoch, created_at_ms, revoked_at_ms " +
+                "FROM identity_devices WHERE principal_id = ? AND device_id > ? ORDER BY device_id LIMIT ?",
+            )
+            .all(principalId, afterId, limit)
+    ) as Record<string, unknown>[];
     return rows.map(toDevice);
   }
 

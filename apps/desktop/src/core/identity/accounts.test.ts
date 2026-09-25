@@ -7,6 +7,7 @@ import { openDatabase } from "../db/open";
 import { AccountsService } from "./accounts";
 import { type AuthorizationSubject, Authorizer } from "./authorize";
 import { IdentityError } from "./errors";
+import { onAccessChanged } from "./gate";
 import { scope } from "./scopes";
 import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
@@ -282,7 +283,7 @@ describe("口令与登录", () => {
     ).toThrow(IdentityError);
   });
 
-  it("登录拿到的授权快照就是编译出来的授予", () => {
+  it("登录只快照底线，共享得来的授权每次现编", () => {
     const { accounts, service, store, owner } = harness();
     const member = accounts.createPrincipal(owner, { displayName: "同事" });
     accounts.setPassword(owner, member.principalId, "correct horse battery");
@@ -299,9 +300,13 @@ describe("口令与登录", () => {
       origin: "http://127.0.0.1:1420",
       deviceName: "同事的笔记本",
     });
-    const permissions = session.principal.scopes.map(
-      (value) => value.Permission,
-    );
+    // 进了快照，撤销一条共享就要等这个会话过期才生效。
+    expect(session.principal.scopes.map((value) => value.Permission)).toEqual([
+      "identity:read",
+    ]);
+    const permissions = accounts
+      .effectiveGrantScopes(member.principalId)
+      .map((value) => value.Permission);
     expect(permissions).toContain("canvas:write");
     expect(permissions).not.toContain("terminal:drive");
     // 会话认证走的是同一张表，成员的会话照样认得出来。
@@ -400,5 +405,118 @@ describe("审计", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]?.workspaceId).toBe("w1");
     expect(entries[0]?.detail).toMatchObject({ role: "viewer" });
+  });
+});
+
+describe("R8：注册、组共享与收权通知", () => {
+  it("拿着邀请注册：建成员、设口令、拿到授予，一张邀请只用一次", () => {
+    const { accounts, service, store, owner } = harness();
+    const issued = accounts.issueInvitation(owner, {
+      role: "editor",
+      targetWorkspaceId: "w1",
+    });
+    const registered = accounts.registerWithInvitation({
+      invitationId: issued.invitationId,
+      token: issued.token,
+      displayName: "新同事",
+      password: "correct horse battery",
+    });
+    expect(registered).toMatchObject({ role: "editor", workspaceId: "w1" });
+    const member = accounts
+      .listPrincipals(owner)
+      .find((row) => row.principalId === registered.principalId);
+    expect(member).toMatchObject({ kind: "member", hasPassword: true });
+    expect(
+      accounts
+        .effectiveGrantScopes(registered.principalId)
+        .map((value) => `${value.Permission}@${value.WorkspaceID}`),
+    ).toContain("canvas:write@w1");
+    // 口令真的能登录。
+    expect(
+      service.loginWithPassword({
+        principalId: registered.principalId,
+        password: "correct horse battery",
+        hostId: store.hostId(),
+        origin: "http://127.0.0.1:1420",
+        deviceName: "新同事的电脑",
+      }).principal.role,
+    ).toBe("member");
+    expect(() =>
+      accounts.registerWithInvitation({
+        invitationId: issued.invitationId,
+        token: issued.token,
+        displayName: "第二个人",
+        password: "correct horse battery",
+      }),
+    ).toThrow(IdentityError);
+    // 失败的那次没有留下空账号。
+    expect(accounts.listPrincipals(owner)).toHaveLength(2);
+  });
+
+  it("作废的邀请兑换不了", () => {
+    const { accounts, owner } = harness();
+    const issued = accounts.issueInvitation(owner, {
+      role: "viewer",
+      targetWorkspaceId: "w1",
+    });
+    accounts.revokeInvitation(owner, issued.invitationId);
+    expect(() =>
+      accounts.registerWithInvitation({
+        invitationId: issued.invitationId,
+        token: issued.token,
+        displayName: "迟到",
+        password: "correct horse battery",
+      }),
+    ).toThrow(IdentityError);
+  });
+
+  it("组共享：入组就有，移出组立刻没有", () => {
+    const { accounts, owner } = harness();
+    const member = accounts.createPrincipal(owner, { displayName: "同事" });
+    const group = accounts.createGroup(owner, "前端组");
+    accounts.putGrant(owner, {
+      workspaceId: "w1",
+      subjectKind: "group",
+      subjectId: group.groupId,
+      role: "operator",
+    });
+    const has = () =>
+      accounts
+        .effectiveGrantScopes(member.principalId)
+        .some((value) => value.Permission === "terminal:create");
+    expect(has()).toBe(false);
+    accounts.putGroupMember(owner, group.groupId, member.principalId, "member");
+    expect(has()).toBe(true);
+    accounts.removeGroupMember(owner, group.groupId, member.principalId);
+    expect(has()).toBe(false);
+  });
+
+  it("每次收权都通知长连接复核；owner 不能被停用", () => {
+    const { accounts, owner } = harness();
+    let notified = 0;
+    const stop = onAccessChanged(() => {
+      notified += 1;
+    });
+    try {
+      const member = accounts.createPrincipal(owner, { displayName: "同事" });
+      accounts.putGrant(owner, {
+        workspaceId: "w1",
+        subjectKind: "principal",
+        subjectId: member.principalId,
+        role: "viewer",
+      });
+      accounts.revokeGrant(owner, {
+        workspaceId: "w1",
+        subjectKind: "principal",
+        subjectId: member.principalId,
+      });
+      accounts.disablePrincipal(owner, member.principalId);
+      expect(notified).toBe(3);
+      expect(() =>
+        accounts.disablePrincipal(owner, owner.principalId),
+      ).toThrow(IdentityError);
+    } finally {
+      stop();
+    }
   });
 });

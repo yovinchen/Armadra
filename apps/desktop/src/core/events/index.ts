@@ -8,7 +8,13 @@
  * caller reads).
  */
 
-import { allows } from "../identity/gate";
+import {
+  type RequestIdentity,
+  accessGate,
+  allows,
+  onAccessChanged,
+  requestIdentity,
+} from "../identity/gate";
 import { scope } from "../identity/scopes";
 import type { CoreContext } from "../main";
 import { workspaceExists } from "./workspaces";
@@ -60,6 +66,22 @@ export function parseCursor(
 let assembled: WorkspaceEventStream | undefined;
 
 /**
+ * 升级请求 → 它背后的身份。guard 与 open 拿到的是同一个请求对象，而 open 跑在
+ * `ws` 完成握手的回调里，异步上下文不保证还在；所以身份在 guard 里按请求记下。
+ */
+const subscribers = new WeakMap<object, RequestIdentity>();
+
+/** 这个订阅者此刻还能不能看这块画布：先确认会话还在，再问判定入口。 */
+function stillAllowed(identity: RequestIdentity, workspaceId: string): boolean {
+  const subject =
+    identity.revalidate === undefined
+      ? identity.subject
+      : identity.revalidate();
+  if (subject === undefined) return false;
+  return accessGate().permits(subject, [scope("events:read", workspaceId)]);
+}
+
+/**
  * The stream of the running core, for the domains that need to know whether a
  * workspace is being watched at all — resource sampling is the first of them,
  * and it exists so that a closed panel costs nothing.
@@ -89,11 +111,28 @@ export function install(context: CoreContext): WorkspaceEventStream {
             ? { cursor }
             : {},
       );
+      // 订阅者是谁在升级前就定了（guard 里记下的那一份）。授权一变就复核：
+      // 撤销共享、移出组、停用账号、撤销设备之后，这条已经升级的 socket 不会
+      // 再经过任何请求级的门，只能在这里关掉——关闭码 4403 让页面分得清「被拒」
+      // 和「断线」，重连会在升级前拿到 403。
+      const identity = subscribers.get(request.raw);
+      const stop =
+        identity === undefined
+          ? () => {}
+          : onAccessChanged(() => {
+              if (!stillAllowed(identity, workspaceId)) {
+                socket.close(4403, "forbidden");
+              }
+            });
+      const end = () => {
+        stop();
+        release();
+      };
       // The stream is read-only; a client frame only matters as a close. A
       // `message` handler that answered would be a second protocol nothing on
       // the other side speaks.
-      socket.on("close", release);
-      socket.on("error", release);
+      socket.on("close", end);
+      socket.on("error", end);
     },
     (params, request) => {
       // Before the upgrade, exactly as the Rust route does: a workspace that
@@ -103,11 +142,15 @@ export function install(context: CoreContext): WorkspaceEventStream {
         return { status: 404, reason: "Not Found" };
       }
       // 订阅的 scope 判定（设计 §4.2 / S6）。事件流按工作空间扇出，所以
-      // 「谁能收到这块画布的帧」正好是一条 `events:read@workspace`。今天订阅者
-      // 恒为 owner，这里恒通过；有第二个 principal 之后，拒绝必须发生在升级
+      // 「谁能收到这块画布的帧」正好是一条 `events:read@workspace`：主体是这次
+      // 请求的身份（服务器壳放进来的），本机壳里是 owner。拒绝必须发生在升级
       // **之前**——一个开了又关的 socket 会让页面按 1 秒的下限无限重连。
       if (!allows([scope("events:read", workspaceId)])) {
         return { status: 403, reason: "Forbidden" };
+      }
+      const identity = requestIdentity();
+      if (identity !== undefined && request.raw !== undefined) {
+        subscribers.set(request.raw, identity);
       }
       // 游标的三档判定在升级之前，和 合并前的实现 一样：三个状态是三个答案，
       // 不是同一个答案的深浅。拒绝写在状态行上（`409 SNAPSHOT_REQUIRED`），

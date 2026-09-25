@@ -71,9 +71,7 @@ export function handleAccounts(
     case "login":
       return login(method, request, context);
     case "register":
-      return method === "POST"
-        ? notImplemented("开放注册（需要 allowRegistration 设置）")
-        : undefined;
+      return method === "POST" ? register(request, context) : undefined;
     case "invitations":
       return invitations(method, segments, request, context);
     case "groups":
@@ -180,6 +178,46 @@ function login(
   };
 }
 
+/**
+ * 注册。持邀请的那一半做实了：新来的人手里只有邀请链接，这一步替他建账号、
+ * 兑换邀请、再照口令登录发会话。不带邀请的开放注册仍是 501——它要一个
+ * `allowRegistration` 设置，而那是一个「谁都能进这台服务器」的决定，不该默认。
+ */
+function register(
+  request: CoreRequest,
+  context: AccountsHttpContext,
+): Answer {
+  const body = object(request);
+  if (body.token === undefined) {
+    return notImplemented("开放注册（需要 allowRegistration 设置）");
+  }
+  const token = text(body.token);
+  const password = text(body.password);
+  const registered = context.accounts.registerWithInvitation({
+    invitationId: token.split(".")[0] ?? "",
+    token,
+    displayName: text(body.displayName),
+    password,
+  });
+  const session = context.login({
+    principalId: registered.principalId,
+    password,
+    deviceName:
+      body.deviceName === undefined ? "Armadra" : text(body.deviceName),
+  }) as Record<string, unknown>;
+  return {
+    status: 201,
+    body: {
+      ...session,
+      invitation: {
+        role: registered.role,
+        groupId: registered.groupId,
+        workspaceId: registered.workspaceId,
+      },
+    },
+  };
+}
+
 function invitations(
   method: string,
   segments: readonly string[],
@@ -204,6 +242,10 @@ function invitations(
         ...(typeof body.ttlMs === "number" ? { ttlMs: body.ttlMs } : {}),
       }),
     };
+  }
+  if (segments.length === 2 && method === "DELETE") {
+    accounts.revokeInvitation(subject(context), segments[1] as string);
+    return { status: 200, body: { revoked: true } };
   }
   if (segments.length === 3 && segments[2] === "accept" && method === "POST") {
     const body = object(request);

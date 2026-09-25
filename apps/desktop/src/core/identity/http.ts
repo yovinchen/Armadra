@@ -248,11 +248,25 @@ export class IdentityHttp {
         }
         case "GET session": {
           const principal = this.service.authenticate(actor);
+          // 成员的快照只有底线，共享得来的授权每次现编；页面据此决定显示什么，
+          // 所以这里报的是「快照 ∪ 现编」，和判定用的是同一份。
+          const effective =
+            principal.role === "member" && this.options.accounts !== undefined
+              ? {
+                  ...principal,
+                  scopes: [
+                    ...principal.scopes,
+                    ...this.options.accounts.effectiveGrantScopes(
+                      principal.principalId,
+                    ),
+                  ],
+                }
+              : principal;
           this.json(
             response,
             cors,
             200,
-            sessionJson(principal, principal.accessExpiresAtMs),
+            sessionJson(effective, principal.accessExpiresAtMs),
           );
           return;
         }

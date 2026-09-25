@@ -113,6 +113,20 @@ export const ROUTE_SCOPE_RULES: readonly RouteScopeRule[] = [
     write: "canvas:read",
   },
 
+  // 工作空间这一行本身（改名、换根目录、删除）不是「编辑画布」：改根目录等于
+  // 把别人的画布指到服务器上另一个目录，删除更收不回来。它和「把这块画布分享
+  // 给谁」同一档，共享角色里没有这一条，所以只有 owner 能做。
+  {
+    pattern: new RegExp(`^${WORKSPACE}$`),
+    read: "canvas:read",
+    write: "workspace:share",
+  },
+  // 「打开」只是记一下最近打开的时间，看得见这块画布的人都会做。
+  {
+    pattern: new RegExp(`^${WORKSPACE}/open$`),
+    read: "canvas:read",
+    write: "canvas:read",
+  },
   // 画布本体：看板、文档、连线、节点，以及工作空间自己。
   {
     pattern: new RegExp(

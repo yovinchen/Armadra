@@ -130,7 +130,7 @@ describe("账号这一面", () => {
     });
   });
 
-  it("建成员、设口令、登录，授权是编译出来的那一份", async () => {
+  it("建成员、设口令、登录，授权每次现编", async () => {
     const { core, base } = await start();
     const session = await pair(core, base);
     const created = await call(session, "POST", "/api/identity/principals", {
@@ -177,10 +177,26 @@ describe("账号这一面", () => {
       native?: { accessToken: string };
     };
     expect(issued.device.role).toBe("member");
+    // 快照只有底线；共享得来的授权每次现编，`GET session` 报的是现编之后那份。
+    expect(issued.scopes.map((value) => value.permission)).toEqual([
+      "identity:read",
+    ]);
+    const current = await fetch(`${base}/api/identity/session`, {
+      headers: {
+        origin: base,
+        authorization: `Bearer ${issued.native?.accessToken ?? ""}`,
+      },
+    });
+    expect(current.status).toBe(200);
+    const effective = (await current.json()) as {
+      scopes: { permission: string; workspaceId: string }[];
+    };
     expect(
-      issued.scopes.map((value) => `${value.permission}@${value.workspaceId}`),
+      effective.scopes.map(
+        (value) => `${value.permission}@${value.workspaceId}`,
+      ),
     ).toContain("canvas:write@w1");
-    expect(issued.scopes.map((value) => value.permission)).not.toContain(
+    expect(effective.scopes.map((value) => value.permission)).not.toContain(
       "terminal:drive",
     );
 
