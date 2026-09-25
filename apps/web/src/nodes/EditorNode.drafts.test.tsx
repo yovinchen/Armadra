@@ -275,6 +275,110 @@ describe("editor drafts", () => {
   });
 });
 
+describe("relocating a draft whose file is gone", () => {
+  /** 文件没了，草稿放在编辑器里；`other.txt` 是目标。 */
+  function orphan(draft: { base: string; draft: string }, other: unknown) {
+    writeDraft("w1", "note.txt", { baseVersion: OLD, ...draft });
+    mocks.info.mockRejectedValue(new Error("Requested path does not exist"));
+    mocks.version.mockResolvedValue({ path: "note.txt", exists: false });
+    mocks.read.mockImplementation(async (_workspace: string, path: string) => {
+      if (path !== "other.txt") throw new Error("gone");
+      if (other instanceof Error) throw other;
+      return other;
+    });
+  }
+
+  async function relocateTo(path: string) {
+    await screen.findByText("The file was deleted on disk");
+    fireEvent.click(screen.getByRole("button", { name: "Relocate" }));
+    fireEvent.change(await screen.findByLabelText("Path in the workspace"), {
+      target: { value: path },
+    });
+  }
+
+  it("merges the draft into an existing file and carries the result over", async () => {
+    orphan(
+      { base: "a\nb\nc\nd\ne\n", draft: "a\nB\nc\nd\ne\n" },
+      { content: "a\nb\nc\nd\nE\n", size: 10, sha256: ON_DISK },
+    );
+    render(
+      <>
+        <EditorNode {...props()} />
+        <MergeDialog />
+      </>,
+    );
+    await view();
+    await relocateTo("other.txt");
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Apply to draft" }),
+    );
+    await waitFor(() =>
+      expect(mocks.updateNodeData).toHaveBeenCalledWith("editor-1", {
+        path: "other.txt",
+      }),
+    );
+    // 合并结果成了目标文件的草稿，按它的内容版本放回；旧路径的草稿清掉。
+    expect(readDraft("w1", "other.txt")).toMatchObject({
+      base: "a\nb\nc\nd\nE\n",
+      draft: "a\nB\nc\nd\nE\n",
+      baseVersion: ON_DISK,
+    });
+    expect(readDraft("w1", "note.txt")).toBeNull();
+    // 合并不写盘。
+    expect(mocks.write).not.toHaveBeenCalled();
+  });
+
+  it("overwrites an existing file only after a confirmation", async () => {
+    orphan(
+      { base: "a\n", draft: "kept\n" },
+      { content: "old\n", size: 4, sha256: ON_DISK },
+    );
+    mocks.write.mockResolvedValue({ size: 5, sha256: SAVED });
+    render(<EditorNode {...props()} />);
+    await view();
+    await relocateTo("other.txt");
+    fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
+    expect(mocks.write).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Overwrite" }));
+    await waitFor(() =>
+      expect(mocks.write).toHaveBeenCalledWith(
+        "w1",
+        "other.txt",
+        "kept\n",
+        4,
+        ON_DISK,
+        false,
+      ),
+    );
+    await waitFor(() =>
+      expect(mocks.updateNodeData).toHaveBeenCalledWith("editor-1", {
+        path: "other.txt",
+      }),
+    );
+    expect(mocks.updateNode).toHaveBeenCalledWith("editor-1", {
+      title: "other.txt",
+    });
+    expect(readDraft("w1", "note.txt")).toBeNull();
+  });
+
+  it("says so when there is no file at the chosen path", async () => {
+    orphan(
+      { base: "a\n", draft: "kept\n" },
+      Object.assign(new Error("Requested path does not exist"), {
+        status: 404,
+      }),
+    );
+    render(<EditorNode {...props()} />);
+    await view();
+    await relocateTo("other.txt");
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+    expect(await screen.findByText("No file at this path")).toBeTruthy();
+    expect(mocks.updateNodeData).not.toHaveBeenCalled();
+    expect(readDraft("w1", "note.txt")).not.toBeNull();
+  });
+});
+
 describe("git gutter", () => {
   it("marks lines against HEAD and follows the edits", async () => {
     mocks.diff.mockImplementation(

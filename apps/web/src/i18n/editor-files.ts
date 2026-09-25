@@ -24,6 +24,11 @@ export const editorFiles: MessageModule = {
     "editor.saveAs": "另存为",
     "editor.saveAs.path": "工作空间内的路径",
     "editor.saveAs.exists": "该路径已有文件",
+    "editor.relocate": "重新定位",
+    "editor.relocate.overwrite": "覆盖",
+    "editor.relocate.confirm": "用草稿覆盖「{path}」的现有内容？",
+    "editor.relocate.missing": "该路径没有文件",
+    "editor.relocate.changed": "目标文件刚被修改，请重试",
   },
   en: {
     "quickOpen.recent": "Recently opened",
@@ -44,5 +49,11 @@ export const editorFiles: MessageModule = {
     "editor.saveAs": "Save as",
     "editor.saveAs.path": "Path in the workspace",
     "editor.saveAs.exists": "A file already exists at this path",
+    "editor.relocate": "Relocate",
+    "editor.relocate.overwrite": "Overwrite",
+    "editor.relocate.confirm":
+      "Replace the current contents of “{path}” with the draft?",
+    "editor.relocate.missing": "No file at this path",
+    "editor.relocate.changed": "The target file just changed; try again",
   },
 };

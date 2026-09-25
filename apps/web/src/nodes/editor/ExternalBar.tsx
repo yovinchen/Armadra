@@ -7,7 +7,7 @@ import type { ExternalChange } from "./types";
  *
  * 有草稿时多一个「合并」：base 是草稿改起时的那一版、ours 是草稿、theirs
  * 是磁盘版的三方合并（编辑器设计 §3）。文件被删除时没有可比较、可重载也
- * 可合并的磁盘版本，只剩保留草稿与另存为。
+ * 可合并的磁盘版本，只剩保留草稿、另存为，与重新定位到另一个已有文件。
  */
 export function ExternalBar({
   change,
@@ -17,6 +17,7 @@ export function ExternalBar({
   onReload,
   onKeep,
   onSaveAs,
+  onRelocate,
 }: {
   change: ExternalChange;
   dirty: boolean;
@@ -25,6 +26,8 @@ export function ExternalBar({
   onReload: () => void;
   onKeep: () => void;
   onSaveAs: () => void;
+  /** 把草稿接到另一个已经存在的文件上。 */
+  onRelocate: () => void;
 }) {
   const t = useT();
   const removed = change.kind === "removed";
@@ -54,6 +57,11 @@ export function ExternalBar({
       {removed && (
         <Button variant="ghost" size="sm" className="h-6" onClick={onSaveAs}>
           {t("editor.saveAs")}
+        </Button>
+      )}
+      {removed && (
+        <Button variant="ghost" size="sm" className="h-6" onClick={onRelocate}>
+          {t("editor.relocate")}
         </Button>
       )}
       <Button variant="secondary" size="sm" className="h-6" onClick={onKeep}>

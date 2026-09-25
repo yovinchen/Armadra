@@ -50,6 +50,8 @@ import { useGitGutter } from "./editor/use-git-gutter";
 import { useDraftProtection } from "./editor/use-draft";
 import { clearDraft, readDraft } from "./editor/drafts";
 import { SaveAsDialog } from "./editor/SaveAsDialog";
+import { RelocateDialog } from "./editor/RelocateDialog";
+import { useRelocate } from "./editor/use-relocate";
 import { rememberRecentFile } from "@/files/recent-files";
 import { basename } from "@/files/file-operations";
 import { openQuickOpen } from "@/panels/quick-open-seed";
@@ -95,6 +97,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     0,
   );
   const [saveAsOpen, setSaveAsOpen] = React.useState(false);
+  const [relocateOpen, setRelocateOpen] = React.useState(false);
 
   const identity = JSON.stringify([workspaceId, path]);
   const refs = useEditorRefs(identity);
@@ -371,6 +374,14 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     if (node.title === basename(path))
       store.updateNode(id, { title: basename(target) });
   };
+
+  const relocate = useRelocate(refs, {
+    id,
+    title: node.title,
+    workspaceId,
+    path,
+    identity,
+  });
 
   /* ------------------------------ Git 行边标记 ----------------------------- */
 
@@ -661,6 +672,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
                 onReload={() => void reload().catch(() => undefined)}
                 onKeep={keepDraft}
                 onSaveAs={() => setSaveAsOpen(true)}
+                onRelocate={() => setRelocateOpen(true)}
               />
             )}
             <div className="relative flex min-h-0 flex-1">
@@ -701,6 +713,13 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
               initialPath={path}
               onOpenChange={setSaveAsOpen}
               onSave={saveAs}
+            />
+            <RelocateDialog
+              open={relocateOpen}
+              currentPath={path}
+              onOpenChange={setRelocateOpen}
+              onMerge={relocate.merge}
+              onOverwrite={relocate.overwrite}
             />
           </div>
         )}
