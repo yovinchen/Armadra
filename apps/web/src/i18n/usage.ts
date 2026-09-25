@@ -30,7 +30,6 @@ export const usage: MessageModule = {
       "在 {provider} 的 CLI 里登录一次，然后回来刷新",
     "usage.status.unavailableHint.copilot":
       "在「设置 → 账号与用量」里登录 Copilot，然后回来刷新",
-    "usage.recoveryHint": "请稍后刷新，或在对应 CLI 中查看",
     "usage.reason.expired_credentials":
       "登录已过期。在 {provider} 的 CLI 里跑一次任何命令，它会自动续期，然后再刷新",
     "usage.reason.unreadable_credentials": "本机的凭据文件读不出来或没有令牌",
@@ -43,7 +42,6 @@ export const usage: MessageModule = {
     "usage.reason.parse": "用量接口的返回无法解析，可能是接口改了",
     "usage.reason.no_windows": "用量接口没有返回任何窗口",
     "usage.source.opencode": "请在 OpenCode 或所用服务商查看",
-    "usage.source.copilot": "请在 GitHub 的 Copilot 用量页查看",
     "usage.source.provider": "额度随所选模型的服务商计算",
 
     "usage.provider.copilot": "Copilot", // i18n-exempt
@@ -137,7 +135,6 @@ export const usage: MessageModule = {
       "Sign in once in the {provider} CLI, then refresh here",
     "usage.status.unavailableHint.copilot":
       "Sign in to Copilot under Settings → Account & usage, then refresh here",
-    "usage.recoveryHint": "Refresh later, or check usage in the CLI",
     "usage.reason.expired_credentials":
       "Sign-in has expired. Run any command in the {provider} CLI and it renews itself; then refresh",
     "usage.reason.unreadable_credentials":
@@ -155,7 +152,6 @@ export const usage: MessageModule = {
       "The usage endpoint's answer could not be parsed; it may have changed",
     "usage.reason.no_windows": "The usage endpoint returned no windows",
     "usage.source.opencode": "View in OpenCode or your model provider",
-    "usage.source.copilot": "View on GitHub’s Copilot usage page",
     "usage.source.provider": "Quota belongs to the selected model provider",
 
     "usage.provider.copilot": "Copilot",

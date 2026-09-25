@@ -6,10 +6,7 @@ const zh = {
   "terminal.input": "终端输入",
   "terminal.rerun": "重新运行",
   "terminal.find": "搜索",
-  "terminal.findNext": "下一个",
-  "terminal.findPrev": "上一个",
   "terminal.exited": "已退出",
-  "terminal.failed": "终端操作失败",
 
   /*
    * 视图状态胶囊（终端宿主设计 §7.1）。两个都不表示进程结束了：
@@ -75,10 +72,7 @@ const en: Record<keyof typeof zh, string> = {
   "terminal.input": "Terminal input",
   "terminal.rerun": "Run again",
   "terminal.find": "Find",
-  "terminal.findNext": "Next",
-  "terminal.findPrev": "Previous",
   "terminal.exited": "Exited",
-  "terminal.failed": "Terminal operation failed",
 
   "terminal.drive.you": "You are driving",
   "terminal.drive.takeover": "You took over",

@@ -33,7 +33,6 @@ export const gitIntegration: MessageModule = {
 
     "gitRepo.startMerge": "开始合并",
     "gitRepo.startRebase": "开始变基",
-    "gitIntegration.rebaseOnto": "变基到",
     "gitIntegration.rebaseSafety":
       "把当前分支上的提交依次重放到所选提交之上；期间 HEAD 处于游离状态，完成后回到原分支。开始前工作区和暂存区必须干净，不会自动 Stash；冲突停下后由你继续或中止。",
     "gitIntegration.rebaseReady": "冲突结果已暂存，可继续重放剩余提交。",
@@ -42,12 +41,8 @@ export const gitIntegration: MessageModule = {
     "gitRepo.continueIntegration": "继续 Git 操作",
     "gitRepo.abortIntegration": "中止 Git 操作",
     "gitRepo.state.awaitingResolution": "等待解决或确认提交",
-    "gitIntegration.title": "合并与冲突",
-    "gitIntegration.target": "合并目标",
-    "gitIntegration.message": "提交说明",
     "gitIntegration.startSafety":
       "开始前工作区和暂存区必须干净。即使没有冲突，也会先保留待提交状态，由你确认继续后创建合并提交。不会自动 Stash。",
-    "gitIntegration.dirty": "先保存或处理本地修改，再开始合并。",
     "gitIntegration.pending": "合并已准备好，仍待你确认提交。",
     "gitIntegration.stageFirst":
       "在编辑器中解决冲突并保存，再到“更改”页暂存；保存文件不会自动标记为已解决。",
@@ -56,17 +51,6 @@ export const gitIntegration: MessageModule = {
     "gitIntegration.restart": "Runtime 重启后不会猜测原操作的所有权。",
     "gitIntegration.abortSafety":
       "中止会丢弃此次 Git 操作的解决结果，并尝试恢复开始时的状态。不会强制覆盖或清理文件；恢复失败时保留实际 Git 状态。",
-    "gitIntegration.none": "没有正在进行的 Git 整合操作。",
-    "gitIntegration.open": "在编辑器打开",
-    "gitIntegration.markResolved": "标记已解决",
-    "gitIntegration.failed": "标记已解决失败",
-    "gitIntegration.base": "Base · 共同基础",
-    "gitIntegration.ours": "Ours · 当前侧",
-    "gitIntegration.theirs": "Theirs · 传入侧",
-    "gitIntegration.absent": "此侧不存在该文件。",
-    "gitIntegration.binary": "二进制内容不以内联文本展示。",
-    "gitIntegration.truncated": "内容超过预览限额，请使用文件或 Git 工具检查。",
-    "gitIntegration.submodule": "此项是子模块提交。",
     "gitIntegration.changed": "仓库或操作已变化，请刷新并重新确认。",
     "gitIntegration.kind.merge": "Merge",
     "gitIntegration.kind.rebase": "Rebase",
@@ -111,7 +95,6 @@ export const gitIntegration: MessageModule = {
 
     "gitRepo.startMerge": "Start merge",
     "gitRepo.startRebase": "Start rebase",
-    "gitIntegration.rebaseOnto": "Rebase onto",
     "gitIntegration.rebaseSafety":
       "Replay this branch's commits on top of the selected commit. HEAD is detached while the sequence runs and returns to the original branch when it finishes. Start from a clean index and worktree; nothing is stashed automatically, and a conflict stops for your explicit continue or abort.",
     "gitIntegration.rebaseReady":
@@ -122,13 +105,8 @@ export const gitIntegration: MessageModule = {
     "gitRepo.abortIntegration": "Abort Git operation",
     "gitRepo.state.awaitingResolution":
       "Awaiting resolution or commit confirmation",
-    "gitIntegration.title": "Merge and conflicts",
-    "gitIntegration.target": "Merge target",
-    "gitIntegration.message": "Commit message",
     "gitIntegration.startSafety":
       "Start from a clean index and worktree. Even a conflict-free merge pauses before creating the merge commit, until you explicitly continue. Changes are never stashed automatically.",
-    "gitIntegration.dirty":
-      "Save or handle local changes before starting a merge.",
     "gitIntegration.pending":
       "The merge is ready and still awaits your commit confirmation.",
     "gitIntegration.stageFirst":
@@ -139,19 +117,6 @@ export const gitIntegration: MessageModule = {
       "A restarted Runtime does not assume ownership of an existing operation.",
     "gitIntegration.abortSafety":
       "Abort discards this Git operation's resolution work and attempts to restore its starting state. It does not force-overwrite or clean files; failed restoration leaves the actual Git state available for inspection.",
-    "gitIntegration.none": "No Git integration is in progress.",
-    "gitIntegration.open": "Open in editor",
-    "gitIntegration.markResolved": "Mark resolved",
-    "gitIntegration.failed": "Could not mark the file resolved",
-    "gitIntegration.base": "Base · common ancestor",
-    "gitIntegration.ours": "Ours · current side",
-    "gitIntegration.theirs": "Theirs · incoming side",
-    "gitIntegration.absent": "This side has no file.",
-    "gitIntegration.binary":
-      "Binary contents are not displayed as inline text.",
-    "gitIntegration.truncated":
-      "This content exceeds the preview limit. Inspect it using a file or Git tool.",
-    "gitIntegration.submodule": "This entry is a submodule commit.",
     "gitIntegration.changed":
       "The repository or operation changed. Refresh and confirm again.",
     "gitIntegration.kind.merge": "Merge",

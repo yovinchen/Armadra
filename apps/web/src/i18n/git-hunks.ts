@@ -33,7 +33,6 @@ export const gitHunks: MessageModule = {
     "gitHunk.cancel": "取消",
     "gitHunk.worktree": "工作区修改",
     "gitHunk.staged": "已暂存修改",
-    "gitHunk.close": "关闭片段视图",
   },
   en: {
     "gitHunk.title": "Individual hunks",
@@ -73,6 +72,5 @@ export const gitHunks: MessageModule = {
     "gitHunk.cancel": "Cancel",
     "gitHunk.worktree": "Working tree changes",
     "gitHunk.staged": "Staged changes",
-    "gitHunk.close": "Close hunk view",
   },
 };

@@ -10,8 +10,6 @@ export const modals: MessageModule = {
 
     "workspace.path": "路径",
 
-    "board.new": "新建画布",
-    "board.rename": "重命名画布",
     "board.name": "名称",
 
     "settings.title": "设置",
@@ -73,8 +71,6 @@ export const modals: MessageModule = {
     "settings.copilot.denied": "已在 GitHub 上拒绝授权",
     "settings.copilot.error": "登录失败，请重试",
     "settings.nodeColorStyle": "节点颜色",
-    "settings.nodeColorStyle.dot": "色点",
-    "settings.nodeColorStyle.bar": "色条",
     "settings.restoreWorkspace": "打开时恢复上次工作空间",
     "settings.restoreWorkspace.note": "关闭后每次都从启动页开始。",
     "settings.showSystemFiles": "显示系统文件",
@@ -210,7 +206,6 @@ export const modals: MessageModule = {
     "settings.credential.file": "文件",
     "settings.credential.none": "未找到",
 
-    "settings.shortcuts": "快捷键",
     "settings.shortcut.recording": "按下组合键…",
     "settings.shortcut.conflict": "冲突",
     "settings.shortcut.windowBrowser":
@@ -301,8 +296,6 @@ export const modals: MessageModule = {
 
     "workspace.path": "Path",
 
-    "board.new": "New board",
-    "board.rename": "Rename board",
     "board.name": "Name",
 
     "settings.title": "Settings",
@@ -367,8 +360,6 @@ export const modals: MessageModule = {
     "settings.copilot.denied": "Authorization was declined on GitHub",
     "settings.copilot.error": "Sign-in failed. Try again.",
     "settings.nodeColorStyle": "Node colour",
-    "settings.nodeColorStyle.dot": "Dot",
-    "settings.nodeColorStyle.bar": "Bar",
     "settings.restoreWorkspace": "Restore last workspace on open",
     "settings.restoreWorkspace.note": "Off starts on the launcher every time.",
     "settings.showSystemFiles": "Show system files",
@@ -506,7 +497,6 @@ export const modals: MessageModule = {
     "settings.credential.file": "File",
     "settings.credential.none": "Not found",
 
-    "settings.shortcuts": "Shortcuts",
     "settings.shortcut.recording": "Press a combination…",
     "settings.shortcut.conflict": "Conflict",
     "settings.shortcut.windowBrowser":

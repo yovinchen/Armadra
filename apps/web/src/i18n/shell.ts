@@ -15,8 +15,6 @@ export const shell: MessageModule = {
     "app.brand": "Armadra",
     "app.splash":
       "Armadra 开屏动画：手写签名写完后下移，犰狳从左侧走出来，停稳成为品牌标识",
-    "app.loadFailed": "画布加载失败",
-    "app.retry": "重试",
     "app.runtimeUnreachable": "无法连接本地 Runtime（{endpoint}）",
     "app.runtimeFailed": "Runtime 请求失败（{status}）",
 
@@ -91,9 +89,6 @@ export const shell: MessageModule = {
     "search.boards": "画布",
     "search.nodes": "节点",
 
-    "agents.title": "Agent",
-    "agents.close": "收起",
-
     "cluster.palette": "命令面板",
     "cluster.explorer": "资源管理器",
     "cluster.scm": "源码控制",
@@ -119,8 +114,6 @@ export const shell: MessageModule = {
     "app.brand": "Armadra",
     "app.splash":
       "Armadra splash: the handwritten signature is drawn and settles, then the armadillo walks in from the left and rests as the brand mark",
-    "app.loadFailed": "Failed to load board",
-    "app.retry": "Retry",
     "app.runtimeUnreachable": "Cannot reach the local runtime ({endpoint})",
     "app.runtimeFailed": "Runtime request failed ({status})",
 
@@ -197,9 +190,6 @@ export const shell: MessageModule = {
     "search.empty": "No results",
     "search.boards": "Boards",
     "search.nodes": "Nodes",
-
-    "agents.title": "Agents",
-    "agents.close": "Collapse",
 
     "cluster.palette": "Command palette",
     "cluster.explorer": "Explorer",

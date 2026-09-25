@@ -9,14 +9,12 @@ import type { MessageModule } from "./index";
 const zh = {
   /* 页与入口 */
   "automation.title": "自动化",
-  "automation.open": "打开自动化",
   "automation.tab.plans": "计划",
   "automation.tab.runs": "运行历史",
   "automation.tab.create": "新建计划",
   "automation.reload": "刷新",
   "automation.empty": "这个工作空间还没有计划",
   "automation.emptyRuns": "这个计划还没有运行记录",
-  "automation.more": "加载更多",
   "automation.loading": "正在读取",
 
   /* 不可用状态（§5：不出现伪按钮） */
@@ -51,7 +49,6 @@ const zh = {
   "automation.nextDue": "下次执行",
   "automation.lastRun": "最近运行",
   "automation.unknownTime": "未知",
-  "automation.executionHost": "执行位置",
   "automation.target": "目标会话",
   "automation.timezone": "时区",
   "automation.revision": "版本",
@@ -195,7 +192,6 @@ const zh = {
   "automation.error.unknownOutcome": "结果未知，请刷新确认后再重试",
 
   /* 原生活动卡片 */
-  "activity.title": "原生活动",
   "activity.source.loop": "CLI 循环",
   "activity.source.subagent": "子代理",
   "activity.readOnly": "只读观察",
@@ -215,14 +211,12 @@ const zh = {
 
 const en: Record<keyof typeof zh, string> = {
   "automation.title": "Automation",
-  "automation.open": "Open automation",
   "automation.tab.plans": "Plans",
   "automation.tab.runs": "Run history",
   "automation.tab.create": "New plan",
   "automation.reload": "Reload",
   "automation.empty": "No plans in this workspace yet",
   "automation.emptyRuns": "This plan has not run yet",
-  "automation.more": "Load more",
   "automation.loading": "Loading",
 
   "automation.blocked.noWorkspace": "Open a workspace first",
@@ -256,7 +250,6 @@ const en: Record<keyof typeof zh, string> = {
   "automation.nextDue": "Next run",
   "automation.lastRun": "Last run",
   "automation.unknownTime": "Unknown",
-  "automation.executionHost": "Execution host",
   "automation.target": "Target session",
   "automation.timezone": "Time zone",
   "automation.revision": "Revision",
@@ -405,7 +398,6 @@ const en: Record<keyof typeof zh, string> = {
   "automation.error.unknownOutcome":
     "Outcome unknown; reload to check before retrying",
 
-  "activity.title": "Native activity",
   "activity.source.loop": "CLI loop",
   "activity.source.subagent": "Subagent",
   "activity.readOnly": "Read-only observation",

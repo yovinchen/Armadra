@@ -49,7 +49,6 @@ const zh = {
   /* 编辑器 */
   "editor.save": "保存",
   "editor.tooLarge": "文件过大",
-  "editor.readonly": "只读",
   "editor.failed": "读取失败",
   "editor.download": "下载文件",
   "editor.dirty": "未保存",
@@ -123,32 +122,12 @@ const zh = {
   "files.status.R": "已重命名",
   "files.status.?": "未跟踪",
 
-  /* 图片 */
-  "image.empty": "无图片",
-
-  /* 画图（§21） */
-  "draw.pen": "画笔",
-  "draw.eraser": "橡皮",
-  "draw.color": "颜色",
-  "draw.undo": "撤销",
-
-  /* 7 色调色板的无障碍名（§3.4） */
-  "color.palette": "节点颜色",
-  "color.blue": "蓝",
-  "color.green": "绿",
-  "color.yellow": "黄",
-  "color.red": "红",
-  "color.purple": "紫",
-  "color.cyan": "青",
-  "color.orange": "橙",
-
   /* 子代理卡片 */
   "subagent.fallback": "子代理",
   "subagent.working": "运行中",
   "subagent.done": "已完成",
   "subagent.tokens": "tokens",
   "subagent.toolUses": "工具",
-  "subagent.transcript": "转录",
 } as const;
 
 const en: Record<keyof typeof zh, string> = {
@@ -188,7 +167,6 @@ const en: Record<keyof typeof zh, string> = {
 
   "editor.save": "Save",
   "editor.tooLarge": "File too large",
-  "editor.readonly": "Read-only",
   "editor.failed": "Read failed",
   "editor.download": "Download file",
   "editor.dirty": "Unsaved",
@@ -260,28 +238,11 @@ const en: Record<keyof typeof zh, string> = {
   "files.status.R": "Renamed",
   "files.status.?": "Untracked",
 
-  "image.empty": "No image",
-
-  "draw.pen": "Pen",
-  "draw.eraser": "Eraser",
-  "draw.color": "Colour",
-  "draw.undo": "Undo",
-
-  "color.palette": "Node colour",
-  "color.blue": "Blue",
-  "color.green": "Green",
-  "color.yellow": "Yellow",
-  "color.red": "Red",
-  "color.purple": "Purple",
-  "color.cyan": "Cyan",
-  "color.orange": "Orange",
-
   "subagent.fallback": "Subagent",
   "subagent.working": "Working",
   "subagent.done": "Done",
   "subagent.tokens": "tokens",
   "subagent.toolUses": "tools",
-  "subagent.transcript": "Transcript",
 };
 
 export const nodes: MessageModule = { "zh-CN": zh, en };

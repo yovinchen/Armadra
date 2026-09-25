@@ -75,7 +75,6 @@ const zh = {
   "content.draw": "手绘",
   "content.image": "图片",
   "content.line": "直线",
-  "content.highlight": "高亮",
   "content.frame": "画框",
   "content.shape": "白板内容",
   /* Frame 引用交给 Agent 的成员清单（canvas/frame-reference.ts） */
@@ -292,7 +291,6 @@ const en: Record<keyof typeof zh, string> = {
   "content.draw": "Drawing",
   "content.image": "Image",
   "content.line": "Line",
-  "content.highlight": "Highlight",
   "content.frame": "Frame",
   "content.shape": "Whiteboard content",
   "content.frameSummary": "Inside the frame \u201c{title}\u201d:",

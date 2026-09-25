@@ -21,8 +21,6 @@ export const gitStashes: MessageModule = {
     "gitStash.noChanges": "当前没有可保存的改动。",
     "gitStash.existingConflicts":
       "暂存区存在冲突，请解决后再保存或应用 Stash。",
-    "gitStash.view": "查看差异",
-    "gitStash.patch": "工作区快照差异",
     "gitStash.noPatch": "此快照没有差异。",
     "gitStash.changed": "仓库或所选 Stash 已变化，请刷新并重新确认。",
     "gitStash.duplicate": "同一对象存在多条记录，请使用 Git 处理后再继续。",
@@ -47,8 +45,6 @@ export const gitStashes: MessageModule = {
     "gitStash.noChanges": "There are no local changes to stash.",
     "gitStash.existingConflicts":
       "Resolve the existing index conflicts before creating or applying a stash.",
-    "gitStash.view": "View diff",
-    "gitStash.patch": "Worktree snapshot diff",
     "gitStash.noPatch": "This snapshot has no differences.",
     "gitStash.changed":
       "The repository or selected stash changed. Refresh and confirm again.",

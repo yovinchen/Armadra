@@ -180,163 +180,33 @@ describe("界面文案", () => {
  * `t(`前缀.${…}`)` 这样拼出来的键，扫描器只看得见那个静态前缀。
  *
  * 自动抽出来而不是手写白名单：手写的白名单一改代码就过期，而这条正则读的
- * 就是代码本身——拼接方式变了，放行范围跟着变。
+ * 就是代码本身——拼接方式变了，放行范围跟着变。前缀不必停在点上：
+ * `gitIntegration.continue${label}`、`mobile.key.ctrl${letter}` 这样把变量
+ * 接在词尾的也算，只要静态部分里至少有一个点（排除普通的模板字符串）。
  */
 function dynamicPrefixes(corpus: string): Set<string> {
   return new Set(
-    [...corpus.matchAll(/`([a-zA-Z][\w.-]*\.)\$\{/g)].map(
+    [...corpus.matchAll(/`([a-zA-Z][\w-]*\.[\w.-]*)\$\{/g)].map(
       (match) => match[1] as string,
     ),
   );
 }
 
 /**
- * 本次清理之外的历史欠账：这些键在这条守卫加上来之前就已经没人引用。
- *
- * 断言写成**全等**而不是「不多于」：新增一个没人用的键会失败，删掉一个欠账
- * 却不从这张表里划掉也会失败。这张表只许变短。
+ * `desktop` 模块是桌面壳托盘与菜单的文案，引用它的是 Electron 主进程
+ * （apps/desktop/src/main），不在这里扫描的前端语料里。它的键由
+ * apps/desktop/src/shell-core/messages.test.ts 按「托盘与菜单要的键」全等守住，
+ * 这里不再重复检查。
  */
-const UNREFERENCED: readonly string[] = [
-  "activity.title",
-  "agent.allow",
-  "agent.deny",
-  "agent.launchFailed",
-  "agents.close",
-  "agents.title",
-  "app.loadFailed",
-  "app.retry",
-  "automation.executionHost",
-  "automation.more",
-  "automation.open",
-  "board.new",
-  "board.rename",
-  "color.blue",
-  "color.cyan",
-  "color.green",
-  "color.orange",
-  "color.palette",
-  "color.purple",
-  "color.red",
-  "color.yellow",
-  "content.highlight",
-  "draw.color",
-  "draw.eraser",
-  "draw.pen",
-  "draw.undo",
-  "editor.readonly",
-  "frameBinding.missing",
-  "gitCommit.binary",
-  "gitCommit.title",
-  "gitHunk.close",
-  "gitIntegration.abortPick",
-  "gitIntegration.abortRebase",
-  "gitIntegration.abortRevert",
-  "gitIntegration.absent",
-  "gitIntegration.base",
-  "gitIntegration.binary",
-  "gitIntegration.continuePick",
-  "gitIntegration.continueRebase",
-  "gitIntegration.continueRevert",
-  "gitIntegration.dirty",
-  "gitIntegration.failed",
-  "gitIntegration.markResolved",
-  "gitIntegration.message",
-  "gitIntegration.none",
-  "gitIntegration.open",
-  "gitIntegration.ours",
-  "gitIntegration.rebaseOnto",
-  "gitIntegration.submodule",
-  "gitIntegration.target",
-  "gitIntegration.theirs",
-  "gitIntegration.title",
-  "gitIntegration.truncated",
-  "gitLog.details.title",
-  "gitLog.table.repository",
-  "gitStash.patch",
-  "gitStash.view",
-  "image.empty",
-  "launch.stalled",
-  "launcher.open",
-  "lsp.executableMissing",
-  "lsp.formatOnSaveHint",
-  "lsp.openDocuments",
-  "lsp.stderr",
-  "lsp.unavailable",
-  "menu.closeWindow",
-  "menu.cut",
-  "menu.file",
-  "menu.minimize",
-  "menu.paste",
-  "menu.quit",
-  "menu.redo",
-  "menu.selectAll",
-  "menu.showWindow",
-  "menu.undo",
-  "menu.window",
-  "menu.zoom",
-  "mobile.key.ctrlA",
-  "mobile.key.ctrlC",
-  "mobile.key.ctrlD",
-  "mobile.key.ctrlE",
-  "mobile.key.ctrlK",
-  "mobile.key.ctrlL",
-  "mobile.key.ctrlR",
-  "mobile.key.ctrlU",
-  "mobile.key.ctrlZ",
-  "problems.inactive",
-  "rope.launched",
-  "rope.subagent",
-  "rope.waiting",
-  "scm.ahead",
-  "scm.behind",
-  "scm.changes",
-  "scm.clean",
-  "scm.close",
-  "scm.committed",
-  "scm.diff",
-  "scm.message",
-  "scm.refresh",
-  "scm.staged",
-  "scm.title",
-  "sessions.add",
-  "sessions.collapse",
-  "sessions.empty",
-  "sessions.expand",
-  "sessions.signal.attention",
-  "sessions.signal.unread",
-  "sessions.signal.working",
-  "sessions.title",
-  "settings.nodeColorStyle.bar",
-  "settings.nodeColorStyle.dot",
-  "settings.shortcuts",
-  "ssh.edit",
-  "ssh.pickIdentity",
-  "ssh.testing",
-  "subagent.transcript",
-  "terminal.failed",
-  "terminal.findNext",
-  "terminal.findPrev",
-  "tray.quit",
-  "tray.showWindow",
-  "tray.updateRestart",
-  "tray.usage.costToday",
-  "tray.usage.noData",
-  "tray.usage.reason.expired_credentials",
-  "tray.usage.reason.forbidden",
-  "tray.usage.reason.network",
-  "tray.usage.reason.no_windows",
-  "tray.usage.reason.parse",
-  "tray.usage.reason.provider_error",
-  "tray.usage.reason.rate_limited",
-  "tray.usage.reason.unauthorized",
-  "tray.usage.reason.unreadable_credentials",
-  "tray.usage.signedOut",
-  "updates.checkedAt",
-  "updates.release.notes",
-  "updates.release.size",
-  "usage.recoveryHint",
-  "usage.source.copilot",
-];
+const REFERENCED_ELSEWHERE = new Set(["desktop"]);
+
+/**
+ * 没人引用的键。2026-09-26 清空：死键已从各语言模块里删掉，动态拼接的由
+ * `dynamicPrefixes` 认出，桌面壳的由 `REFERENCED_ELSEWHERE` 交给壳自己的测试。
+ *
+ * 断言写成**全等**：新增一个没人用的键会失败。这张表只许保持为空。
+ */
+const UNREFERENCED: readonly string[] = [];
 
 describe("消息键的引用", () => {
   // 扫全量源码语料，整套并行跑时 5 秒默认预算偏紧。
@@ -349,8 +219,9 @@ describe("消息键的引用", () => {
     const used = (key: string) =>
       corpus.includes(key) || prefixes.some((prefix) => key.startsWith(prefix));
 
-    const dead = Object.values(MODULES)
-      .flatMap((module) => Object.keys(module["zh-CN"]))
+    const dead = Object.entries(MODULES)
+      .filter(([name]) => !REFERENCED_ELSEWHERE.has(name))
+      .flatMap(([, module]) => Object.keys(module["zh-CN"]))
       .filter((key) => !used(key))
       .sort();
 

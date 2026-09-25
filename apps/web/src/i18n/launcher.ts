@@ -9,7 +9,6 @@ import type { MessageModule } from "./index";
 export const launcher: MessageModule = {
   "zh-CN": {
     "launcher.newFolder": "新建文件夹",
-    "launcher.open": "打开文件夹",
     "launcher.clone": "克隆仓库",
     "launcher.remove": "从列表移除",
     "launcher.removeTitle": "移除工作空间？",
@@ -26,7 +25,6 @@ export const launcher: MessageModule = {
   },
   en: {
     "launcher.newFolder": "New folder",
-    "launcher.open": "Open folder",
     "launcher.clone": "Clone repository",
     "launcher.remove": "Remove from list",
     "launcher.removeTitle": "Remove workspace?",

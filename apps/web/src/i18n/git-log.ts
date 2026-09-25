@@ -43,7 +43,6 @@ export const gitLog: MessageModule = {
     "gitLog.table.loading": "读取中…",
     "gitLog.table.more": "继续读取…",
     "gitLog.table.truncated": "仓库过多，只合并了前 32 个。",
-    "gitLog.table.repository": "仓库：{name}",
 
     "gitLog.toolbar.search": "搜索消息或 hash",
     "gitLog.toolbar.regex": "正则",
@@ -70,7 +69,6 @@ export const gitLog: MessageModule = {
     "gitLog.toolbar.showHashColumn": "显示 hash 列",
     "gitLog.toolbar.clear": "清除筛选",
 
-    "gitLog.details.title": "提交详情",
     "gitLog.details.empty": "选择一行查看详情。",
     "gitLog.details.copyHash": "复制 hash",
     "gitLog.details.committer": "提交者",
@@ -163,7 +161,6 @@ export const gitLog: MessageModule = {
     "gitLog.table.more": "Load more…",
     "gitLog.table.truncated":
       "Too many repositories; only the first 32 merged.",
-    "gitLog.table.repository": "Repository: {name}",
 
     "gitLog.toolbar.search": "Search message or hash",
     "gitLog.toolbar.regex": "Regex",
@@ -190,7 +187,6 @@ export const gitLog: MessageModule = {
     "gitLog.toolbar.showHashColumn": "Show hash column",
     "gitLog.toolbar.clear": "Clear filters",
 
-    "gitLog.details.title": "Commit details",
     "gitLog.details.empty": "Select a row to see its details.",
     "gitLog.details.copyHash": "Copy hash",
     "gitLog.details.committer": "Committer",

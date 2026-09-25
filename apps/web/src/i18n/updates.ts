@@ -51,7 +51,6 @@ export const updates: MessageModule = {
     "updates.partial.shellNotChecked": "桌面壳未检查。",
     "updates.progress": "已下载",
     "updates.retryAfter": "可在 {value} 分钟后重试。",
-    "updates.checkedAt": "上次检查：{value}",
     "updates.downloaded.note":
       "重启后会安装新版本。终端会话会保留，自动化计划会暂停到重启完成。",
     "updates.action.cancel": "取消",
@@ -87,8 +86,6 @@ export const updates: MessageModule = {
     "updates.shellReason.installFailed": "安装失败，当前版本没有被替换。",
     "updates.shellReason.updaterUnavailable": "此构建的更新器不可用。",
     "updates.release": "新版本",
-    "updates.release.notes": "查看发布说明",
-    "updates.release.size": "安装包大小",
     "updates.signature": "签名",
     "updates.signature.present": "发布包附带签名，由安装程序验证",
     "updates.signature.absent": "发布包没有附带签名",
@@ -166,7 +163,6 @@ export const updates: MessageModule = {
     "updates.partial.shellNotChecked": "The desktop shell did not check.",
     "updates.progress": "Downloaded",
     "updates.retryAfter": "You can try again in {value} minutes.",
-    "updates.checkedAt": "Last checked: {value}",
     "updates.downloaded.note":
       "Restarting installs the new version. Terminal sessions are kept; automation is paused until the restart finishes.",
     "updates.action.cancel": "Cancel",
@@ -207,8 +203,6 @@ export const updates: MessageModule = {
     "updates.shellReason.updaterUnavailable":
       "This build's updater is unusable.",
     "updates.release": "New release",
-    "updates.release.notes": "Read the release notes",
-    "updates.release.size": "Package size",
     "updates.signature": "Signature",
     "updates.signature.present":
       "The release ships a signature; the installer verifies it",

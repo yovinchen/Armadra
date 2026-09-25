@@ -3,7 +3,6 @@ import type { MessageModule } from "./index";
 /** Git 工具窗口的提交页（Git 工具窗口设计 §2.3）。 */
 export const gitCommit: MessageModule = {
   "zh-CN": {
-    "gitCommit.title": "提交",
     "gitCommit.changes": "变更",
     "gitCommit.clean": "没有需要提交的改动。",
     "gitCommit.group.conflicts": "冲突",
@@ -17,7 +16,6 @@ export const gitCommit: MessageModule = {
     "gitCommit.renamedFrom": "重命名自 {path}",
     "gitCommit.selectFile": "选一个文件查看差异。",
     "gitCommit.noRepository": "这个工作空间下没有找到 Git 仓库。",
-    "gitCommit.binary": "二进制文件，不显示差异。",
     "gitCommit.message": "提交信息",
     "gitCommit.messagePlaceholder": "这次改了什么，以及为什么",
     "gitCommit.history": "最近用过的信息",
@@ -41,7 +39,6 @@ export const gitCommit: MessageModule = {
     "gitCommit.discard": "丢弃选中变更",
   },
   en: {
-    "gitCommit.title": "Commit",
     "gitCommit.changes": "Changes",
     "gitCommit.clean": "Nothing to commit.",
     "gitCommit.group.conflicts": "Conflicts",
@@ -55,7 +52,6 @@ export const gitCommit: MessageModule = {
     "gitCommit.renamedFrom": "Renamed from {path}",
     "gitCommit.selectFile": "Select a file to see its diff.",
     "gitCommit.noRepository": "No Git repository was found in this workspace.",
-    "gitCommit.binary": "Binary file; no diff is shown.",
     "gitCommit.message": "Commit message",
     "gitCommit.messagePlaceholder": "What changed, and why",
     "gitCommit.history": "Recent messages",

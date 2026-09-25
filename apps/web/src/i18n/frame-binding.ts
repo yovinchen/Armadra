@@ -16,7 +16,6 @@ export const frameBinding: MessageModule = {
     "frameBinding.initRunning": "初始化脚本运行中",
     "frameBinding.initSucceeded": "初始化脚本已完成",
     "frameBinding.initFailed": "初始化脚本失败",
-    "frameBinding.missing": "找不到这个 worktree",
     // 绑定坏掉的方式不止一种，修法也不一样：目录没了可以重建，分支被切走
     // 了不能——那个检出还在，重建只会失败。
     "frameBinding.reason.missing": "找不到这个 worktree",
@@ -47,7 +46,6 @@ export const frameBinding: MessageModule = {
     "frameBinding.initRunning": "Init script running",
     "frameBinding.initSucceeded": "Init script finished",
     "frameBinding.initFailed": "Init script failed",
-    "frameBinding.missing": "Worktree not found",
     "frameBinding.reason.missing": "Worktree not found",
     "frameBinding.reasonHint.missing":
       "The checkout is gone from disk. Recreate it on the same branch, or unbind this Frame.",
