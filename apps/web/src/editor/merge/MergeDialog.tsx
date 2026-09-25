@@ -49,6 +49,13 @@ export function MergeDialog() {
     [state.regions, state.choices, state.trailingNewline],
   );
 
+  const draft = state.mode === "draft";
+
+  const applyDraft = () => {
+    store.getState().applyDraft?.(merged);
+    store.getState().close();
+  };
+
   const save = async (markResolved: boolean) => {
     const { workspaceId, path, repositoryPath, expectedSha256, bom } =
       store.getState();
@@ -84,7 +91,9 @@ export function MergeDialog() {
     >
       <DialogContent className="flex max-h-[86vh] w-[min(96vw,72rem)] max-w-none flex-col gap-3">
         <DialogHeader>
-          <DialogTitle>{t("merge.title")}</DialogTitle>
+          <DialogTitle>
+            {t(draft ? "merge.draft.title" : "merge.title")}
+          </DialogTitle>
           <DialogDescription>
             {state.loading ? t("merge.loading") : (state.path ?? "")}
           </DialogDescription>
@@ -112,7 +121,7 @@ export function MergeDialog() {
             <div className="flex flex-col gap-3 p-3">
               {conflicts.length === 0 ? (
                 <p className="text-[12px] text-muted-foreground">
-                  {t("merge.noConflicts")}
+                  {t(draft ? "merge.draft.noConflicts" : "merge.noConflicts")}
                 </p>
               ) : (
                 conflicts.map((region, index) => (
@@ -121,6 +130,7 @@ export function MergeDialog() {
                     index={index}
                     region={region as ConflictRegion}
                     choice={state.choices[index] ?? "ours"}
+                    draft={draft}
                     onChoose={(choice) =>
                       store.getState().choose(index, choice)
                     }
@@ -145,21 +155,29 @@ export function MergeDialog() {
               count: String(countConflicts(state.regions)),
             })}
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={state.saving || state.loading || !!state.unavailable}
-            onClick={() => void save(false)}
-          >
-            {t("merge.saveOnly")}
-          </Button>
-          <Button
-            size="sm"
-            disabled={state.saving || state.loading || !!state.unavailable}
-            onClick={() => void save(true)}
-          >
-            {t("merge.saveAndResolve")}
-          </Button>
+          {draft ? (
+            <Button size="sm" onClick={applyDraft}>
+              {t("merge.draft.apply")}
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={state.saving || state.loading || !!state.unavailable}
+                onClick={() => void save(false)}
+              >
+                {t("merge.saveOnly")}
+              </Button>
+              <Button
+                size="sm"
+                disabled={state.saving || state.loading || !!state.unavailable}
+                onClick={() => void save(true)}
+              >
+                {t("merge.saveAndResolve")}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -168,18 +186,34 @@ export function MergeDialog() {
 
 const CHOICES: readonly Choice[] = ["ours", "theirs", "both", "base", "none"];
 
+/**
+ * 草稿合并里「我们的 / 他们的」是草稿与磁盘版，同一个词在 Git 冲突里指的是
+ * 两个分支——换成说得清的名字，而不是让人去猜哪边是哪边。
+ */
+const DRAFT_LABELS: Record<string, string> = {
+  "merge.base": "merge.draft.base",
+  "merge.ours": "merge.draft.ours",
+  "merge.theirs": "merge.draft.theirs",
+  "merge.choice.ours": "merge.draft.choice.ours",
+  "merge.choice.theirs": "merge.draft.choice.theirs",
+};
+
 function Hunk({
   index,
   region,
   choice,
+  draft,
   onChoose,
 }: {
   index: number;
   region: ConflictRegion;
   choice: Choice;
+  draft: boolean;
   onChoose: (choice: Choice) => void;
 }) {
-  const t = useT();
+  const translate = useT();
+  const t = (key: string, values?: Record<string, string>) =>
+    translate(draft ? (DRAFT_LABELS[key] ?? key) : key, values);
   return (
     <section className="min-w-0 rounded-[var(--radius-sm)] border border-border p-2">
       <div className="flex flex-wrap items-center gap-1.5 pb-2">

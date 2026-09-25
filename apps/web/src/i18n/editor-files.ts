@@ -16,6 +16,14 @@ export const editorFiles: MessageModule = {
     "editor.image.zoom": "缩放",
     "editor.image.fit": "适应",
     "editor.image.actual": "1:1",
+
+    "editor.draft.restored": "已恢复未保存的草稿",
+    "editor.draft.restoredStale": "已恢复草稿，磁盘上的文件在此期间被修改",
+    "editor.draft.discard": "丢弃草稿",
+    "editor.draft.merge": "合并",
+    "editor.saveAs": "另存为",
+    "editor.saveAs.path": "工作空间内的路径",
+    "editor.saveAs.exists": "该路径已有文件",
   },
   en: {
     "quickOpen.recent": "Recently opened",
@@ -27,5 +35,14 @@ export const editorFiles: MessageModule = {
     "editor.image.zoom": "Zoom",
     "editor.image.fit": "Fit",
     "editor.image.actual": "1:1",
+
+    "editor.draft.restored": "Restored an unsaved draft",
+    "editor.draft.restoredStale":
+      "Restored a draft; the file changed on disk in the meantime",
+    "editor.draft.discard": "Discard draft",
+    "editor.draft.merge": "Merge",
+    "editor.saveAs": "Save as",
+    "editor.saveAs.path": "Path in the workspace",
+    "editor.saveAs.exists": "A file already exists at this path",
   },
 };

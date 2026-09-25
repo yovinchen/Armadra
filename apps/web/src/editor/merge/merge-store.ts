@@ -12,8 +12,18 @@ import type { Choice, MergeRegion } from "@/lib/merge3";
  * 被关掉而失去意义。
  */
 
+/**
+ * `git`：冲突文件，三份取自索引，结果写盘并可标记已解决。
+ * `draft`：编辑器草稿与磁盘版（编辑器设计 §3），base 是草稿开始时读到的
+ * 正文，结果只放回编辑器——写不写盘仍然由那个节点的保存决定。
+ */
+export type MergeMode = "git" | "draft";
+
 export interface MergeState {
   open: boolean;
+  mode: MergeMode;
+  /** `draft` 模式的去处：把合并结果交回发起的编辑器。 */
+  applyDraft: ((merged: string) => void) | null;
   workspaceId: string | null;
   /** 仓库相对的文件路径。对话框标题显示的也是它。 */
   path: string | null;
@@ -36,6 +46,13 @@ export interface MergeState {
   error: string | null;
   /** 已经写盘并且索引里标了已解决。 */
   resolved: boolean;
+  /** 草稿合并：三份原文调用方已经在手，直接进入就绪状态。 */
+  beginDraft: (context: {
+    path: string;
+    regions: MergeRegion[];
+    trailingNewline: boolean;
+    apply: (merged: string) => void;
+  }) => void;
   begin: (context: {
     workspaceId: string;
     path: string;
@@ -58,6 +75,7 @@ export interface MergeState {
 type MergeData = Omit<
   MergeState,
   | "begin"
+  | "beginDraft"
   | "ready"
   | "refuse"
   | "choose"
@@ -70,6 +88,8 @@ type MergeData = Omit<
 function empty(): MergeData {
   return {
     open: false,
+    mode: "git",
+    applyDraft: null,
     workspaceId: null,
     path: null,
     repositoryPath: ".",
@@ -97,6 +117,22 @@ export const useMergeStore = create<MergeState>()((set) => ({
       workspaceId,
       path,
       repositoryPath,
+    });
+  },
+  beginDraft: ({ path, regions, trailingNewline, apply }) => {
+    requestOverlay("merge");
+    set({
+      ...empty(),
+      open: true,
+      mode: "draft",
+      applyDraft: apply,
+      path,
+      regions,
+      // 草稿一侧是人刚写下的东西，默认保住它；磁盘那侧逐处挑。
+      choices: regions
+        .filter((region) => region.kind === "conflict")
+        .map((): Choice => "ours"),
+      trailingNewline,
     });
   },
   ready: ({ regions, expectedSha256, bom, trailingNewline }) =>

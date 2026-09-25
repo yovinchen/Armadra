@@ -23,6 +23,11 @@ export type LoadState =
       eol?: FileEol;
       /** 文件本身不可写，与工作区权限无关。 */
       readonly?: boolean;
+      /**
+       * 磁盘上已经没有这个文件，正文是本机留着的草稿（编辑器设计 §3）。
+       * 没有内容版本也可写：保存按新建提交，或者另存为。
+       */
+      orphan?: boolean;
     };
 
 /** 由页面自己渲染的非文本预览（`file-info` 的 `preview`）。 */

@@ -47,7 +47,11 @@ import { useExternalChanges } from "./editor/use-external-changes";
 import { useEditorKeybindings } from "./editor/use-editor-keys";
 import { useFileSave } from "./editor/use-save";
 import { useGitGutter } from "./editor/use-git-gutter";
+import { useDraftProtection } from "./editor/use-draft";
+import { clearDraft, readDraft } from "./editor/drafts";
+import { SaveAsDialog } from "./editor/SaveAsDialog";
 import { rememberRecentFile } from "@/files/recent-files";
+import { basename } from "@/files/file-operations";
 import { openQuickOpen } from "@/panels/quick-open-seed";
 import { useLanguageService } from "@/editor/language/use-language";
 import { languageIdFor } from "@/editor/language/language-ids";
@@ -90,6 +94,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     (value: number) => value + 1,
     0,
   );
+  const [saveAsOpen, setSaveAsOpen] = React.useState(false);
 
   const identity = JSON.stringify([workspaceId, path]);
   const refs = useEditorRefs(identity);
@@ -102,7 +107,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     state.kind === "text" &&
     state.identity === identity &&
     state.readonly !== true &&
-    Boolean(state.sha256);
+    (Boolean(state.sha256) || state.orphan === true);
   refs.writableRef.current = writable;
 
   /* --------------------------------- 读取 --------------------------------- */
@@ -172,8 +177,28 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
         eol: file.eol,
         readonly: file.readonly,
       });
-    })().catch(() => {
-      if (!cancelled) setState({ kind: "error" });
+    })().catch(async () => {
+      if (cancelled) return;
+      // 读不到，而本机还留着这个文件的草稿：确认是文件没了（不是断线）
+      // 才把草稿当正文打开，否则仍然是读取失败，草稿留到下次。
+      const stored = readDraft(workspaceId, path);
+      if (stored) {
+        const version = await runtimeApi
+          .fileVersion(workspaceId, path)
+          .catch(() => null);
+        if (cancelled) return;
+        if (version && !version.exists) {
+          setState({
+            kind: "text",
+            content: stored.draft,
+            size: stored.draft.length,
+            identity,
+            orphan: true,
+          });
+          return;
+        }
+      }
+      setState({ kind: "error" });
     });
     return () => {
       cancelled = true;
@@ -183,6 +208,9 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
   }, [path, workspaceId]);
 
   /* ------------------------------ CodeMirror ------------------------------ */
+
+  /** 编辑器建好时就把回调接上，草稿钩子后面才声明，所以隔一层引用。 */
+  const draftChangeRef = React.useRef<() => void>(() => undefined);
 
   React.useEffect(() => {
     if (state.kind !== "text" || state.identity !== identity) return;
@@ -206,8 +234,10 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
         // 走默认的 LF，状态栏会把这件事说出来。
         lineSeparator: eol === "crlf" ? "\r\n" : undefined,
         phrases: searchPhrases(t),
-        onDocChanged: (content) =>
-          setDirty(content !== refs.baselineRef.current),
+        onDocChanged: (content) => {
+          setDirty(content !== refs.baselineRef.current);
+          draftChangeRef.current();
+        },
       });
       created = view;
       refs.viewRef.current = view;
@@ -294,6 +324,54 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     onReloaded: bumpDiskRevision,
   });
 
+  /* ------------------------------- 草稿保护 ------------------------------- */
+
+  const drafts = useDraftProtection(refs, {
+    workspaceId,
+    path,
+    identity,
+    state,
+    viewGeneration,
+    setDirty,
+    setExternal,
+    setDiskContent,
+    onDiskSynced: bumpDiskRevision,
+  });
+  draftChangeRef.current = drafts.noteChange;
+
+  /** 另存为：按新建写到 `target`，然后让这个节点指过去。 */
+  const saveAs = async (target: string) => {
+    const view = refs.viewRef.current;
+    if (!view || !workspaceId || refs.viewIdentityRef.current !== identity)
+      return;
+    const content = view.state.sliceDoc();
+    const result = await runtimeApi.writeFile(
+      workspaceId,
+      target,
+      content,
+      undefined,
+      undefined,
+      refs.bomRef.current,
+    );
+    // 草稿已经落成文件，本机副本不再需要；基准先换掉，卸载时的最后一次
+    // 写入就不会把它又存回旧路径。
+    refs.baselineRef.current = content;
+    refs.recreateRef.current = false;
+    clearDraft(workspaceId, path);
+    if (target === path) {
+      refs.versionRef.current = result.sha256;
+      refs.sizeRef.current = result.size;
+      setDirty(false);
+      setExternal(null);
+      bumpDiskRevision();
+      return;
+    }
+    const store = useCanvasStore.getState();
+    store.updateNodeData(id, { path: target });
+    if (node.title === basename(path))
+      store.updateNode(id, { title: basename(target) });
+  };
+
   /* ------------------------------ Git 行边标记 ----------------------------- */
 
   useGitGutter(refs, {
@@ -336,10 +414,12 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
   );
 
   const languageAfterSave = language.afterSave;
+  const persistDraft = drafts.persistNow;
   const afterSave = React.useCallback(() => {
     languageAfterSave?.();
     bumpDiskRevision();
-  }, [languageAfterSave]);
+    persistDraft();
+  }, [languageAfterSave, persistDraft]);
 
   const { save } = useFileSave(refs, {
     path,
@@ -575,9 +655,12 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
             {external && (
               <ExternalBar
                 change={external}
+                dirty={dirty}
                 onCompare={compare}
+                onMerge={drafts.mergeWithDisk}
                 onReload={() => void reload().catch(() => undefined)}
                 onKeep={keepDraft}
+                onSaveAs={() => setSaveAsOpen(true)}
               />
             )}
             <div className="relative flex min-h-0 flex-1">
@@ -612,6 +695,12 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
               language={language.status}
               ownership={language.ownership}
               languageApplicable={languageEligible}
+            />
+            <SaveAsDialog
+              open={saveAsOpen}
+              initialPath={path}
+              onOpenChange={setSaveAsOpen}
+              onSave={saveAs}
             />
           </div>
         )}
