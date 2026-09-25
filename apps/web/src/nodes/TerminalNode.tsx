@@ -5,6 +5,7 @@ import {
   Moon,
   RotateCw,
   Share2,
+  Snowflake,
   Unplug,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -188,6 +189,8 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
 
   const exited =
     surface.connection === "exited" || surface.connection === "failed";
+  // 节能休眠（终端宿主设计 §7.2）：进程不在，不占内存，也没有人在驱动它。
+  const hibernated = surface.render === "hibernated";
 
   /**
    * 头部只留「一眼就要看到」的那几样（F5）。
@@ -204,7 +207,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
         的普通终端和一个 Agent 一样会吃掉几个 GB。SSH 会话的进程树在别的机器
         上，本机测不到，所以不显示——那里的数字只可能是假的（设计 §8）。
       */}
-      {!data?.ssh && !exited && (
+      {!data?.ssh && !exited && !hibernated && (
         <MemoryBadge
           nodeId={id}
           workspaceId={workspaceId}
@@ -226,7 +229,9 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
         谁在驱动（`agent-delivery.md` §6）。只有真的有人或有 Agent 在驱动时
         才出现：空闲是常态，画出来只是噪音。
       */}
-      {!exited && <DriveBadge nodeId={id} sessionId={sessionId} />}
+      {!exited && !hibernated && (
+        <DriveBadge nodeId={id} sessionId={sessionId} />
+      )}
       {/*
         排在这个终端前面的那些（`agent-delivery.md` §4.6）。队空就不画：
         没有人排队是常态。
@@ -260,6 +265,25 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
         把它画出来只是噪音。
         已退出的会话不再报掉线：那时 socket 关掉本来就是收尾。
       */}
+      {/*
+        节能休眠：与下面两个胶囊不同，这一个说的是「进程真的不在了」——点一下
+        节点就会用 CLI 的 resume 接回原来那段对话。
+      */}
+      {hibernated && (
+        <Badge
+          variant="outline"
+          className="h-[18px] px-1.5 text-[length:var(--text-caption)] text-muted-foreground"
+        >
+          <Snowflake className="size-2.5" />
+          {t(
+            surface.hibernation === "resuming"
+              ? "terminal.hibernation.resuming"
+              : surface.hibernation === "failed"
+                ? "terminal.hibernation.failed"
+                : "terminal.hibernation.label",
+          )}
+        </Badge>
+      )}
       {!exited && surface.render === "disconnected" && (
         <Badge
           variant="outline"
@@ -289,7 +313,7 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       {...(bell ? { "data-bell": "true" } : {})}
     >
       <PendingLaunchButton nodeId={id} />
-      {exited && (
+      {(exited || surface.hibernation === "failed") && (
         <IconButton
           label={t("terminal.rerun")}
           onClick={() => surfaceRef.current?.restart()}

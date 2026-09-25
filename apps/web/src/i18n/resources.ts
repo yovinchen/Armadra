@@ -65,6 +65,7 @@ export const resources: MessageModule = {
     "resources.unknown.remote": "在远程主机上运行，本机测不到指标",
     "resources.unknown.no-pid": "没有可用的进程号",
     "resources.unknown.warming-up": "正在建立采样基线",
+    "resources.unknown.hibernated": "已休眠，不占内存",
 
     "resources.sort.hint": "点一次换排序；测不出来的排在最后，不当 0",
     "resources.session.tree": "展开进程树",
@@ -205,6 +206,7 @@ export const resources: MessageModule = {
     "resources.unknown.remote": "Runs on a remote host; not measurable here",
     "resources.unknown.no-pid": "No process id available",
     "resources.unknown.warming-up": "Establishing a sampling baseline",
+    "resources.unknown.hibernated": "Hibernated; uses no memory",
 
     "resources.sort.hint":
       "Click to re-sort. Anything unmeasured sorts last rather than as 0",

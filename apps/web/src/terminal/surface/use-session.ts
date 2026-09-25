@@ -25,9 +25,11 @@ export function useTerminalSession(
     attempt: number;
     patch: (next: Partial<ConnectionStatus>) => void;
     setSessionId: (id: string) => void;
+    /** 读到的会话在节能休眠：交给 `use-hibernation`，不替它新建。 */
+    onHibernated: (sessionId: string) => void;
   },
 ): (forceNew: boolean) => Promise<void> {
-  const { nodeId, attempt, patch, setSessionId } = options;
+  const { nodeId, attempt, patch, setSessionId, onHibernated } = options;
 
   const ensureSession = React.useCallback(
     async (forceNew: boolean) => {
@@ -51,11 +53,18 @@ export function useTerminalSession(
           setSessionId(existing.sessionId);
           return;
         }
+        // 节能休眠（终端宿主设计 §7.2）：进程不在，但这段对话点一下就能用 CLI
+        // 的 resume 接回来。在这里新建会话，就是在同一个节点上另起一个互不相识
+        // 的 CLI，而休眠的那段就此没人接得回来了。
+        if (existing && existing.state === "hibernated") {
+          onHibernated(existing.sessionId);
+          return;
+        }
       }
 
       if (refs.creatingRef.current) return;
       refs.creatingRef.current = true;
-      patch({ connection: "starting", error: null });
+      patch({ connection: "starting", hibernation: null, error: null });
       try {
         const started = await sessionGateway.start({
           workspaceId: workspace.id,
@@ -91,7 +100,7 @@ export function useTerminalSession(
         refs.creatingRef.current = false;
       }
     },
-    [refs, nodeId, patch, setSessionId],
+    [refs, nodeId, patch, setSessionId, onHibernated],
   );
 
   React.useEffect(() => {

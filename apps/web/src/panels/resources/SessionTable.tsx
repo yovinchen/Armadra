@@ -266,13 +266,16 @@ export function SessionTable({
                       <Crosshair />
                     </IconButton>
                   )}
-                  {/* 列表里只剩还在跑的会话，所以「结束」总是可按的。 */}
-                  <IconButton
-                    label={t("resources.session.end")}
-                    onClick={() => setEnding(session)}
-                  >
-                    <X />
-                  </IconButton>
+                  {/* 列表里除了休眠的都还在跑，所以「结束」对它们总是可按的；
+                      休眠的进程早就不在了，没有什么可结束。 */}
+                  {session.unknownReason !== "hibernated" && (
+                    <IconButton
+                      label={t("resources.session.end")}
+                      onClick={() => setEnding(session)}
+                    >
+                      <X />
+                    </IconButton>
+                  )}
                 </div>
               </div>
 

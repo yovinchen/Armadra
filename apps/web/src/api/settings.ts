@@ -64,11 +64,20 @@ export const runtimeSettingsSchema = z.looseObject({
        * 照留，一个字节都不丢。`0` = 关闭。
        */
       dormantAfterSeconds: z.number().int().nonnegative().default(120),
+      /**
+       * `terminal.ecoMode` / `terminal.ecoIdleMinutes`——节能休眠（宿主设计
+       * §7.2）。与上面那条不同，这一条真的结束进程：空闲满阈值、能用 CLI 的
+       * resume 接回来的 Agent 会话被结束以释放内存，点开节点时接回来。
+       */
+      ecoMode: z.boolean().default(true),
+      ecoIdleMinutes: z.number().int().positive().default(30),
     })
     .default({
       backend: "auto",
       detachedGraceMinutes: 1440,
       dormantAfterSeconds: 120,
+      ecoMode: true,
+      ecoIdleMinutes: 30,
     }),
   /** 每个工作空间一段（`workspaces.<id>`）。 */
   workspaces: z

@@ -137,11 +137,14 @@ export function liveSessions(
 ): SessionResources[] {
   return sessions.filter(
     (session) =>
-      session.alive &&
-      !(
-        session.unknownReason !== null &&
-        GONE_REASONS.has(session.unknownReason)
-      ),
+      // 节能休眠的会话进程不在，但节点还挂着它、点一下就接回来：照列，写明
+      // 「已休眠」，数字恒为空（宿主设计 §7.2）。
+      session.unknownReason === "hibernated" ||
+      (session.alive &&
+        !(
+          session.unknownReason !== null &&
+          GONE_REASONS.has(session.unknownReason)
+        )),
   );
 }
 

@@ -18,7 +18,14 @@ export interface TerminalSessionRecord {
   sessionId: string;
   /** 跨 recycle 不变，挂载时按它找会话。 */
   sessionKey: string;
-  state: "pending" | "starting" | "running" | "exited" | "lost" | "reclaiming";
+  state:
+    | "pending"
+    | "starting"
+    | "running"
+    | "exited"
+    | "lost"
+    | "reclaiming"
+    | "hibernated";
   generation: bigint;
   exitCode?: number;
   /** 保留字段：core 不做 revision CAS，恒为 0。 */
@@ -47,8 +54,16 @@ function fromRuntime(session: {
   // statement as "no run has been recorded": zero.
   generation?: number;
   exitCode?: number | null;
+  hibernation?: "hibernated" | null;
 }): TerminalSessionRecord {
-  const state = session.status === "running" ? "running" : "exited";
+  // 节能休眠的会话不是「已退出」：它还挂在节点上，点一下就用 CLI 的 resume
+  // 接回来。当成退出的话，挂载会替它起一个全新的会话。
+  const state =
+    session.status === "running"
+      ? "running"
+      : session.hibernation === "hibernated"
+        ? "hibernated"
+        : "exited";
   return {
     sessionId: session.id,
     sessionKey: session.sessionKey || session.id,
@@ -101,6 +116,14 @@ export const sessionGateway = {
     mode: TerminateMode = "process",
   ): Promise<TerminalSessionRecord> {
     return fromRuntime(await runtimeApi.terminateTerminal(sessionId, mode));
+  },
+
+  /** 唤醒节能休眠的会话：同一个会话 id，下一个代次，接回原来那段对话。 */
+  async wake(
+    _workspaceId: string,
+    sessionId: string,
+  ): Promise<TerminalSessionRecord> {
+    return fromRuntime(await runtimeApi.wakeTerminal(sessionId));
   },
 
   /** 同一个逻辑会话，下一个代次。一次调用，不是先停后起。 */

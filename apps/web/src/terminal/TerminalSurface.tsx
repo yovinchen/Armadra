@@ -26,6 +26,7 @@ import {
   readWorkspaceFileDrag,
 } from "@/files/workspace-drag";
 import { TERMINAL_PADDING } from "@/nodes/geometry";
+import { Button } from "@/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -43,6 +44,7 @@ import { useSurfaceHandle } from "./surface/use-handle";
 import { useLaunchSequence } from "./surface/use-launch";
 import { useRefit } from "./surface/use-refit";
 import { useRenderBudget } from "./surface/use-render-budget";
+import { useHibernation } from "./surface/use-hibernation";
 import { useAdoptedSession, useTerminalSession } from "./surface/use-session";
 import { useTerminalTransport } from "./surface/use-transport";
 import { useXtermInstance } from "./surface/use-xterm";
@@ -221,11 +223,20 @@ function TerminalSurfaceImpl({
 
   /* ----------------------------- 会话的建立 ------------------------------ */
 
+  const hibernation = useHibernation(refs, {
+    nodeId,
+    patch,
+    setSessionId,
+    setAttempt,
+  });
+  const hibernated = status.connection === "hibernated";
+
   const ensureSession = useTerminalSession(refs, {
     nodeId,
     attempt,
     patch,
     setSessionId,
+    onHibernated: hibernation.enter,
   });
 
   // core 替节点起的会话（冷启动、依赖编排）写进节点数据后，挂着的表面跟过去。
@@ -249,6 +260,7 @@ function TerminalSurfaceImpl({
     nodeId,
     sessionId,
     detached,
+    hibernated,
     attempt,
     setAttempt,
     patch,
@@ -351,12 +363,17 @@ function TerminalSurfaceImpl({
               toast.error(translate(fileDragMessage(error)));
             }
           }}
-          // 只聚焦，不写任何字节给 PTY（§18.3 鼠标行）。
-          onPointerDown={() => refs.terminalRef.current?.focus()}
+          // 只聚焦，不写任何字节给 PTY（§18.3 鼠标行）。休眠着的终端点一下就
+          // 是唤醒（宿主设计 §7.2）。
+          onPointerDown={() => {
+            if (hibernated) hibernation.wake();
+            refs.terminalRef.current?.focus();
+          }}
           // 焦点进了终端（点进来、⌘F 之后跳回来、快捷键聚焦）即视为读过。
           // 同时也是渲染优先级的来源：xterm 6 没有公开的 onFocus/onBlur，
           // 焦点只能从容器的 focusin/focusout 看（§7.1「优先焦点实例」）。
           onFocusCapture={() => {
+            if (hibernated) hibernation.wake();
             setFocused(true);
             const store = useAgentStatusStore.getState();
             if (store.statuses[nodeId]?.unread) store.markRead(nodeId);
@@ -376,6 +393,22 @@ function TerminalSurfaceImpl({
             className="absolute inset-0"
             style={{ padding: TERMINAL_PADDING }}
           />
+          {hibernated && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={status.hibernation === "resuming"}
+                onClick={hibernation.wake}
+              >
+                {t(
+                  status.hibernation === "resuming"
+                    ? "terminal.hibernation.resuming"
+                    : "terminal.hibernation.wake",
+                )}
+              </Button>
+            </div>
+          )}
         </div>
       </ContextMenuTrigger>
       {/* 菜单走 portal，开合不改变 body 尺寸（§18.2 规则 1）。 */}

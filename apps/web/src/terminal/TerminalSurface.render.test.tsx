@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { TerminalNodeData } from "@armadra/shared";
 import type { TerminalTransportHandlers } from "./transport";
 import { installDomPolyfills } from "../app/test-harness";
@@ -25,6 +32,7 @@ const fixture = vi.hoisted(() => ({
   close: vi.fn(),
   getTerminal: vi.fn(),
   createTerminal: vi.fn(),
+  wakeTerminal: vi.fn(),
 }));
 
 vi.mock("@/store/canvas-store", () => ({
@@ -46,6 +54,7 @@ vi.mock("@/api/client", () => ({
   runtimeApi: {
     getTerminal: (...args: unknown[]) => fixture.getTerminal(...args),
     createTerminal: (...args: unknown[]) => fixture.createTerminal(...args),
+    wakeTerminal: (...args: unknown[]) => fixture.wakeTerminal(...args),
     agents: vi.fn(async () => []),
   },
 }));
@@ -317,5 +326,62 @@ describe("core 替节点起的会话", () => {
     );
     await act(async () => {});
     expect(fixture.urls).toEqual(seen);
+  });
+});
+
+describe("节能休眠", () => {
+  const row = {
+    id: "00000000-0000-4000-8000-000000000001",
+    workspaceId: "00000000-0000-4000-8000-000000000002",
+    cwd: "/repo",
+    shell: "/bin/sh",
+    command: null,
+    exitCode: null,
+    createdAt: "2026-09-26T00:00:00Z",
+    endedAt: null,
+  };
+
+  it("读到休眠的会话不新建、不连 socket；点一下唤醒后照原样重连", async () => {
+    fixture.data = { kind: "terminal", sessionId: row.id };
+    fixture.getTerminal.mockImplementation(async () => ({
+      ...row,
+      status: "terminated",
+      generation: 1,
+      hibernation: "hibernated",
+    }));
+    fixture.wakeTerminal.mockImplementation(async () => {
+      // 醒来之后那一行就是 running 了，挂载时的那次读也会这么答。
+      fixture.getTerminal.mockImplementation(async () => ({
+        ...row,
+        status: "running",
+        generation: 2,
+        hibernation: null,
+      }));
+      return { ...row, status: "running", generation: 2, hibernation: null };
+    });
+    const changed = vi.fn<(status: TerminalSurfaceStatus) => void>();
+    render(
+      <TerminalSurface
+        nodeId="node"
+        data={fixture.data}
+        collapsed={false}
+        onStatusChange={changed}
+      />,
+    );
+    await waitFor(() =>
+      expect(changed.mock.calls.at(-1)?.[0].render).toBe("hibernated"),
+    );
+    // 挂载时抢先连上的那一条已经收掉；没有人去建第二个 PTY。
+    expect(fixture.createTerminal).not.toHaveBeenCalled();
+    fixture.handlers = null;
+
+    fireEvent.click(screen.getByRole("button", { name: "唤醒" }));
+    await waitFor(() =>
+      expect(fixture.wakeTerminal).toHaveBeenCalledWith(row.id),
+    );
+    await waitFor(() => expect(fixture.handlers).not.toBeNull());
+    expect(fixture.wakeTerminal).toHaveBeenCalledTimes(1);
+    expect(fixture.createTerminal).not.toHaveBeenCalled();
+    expect(changed.mock.calls.at(-1)?.[0].hibernation ?? null).toBeNull();
   });
 });

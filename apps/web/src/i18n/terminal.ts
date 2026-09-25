@@ -28,6 +28,13 @@ const zh = {
   "terminal.render.disconnected": "已断开",
   "terminal.render.detached": "已分离",
 
+  /* 节能休眠（终端宿主设计 §7.2）：进程已经结束，点一下用 CLI 的续接接回来。 */
+  "terminal.hibernation.label": "休眠中",
+  "terminal.hibernation.resuming": "正在唤醒",
+  "terminal.hibernation.failed": "唤醒失败",
+  "terminal.hibernation.wake": "唤醒",
+  "terminal.hibernation.wakeFailed": "没能唤醒这个会话",
+
   /* 设置页「终端」一组（§18.3 设置项行）。 */
   "terminal.settings.font": "字体",
   "terminal.settings.fontSize": "字号",
@@ -47,6 +54,15 @@ const zh = {
   "terminal.settings.dormant.30s": "30 秒",
   "terminal.settings.dormant.2m": "2 分钟",
   "terminal.settings.dormant.10m": "10 分钟",
+  "terminal.settings.eco": "节能休眠",
+  "terminal.settings.ecoHint":
+    "空闲的 Agent 会话结束进程、释放内存，点开节点时接回原来的对话。",
+  "terminal.settings.ecoIdle": "空闲多久后休眠",
+  "terminal.settings.ecoIdle.15m": "15 分钟",
+  "terminal.settings.ecoIdle.30m": "30 分钟",
+  "terminal.settings.ecoIdle.1h": "1 小时",
+  "terminal.settings.ecoIdle.2h": "2 小时",
+  "terminal.settings.ecoIdle.4h": "4 小时",
   "terminal.copy": "复制",
   "terminal.paste": "粘贴",
   "terminal.cursor.block": "方块",
@@ -73,6 +89,12 @@ const en: Record<keyof typeof zh, string> = {
   "terminal.render.disconnected": "Disconnected",
   "terminal.render.detached": "Detached",
 
+  "terminal.hibernation.label": "Hibernated",
+  "terminal.hibernation.resuming": "Waking",
+  "terminal.hibernation.failed": "Wake failed",
+  "terminal.hibernation.wake": "Wake",
+  "terminal.hibernation.wakeFailed": "Could not wake this session",
+
   "terminal.settings.font": "Font",
   "terminal.settings.fontSize": "Font size",
   "terminal.settings.lineHeight": "Line height",
@@ -91,6 +113,15 @@ const en: Record<keyof typeof zh, string> = {
   "terminal.settings.dormant.30s": "30 seconds",
   "terminal.settings.dormant.2m": "2 minutes",
   "terminal.settings.dormant.10m": "10 minutes",
+  "terminal.settings.eco": "Energy-saving hibernation",
+  "terminal.settings.ecoHint":
+    "Idle agent sessions end their process to free memory; opening the node resumes the same conversation.",
+  "terminal.settings.ecoIdle": "Hibernate after",
+  "terminal.settings.ecoIdle.15m": "15 minutes",
+  "terminal.settings.ecoIdle.30m": "30 minutes",
+  "terminal.settings.ecoIdle.1h": "1 hour",
+  "terminal.settings.ecoIdle.2h": "2 hours",
+  "terminal.settings.ecoIdle.4h": "4 hours",
   "terminal.copy": "Copy",
   "terminal.paste": "Paste",
   "terminal.cursor.block": "Block",

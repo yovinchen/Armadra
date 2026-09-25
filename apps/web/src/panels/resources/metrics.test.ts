@@ -205,6 +205,21 @@ describe("已经不在的会话", () => {
     expect(rows.map((row) => row.sessionId)).toEqual(["live"]);
   });
 
+  it("节能休眠的会话照列：进程不在，但点一下就接回来，数字恒空", () => {
+    const rows = liveSessions([
+      session({
+        sessionId: "asleep",
+        alive: false,
+        memoryBytes: null,
+        cpuPercent: null,
+        unknownReason: "hibernated",
+      }),
+      session({ sessionId: "ended", alive: false, unknownReason: "exited" }),
+    ]);
+    expect(rows.map((row) => row.sessionId)).toEqual(["asleep"]);
+    expect(unknownReasonKey("hibernated")).toBe("resources.unknown.hibernated");
+  });
+
   it("远端、没有 pid 和刚起来的会话都留着——它们还在，只是测不到", () => {
     const rows = liveSessions([
       session({

@@ -8,7 +8,9 @@ export type TerminalConnection =
   | "live"
   | "detached"
   | "exited"
-  | "failed";
+  | "failed"
+  /** 节能休眠：进程已经结束、恢复信息留着，等人点一下接回来（宿主设计 §7.2）。 */
+  | "hibernated";
 
 export interface TerminalSurfaceStatus {
   connection: TerminalConnection;
@@ -16,6 +18,11 @@ export interface TerminalSurfaceStatus {
   error: string | null;
   /** Actual PTY identity from the current transport hello; never provider IDs. */
   binding?: { sessionId: string; generation: number } | null;
+  /**
+   * `connection === "hibernated"` 时的细分：睡着、正在接回、没接回来。醒着时
+   * 缺席或为 `null`。
+   */
+  hibernation?: "hibernated" | "resuming" | "failed" | null;
   /**
    * 视图状态（终端宿主设计 §7.1）。与 `connection` 正交：它只说这个终端此刻
    * 以什么强度渲染，进程的死活仍然只看 `connection`。

@@ -67,6 +67,14 @@ export const terminalsApi = {
     request(`/api/terminals/${sessionId}/recycle`, terminalSessionSchema, {
       method: "POST",
     }),
+  /**
+   * 唤醒一个节能休眠的会话（终端宿主设计 §7.2）：core 在同一个会话 id 上起下
+   * 一代，敲 CLI 自己的恢复行。已经醒着就答它现在的样子。
+   */
+  wakeTerminal: (sessionId: string) =>
+    request(`/api/terminals/${sessionId}/wake`, terminalSessionSchema, {
+      method: "POST",
+    }),
   terminalBackend: () =>
     request("/api/terminals/backend", terminalBackendInfoSchema),
 

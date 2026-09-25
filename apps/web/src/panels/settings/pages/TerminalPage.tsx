@@ -47,6 +47,18 @@ const DORMANT_CHOICES = [
 ] as const;
 
 /**
+ * 节能休眠的阈值（宿主设计 §7.2）。以分钟计、从 15 分钟起：这一条会结束进程，
+ * 比上面只放慢投递的那条重得多，秒级的档位只会让人刚切走就丢了现场。
+ */
+const ECO_IDLE_CHOICES = [
+  { minutes: 15, key: "terminal.settings.ecoIdle.15m" },
+  { minutes: 30, key: "terminal.settings.ecoIdle.30m" },
+  { minutes: 60, key: "terminal.settings.ecoIdle.1h" },
+  { minutes: 120, key: "terminal.settings.ecoIdle.2h" },
+  { minutes: 240, key: "terminal.settings.ecoIdle.4h" },
+] as const;
+
+/**
  * 防休眠策略（T02，终端宿主设计 §9）。
  *
  * 默认是 `manual`：不经用户明确要求，没有任何东西可以让这台机器不睡。
@@ -149,6 +161,41 @@ export function TerminalPage() {
             <SelectContent className="z-[var(--z-dialog)]">
               {DORMANT_CHOICES.map((choice) => (
                 <SelectItem key={choice.seconds} value={String(choice.seconds)}>
+                  {t(choice.key)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+
+        <SettingsRow
+          label={t("terminal.settings.eco")}
+          footnote={t("terminal.settings.ecoHint")}
+        >
+          <Switch
+            checked={runtimeTerminal?.ecoMode ?? true}
+            disabled={!settings.data}
+            aria-label={t("terminal.settings.eco")}
+            onCheckedChange={(checked) =>
+              save.mutate({ terminal: { ecoMode: checked } })
+            }
+          />
+        </SettingsRow>
+
+        <SettingsRow label={t("terminal.settings.ecoIdle")}>
+          <Select
+            value={String(runtimeTerminal?.ecoIdleMinutes ?? 30)}
+            disabled={!settings.data || runtimeTerminal?.ecoMode === false}
+            onValueChange={(value) =>
+              save.mutate({ terminal: { ecoIdleMinutes: Number(value) } })
+            }
+          >
+            <SelectTrigger size="sm" className={CONTROL_WIDTH}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="z-[var(--z-dialog)]">
+              {ECO_IDLE_CHOICES.map((choice) => (
+                <SelectItem key={choice.minutes} value={String(choice.minutes)}>
                   {t(choice.key)}
                 </SelectItem>
               ))}

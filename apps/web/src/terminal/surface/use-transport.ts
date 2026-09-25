@@ -17,6 +17,8 @@ export function useTerminalTransport(
     nodeId: string;
     sessionId: string | undefined;
     detached: boolean;
+    /** 节能休眠：进程不在，连上去只会拿到一个「已退出」。 */
+    hibernated: boolean;
     attempt: number;
     setAttempt: React.Dispatch<React.SetStateAction<number>>;
     patch: (next: Partial<ConnectionStatus>) => void;
@@ -31,6 +33,7 @@ export function useTerminalTransport(
     nodeId,
     sessionId,
     detached,
+    hibernated,
     attempt,
     setAttempt,
     patch,
@@ -42,7 +45,7 @@ export function useTerminalTransport(
   } = options;
 
   React.useEffect(() => {
-    if (!sessionId || detached) return;
+    if (!sessionId || detached || hibernated) return;
     const terminal = refs.terminalRef.current;
     if (!terminal) return;
 
@@ -159,7 +162,12 @@ export function useTerminalTransport(
           const connection = refs.statusRef.current.connection;
           // 进程已退出/失败时的关闭是正常收尾；其余情况（Runtime 重启、网络抖动）
           // 都按意外断线处理：标记 detached 并按退避自动重连，重连会先清屏再 attach。
-          if (connection === "exited" || connection === "failed") return;
+          if (
+            connection === "exited" ||
+            connection === "failed" ||
+            connection === "hibernated"
+          )
+            return;
           patch({ connection: "detached", binding: null });
           const delay = refs.reconnectDelayRef.current;
           refs.reconnectDelayRef.current = Math.min(delay * 2, 10_000);
@@ -192,6 +200,7 @@ export function useTerminalTransport(
     nodeId,
     sessionId,
     detached,
+    hibernated,
     attempt,
     setAttempt,
     patch,

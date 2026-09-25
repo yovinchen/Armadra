@@ -24,6 +24,20 @@ function inputs(patch: Partial<RenderInputs> = {}): RenderInputs {
 }
 
 describe("resolveRenderState", () => {
+  it("节能休眠压过一切：进程不在，谈不上渲染强度，也不是掉线", () => {
+    for (const patch of [
+      {},
+      { detached: true },
+      { focused: true },
+      { collapsed: true },
+    ]) {
+      expect(
+        resolveRenderState(inputs({ connection: "hibernated", ...patch })),
+      ).toBe("hibernated");
+    }
+    expect(rendersActively("hibernated")).toBe(false);
+  });
+
   it("有焦点且看得见时是 focused", () => {
     expect(resolveRenderState(inputs({ focused: true }))).toBe("focused");
   });

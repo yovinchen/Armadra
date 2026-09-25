@@ -20,7 +20,13 @@ export type TerminalRenderState =
   | "visible"
   | "offscreen"
   | "detached"
-  | "disconnected";
+  | "disconnected"
+  /**
+   * 节能休眠（终端宿主设计 §7.2）：与上面五个都不同，这一档**进程真的不在了**
+   * ——core 结束了它来还内存，恢复信息留在库里。不连 socket、不渲染，点一下
+   * 或聚焦时用 CLI 的 resume 接回来。
+   */
+  | "hibernated";
 
 export interface RenderInputs {
   /** WebSocket 状态机的当前状态。 */
@@ -42,6 +48,8 @@ export interface RenderInputs {
 /**
  * 输入 → 视图状态。优先级从上往下，第一条命中即返回：
  *
+ * 0. `hibernated`——节能休眠，见类型上的说明。
+ *
  * 1. `detached`——**我们自己**关的 socket。进程还在跑，执行端保留着 VT/tmux
  *    状态，重新可见时会走「reset → attach → 快照/重绘」那条路。这不是错误。
  * 2. `disconnected`——socket **意外**没了：`connection === "detached"`（退避重连
@@ -55,6 +63,8 @@ export interface RenderInputs {
  * 5. 其余都是 `offscreen`。
  */
 export function resolveRenderState(inputs: RenderInputs): TerminalRenderState {
+  // 0. 休眠压过一切：没有进程，就谈不上渲染强度，也谈不上掉线。
+  if (inputs.connection === "hibernated") return "hibernated";
   if (inputs.detached) return "detached";
   if (inputs.connection === "detached" || inputs.connection === "failed") {
     return "disconnected";
