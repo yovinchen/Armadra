@@ -2,6 +2,11 @@ import type { DatabaseSync } from "node:sqlite";
 import type { CoreContext } from "../main";
 import type { CoreRequest, HandlerResult, RouteMatch } from "../http/router";
 import { createRootDirectory, directorySource } from "./directory";
+import {
+  openRemoteWorkspace,
+  switchExecutionHost,
+  switchRequestOf,
+} from "./execution";
 import { canonicalDirectory } from "./roots";
 import {
   DomainError,
@@ -214,47 +219,42 @@ export function install(context: CoreContext): void {
     })),
   );
 
-  // The two execution-host routes need an SSH Worker to prove the remote root
-  // before a row may name it, and that subsystem is R5's. Validating the
-  // request and then refusing with `unsupported` is the honest answer: it is
-  // the same 501 the Rust Runtime gives when a host cannot do something at
-  // all, and it is what the settings page already degrades on. A silent local
-  // fallback — a "remote" workspace reading this machine's files — is the one
-  // outcome that must not happen.
+  // Both execution-host routes prove the root on the machine that will hold
+  // it — through that host's Worker, or this process for an empty id — before
+  // a row may name it. A host that cannot be reached fails the request; it
+  // never becomes a "remote" workspace reading this machine's files.
   server.router.handle(
     "POST",
     "/api/workspaces/remote",
-    answered((_match, request) => {
+    answered(async (_match, request) => {
       const body = jsonObject(request.body);
-      validWorkspaceName(requiredRootName(body));
-      const rootPath = requiredRootPath(body);
-      if (!rootPath.startsWith("/") || rootPath.length > 4_096) {
-        throw badRequest(
-          "A remote workspace root must be an absolute path on the execution host",
-        );
-      }
-      throw unsupported("执行主机（R5）");
+      return {
+        status: 200,
+        body: await openRemoteWorkspace(context, {
+          name: validWorkspaceName(requiredRootName(body)),
+          executionHostId: optionalString(body, "executionHostId"),
+          rootPath: requiredRootPath(body),
+          permissions: permissionsOf(body),
+        }),
+      };
     }),
   );
   server.router.handle(
     "PATCH",
     "/api/workspaces/{workspaceId}/execution-host",
-    answered((match) => {
-      const workspace = getWorkspace(database, workspaceId(match));
-      if (!workspace.permissions.read) {
-        throw new DomainError(
-          403,
-          "forbidden",
-          "This workspace is not readable",
-        );
-      }
-      throw unsupported("执行主机（R5）");
+    answered(async (match, request) => {
+      const outcome = await switchExecutionHost(
+        context,
+        workspaceId(match),
+        switchRequestOf(jsonObject(request.body)),
+      );
+      // A refusal is structured rather than `{ code, message }` alone: a person
+      // can only act on *which* directories differ or *what* is still open.
+      return outcome.kind === "refused"
+        ? { status: 409, body: outcome.refusal }
+        : { status: 200, body: outcome.workspace };
     }),
   );
-}
-
-function unsupported(feature: string): DomainError {
-  return new DomainError(501, "unsupported", feature);
 }
 
 export function workspaceId(match: RouteMatch): string {

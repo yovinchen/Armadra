@@ -254,7 +254,7 @@ describe("the workspace routes", () => {
     expect(twice.body).toMatchObject({ code: "not_found" });
   });
 
-  it("refuses an execution-host route rather than falling back to this machine", async () => {
+  it("refuses a remote workspace when no remote execution is assembled, rather than falling back to this machine", async () => {
     const remote = await core.call("POST", "/api/workspaces/remote", {
       name: "remote",
       executionHostId: "host",
