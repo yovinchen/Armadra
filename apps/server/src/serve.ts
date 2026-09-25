@@ -5,13 +5,22 @@ import type { Duplex } from "node:stream";
 import { allowOrigins } from "../../desktop/src/core/http/cors";
 import { DOMAINS, type RunningCore, run } from "../../desktop/src/core/main";
 import { identityInstanceId } from "../../desktop/src/core/identity";
-import { IdentityService } from "../../desktop/src/core/identity/service";
+import { AccountsService } from "../../desktop/src/core/identity/accounts";
+import type { AuthorizationSubject } from "../../desktop/src/core/identity/authorize";
+import {
+  type RequestIdentity,
+  runAs,
+} from "../../desktop/src/core/identity/gate";
+import {
+  IdentityService,
+  type Principal,
+} from "../../desktop/src/core/identity/service";
 import { IdentityStore } from "../../desktop/src/core/identity/store";
 import { canonicalOrigin } from "../../desktop/src/core/identity/origin";
 import { allScopes } from "../../desktop/src/core/identity/scopes";
 import type { CoreLog } from "../../desktop/src/core/platform";
 import { type ListenAddress, loopbackHost } from "./cli";
-import { type Refusal, gate } from "./auth";
+import { type Admission, type Refusal, admit } from "./auth";
 import { serverPlatform } from "./platform-node";
 import { type TlsMaterial, resolveTls } from "./tls";
 import {
@@ -67,6 +76,17 @@ export interface RunningServer {
   readonly pairingTicket: string | undefined;
   /** 再铸一张，用于 SIGUSR2 与测试。 */
   pair(): { ticket: string; url: string; expiresAtMs: number };
+  /** 这台服务器有没有管理员（owner）了。没有时第一张配对票兑换出来的就是它。 */
+  hasAdmin(): boolean;
+  /**
+   * 以管理员的名义签一张邀请，给运维在命令行上发链接用；页面上签的是同一种。
+   * 链接落在页面根上的片段里（{@link invitationUrl}）。
+   */
+  invite(input: {
+    role: string;
+    targetGroupId?: string;
+    targetWorkspaceId?: string;
+  }): { invitationId: string; url: string; expiresAtMs: number };
   stop(): Promise<void>;
 }
 
@@ -85,6 +105,17 @@ export function originsFor(
   const all = [...publicOrigins];
   if (own !== undefined) all.push(own);
   return [...new Set(all)];
+}
+
+/**
+ * 邀请兑换页的入口：页面根上的 `#invite=<令牌>`。
+ *
+ * 和配对票同一条理由放在片段里：片段不上请求行，于是令牌不进任何访问日志，
+ * 也不进 `Referer`。页面读到它就打开兑换对话框（起名、设口令），兑换走的是
+ * `POST /api/identity/register`——身份域自己的匿名面，门在 `auth.ts` 里放行。
+ */
+export function invitationUrl(origin: string, token: string): string {
+  return `${origin}/#invite=${token}`;
 }
 
 /** 自签名证书要覆盖的名字。 */
@@ -140,11 +171,11 @@ export async function serve(options: ServeOptions): Promise<RunningServer> {
     );
   }
 
-  const service = new IdentityService(
-    new IdentityStore(core.db.database),
-    identityInstanceId(),
-  );
+  const store = new IdentityStore(core.db.database);
+  const service = new IdentityService(store, identityInstanceId());
+  const accounts = new AccountsService({ store });
   const hostId = service.hostId();
+  const hasAdmin = () => store.transaction((tx) => tx.owner() !== undefined);
 
   let tls: TlsMaterial;
   let https: Server;
@@ -174,7 +205,7 @@ export async function serve(options: ServeOptions): Promise<RunningServer> {
       });
     });
     https.on("upgrade", (request, socket, head) => {
-      const refusal = gate(
+      const admission = admit(
         {
           method: request.method ?? "GET",
           path: pathOf(request),
@@ -183,6 +214,7 @@ export async function serve(options: ServeOptions): Promise<RunningServer> {
         },
         context,
       );
+      const refusal = admission.refusal;
       if (refusal !== undefined) {
         socket.write(
           `HTTP/1.1 ${refusal.status} ${refusal.body.code}\r\nConnection: close\r\n\r\n`,
@@ -190,7 +222,10 @@ export async function serve(options: ServeOptions): Promise<RunningServer> {
         socket.destroy();
         return;
       }
-      delegate.emit("upgrade", request, socket as Duplex, head);
+      // 升级在这个人的身份下进行：事件流的订阅判定与之后的复核都认它。
+      runAs(requestIdentityOf(admission, context), () =>
+        delegate.emit("upgrade", request, socket as Duplex, head),
+      );
     });
   } catch (error) {
     await core.stop();
@@ -215,12 +250,37 @@ export async function serve(options: ServeOptions): Promise<RunningServer> {
     };
   };
 
+  const invite = (input: {
+    role: string;
+    targetGroupId?: string;
+    targetWorkspaceId?: string;
+  }): { invitationId: string; url: string; expiresAtMs: number } => {
+    const owner = store.transaction((tx) => tx.owner());
+    if (owner === undefined) {
+      throw new Error("还没有管理员：先用配对链接成为第一个管理员");
+    }
+    const issued = accounts.issueInvitation(
+      { principalId: owner.principalId, kind: "owner", scopes: allScopes() },
+      input,
+    );
+    return {
+      invitationId: issued.invitationId,
+      url: invitationUrl(origin, issued.token),
+      expiresAtMs: issued.expiresAtMs,
+    };
+  };
+
   log.info("Armadra 服务器壳已就绪", {
     origin,
     tls: tls.selfSigned ? "自签名" : tls.certFile,
     webRoot: webRoot.directory,
   });
   let pairingTicket: string | undefined;
+  if (!hasAdmin()) {
+    // 首个管理员：服务器上还没有 owner 时，第一张被兑换的配对票就铸出它，此后
+    // 它在「设置 → 账号与共享」里管理成员、组与共享。
+    log.info("这台服务器还没有管理员：打开下面的配对链接成为第一个管理员");
+  }
   if (options.pairing) {
     const issued = pair();
     pairingTicket = issued.ticket;
@@ -237,6 +297,8 @@ export async function serve(options: ServeOptions): Promise<RunningServer> {
     hostId,
     pairingTicket,
     pair,
+    hasAdmin,
+    invite,
     stop: async () => {
       await new Promise<void>((done) => {
         https.close(() => done());
@@ -269,16 +331,19 @@ async function handle(
 ): Promise<void> {
   const path = pathOf(request);
   const method = (request.method ?? "GET").toUpperCase();
-  const refusal = gate(
+  const admission = admit(
     { method, path, headers: request.headers },
     options.context,
   );
-  if (refusal !== undefined) {
-    refuse(response, refusal);
+  if (admission.refusal !== undefined) {
+    refuse(response, admission.refusal);
     return;
   }
   if (path === "/health" || path === "/api" || path.startsWith("/api/")) {
-    options.delegate.emit("request", request, response);
+    // core 里的路由门与各域的判定按这个身份判（`core/identity/gate.ts`）。
+    runAs(requestIdentityOf(admission, options.context), () =>
+      options.delegate.emit("request", request, response),
+    );
     return;
   }
   if (method !== "GET" && method !== "HEAD") {
@@ -299,6 +364,52 @@ async function handle(
     });
     response.writeHead(500, staticHeaders()).end();
   }
+}
+
+/**
+ * 匿名面上的请求身份：一个什么授权都没有的成员。
+ *
+ * 不留空（留空 core 会当成本机 owner）：身份域自己的登录面不经路由门，而除它
+ * 以外任何一处判定问到这个身份，答案都该是「不行」。
+ */
+const ANONYMOUS: RequestIdentity = {
+  subject: { principalId: "", kind: "member", scopes: [] },
+};
+
+function subjectOf(principal: Principal): AuthorizationSubject {
+  return {
+    principalId: principal.principalId,
+    kind: principal.role === "member" ? "member" : "owner",
+    scopes: principal.scopes,
+  };
+}
+
+function requestIdentityOf(
+  admission: Admission,
+  context: HandleContext["context"],
+): RequestIdentity {
+  const principal = admission.principal;
+  if (principal === undefined) return ANONYMOUS;
+  const accessToken = admission.accessToken ?? "";
+  const origin = admission.origin ?? "";
+  return {
+    subject: subjectOf(principal),
+    // 长连接的复核：会话还在就给出当前主体。访问密钥过期（页面会刷新出一把
+    // 新的）也算失效——被关掉的 socket 由页面带着新 Cookie 重连，门在升级前。
+    revalidate: () => {
+      try {
+        return subjectOf(
+          context.service.authenticate({
+            accessToken,
+            hostId: context.hostId,
+            origin,
+          }),
+        );
+      } catch {
+        return undefined;
+      }
+    },
+  };
 }
 
 function refuse(response: ServerResponse, refusal: Refusal): void {

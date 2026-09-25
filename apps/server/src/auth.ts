@@ -1,7 +1,10 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { cookieName } from "../../desktop/src/core/identity/http";
 import { canonicalOrigin } from "../../desktop/src/core/identity/origin";
-import type { IdentityService } from "../../desktop/src/core/identity/service";
+import type {
+  IdentityService,
+  Principal,
+} from "../../desktop/src/core/identity/service";
 import { IdentityError } from "../../desktop/src/core/identity/errors";
 
 /**
@@ -125,6 +128,60 @@ export function gate(
   input: GateInput,
   context: GateContext,
 ): Refusal | undefined {
+  return admit(input, context).refusal;
+}
+
+/**
+ * 放行时一并交出这次请求是谁。
+ *
+ * `principal` 与 `accessToken` 只在要求会话的那几条路径上有；匿名面（健康检查、
+ * 身份域自己的登录面、静态产物）两者都没有。壳拿它们把请求放进 core 的
+ * 请求身份里（`runAs`），core 里的路由门与事件流就按这个人判。
+ */
+export interface Admission {
+  readonly refusal?: Refusal;
+  readonly principal?: Principal;
+  readonly accessToken?: string;
+  readonly origin?: string;
+}
+
+export function admit(input: GateInput, context: GateContext): Admission {
+  const refusal = screen(input, context);
+  if (refusal !== undefined) return { refusal };
+  const isApi = input.path === "/api" || input.path.startsWith("/api/");
+  if (!isApi || anonymousPath(input.path)) return {};
+  const origin = canonicalOrigin(
+    singleHeader(input.headers, "origin") as string,
+  ) as string;
+  const accessToken = cookieValue(
+    input.headers,
+    accessCookieName(context.hostId),
+  );
+  const requireCsrf = input.upgrade !== true && !safeMethod(input.method);
+  try {
+    const principal = context.service.authenticate({
+      accessToken,
+      hostId: context.hostId,
+      origin,
+      requireCsrf,
+      csrfToken: singleHeader(input.headers, "x-armadra-csrf") ?? "",
+    });
+    return { principal, accessToken, origin };
+  } catch (error) {
+    if (error instanceof IdentityError && error.kind === "permission") {
+      return {
+        refusal: {
+          status: 403,
+          body: { code: "forbidden", message: "CSRF 校验未通过" },
+        },
+      };
+    }
+    return { refusal: UNAUTHENTICATED };
+  }
+}
+
+/** 会话之前的三道：面、Origin、`Sec-Fetch-Site`，外加「有没有会话凭据」。 */
+function screen(input: GateInput, context: GateContext): Refusal | undefined {
   if (loopbackOnlyPath(input.path)) {
     return {
       status: 404,
@@ -153,23 +210,5 @@ export function gate(
     accessCookieName(context.hostId),
   );
   if (accessToken === "" || origin === undefined) return UNAUTHENTICATED;
-  const requireCsrf = input.upgrade !== true && !safeMethod(input.method);
-  try {
-    context.service.authenticate({
-      accessToken,
-      hostId: context.hostId,
-      origin: canonicalOrigin(origin) as string,
-      requireCsrf,
-      csrfToken: singleHeader(input.headers, "x-armadra-csrf") ?? "",
-    });
-  } catch (error) {
-    if (error instanceof IdentityError && error.kind === "permission") {
-      return {
-        status: 403,
-        body: { code: "forbidden", message: "CSRF 校验未通过" },
-      };
-    }
-    return UNAUTHENTICATED;
-  }
   return undefined;
 }
