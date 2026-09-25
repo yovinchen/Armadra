@@ -88,3 +88,29 @@ node tools/probes/core-terminal-packaged.mjs              # 打包版，从页�
 - **packaged**：需要先 `pnpm --filter @armadra/desktop dist`（本机没有 `CSC_LINK` 时 `dist.mjs` 自动跳过签名与公证）。按访达的方式启动：`PATH` 只给 launchd 那条（`/usr/bin:/bin:/usr/sbin:/sbin`），数据目录用 `ARMADRA_DATA_DIR`、Chromium profile 用 `--user-data-dir` 都指到临时目录，不碰操作员的 `~/Library/Application Support/Armadra`。本机装了 tmux（Homebrew 等常见位置）时，会话必须是 `tmux` 后端，资源采样（`GET …/resources`）也必须给出这个会话的 pid——两处各自找 tmux，都得用补过的 PATH。调试端口是运行时选的空闲端口，不是固定值：机器上另一个 Electron 占着固定端口时，探针会连上别人的渲染进程，失败起来和打包出错一模一样。
 
 三个脚本都用 `mktemp` 的数据目录与各自私有的 tmux socket，跑完 `kill-server` 并删掉目录；不碰操作者自己的数据目录或 tmux server。
+
+## 本轮界面功能的端到端验证
+
+真 core（`apps/desktop/out/core/main.js`）、真 Vite 页面、新 profile 的无头 Chrome，经浏览器级 CDP 连接驱动；多设备场景用两个独立的 browser context 当两台设备。场景拆在 `ui-features/` 里，共用一套临时环境（`harness.mjs`），媒体夹具与截图像素统计在 `fixtures.mjs`。
+
+```sh
+pnpm libs:build
+pnpm --filter @armadra/desktop build
+node tools/probes/ui-features-e2e.mjs [输出目录] [--only=presence,editor,fileTree,search,keybindings,integration,resources]
+```
+
+产物默认在 `target/ui-features-e2e/`：`result.json`（每个场景的检查项、实测数字、截图路径与控制台错误）与截图；窄屏 390×844 的截图以 `mobile-` 开头，场景失败时每个截过图的页面补一张 `failure-<场景>-N.png`。每个场景都收集 `Runtime.consoleAPICalled` 的 error 与 `Runtime.exceptionThrown`，有未预期的就算失败。
+
+验证什么：
+
+- **presence**（多设备画布）：单页面不出设备条且自动拿租约；第二台只读、显示「X 正在编辑」、拖不动；第一台一笔保存被 CDP 拦下的改动在第二台二次确认接管后被丢掉并按远端重载；关掉持有者页面后租约释放。
+- **editor**：PNG（透明、棋盘格像素统计、滚轮缩放）、PDF（截图里查看器区域不是空白）、MP4 / MP3（原生控件、元数据）；草稿刷新后恢复；草稿期间磁盘改同一文件出现三方合并；Git 行边的修改标记；快速打开的最近文件与 `文件:行:列`。MP4 由同一个 Chrome 的 MediaRecorder 录 canvas 得到，MP3 是合法的静音帧，PDF 手写对象表，都不依赖外部工具。
+- **fileTree**：右键「复制路径 / 复制相对路径」写进剪贴板的内容（授予 context 剪贴板权限后读回），浏览器里没有「在访达中显示」。
+- **search**：先直接问 core 量一次整轮扫描（约 3.6 万个文件），再在页面上中途换关键词、点「停止」；core 的 debug 日志「文件搜索随连接断开中止」带着 `visited`，断言它明显小于整轮文件数。
+- **keybindings**：设为无、追加第二组键、`when` 的语法错与未知键提示且不能保存；回到画布用真实键盘事件确认改动生效，最后全部重置。
+- **integration**：临时 HOME 的 `.claude/settings.json` 里 11 条相同的旧 Hook；行布局、「旧残留 11」弹层在设置对话框之上、同一命令合并为 ×11；「修复」只清残留、保留用户自己的命令并留备份。
+- **resources**：`ARMADRA_REMOTE_WORKER_LAUNCHER` 指向探针写的替身 ssh，远端命令是本仓库的 `main.js worker --stdio`，所以「构建机」的总览是 Worker 真读出来的；主机筛选（全部 / 本机 / 构建机）；休眠会话在节点与面板上的显示；`ARMADRA_STATUS_PAGE_BASE` 指向本机 fixture 时用量卡的状态徽标。
+
+没验证什么：休眠的**判据与接回**（休眠状态是经 API 结束会话后在数据库里把结束原因置成 `hibernate`，与 `Manager.hibernate` 写的同形；真正走到休眠要一个空闲 5 分钟以上的 Agent CLI）；真实 SSH 与另一台机器；打包应用里的 PDF 查看器与视频解码（这里是无头 Chrome）；触屏手势（窄屏只按视口宽度截图）。
+
+一切都是临时的、回环的：随机端口（不用 1420 / 1421 / 43120-43125）、`mktemp` 的数据目录、HOME、`CLAUDE_CONFIG_DIR` / `CODEX_HOME`、替身脚本与浏览器 profile，结束时全部删除并停掉自己起的 tmux 服务器；不读写操作员自己的数据目录与 CLI 配置，不联网。
