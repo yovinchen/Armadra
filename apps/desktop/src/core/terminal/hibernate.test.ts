@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ECO_IDLE_MINUTES,
   type HibernationFacts,
+  TEST_ECO_IDLE_ENV,
+  TEST_HIBERNATE_INTERVAL_MS,
   ecoPolicy,
+  ecoTestOverride,
   hasBackgroundWork,
   hibernationBlockers,
   isShell,
@@ -104,6 +107,19 @@ describe("ecoPolicy", () => {
     expect(ecoPolicy((path) => settings[path]).idleMinutes).toBe(
       DEFAULT_ECO_IDLE_MINUTES,
     );
+  });
+});
+
+describe("ecoTestOverride", () => {
+  it("只认 1–600 的整数秒，给出分钟阈值与两秒一轮的巡检", () => {
+    expect(ecoTestOverride({ [TEST_ECO_IDLE_ENV]: "30" })).toEqual({
+      idleMinutes: 0.5,
+      intervalMs: TEST_HIBERNATE_INTERVAL_MS,
+    });
+    expect(ecoTestOverride({})).toBeUndefined();
+    for (const bad of ["0", "601", "1.5", "-3", "abc", ""]) {
+      expect(ecoTestOverride({ [TEST_ECO_IDLE_ENV]: bad })).toBeUndefined();
+    }
   });
 });
 

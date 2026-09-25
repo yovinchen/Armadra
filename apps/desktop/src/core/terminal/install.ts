@@ -20,6 +20,7 @@ import { parseCustomAgents } from "../settings/custom-agents";
 import {
   HIBERNATE_INTERVAL_MS,
   ecoPolicy,
+  ecoTestOverride,
   hibernatedSession,
   setHibernationWaker,
 } from "./hibernate";
@@ -279,6 +280,8 @@ export function install(
   /* ------------------------------ Eco 休眠 -------------------------------- */
 
   // 终端宿主设计 §7.2。设置每次现读：开关与阈值改了下一轮巡检就生效。
+  // 探针的秒级阈值（`hibernate.ts::ecoTestOverride`）：开关仍听设置的。
+  const ecoOverride = ecoTestOverride();
   const agentSettings = () =>
     collab()?.settings ?? {
       customAgents: () =>
@@ -288,8 +291,14 @@ export function install(
     database: context.db.database,
     manager,
     settings: agentSettings,
-    policy: () =>
-      ecoPolicy((path) => settingsDomain()?.settings.get(path) ?? undefined),
+    policy: () => {
+      const policy = ecoPolicy(
+        (path) => settingsDomain()?.settings.get(path) ?? undefined,
+      );
+      return ecoOverride === undefined
+        ? policy
+        : { ...policy, idleMinutes: ecoOverride.idleMinutes };
+    },
     environment: (nodeId, agentId) => ownedEnvironment(nodeId, agentId),
     // 与依赖编排拼启动行时同一个来源：本机解析到的程序路径，与集成要求的
     // argv（Claude 的 `--settings <文件>`，少了它 hook 不上报）。
@@ -317,7 +326,7 @@ export function install(
       .catch((failure: unknown) => {
         context.log.warn("Eco 休眠巡检失败", { error: describe(failure) });
       });
-  }, HIBERNATE_INTERVAL_MS);
+  }, ecoOverride?.intervalMs ?? HIBERNATE_INTERVAL_MS);
   hibernateTimer.unref?.();
 
   route("POST", "/api/terminals", async (_params, request) => {

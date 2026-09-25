@@ -75,6 +75,39 @@ export function ecoPolicy(read: (path: string) => unknown): EcoPolicy {
 }
 
 /**
+ * 仅供端到端探针：把阈值压到秒级、巡检缩到两秒（`tools/probes/agent-e2e.mjs`）。
+ *
+ * 为什么不放宽设置的下限：5 分钟是给人的下限，设置页、schema 与同步到别的设备
+ * 的那份文档都按它校验，放宽等于让用户也能设成几秒，而几秒的休眠会把刚停下来
+ * 等人看结果的 CLI 杀掉。探针要的只是「别让一个场景等 6 分钟」，所以做成一个
+ * 带 TEST 字样、只有启动 core 的进程能给的环境变量：不进设置、不进界面，
+ * 打包版里没有人会设它。
+ */
+export const TEST_ECO_IDLE_ENV = "ARMADRA_TEST_ECO_IDLE_SECONDS";
+
+/** 覆盖生效时的巡检间隔。 */
+export const TEST_HIBERNATE_INTERVAL_MS = 2_000;
+
+export interface EcoTestOverride {
+  readonly idleMinutes: number;
+  readonly intervalMs: number;
+}
+
+/** 1–600 秒的整数才算数；别的值一律当没设，照常按设置走。 */
+export function ecoTestOverride(
+  env: NodeJS.ProcessEnv = process.env,
+): EcoTestOverride | undefined {
+  const raw = env[TEST_ECO_IDLE_ENV];
+  if (raw === undefined || !/^\d+$/.test(raw.trim())) return undefined;
+  const seconds = Number(raw.trim());
+  if (seconds < 1 || seconds > 600) return undefined;
+  return {
+    idleMinutes: seconds / 60,
+    intervalMs: TEST_HIBERNATE_INTERVAL_MS,
+  };
+}
+
+/**
  * 不休眠的理由。一个会话可以同时有好几条，巡检只关心是不是空的；列全是为了
  * 用例与日志能说清楚「为什么这个没睡」。
  */
