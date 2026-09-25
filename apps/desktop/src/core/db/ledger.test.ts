@@ -1,5 +1,3 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -12,6 +10,7 @@ import {
   recordApplied,
 } from "./ledger";
 import { type Migration, loadMigrations } from "./migrations";
+import { tempDir } from "../testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrations = loadMigrations(resolve(here, "migrations"));
@@ -30,7 +29,7 @@ afterEach(() => {
 /** A database on disk, because `typeof()` and BLOB binding are the point. */
 function database(): DatabaseSync {
   const created = new DatabaseSync(
-    join(mkdtempSync(join(tmpdir(), "armadra-ledger-")), "canvas.db"),
+    join(tempDir("armadra-ledger-"), "canvas.db"),
   );
   open.push(created);
   return created;

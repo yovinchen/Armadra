@@ -1,5 +1,3 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,6 +11,7 @@ import {
 } from "./service";
 import { allScopes, scope } from "./scopes";
 import { IdentityStore } from "./store";
+import { tempDir } from "../testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, "../db/migrations");
@@ -32,7 +31,7 @@ afterEach(() => {
 });
 
 function fixture(start = 1_700_000_000_000) {
-  const directory = mkdtempSync(join(tmpdir(), "armadra-identity-"));
+  const directory = tempDir("armadra-identity-");
   const opened = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir,

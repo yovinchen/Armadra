@@ -1,11 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HOOK_CLIENT_REVISION } from "./events";
@@ -18,11 +11,12 @@ import {
   uninstallModule,
 } from "./extensions";
 import { isManagedCommand } from "./shared";
+import { tempDir } from "../../testing/temp-dir";
 
 const CLIENT = "/opt/armadra/armadra-hook";
 
 function home(kind: string): string {
-  return mkdtempSync(join(tmpdir(), `armadra-${kind}-`));
+  return tempDir(`armadra-${kind}-`);
 }
 
 describe("the opencode plugin", () => {

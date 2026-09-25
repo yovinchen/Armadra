@@ -1,6 +1,5 @@
 import { X509Certificate, createPrivateKey } from "node:crypto";
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 /**
@@ -18,9 +17,10 @@ import {
   resolveTls,
   selfSignedCertificate,
 } from "./tls";
+import { tempDir } from "../../desktop/src/core/testing/temp-dir";
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-tls-"));
+  return tempDir("armadra-tls-");
 }
 
 describe("DER 写入器", () => {

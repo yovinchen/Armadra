@@ -26,26 +26,31 @@ const page =
 const dataDir = mkdtempSync(join(tmpdir(), "armadra-live-browser-"));
 let backend: HeadlessBackend | undefined;
 
-afterAll(() => {
+afterAll(async () => {
   try {
     backend?.close();
   } catch {
     // A browser that already died has nothing left to close.
   }
-  // Chromium may still be flushing its profile when the pipe closes; a
-  // single-shot rm then meets ENOTEMPTY about one run in three. The retries
-  // cover the usual case, and the `catch` covers the rest: a profile
-  // directory left in `$TMPDIR` after the browser has already proven it
-  // paints a frame is the operating system's to sweep up, not a test result.
-  try {
-    rmSync(dataDir, {
-      recursive: true,
-      force: true,
-      maxRetries: 20,
-      retryDelay: 250,
-    });
-  } catch {
-    // Left for the OS.
+  // Chromium may still be flushing its profile when the pipe closes, and its
+  // helper processes outlive the pipe by a second or two: a single-shot rm
+  // then meets ENOTEMPTY, or removes a directory the helper recreates. Retry
+  // until the directory stays gone, for up to about fifteen seconds; after
+  // that, a profile directory left in `$TMPDIR` after the browser has already
+  // proven it paints a frame is the operating system's to sweep up, not a
+  // test result.
+  for (let attempt = 0; attempt < 30 && existsSync(dataDir); attempt += 1) {
+    try {
+      rmSync(dataDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 4,
+        retryDelay: 100,
+      });
+    } catch {
+      // Still being written; try again below.
+    }
+    await new Promise((done) => setTimeout(done, 500));
   }
 });
 

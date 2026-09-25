@@ -25,6 +25,9 @@ export default defineConfig({
     ],
     environment: "node",
     pool: "forks",
+    // Each file's `tempDir()` directories are removed after it (and any tmux
+    // server under them stopped).
+    setupFiles: ["src/core/testing/setup.ts"],
     // The Host and Runtime process tests wait on real timeouts.
     testTimeout: 60_000,
   },

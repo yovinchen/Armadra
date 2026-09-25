@@ -1,12 +1,12 @@
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { read } from "./endpoint";
 import { HookService } from "./service";
+import { tempDir } from "../testing/temp-dir";
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-hook-service-"));
+  return tempDir("armadra-hook-service-");
 }
 
 describe("the hook service", () => {

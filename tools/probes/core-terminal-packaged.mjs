@@ -275,7 +275,14 @@ async function main() {
     await delay(2000);
     first.kill("SIGKILL");
     await killTmux(join(dataDir, "tmux.sock"));
-    rmSync(dataDir, { recursive: true, force: true });
+    // A shell the core just killed may still hold the directory for a
+    // moment (and on Windows an open handle refuses the delete outright):
+    // retry, then leave it to the OS rather than turn a pass into a throw.
+    try {
+      rmSync(dataDir, { recursive: true, force: true, maxRetries: 20 });
+    } catch {
+      // Left for the OS.
+    }
   }
 
   console.log(JSON.stringify(outcome, null, 2));

@@ -1,5 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { COPILOT_HOOK_EVENTS, OMP_HOOK_EVENTS, PI_HOOK_EVENTS } from "./events";
@@ -13,6 +12,7 @@ import {
   readJsonObject,
   stripManagedHandlers,
 } from "./shared";
+import { tempDir } from "../../testing/temp-dir";
 
 const HOME = "/home/dev";
 const none: FromEnv = () => undefined;
@@ -115,7 +115,7 @@ describe("recognising and writing a managed command", () => {
   });
 
   it("never overwrites a corrupt config", () => {
-    const directory = mkdtempSync(join(tmpdir(), "armadra-install-"));
+    const directory = tempDir("armadra-install-");
     const path = join(directory, "settings.json");
     writeFileSync(path, "{ not json", "utf8");
     expect(() => readJsonObject(path)).toThrow(/not valid JSON/);

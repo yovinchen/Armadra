@@ -1,6 +1,5 @@
 import { createServer } from "node:http";
-import { mkdtempSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createServer as createSocketServer } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,6 +11,7 @@ import {
   release,
   tcpAuthority,
 } from "./listen";
+import { tempDir } from "./testing/temp-dir";
 
 const closing: (() => void)[] = [];
 
@@ -26,7 +26,7 @@ function server(): ReturnType<typeof createServer> {
 }
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-listen-"));
+  return tempDir("armadra-listen-");
 }
 
 describe("--listen spec parsing", () => {

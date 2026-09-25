@@ -1,10 +1,4 @@
-import {
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -22,9 +16,10 @@ import {
   workerSettingsFile,
   writeSecret,
 } from "./paths";
+import { tempDir } from "./testing/temp-dir";
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-paths-"));
+  return tempDir("armadra-paths-");
 }
 
 describe("the data directory", () => {

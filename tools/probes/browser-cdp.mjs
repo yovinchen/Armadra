@@ -294,8 +294,10 @@ try {
       await rm(profile, {
         recursive: true,
         force: true,
-        maxRetries: 4,
-        retryDelay: 200,
+        // Chromium's helpers outlive the main process by a moment and may
+        // still be flushing the profile.
+        maxRetries: 20,
+        retryDelay: 250,
       });
     } catch (error) {
       report.cleanupError = error.message;

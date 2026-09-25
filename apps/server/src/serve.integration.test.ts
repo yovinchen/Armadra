@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
-import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { serve } from "./serve";
+import { tempDir } from "../../desktop/src/core/testing/temp-dir";
 
 /**
  * 装配级用例：真起一次 `serve`。
@@ -80,9 +80,9 @@ function call(
 }
 
 beforeAll(async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), "armadra-server-"));
-  webRoot = mkdtempSync(join(tmpdir(), "armadra-web-"));
-  outside = mkdtempSync(join(tmpdir(), "armadra-outside-"));
+  const dataDir = tempDir("armadra-server-");
+  webRoot = tempDir("armadra-web-");
+  outside = tempDir("armadra-outside-");
   writeFileSync(join(outside, "secret.txt"), "不该被读到");
   writeFileSync(
     join(webRoot, "index.html"),

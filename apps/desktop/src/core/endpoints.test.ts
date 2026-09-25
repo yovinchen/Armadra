@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,9 +12,10 @@ import {
   withdraw,
 } from "./endpoints";
 import { endpointsFile } from "./paths";
+import { tempDir } from "./testing/temp-dir";
 
 function temporary(): string {
-  return endpointsFile(mkdtempSync(join(tmpdir(), "armadra-endpoints-")));
+  return endpointsFile(tempDir("armadra-endpoints-"));
 }
 
 const runtimeRecord = () => ({
@@ -86,10 +87,7 @@ describe("endpoints.json", () => {
 
   it("does not mind withdrawing from a file that was never written", () => {
     expect(() =>
-      withdraw(
-        join(mkdtempSync(join(tmpdir(), "armadra-")), "gone.json"),
-        HOST_SERVICE,
-      ),
+      withdraw(join(tempDir("armadra-"), "gone.json"), HOST_SERVICE),
     ).not.toThrow();
   });
 

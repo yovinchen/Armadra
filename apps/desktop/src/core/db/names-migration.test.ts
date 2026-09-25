@@ -1,10 +1,10 @@
-import { copyFileSync, mkdtempSync, readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { handlesFor } from "../canvas/handles";
 import { openDatabase } from "./open";
+import { tempDir } from "../testing/temp-dir";
 
 /**
  * 0021 的回填：一个已经在用的库里，`node.data.handle` 搬进 `node_handles`。
@@ -29,7 +29,7 @@ afterEach(() => {
 
 /** 一个只带 0021 之前那些迁移的目录（账本要的是一段连续前缀）。 */
 function beforeNames(): string {
-  const directory = mkdtempSync(join(tmpdir(), "armadra-0021-overlay-"));
+  const directory = tempDir("armadra-0021-overlay-");
   for (const name of readdirSync(migrationsDir)) {
     if (Number(name.slice(0, 4)) >= 21) continue;
     copyFileSync(join(migrationsDir, name), join(directory, name));
@@ -45,10 +45,7 @@ function open(file: string, directory: string) {
 
 describe("0021：data.handle → node_handles", () => {
   it("搬走合法的名字，撞名的留先到的那个，其余副本清掉", () => {
-    const file = join(
-      mkdtempSync(join(tmpdir(), "armadra-0021-")),
-      "canvas.db",
-    );
+    const file = join(tempDir("armadra-0021-"), "canvas.db");
 
     const old = open(file, beforeNames());
     old.database.exec(

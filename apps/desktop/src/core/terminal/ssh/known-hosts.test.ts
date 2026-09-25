@@ -3,9 +3,8 @@
  * cases that file cannot have because its trust file is a process global.
  */
 
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdirSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SshHost } from "../../settings/ssh-hosts";
@@ -20,6 +19,7 @@ import {
   trust,
   trustedLines,
 } from "./known-hosts";
+import { tempDir } from "../../testing/temp-dir";
 
 const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleExampleExampleExample";
 
@@ -30,7 +30,7 @@ function host(): SshHost {
 let directories: string[] = [];
 
 function dataDir(): string {
-  const path = mkdtempSync(join(tmpdir(), "armadra-known-hosts-"));
+  const path = tempDir("armadra-known-hosts-");
   directories.push(path);
   return path;
 }

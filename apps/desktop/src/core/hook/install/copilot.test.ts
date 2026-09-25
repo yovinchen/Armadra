@@ -1,12 +1,10 @@
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hooksPath, install, isManagedEntry, uninstall } from "./copilot";
@@ -15,11 +13,12 @@ import {
   COPILOT_HOOK_EVENTS,
   HOOK_CLIENT_REVISION,
 } from "./events";
+import { tempDir } from "../../testing/temp-dir";
 
 const CLIENT = "/opt/armadra/armadra-hook";
 
 function home(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-copilot-"));
+  return tempDir("armadra-copilot-");
 }
 
 interface HookFile {

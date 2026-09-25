@@ -1,6 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { connect } from "node:net";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +8,7 @@ import { read } from "./endpoints";
 import { ROUTES } from "./http/routes";
 import { parseAnnouncement } from "./instance";
 import { endpointsFile } from "./paths";
+import { tempDir } from "./testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, "db/migrations");
@@ -19,7 +19,7 @@ afterEach(async () => {
 });
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-core-"));
+  return tempDir("armadra-core-");
 }
 
 async function start(dataDir: string, listen = "tcp:127.0.0.1:0") {

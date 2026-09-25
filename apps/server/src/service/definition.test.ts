@@ -1,11 +1,4 @@
-import {
-  appendFileSync,
-  mkdtempSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 /**
@@ -31,6 +24,7 @@ import {
   normalizeSpec,
   specArguments,
 } from "./spec";
+import { tempDir } from "../../../desktop/src/core/testing/temp-dir";
 
 /**
  * 服务定义那四条规则的用例，移植自合并前实现的 `servicedef` 包：
@@ -47,7 +41,7 @@ const BASE: SpecInput = {
 };
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-service-"));
+  return tempDir("armadra-service-");
 }
 
 describe("服务定义的校验", () => {

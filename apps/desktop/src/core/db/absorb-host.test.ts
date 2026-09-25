@@ -1,5 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
@@ -11,6 +10,7 @@ import {
   hostDatabaseFile,
 } from "./absorb-host";
 import { openDatabase } from "./open";
+import { tempDir } from "../testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, "migrations");
@@ -32,7 +32,7 @@ const DEVICE = "fedcba9876543210fedcba9876543210";
 const SESSION = "11112222333344445555666677778888";
 
 function dataDir(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-absorb-"));
+  return tempDir("armadra-absorb-");
 }
 
 function unified(directory: string) {

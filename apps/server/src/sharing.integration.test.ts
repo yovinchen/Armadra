@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { serve } from "./serve";
+import { tempDir } from "../../desktop/src/core/testing/temp-dir";
 
 /**
  * 装配级用例：服务器壳上的账号、邀请与共享真的生效（R8）。
@@ -133,7 +134,7 @@ async function register(token: string, displayName: string): Promise<Person> {
 }
 
 async function workspace(name: string): Promise<string> {
-  const root = mkdtempSync(join(tmpdir(), `armadra-share-${name}-`));
+  const root = tempDir(`armadra-share-${name}-`);
   writeFileSync(join(root, "README.md"), name);
   const created = await call("/api/workspaces", {
     method: "POST",
@@ -180,8 +181,8 @@ function subscribe(
 }
 
 beforeAll(async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), "armadra-server-share-"));
-  const webRoot = mkdtempSync(join(tmpdir(), "armadra-web-share-"));
+  const dataDir = tempDir("armadra-server-share-");
+  const webRoot = tempDir("armadra-web-share-");
   writeFileSync(join(webRoot, "index.html"), "<!doctype html>");
   running = await serve({
     listen: { host: "127.0.0.1", port: 0 },

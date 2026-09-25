@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { SESSION_PREFIX, sessionKey } from "../backend";
 import { childEnvironment } from "../environment";
-import { killTmuxServer } from "../../workspaces/fixture";
+import { killTmuxServer } from "../../testing/temp-dir";
 import {
   MINIMUM_VERSION,
   defaultTerminal,

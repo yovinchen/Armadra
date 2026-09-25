@@ -10,6 +10,8 @@ export default defineConfig({
     exclude: ["**/node_modules/**", "**/out/**"],
     environment: "node",
     pool: "forks",
+    // 用例经 `tempDir()` 建的临时目录，每个文件跑完统一删（与桌面壳同一套）。
+    setupFiles: ["../desktop/src/core/testing/setup.ts"],
     testTimeout: 60_000,
   },
 });

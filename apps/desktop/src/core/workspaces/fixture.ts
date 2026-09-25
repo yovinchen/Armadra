@@ -1,6 +1,4 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DatabaseSync } from "node:sqlite";
@@ -11,6 +9,7 @@ import type { CoreRequest } from "../http/router";
 import type { CoreContext } from "../main";
 import { createLog, nodePlatform } from "../platform";
 import { canonicalize } from "./roots";
+import { killTmuxServer, tempDir } from "../testing/temp-dir";
 
 /**
  * A throwaway core for the canvas-side tests: a real database with the real
@@ -56,7 +55,7 @@ export function fixture(
   // `/var`, which is a symlink to `/private/var`, and the root registration
   // refuses a path any segment of which is a link. A test must exercise that
   // rule with a crafted link, not trip over the platform's own.
-  const directory = canonicalize(mkdtempSync(join(tmpdir(), "armadra-core-")));
+  const directory = canonicalize(tempDir("armadra-core-"));
   const opened: OpenedDatabase = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir: migrationsDir(),
@@ -123,19 +122,4 @@ export function fixture(
       rmSync(directory, { recursive: true, force: true });
     },
   };
-}
-
-/**
- * Stops the tmux server a test started under `dataDir`. A core keeps its
- * sessions on shutdown by design, so deleting the directory alone only
- * removes the socket and leaves the server and its shells running for good.
- */
-export function killTmuxServer(dataDir: string): void {
-  const socket = join(dataDir, "tmux.sock");
-  if (!existsSync(socket)) return;
-  try {
-    execFileSync("tmux", ["-S", socket, "kill-server"], { stdio: "ignore" });
-  } catch {
-    // Already gone: `exit-empty on` got there first.
-  }
 }

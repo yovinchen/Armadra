@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type Endpoint, parse, read, render, write } from "./endpoint";
+import { tempDir } from "../testing/temp-dir";
 
 function fixture(): Endpoint {
   return {
@@ -58,7 +58,7 @@ describe("the hook endpoint file", () => {
   });
 
   it.skipIf(process.platform === "win32")("writes a private file", () => {
-    const directory = mkdtempSync(join(tmpdir(), "armadra-hook-endpoint-"));
+    const directory = tempDir("armadra-hook-endpoint-");
     const path = join(directory, "nested", "hook-endpoint.env");
     write(path, fixture());
     expect(statSync(path).mode & 0o777).toBe(0o600);

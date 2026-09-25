@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { rmSync } from "node:fs";
@@ -13,10 +12,11 @@ import {
   validDirectoryName,
   workspaceRelativePath,
 } from "./roots";
+import { tempDir } from "../testing/temp-dir";
 
 /** Path narrowing, ported from the pre-merge implementation. */
 describe("workspace roots", () => {
-  const directory = canonicalize(mkdtempSync(join(tmpdir(), "armadra-roots-")));
+  const directory = canonicalize(tempDir("armadra-roots-"));
   afterAll(() => {
     rmSync(directory, { recursive: true, force: true });
   });
@@ -65,7 +65,7 @@ describe("workspace roots", () => {
   });
 
   it("lets an import name an absolute path outside the workspace, but not a link out of it", () => {
-    const outside = canonicalize(mkdtempSync(join(tmpdir(), "armadra-drag-")));
+    const outside = canonicalize(tempDir("armadra-drag-"));
     const file = join(outside, "shot.png");
     writeFileSync(file, "x");
     expect(resolveImportSource(directory, file)).toBe(file);

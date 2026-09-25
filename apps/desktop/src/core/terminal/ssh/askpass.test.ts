@@ -13,9 +13,7 @@
  */
 
 import { execFile } from "node:child_process";
-import { mkdtempSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { statSync } from "node:fs";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -32,6 +30,7 @@ import {
   socketPath,
 } from "./askpass";
 import type { SshPrompt } from "./prompts";
+import { tempDir } from "../../testing/temp-dir";
 
 const run = promisify(execFile);
 
@@ -45,7 +44,7 @@ function service(onPrompt: (prompt: SshPrompt) => void): {
   readonly service: AskpassService;
   readonly dataDir: string;
 } {
-  const dataDir = mkdtempSync(join(tmpdir(), "armadra-askpass-"));
+  const dataDir = tempDir("armadra-askpass-");
   const created = new AskpassService({ dataDir, onPrompt });
   services.push(created);
   return { service: created, dataDir };

@@ -1,5 +1,3 @@
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,6 +9,7 @@ import { onAccessChanged } from "./gate";
 import { scope } from "./scopes";
 import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
+import { tempDir } from "../testing/temp-dir";
 
 /**
  * 账号、组、授予、邀请与审计，跑在真库上。
@@ -40,7 +39,7 @@ afterEach(() => {
 let clock = 1_800_000_000_000;
 
 function harness() {
-  const directory = mkdtempSync(join(tmpdir(), "armadra-accounts-"));
+  const directory = tempDir("armadra-accounts-");
   const opened = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir,

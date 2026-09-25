@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { DatabaseRefused, openDatabase } from "./open";
 import { loadMigrations } from "./migrations";
+import { tempDir } from "../testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, "migrations");
@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 function file(): string {
-  return join(mkdtempSync(join(tmpdir(), "armadra-open-")), "canvas.db");
+  return join(tempDir("armadra-open-"), "canvas.db");
 }
 
 function open(path: string) {

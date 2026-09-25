@@ -1,11 +1,11 @@
-import { mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { HookAuth, validNodeId } from "./auth";
+import { tempDir } from "../testing/temp-dir";
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-hook-auth-"));
+  return tempDir("armadra-hook-auth-");
 }
 
 function mode(path: string): number {

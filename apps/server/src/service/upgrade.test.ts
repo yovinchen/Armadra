@@ -1,12 +1,5 @@
-import {
-  chmodSync,
-  mkdtempSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -20,11 +13,12 @@ import {
   verifyCandidate,
   verifyChecksum,
 } from "./upgrade";
+import { tempDir } from "../../../desktop/src/core/testing/temp-dir";
 
 const posix = process.platform !== "win32";
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-upgrade-"));
+  return tempDir("armadra-upgrade-");
 }
 
 function script(

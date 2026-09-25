@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   install,
@@ -18,14 +10,15 @@ import {
   uninstall,
 } from "./claude";
 import { CLAUDE_HOOK_EVENTS, HOOK_CLIENT_REVISION } from "./events";
+import { tempDir } from "../../testing/temp-dir";
 
 const CLIENT = "/opt/armadra/armadra-hook";
 
 /** `[the user's config home, our integration home]`. */
 function homes(): [string, string] {
   return [
-    mkdtempSync(join(tmpdir(), "armadra-claude-config-")),
-    mkdtempSync(join(tmpdir(), "armadra-claude-integration-")),
+    tempDir("armadra-claude-config-"),
+    tempDir("armadra-claude-integration-"),
   ];
 }
 

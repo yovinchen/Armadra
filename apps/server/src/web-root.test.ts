@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,10 +10,11 @@ import {
   resolveWithinRoot,
   staticHeaders,
 } from "./web-root";
+import { tempDir } from "../../desktop/src/core/testing/temp-dir";
 
 function fixture(): { root: string; outside: string } {
-  const root = mkdtempSync(join(tmpdir(), "armadra-webroot-"));
-  const outside = mkdtempSync(join(tmpdir(), "armadra-outside-"));
+  const root = tempDir("armadra-webroot-");
+  const outside = tempDir("armadra-outside-");
   writeFileSync(join(outside, "secret.txt"), "不该被读到");
   writeFileSync(join(root, "index.html"), "<!doctype html>");
   mkdirSync(join(root, "assets"));
@@ -65,7 +65,7 @@ describe("静态托管", () => {
   });
 
   it("没有 index.html 的目录不是 apps/web 的产物", async () => {
-    const empty = mkdtempSync(join(tmpdir(), "armadra-empty-"));
+    const empty = tempDir("armadra-empty-");
     await expect(openWebRoot(empty)).rejects.toThrow(/index\.html/);
   });
 

@@ -10,6 +10,7 @@ export default defineConfig({
     include: ["src/core/browser/headless/live.integration.test.ts"],
     environment: "node",
     pool: "forks",
+    setupFiles: ["src/core/testing/setup.ts"],
     testTimeout: 120_000,
     hookTimeout: 60_000,
   },

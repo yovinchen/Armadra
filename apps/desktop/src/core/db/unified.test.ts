@@ -1,18 +1,12 @@
 import { createHash } from "node:crypto";
-import {
-  copyFileSync,
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { DatabaseRefused, openDatabase } from "./open";
 import { loadMigrations } from "./migrations";
 import { BACKUP_PREFIX, UNIFIED_VERSION, backupPath } from "./unified";
+import { tempDir } from "../testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 /** 唯一的迁移目录：0001–0020 一条序列。 */
@@ -30,7 +24,7 @@ afterEach(() => {
 });
 
 function file(): string {
-  return join(mkdtempSync(join(tmpdir(), "armadra-unified-")), "canvas.db");
+  return join(tempDir("armadra-unified-"), "canvas.db");
 }
 
 /**
@@ -40,7 +34,7 @@ function file(): string {
  * 「门后的库被一个不认识 15 的构建打开会怎样」的来源。
  */
 function beforeGate(): string {
-  const directory = mkdtempSync(join(tmpdir(), "armadra-before-gate-"));
+  const directory = tempDir("armadra-before-gate-");
   for (const name of readdirSync(migrationsDir)) {
     if (Number.parseInt(name.slice(0, 4), 10) >= UNIFIED_VERSION) continue;
     copyFileSync(join(migrationsDir, name), join(directory, name));

@@ -1,11 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -22,6 +15,7 @@ import {
 } from "./integration";
 import { injectionMode } from "./shared";
 import { registerSkillInstaller, skillFile } from "./skills";
+import { tempDir } from "../../testing/temp-dir";
 
 const AGENT_IDS = ["claude", "codex", "opencode", "pi", "omp", "copilot"];
 
@@ -37,7 +31,7 @@ function fakeHome(name: string): string {
 }
 
 function temporary(prefix: string): string {
-  return mkdtempSync(join(tmpdir(), `armadra-${prefix}-`));
+  return tempDir(`armadra-${prefix}-`);
 }
 
 let release: (() => void) | undefined;

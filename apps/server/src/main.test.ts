@@ -1,5 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -11,6 +10,7 @@ import { describe, expect, it } from "vitest";
 const posixOnly = it.skipIf(process.platform === "win32");
 
 import { type MainIo, main } from "./main";
+import { tempDir } from "../../desktop/src/core/testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -21,7 +21,7 @@ interface Run {
 }
 
 function temporary(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-main-"));
+  return tempDir("armadra-main-");
 }
 
 async function run(argv: string[], env: NodeJS.ProcessEnv = {}): Promise<Run> {

@@ -1,9 +1,9 @@
-import { copyFileSync, mkdtempSync, readdirSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { openDatabase } from "./open";
+import { tempDir } from "../testing/temp-dir";
 
 /**
  * 0019 的升级路径：**一个已经在用的库**升上来之后还认得原来那个 owner。
@@ -37,7 +37,7 @@ afterEach(() => {
  * 0020 而没有 0019 会让升级前那一次打开就被拒。
  */
 function beforeAccounts(): string {
-  const directory = mkdtempSync(join(tmpdir(), "armadra-0019-overlay-"));
+  const directory = tempDir("armadra-0019-overlay-");
   for (const name of readdirSync(migrationsDir)) {
     if (Number(name.slice(0, 4)) >= 19) continue;
     copyFileSync(join(migrationsDir, name), join(directory, name));
@@ -56,10 +56,7 @@ function open(file: string, directory: string) {
 
 describe("0019：identity_owner → identity_principals", () => {
   it("升级之后 owner 行还在，标识与时间一个字节都没变", () => {
-    const file = join(
-      mkdtempSync(join(tmpdir(), "armadra-0019-")),
-      "canvas.db",
-    );
+    const file = join(tempDir("armadra-0019-"), "canvas.db");
     const old = open(file, beforeAccounts());
     old.database
       .prepare("INSERT INTO store_meta(singleton, host_id) VALUES(1, ?)")
@@ -132,10 +129,7 @@ describe("0019：identity_owner → identity_principals", () => {
   });
 
   it("设备的 role 放开到 member，owner 表不再存在", () => {
-    const file = join(
-      mkdtempSync(join(tmpdir(), "armadra-0019-")),
-      "canvas.db",
-    );
+    const file = join(tempDir("armadra-0019-"), "canvas.db");
     const opened = open(file, migrationsDir);
     opened.database
       .prepare(
@@ -166,10 +160,7 @@ describe("0019：identity_owner → identity_principals", () => {
   });
 
   it("只能有一个 owner", () => {
-    const file = join(
-      mkdtempSync(join(tmpdir(), "armadra-0019-")),
-      "canvas.db",
-    );
+    const file = join(tempDir("armadra-0019-"), "canvas.db");
     const opened = open(file, migrationsDir);
     const insert = opened.database.prepare(
       "INSERT INTO identity_principals(principal_id, kind, display_name, created_at_ms, disabled_at_ms) " +
@@ -180,10 +171,7 @@ describe("0019：identity_owner → identity_principals", () => {
   });
 
   it("审计不随被删的组一起消失", () => {
-    const file = join(
-      mkdtempSync(join(tmpdir(), "armadra-0019-")),
-      "canvas.db",
-    );
+    const file = join(tempDir("armadra-0019-"), "canvas.db");
     const opened = open(file, migrationsDir);
     opened.database
       .prepare(

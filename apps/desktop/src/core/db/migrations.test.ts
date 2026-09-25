@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { checksum, loadMigrations, resolveMigrationsDir } from "./migrations";
+import { tempDir } from "../testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../../../..");
@@ -69,7 +70,7 @@ describe("the migration set", () => {
   });
 
   it("ignores files that are not migrations and honours the no-transaction marker", () => {
-    const directory = mkdtempSync(join(tmpdir(), "armadra-migrations-"));
+    const directory = tempDir("armadra-migrations-");
     writeFileSync(join(directory, "0001_first.sql"), "SELECT 1;");
     writeFileSync(
       join(directory, "0002_second_thing.sql"),
@@ -85,14 +86,14 @@ describe("the migration set", () => {
   });
 
   it("sorts by version, not by file name", () => {
-    const directory = mkdtempSync(join(tmpdir(), "armadra-migrations-"));
+    const directory = tempDir("armadra-migrations-");
     writeFileSync(join(directory, "10_ten.sql"), "SELECT 10;");
     writeFileSync(join(directory, "9_nine.sql"), "SELECT 9;");
     expect(loadMigrations(directory).map((m) => m.version)).toEqual([9, 10]);
   });
 
   it("refuses a version prefix that is not an integer", () => {
-    const directory = mkdtempSync(join(tmpdir(), "armadra-migrations-"));
+    const directory = tempDir("armadra-migrations-");
     writeFileSync(join(directory, "first_thing.sql"), "SELECT 1;");
     expect(() => loadMigrations(directory)).toThrow(/integer version prefix/);
   });

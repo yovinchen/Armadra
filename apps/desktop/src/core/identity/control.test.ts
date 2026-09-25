@@ -1,5 +1,4 @@
-import { mkdtempSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,6 +6,7 @@ import { openDatabase } from "../db/open";
 import { controlSocketPath, startControlChannel } from "./control";
 import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
+import { tempDir } from "../testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, "../db/migrations");
@@ -25,7 +25,7 @@ afterEach(async () => {
 });
 
 async function channel() {
-  const dataDir = mkdtempSync(join(tmpdir(), "armadra-control-"));
+  const dataDir = tempDir("armadra-control-");
   const opened = openDatabase({
     file: join(dataDir, "canvas.db"),
     migrationsDir,

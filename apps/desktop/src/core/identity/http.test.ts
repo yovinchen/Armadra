@@ -1,6 +1,4 @@
-import { mkdtempSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,6 +15,7 @@ import { MAX_FRAME_BYTES, PROTOCOL_MAJOR, PROTOCOL_MINOR } from "./protocol";
 import { allScopes } from "./scopes";
 import { IdentityService } from "./service";
 import { IdentityStore } from "./store";
+import { tempDir } from "../testing/temp-dir";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = resolve(here, "../db/migrations");
@@ -41,7 +40,7 @@ interface Harness {
 }
 
 async function harness(): Promise<Harness> {
-  const directory = mkdtempSync(join(tmpdir(), "armadra-identity-http-"));
+  const directory = tempDir("armadra-identity-http-");
   const opened = openDatabase({
     file: join(directory, "canvas.db"),
     migrationsDir,

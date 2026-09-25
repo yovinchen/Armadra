@@ -1,19 +1,18 @@
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isLegacyCommand, repairIn, scanIn } from "./repair";
 import { SKILLS_ROOT } from "./skills";
+import { tempDir } from "../../testing/temp-dir";
 
 function home(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-repair-"));
+  return tempDir("armadra-repair-");
 }
 
 function readJson(path: string): Record<string, never> {

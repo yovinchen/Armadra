@@ -1,6 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   configPath,
@@ -14,13 +12,14 @@ import {
 import { CODEX_HOOK_EVENTS } from "./events";
 import { isManagedCommand } from "./shared";
 import { stateKeys } from "./toml-state";
+import { tempDir } from "../../testing/temp-dir";
 
 const CLIENT = "/opt/armadra/armadra-hook";
 const DEFAULT_TIMEOUT_SEC = 600;
 const SESSION_END_TIMEOUT_SEC = 1;
 
 function home(): string {
-  return mkdtempSync(join(tmpdir(), "armadra-codex-"));
+  return tempDir("armadra-codex-");
 }
 
 function readHooks(path: string): {

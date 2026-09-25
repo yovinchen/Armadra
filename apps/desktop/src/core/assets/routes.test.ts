@@ -1,11 +1,11 @@
-import { mkdtempSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type Fixture, fixture } from "../workspaces/fixture";
 import { install as installWorkspaces } from "../workspaces/routes";
 import { install } from "./routes";
 import { ASSETS_DIRECTORY, MAX_ASSET_BYTES } from "./store";
+import { tempDir } from "../testing/temp-dir";
 
 /**
  * The whiteboard asset store, ported from
@@ -117,7 +117,7 @@ describe("the asset routes", () => {
 
   it("imports an asset from a path into the same store", async () => {
     // A picture the user dragged in from outside the workspace.
-    const outside = mkdtempSync(join(tmpdir(), "armadra-drag-"));
+    const outside = tempDir("armadra-drag-");
     const source = join(outside, "shot.PNG");
     writeFileSync(source, png);
 
