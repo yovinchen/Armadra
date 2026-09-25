@@ -42,6 +42,7 @@ export const errors: MessageModule = {
     "error.delivery.LEASE_HELD_BY_AGENT": "另一个 Agent 正在驱动它",
     "error.delivery.TARGET_BUSY": "目标正在一轮里",
     "error.delivery.TARGET_STARTING": "目标刚起来，还没报过状态",
+    "error.delivery.TARGET_INPUT_PENDING": "目标的输入行上有没提交的半行",
     "error.delivery.QUEUE_FULL": "这个目标的队伍满了",
     "error.delivery.TARGET_GONE": "目标没有在运行的会话",
   },
@@ -76,6 +77,8 @@ export const errors: MessageModule = {
     "error.delivery.TARGET_BUSY": "The target is in a turn",
     "error.delivery.TARGET_STARTING":
       "The target just started and has not reported yet",
+    "error.delivery.TARGET_INPUT_PENDING":
+      "The target has an unsubmitted half line in its input",
     "error.delivery.QUEUE_FULL": "That target's queue is full",
     "error.delivery.TARGET_GONE": "The target has no running session",
   },

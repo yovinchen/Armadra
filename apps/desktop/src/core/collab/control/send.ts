@@ -131,6 +131,7 @@ export const SEND_CODES = {
   TARGET_STARTING: 409,
   TARGET_BUSY: 409,
   TARGET_AWAITING_APPROVAL: 409,
+  TARGET_INPUT_PENDING: 409,
   TARGET_STATE_UNVERIFIED: 409,
   [LEASE_HELD_BY_HUMAN]: 409,
   [LEASE_REVOKED]: 409,
@@ -182,6 +183,7 @@ type QueueReason =
   | "TARGET_BUSY"
   | "TARGET_STARTING"
   | "TARGET_AWAITING_APPROVAL"
+  | "TARGET_INPUT_PENDING"
   | typeof LEASE_HELD_BY_HUMAN
   | typeof LEASE_HELD_BY_AGENT;
 
@@ -190,6 +192,8 @@ const QUEUE_MESSAGES: Record<QueueReason, string> = {
   TARGET_STARTING: "目标刚起来，还没有报过第一条状态。",
   TARGET_AWAITING_APPROVAL:
     "目标停在一个权限提示或提问上；写进去就是替人回答了那个问题。",
+  TARGET_INPUT_PENDING:
+    "目标的输入行上有半截没提交的字；投进去就会接在那半行后面。",
   [LEASE_HELD_BY_HUMAN]: "有人正在这个终端里打字。",
   [LEASE_HELD_BY_AGENT]: "另一个 Agent 正在驱动它。",
 };
@@ -198,6 +202,7 @@ const QUEUE_STATE: Record<QueueReason, TargetState> = {
   TARGET_BUSY: "busy",
   TARGET_STARTING: "starting",
   TARGET_AWAITING_APPROVAL: "awaiting-approval",
+  TARGET_INPUT_PENDING: "idle",
   [LEASE_HELD_BY_HUMAN]: "idle",
   [LEASE_HELD_BY_AGENT]: "idle",
 };
@@ -545,6 +550,23 @@ export async function attempt(
       item,
       target,
       LEASE_HELD_BY_AGENT,
+      options,
+      now,
+    );
+  }
+
+  // 人打了一半的输入（§4.3 第 3 条，推广到每一种目标）。租约只管「人此刻在不
+  // 在打字」：停手十秒它就过期，而输入行上那半截字还在。有 hook 状态的目标报的
+  // `idle` 说的是「这一轮结束了」，不是「输入行是空的」——这时候投进去，正文会
+  // 接在人那半行后面一起提交。所以排队，等人自己提交或清掉那一行。
+  // 判据是终端域的输入围栏（`terminal/input.ts` 的 `InputSafety`），终端对查询
+  // 的应答不算人打的字，那条规矩在围栏里，这里不另判一遍。
+  if (context.terminals?.observed?.(live.session.sessionId)?.pending === true) {
+    return queueOrRefuse(
+      context,
+      item,
+      target,
+      "TARGET_INPUT_PENDING",
       options,
       now,
     );

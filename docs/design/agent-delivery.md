@@ -277,6 +277,7 @@ armadra-hook canvas send --to reviewer --body '…' --dry-run
 | `TARGET_STARTING`          |  409 | 会话刚起来，还没报过第一条状态                             | 排队（默认）或稍后再来                     |
 | `TARGET_BUSY`              |  409 | 目标正在一轮里（`--no-queue` 时才会看到）                  | 排队，或 `--interrupt`                     |
 | `TARGET_AWAITING_APPROVAL` |  409 | 目标停在权限提示或提问上                                   | **绝不重试**：写进去就是替人回答了那个问题 |
+| `TARGET_INPUT_PENDING`     |  409 | 目标输入行上有人留下的半行没提交（租约过期后仍在）         | 排队（默认），等人提交或清掉那一行         |
 | `TARGET_STATE_UNVERIFIED`  |  409 | 目标没有状态适配，只有 PTY 观测（§4.3）                    | 改用 `post`，或显式 `--unverified`         |
 | `LEASE_HELD_BY_HUMAN`      |  409 | 人正在这个终端里打字                                       | 等；不要循环重试                           |
 | `LEASE_REVOKED`            |  409 | 人按了「接管」                                             | 停手，读 `outbox` 并告诉用户               |

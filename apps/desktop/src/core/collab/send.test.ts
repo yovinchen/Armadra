@@ -353,6 +353,36 @@ describe("the drive lease", () => {
     expect(pendingCountFor(fixture.database, peer, nowSeconds())).toBe(0);
   });
 
+  // 人打了半行、停手十秒，租约自然过期回到 `free`；目标报的仍是 hook 的
+  // `idle`。租约放行了，那半截字还在输入行上——投进去就是接在它后面一起提交。
+  it("queues behind half a line a person left after their lease expired", async () => {
+    target({ lease: freeLease(2) });
+    fixture.terminal.activity.set(peerSession, {
+      pending: true,
+      lastInputAt: 0,
+      lastOutputAt: 0,
+    });
+    expect(ok(await send())).toMatchObject({
+      outcome: "queued",
+      reason: "TARGET_INPUT_PENDING",
+      targetState: "idle",
+    });
+    expect(fixture.terminal.submits).toHaveLength(0);
+
+    // `--no-queue` 下同一个码当场拒绝。
+    const refused = refusal(await send({ key: "now", "no-queue": true }));
+    expect(refused.code).toBe("TARGET_INPUT_PENDING");
+
+    // 人提交或清掉了那一行：出队照常投进去。
+    fixture.terminal.activity.set(peerSession, {
+      pending: false,
+      lastInputAt: 0,
+      lastOutputAt: 0,
+    });
+    await new SendPump(() => fixture.collab).drain(peer);
+    expect(fixture.terminal.submits).toHaveLength(1);
+  });
+
   it("queues behind another agent, but not behind itself", async () => {
     target({
       lease: {
