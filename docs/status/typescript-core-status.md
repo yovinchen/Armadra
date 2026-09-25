@@ -1813,3 +1813,39 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/server test`：10 文件 79 条通过。新增 `sharing.integration.test.ts`：真起 `serve`，首个管理员配对，三人经邀请注册；矩阵（列表 / 读 / 写 / 开终端 / 改工作空间与全局设置 / 改共享）、非成员升级前 403、成员只收自己画布的帧、邀请一次性与作废、撤销共享后事件流 4403 关闭且下一个请求 403。
 - `pnpm --filter @armadra/web test` / `typecheck`：新增 `AccountsSharingPage.test.tsx` 6 条；全量跑时 `AutomationDrawer` 与 `KeybindingsPage` 各有用例超时，单独重跑通过（负载所致）。
 - `pnpm check`、`pnpm format:check` 通过。
+
+## 45. 第一批留下的零散缺口（2026-09-26）
+
+补 §35–§40 各自记下的「没做 / 已知限制」。
+
+### 45.1 Issues 分组的「部分」标记（§38.4）
+
+`allIssues` 任一页回 `statusGroupsPartial: true` 就在 `IssuePage` 上记下；`IssueList` 在分组上方放一个描边徽标「分组不完整」，悬停说明原因。没有 Issue 时不显示。
+
+### 45.2 挂着的终端节点跟上 core 起的会话（§35.1 已知限制）
+
+冷启动与依赖编排的 `spawnForNode` 都把新会话 id 写进节点数据并发 `board.changed`，页面合并后 `TerminalSurface` 的 `data.sessionId` 就变了。新增 `surface/use-session.ts::useAdoptedSession`：只在节点数据里的 id **变化**时换过去，不和手里的那个比——挂载时 `find` 可能找到比节点数据更新的会话，那时两者不同是正常的；自己新建的会话两边同时写，不触发；正在新建时不抢。换过去的会话不算本次挂载新建（`freshSessionRef = false`），启动行不会再敲一遍。`TerminalNode.tsx` 没有改动。
+
+### 45.3 批量组队 `canvas team`（§36.2 没做的组合操作）
+
+`team --member "agent[@模型]|标题|任务"`（最多 6 个，只切前两个 `|`）一次建一组 Agent 节点，每个都等同一次 `open-agent`：同样的节点数据、从调用者连主从线、第一条任务走投递队列。编排三种：缺省并行（带 `--after` 时一起等外部节点）；`--chain` 让第 N 个等第 N−1 个并互连对等线；`--gather` 加一个汇总节点，并行时等全部成员、流水线时等最后一个，与每个成员连对等线。`--after-turn` / `--ttl` / `--permission-mode` / `--inbox-wake` / `--dry-run` 作用于整队。所有校验（agent、模型、权限模式、外部依赖、来源链）都在建节点之前；依赖在节点全部存好之后写，团内上游那时才是画布上的 Agent 节点。`Args` 新增 `all(name)`：`list` 会按逗号切，任务正文里的逗号不能切。
+
+`SKILLS_REVISION` 10 → 11，技能文本与 CLI 用法同步加了 `team`；`architecture.md` 的动词清单补齐（它还写着 `send` 已移除）。
+
+### 45.4 编辑器草稿重新定位（§37.5 没做）
+
+文件被删或移走时提示条多一个「重新定位」：填一个已存在的文件，「合并」以草稿改起时的正文（本机副本里的 `base`，没有就用编辑器基准）为 base、目标为 theirs 走同一个草稿合并对话框，结果写成**目标文件**的本机草稿（带它的内容版本）再把节点改指过去，由草稿保护放回——不写盘；「覆盖」再确认一次后带读到的 size / sha256 写盘，期间被改就 409。目标不存在答「该路径没有文件」，不代为新建（那是另存为）。代码在 `nodes/editor/use-relocate.ts` 与 `RelocateDialog.tsx`。
+
+### 45.5 切换执行主机发 `workspace.grants`（§38.3）
+
+`PATCH …/execution-host` 成功且主机或根目录真的变了才发，事件多一个可选的 `executionHostId`（新主机，本机为空串）。语言服务的 `grantChange` 据此停掉按旧根起的服务器：搬到别的主机报 `unsupported_remote`，本机换目录报 `workspace_closed`。原地「切换」到同一个根不发。
+
+### 45.6 过期注释
+
+`settings/execution-hosts.ts` 说 `/validate` 仍是 501（早由 `core/remote` 接上）；`language/index.ts` 说 Worker 的 `registerRoot` 等还没实现、远端答 `link_lost`（§34 已实现、现答 `unsupported_remote`）；`collab/control/index.ts` 的「十三个动词」。都改成现状。
+
+### 45.7 验证
+
+- `pnpm --filter @armadra/desktop test`：vitest 2921 通过、13 跳过；live 1/1；脚本 38/38。新用例：`collab/control.test.ts` 的 `team` 三条（并行 + 汇总、带外部依赖的流水线、建节点前拒绝与演练），`language/policy.test.ts`（搬家即停），`language/routes.integration.test.ts`（真 HTTP 切换根目录 → 会话收到 `stopped` + `workspace_closed`，原地切换不再发）。
+- `pnpm --filter @armadra/web test`：2711 通过，4 条失败都是 `KeybindingsPage.test.tsx` 的 5 秒超时（机器负载 200+），单独以 `--testTimeout=30000` 重跑 20/20 通过，与本节无关。新用例：`TerminalSurface.render.test.tsx`（节点数据换 id 后重连到新会话且不新建、数据没变时不被拽回）、`GithubDrawer.test.tsx`（部分标记）、`EditorNode.drafts.test.tsx`（重新定位的合并、确认后覆盖、目标不存在）。
+- `pnpm --filter @armadra/server test` 68/68；`pnpm check`、`pnpm format:check` 通过。
