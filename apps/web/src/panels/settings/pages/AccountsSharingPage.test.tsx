@@ -184,7 +184,9 @@ describe("设置 → 账号与共享", () => {
   });
 
   it("成员只看得到自己的账号", async () => {
-    mocks.resume.mockResolvedValue(session(MEMBER, "member", ["identity:read"]));
+    mocks.resume.mockResolvedValue(
+      session(MEMBER, "member", ["identity:read"]),
+    );
     mount();
     expect(await screen.findByText("我的账号")).toBeTruthy();
     expect(screen.getByText(MEMBER)).toBeTruthy();
@@ -195,9 +197,7 @@ describe("设置 → 账号与共享", () => {
   it("没有会话时给登录表单", async () => {
     mocks.resume.mockResolvedValue(null);
     mount();
-    expect(
-      await screen.findByRole("button", { name: "登录" }),
-    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "登录" })).toBeTruthy();
     expect(screen.getByLabelText("账号标识")).toBeTruthy();
   });
 

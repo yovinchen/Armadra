@@ -223,9 +223,9 @@ describe("共享的权限矩阵", () => {
   it("工作空间列表只给看得见的那几块", async () => {
     const ids = async (who: Person) =>
       (
-        JSON.parse(
-          (await call("/api/workspaces", { person: who })).body,
-        ) as { id: string }[]
+        JSON.parse((await call("/api/workspaces", { person: who })).body) as {
+          id: string;
+        }[]
       ).map((item) => item.id);
     expect(await ids(admin)).toEqual(expect.arrayContaining([w1, w2]));
     expect(await ids(editor)).toEqual([w1]);

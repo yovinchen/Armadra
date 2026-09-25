@@ -58,9 +58,7 @@ function harness() {
       json: <T>() => body as T,
     };
     const run = () => guard(request, router.requiredScope(method, path));
-    return who === undefined
-      ? run()
-      : runAs({ subject: subject(who) }, run);
+    return who === undefined ? run() : runAs({ subject: subject(who) }, run);
   };
   return { guard, decide };
 }
@@ -80,9 +78,9 @@ function row(
   path: string,
   body?: unknown,
 ): string {
-  return PEOPLE.filter(
-    (who) => decide(who, method, path, body).allowed,
-  ).join(",");
+  return PEOPLE.filter((who) => decide(who, method, path, body).allowed).join(
+    ",",
+  );
 }
 
 describe("路由门的矩阵", () => {
@@ -125,9 +123,7 @@ describe("路由门的矩阵", () => {
 
   it("身份域自己判，不经路由门", () => {
     const { decide } = harness();
-    expect(row(decide, "GET", "/api/identity/groups")).toBe(
-      PEOPLE.join(","),
-    );
+    expect(row(decide, "GET", "/api/identity/groups")).toBe(PEOPLE.join(","));
   });
 
   it("工作空间列表放行，只留看得见的", () => {
@@ -137,11 +133,7 @@ describe("路由门的矩阵", () => {
       (decide(who, "GET", "/api/workspaces").filter?.(list) ?? list) as {
         id: string;
       }[];
-    expect(visible("owner").map((item) => item.id)).toEqual([
-      "w1",
-      "w2",
-      "w3",
-    ]);
+    expect(visible("owner").map((item) => item.id)).toEqual(["w1", "w2", "w3"]);
     expect(visible("viewer").map((item) => item.id)).toEqual(["w1"]);
     expect(visible("outsider").map((item) => item.id)).toEqual(["w2"]);
   });
@@ -157,9 +149,7 @@ describe("路由门的矩阵", () => {
     );
     // 附着的 socket 能写：没记过创建者的会话按「别人的」判。
     expect(row(decide, "GET", "/api/terminals/t1/ws")).toBe("owner,driver");
-    expect(row(decide, "POST", "/api/terminals/t1/paste")).toBe(
-      "owner,driver",
-    );
+    expect(row(decide, "POST", "/api/terminals/t1/paste")).toBe("owner,driver");
     // 不知道属于哪块画布的会话，成员一律不放。
     expect(row(decide, "GET", "/api/terminals/unknown/capture")).toBe("owner");
   });

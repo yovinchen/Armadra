@@ -100,11 +100,7 @@ export function createRouteGuard(options: RouteAccessOptions): RouteGuard & {
             ? body.filter(
                 (item: unknown) =>
                   typeof (item as { id?: unknown })?.id === "string" &&
-                  allowed(
-                    subject,
-                    "canvas:read",
-                    (item as { id: string }).id,
-                  ),
+                  allowed(subject, "canvas:read", (item as { id: string }).id),
               )
             : body,
       };

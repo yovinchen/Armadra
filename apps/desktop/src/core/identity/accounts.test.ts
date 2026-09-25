@@ -512,9 +512,9 @@ describe("R8：注册、组共享与收权通知", () => {
       });
       accounts.disablePrincipal(owner, member.principalId);
       expect(notified).toBe(3);
-      expect(() =>
-        accounts.disablePrincipal(owner, owner.principalId),
-      ).toThrow(IdentityError);
+      expect(() => accounts.disablePrincipal(owner, owner.principalId)).toThrow(
+        IdentityError,
+      );
     } finally {
       stop();
     }

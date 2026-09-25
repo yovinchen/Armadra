@@ -500,7 +500,8 @@ function Members({ self }: { self: string }) {
               onClick={() => {
                 const target = confirm;
                 setConfirm(null);
-                if (target) void act(() => disablePrincipal(target.principalId));
+                if (target)
+                  void act(() => disablePrincipal(target.principalId));
               }}
             >
               {t("sharing.members.disable")}
@@ -747,7 +748,8 @@ function Invitations() {
   const [link, setLink] = React.useState("");
   const now = Date.now();
   const pending = (invitations.data ?? []).filter(
-    (invitation) => invitation.consumedAtMs === 0 && invitation.expiresAtMs > now,
+    (invitation) =>
+      invitation.consumedAtMs === 0 && invitation.expiresAtMs > now,
   );
   const workspaceName = (id: string) =>
     workspaces.data?.find((workspace) => workspace.id === id)?.name ?? id;
@@ -957,7 +959,11 @@ function Sharing() {
               ))}
             </SelectContent>
           </Select>
-          <RoleSelect value={role} onChange={setRole} label={t("sharing.role")} />
+          <RoleSelect
+            value={role}
+            onChange={setRole}
+            label={t("sharing.role")}
+          />
           <Button
             type="button"
             size="sm"

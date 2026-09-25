@@ -183,10 +183,7 @@ function login(
  * 兑换邀请、再照口令登录发会话。不带邀请的开放注册仍是 501——它要一个
  * `allowRegistration` 设置，而那是一个「谁都能进这台服务器」的决定，不该默认。
  */
-function register(
-  request: CoreRequest,
-  context: AccountsHttpContext,
-): Answer {
+function register(request: CoreRequest, context: AccountsHttpContext): Answer {
   const body = object(request);
   if (body.token === undefined) {
     return notImplemented("开放注册（需要 allowRegistration 设置）");
