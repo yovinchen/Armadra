@@ -5,10 +5,11 @@ import {
   type Viewport,
 } from "@armadra/shared";
 import { t } from "../app/preferences-store";
-import { isConflict, runtimeApi } from "../api/client";
+import { isConflict, isLeaseHeld, runtimeApi } from "../api/client";
 import { serializeWhiteboard } from "../canvas/whiteboard/serialize";
 import { useCanvasStore } from "../store/canvas-store";
 import { clearLocalEdits, localEdits } from "../store/canvas/pending";
+import { isReadOnly, presenceClientId } from "../store/canvas/presence";
 import {
   CanvasSaveQueue,
   MAX_CONFLICT_REPLAYS,
@@ -27,6 +28,12 @@ import {
  */
 
 export const EDIT_DEBOUNCE_MS = 600;
+
+/**
+ * 保存被 423 拒了：租约在别的设备手里（core JSON §9）。`app/use-board-sync`
+ * 听这个事件，立刻重新心跳拿在线表，并按远端重载这块画布。
+ */
+export const LEASE_LOST_EVENT = "armadra:canvas-lease-lost";
 export const VIEWPORT_THROTTLE_MS = 2_000;
 
 let queue: CanvasSaveQueue | null = null;
@@ -97,7 +104,7 @@ function boardQueue(): CanvasSaveQueue {
   if (queue) return queue;
   queue = new CanvasSaveQueue(
     (workspaceId, boardId, document) =>
-      runtimeApi.saveBoard(workspaceId, boardId, document),
+      runtimeApi.saveBoard(workspaceId, boardId, document, presenceClientId()),
     (workspaceId, boardId, source, saved, reason) => {
       queue?.rebasePending(workspaceId, boardId, saved.board);
       conflictStreak.delete(`${workspaceId}:${boardId}`);
@@ -124,6 +131,14 @@ function boardQueue(): CanvasSaveQueue {
     },
     (workspaceId, boardId, cause) => {
       if (useCanvasStore.getState().boardId !== boardId) return;
+      // 423 = 别的设备拿着编辑租约。不是故障，不亮红灯：本地这份作废，
+      // 转成只读，由画布同步按远端重载。
+      if (isLeaseHeld(cause)) {
+        clearLocalEdits();
+        useCanvasStore.setState({ saveState: "saved", saveError: null });
+        window.dispatchEvent(new Event(LEASE_LOST_EVENT));
+        return;
+      }
       // 409 = 别的窗口先存了。自动变基重放，别急着亮红灯。
       if (isConflict(cause)) {
         void resolveConflict(workspaceId, boardId, cause);
@@ -212,6 +227,13 @@ export function startAutosave(): () => void {
     editTimer = null;
     const state = useCanvasStore.getState();
     if (state.saveState !== "dirty") return;
+    // 只读时落下来的只可能是排版副产物（文字自适应高度之类），写出去也会被
+    // 423 拒；丢掉，远端那份才是真的。
+    if (isReadOnly(state)) {
+      clearLocalEdits();
+      useCanvasStore.setState({ saveState: "saved" });
+      return;
+    }
     if (!syncWhiteboard()) {
       useCanvasStore.setState({
         saveState: "error",
@@ -233,6 +255,8 @@ export function startAutosave(): () => void {
     const state = useCanvasStore.getState();
     // 有编辑在路上就不必单独存视口了，那次 PUT 会带上它。
     if (state.saveState !== "saved" && state.saveState !== "idle") return;
+    // 视口也存在画布文档里：只读的一方平移只是自己看，不写。
+    if (isReadOnly(state)) return;
     const next = target();
     if (!next) return;
     // 刚刚那次编辑保存已经把这个视口带走了，不必再 PUT 一遍。

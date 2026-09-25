@@ -214,6 +214,16 @@ const zh = {
   "delete.session.title": "结束会话并删除？",
   "delete.session.confirm": "删除",
   "delete.cancel": "取消",
+
+  /* 在线设备与编辑租约（core JSON §9） */
+  "presence.label": "在线设备",
+  "presence.thisDevice": "本机",
+  "presence.unnamed": "未命名设备",
+  "presence.editing": "{device} 正在编辑",
+  "presence.takeover": "接管",
+  "presence.takeoverTitle": "接管编辑？",
+  "presence.takeoverDescription":
+    "{device} 会变为只读，它还没保存的改动会丢失。",
 } as const;
 
 const en: Record<keyof typeof zh, string> = {
@@ -403,6 +413,15 @@ const en: Record<keyof typeof zh, string> = {
   "delete.session.title": "End the session and delete?",
   "delete.session.confirm": "Delete",
   "delete.cancel": "Cancel",
+
+  "presence.label": "Devices online",
+  "presence.thisDevice": "This device",
+  "presence.unnamed": "Unnamed device",
+  "presence.editing": "{device} is editing",
+  "presence.takeover": "Take over",
+  "presence.takeoverTitle": "Take over editing?",
+  "presence.takeoverDescription":
+    "{device} becomes read-only and loses any unsaved changes.",
 };
 
 export const canvas: MessageModule = { "zh-CN": zh, en };

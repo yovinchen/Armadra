@@ -4,9 +4,16 @@ import type { BoardDocument } from "@armadra/shared";
 import { runtimeApi } from "../api/client";
 import { onWorkspaceEvent } from "../api/events";
 import { useDraftsActive } from "../canvas/flow/drafts";
-import { flushBoardSaves } from "../save/autosave";
+import { LEASE_LOST_EVENT, flushBoardSaves } from "../save/autosave";
 import { SAVE_RETRY_EVENT } from "../shell/Banners";
 import { useCanvasStore } from "../store/canvas-store";
+import {
+  applyPresence,
+  markPresenceActivity,
+  presenceClientId,
+  presenceDeviceName,
+  takePresenceActivity,
+} from "../store/canvas/presence";
 import {
   lastBoardId,
   lastWorkspaceId,
@@ -119,6 +126,8 @@ export function useBoardSync() {
       onCanvasChanged();
     });
   }, [onCanvasChanged, workspaceId]);
+
+  useBoardPresence(workspaceId, boardId, onCanvasChanged);
 
   /* ------------------------ 启动：恢复上次的工作空间 ---------------------- */
   /**
@@ -254,4 +263,86 @@ export function useBoardSync() {
   }, [saveState]);
 
   return { boards, board };
+}
+
+/** 心跳间隔；core 按三次没到算断开（core JSON §9.1）。 */
+export const PRESENCE_HEARTBEAT_MS = 10_000;
+
+/**
+ * 在线设备与编辑租约（core JSON §9）。
+ *
+ * 打开一块画布就开始心跳，切走或关页面时离开。单设备、单窗口时第一次心跳
+ * 就拿到租约，之后什么都不会发生；有别的设备在看时，谁持有租约由 core 说了
+ * 算，这里只把回答放进 store（`store/canvas/presence.ts`），画布据此只读。
+ *
+ * 租约换手的那一刻按远端重载：丢了租约，本地那份作废；拿到租约，手里那份
+ * 可能停在只读期间的某一版。
+ */
+function useBoardPresence(
+  workspaceId: string | null,
+  boardId: string | null,
+  reload: () => void,
+): void {
+  useEffect(() => {
+    if (!workspaceId || !boardId) return;
+    const clientId = presenceClientId();
+    const deviceName = presenceDeviceName();
+    let stopped = false;
+    let left = false;
+
+    const apply = (snapshot: Parameters<typeof applyPresence>[0]) => {
+      if (stopped) return;
+      const change = applyPresence(snapshot);
+      if (change.lost || change.gained) reload();
+    };
+    const beat = () => {
+      void runtimeApi
+        .presenceHeartbeat(workspaceId, boardId, {
+          clientId,
+          deviceName,
+          active: takePresenceActivity(),
+        })
+        .then(apply)
+        // 连不上时什么都不改：上一份在线表继续有效，core 那边会按 TTL 把我们
+        // 摘掉，重连后的第一次心跳再补回来。
+        .catch(() => undefined);
+    };
+    const leave = () => {
+      if (left) return;
+      left = true;
+      void runtimeApi
+        .leavePresence(workspaceId, boardId, clientId)
+        .catch(() => undefined);
+    };
+
+    beat();
+    const timer = window.setInterval(beat, PRESENCE_HEARTBEAT_MS);
+    const offEvent = onWorkspaceEvent("canvas.presence", (event) => {
+      if (event.boardId === boardId) apply(event);
+    });
+    // 被 423 拒了：别等下一拍，马上问一次谁拿着租约。
+    const onLost = () => beat();
+    // 后台标签页的定时器会被浏览器节流到一分钟一次，回到前台时先补一拍。
+    const onVisible = () => {
+      if (document.visibilityState === "visible") beat();
+    };
+    const onActivity = () => markPresenceActivity();
+    window.addEventListener(LEASE_LOST_EVENT, onLost);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pointerdown", onActivity, { capture: true });
+    window.addEventListener("keydown", onActivity, { capture: true });
+    window.addEventListener("pagehide", leave);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      offEvent();
+      window.removeEventListener(LEASE_LOST_EVENT, onLost);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pointerdown", onActivity, { capture: true });
+      window.removeEventListener("keydown", onActivity, { capture: true });
+      window.removeEventListener("pagehide", leave);
+      leave();
+    };
+  }, [boardId, reload, workspaceId]);
 }

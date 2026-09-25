@@ -10,6 +10,8 @@ import {
 import type { BoardDocument, CanvasNode } from "@armadra/shared";
 import "@xyflow/react/dist/style.css";
 import "../styles/canvas.css";
+import { useCanvasReadOnly } from "../store/canvas/presence";
+import { PresenceBar } from "./PresenceBar";
 
 import {
   AlertDialog,
@@ -414,9 +416,12 @@ function FlowWorkspaceInner() {
   // 手形工具改 `panOnDrag` / `selectionOnDrag` / `nodesDraggable` 三项
   // （`flow-options`），所以当前工具也是这张表的输入。
   const tool = useTool();
+  // 编辑租约在别的设备手里（core JSON §9）：拖、连都关掉，平移缩放照旧。
+  // store 的 commit 入口也会拦，这里是让手势一开始就不发生。
+  const readOnly = useCanvasReadOnly();
   const options = React.useMemo(
-    () => flowOptions({ whiteboard: preferences, locked, tool }),
-    [locked, preferences, tool],
+    () => flowOptions({ whiteboard: preferences, locked, tool, readOnly }),
+    [locked, preferences, readOnly, tool],
   );
 
   return (
@@ -478,6 +483,7 @@ function FlowWorkspaceInner() {
             <ToolLayer />
           </ReactFlow>
           <CanvasStylePanel />
+          <PresenceBar />
         </div>
       </ContextMenuTrigger>
 

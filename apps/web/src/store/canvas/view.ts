@@ -2,6 +2,7 @@ import { getFlow } from "../../canvas/flow/flow-context";
 import { arrangeCanvas } from "../../canvas/tidy-flow";
 import { diffSnapshots, record, redo, undo } from "./history";
 import { markPatch } from "./pending";
+import { isReadOnly } from "./presence";
 import { type CanvasGet, type CanvasSet, type CanvasStore } from "./types";
 
 export function createViewSlice(
@@ -51,6 +52,10 @@ export function createViewSlice(
     setWhiteboard: (doc, options = {}) =>
       set((state) => {
         if (state.whiteboard === doc) return state;
+        // 远端灌入（`history: "ignore"`）照收；本地的白板编辑在只读时不落。
+        if ((options.history ?? "record") !== "ignore" && isReadOnly(state)) {
+          return state;
+        }
         const nodes = state.document?.nodes ?? [];
         const edges = state.document?.edges ?? [];
         const diff = diffSnapshots(

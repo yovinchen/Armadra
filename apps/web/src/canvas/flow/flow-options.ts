@@ -23,6 +23,11 @@ export interface FlowOptionsInput {
   locked: boolean;
   /** 当前工具（`interaction/tool-store`）：手形与绘图工具各改一组值。 */
   tool?: CanvasToolId;
+  /**
+   * 编辑租约在别的设备手里（core JSON §9）：节点拖不动、连不了线，看和平移
+   * 照旧。
+   */
+  readOnly?: boolean;
 }
 
 export interface FlowOptions {
@@ -70,6 +75,7 @@ export function flowOptions({
   whiteboard,
   locked,
   tool = "select",
+  readOnly = false,
 }: FlowOptionsInput): FlowOptions {
   const mouse = whiteboard.inputMode === "mouse";
   const grid = whiteboard.gridSize;
@@ -93,8 +99,8 @@ export function flowOptions({
     snapGrid: [grid, grid],
     autoPanOnNodeDrag: whiteboard.edgeScroll,
     autoPanOnConnect: whiteboard.edgeScroll,
-    nodesDraggable: !hand && !drawing,
-    nodesConnectable: true,
+    nodesDraggable: !readOnly && !hand && !drawing,
+    nodesConnectable: !readOnly,
     // 绘图时关掉：画过一个节点之后那一下 `click` 不该顺手把它选中。
     elementsSelectable: !drawing,
   };

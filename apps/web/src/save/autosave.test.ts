@@ -39,12 +39,18 @@ vi.mock("../api/client", () => ({
   },
   isConflict: (error: unknown) =>
     (error as { status?: number } | null)?.status === 409,
+  isLeaseHeld: (error: unknown) =>
+    (error as { code?: string } | null)?.code === "canvas_lease_held",
 }));
 
 const { useCanvasStore } = await import("../store/canvas-store");
 const { emptyWhiteboard } = await import("../canvas/whiteboard/model");
+const { presenceClientId, resetPresenceClient } = await import(
+  "../store/canvas/presence"
+);
 const {
   EDIT_DEBOUNCE_MS,
+  LEASE_LOST_EVENT,
   VIEWPORT_THROTTLE_MS,
   resetAutosaveQueue,
   startAutosave,
@@ -97,6 +103,8 @@ beforeEach(() => {
 afterEach(() => {
   stop();
   vi.useRealTimers();
+  useCanvasStore.getState().setPresence(null);
+  resetPresenceClient();
 });
 
 describe("autosave", () => {
@@ -286,5 +294,44 @@ describe("autosave", () => {
 
     await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS * 4);
     expect(saveBoard).not.toHaveBeenCalled();
+  });
+
+  /* ------------------------ 编辑租约（core JSON §9） ---------------------- */
+
+  it("保存带上本页的 clientId", async () => {
+    useCanvasStore.getState().addNode("sticky");
+    await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS);
+    expect(saveBoard.mock.calls[0]?.[3]).toBe(presenceClientId());
+  });
+
+  it("租约在别的设备手里时，编辑与视口都不落、也不发 PUT", async () => {
+    useCanvasStore.getState().setPresence({
+      boardId: board.id,
+      clients: [],
+      lease: {
+        clientId: "someone-else-entirely",
+        deviceName: "iPad",
+        acquiredAt: timestamp,
+      },
+    });
+    expect(useCanvasStore.getState().addNode("sticky")).toBe("");
+    expect(useCanvasStore.getState().document?.nodes).toHaveLength(0);
+    useCanvasStore.getState().setViewport({ x: 30, y: 30, zoom: 1 });
+    await vi.advanceTimersByTimeAsync(VIEWPORT_THROTTLE_MS + EDIT_DEBOUNCE_MS);
+    expect(saveBoard).not.toHaveBeenCalled();
+  });
+
+  it("423 不亮红灯：丢掉本地这份并通知画布同步", async () => {
+    saveBoard.mockRejectedValueOnce(
+      new RuntimeRequestError(423, "held", "canvas_lease_held"),
+    );
+    const lost = vi.fn();
+    window.addEventListener(LEASE_LOST_EVENT, lost);
+    useCanvasStore.getState().addNode("sticky");
+    await vi.advanceTimersByTimeAsync(EDIT_DEBOUNCE_MS);
+    window.removeEventListener(LEASE_LOST_EVENT, lost);
+    expect(lost).toHaveBeenCalledTimes(1);
+    expect(useCanvasStore.getState().saveState).toBe("saved");
+    expect(useCanvasStore.getState().saveError).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import {
   type BoardDocument,
+  type BoardPresence,
   type CanvasEdgeRole,
   type CanvasNode,
   type CanvasNodeData,
@@ -109,6 +110,11 @@ export interface CanvasState {
   panels: PanelState;
   saveState: SaveState;
   saveError: string | null;
+  /**
+   * 谁在看、谁持有写租约（core JSON §9）。按 `boardId` 认：属于别的画布的
+   * 旧快照不参与只读判定（`presence.ts`）。
+   */
+  presence: BoardPresence | null;
 }
 
 export interface CanvasActions {
@@ -126,6 +132,7 @@ export interface CanvasActions {
   mergeRemoteDocument: (document: BoardDocument) => void;
   setSaveState: (state: SaveState) => void;
   setSaveError: (message: string | null) => void;
+  setPresence: (presence: BoardPresence | null) => void;
   setPanel: <K extends keyof PanelState>(key: K, value: PanelState[K]) => void;
 
   selectNodes: (ids: string[]) => void;

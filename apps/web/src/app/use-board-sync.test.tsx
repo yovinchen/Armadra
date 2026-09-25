@@ -90,11 +90,24 @@ function document(x: number, updatedAt = stamp): BoardDocument {
 let remote = document(0);
 const loadBoard = vi.fn(async () => JSON.parse(JSON.stringify(remote)));
 
+/** 在线表：缺省只有自己，心跳就拿到租约（core JSON §9）。 */
+const presenceHeartbeat = vi.fn(
+  async (_ws: string, boardId: string, body: { clientId: string }) => ({
+    boardId,
+    clients: [{ clientId: body.clientId, deviceName: "", lastSeenAt: stamp }],
+    lease: { clientId: body.clientId, deviceName: "", acquiredAt: stamp },
+  }),
+);
+const leavePresence = vi.fn(async () => undefined);
+
 vi.mock("../api/client", () => ({
   runtimeApi: {
     listBoards: vi.fn(async () => [board]),
     openWorkspace: vi.fn(async () => undefined),
     loadBoard: (...args: unknown[]) => loadBoard(...(args as [])),
+    presenceHeartbeat: (...args: unknown[]) =>
+      presenceHeartbeat(...(args as [string, string, { clientId: string }])),
+    leavePresence: (...args: unknown[]) => leavePresence(...(args as [])),
   },
 }));
 
@@ -104,6 +117,7 @@ vi.mock("./workspaces-query", () => ({
 
 vi.mock("../save/autosave", () => ({
   flushBoardSaves: async () => undefined,
+  LEASE_LOST_EVENT: "armadra:canvas-lease-lost",
 }));
 
 const { dispatchWorkspaceEvent, resetWorkspaceEvents } = await import(
@@ -111,6 +125,9 @@ const { dispatchWorkspaceEvent, resetWorkspaceEvents } = await import(
 );
 const { useCanvasStore } = await import("../store/canvas-store");
 const { useBoardSync } = await import("./use-board-sync");
+const { isReadOnly, presenceClientId } = await import(
+  "../store/canvas/presence"
+);
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const client = new QueryClient({
@@ -125,6 +142,8 @@ const positionOf = () =>
 beforeEach(() => {
   remote = document(0);
   loadBoard.mockClear();
+  presenceHeartbeat.mockClear();
+  leavePresence.mockClear();
   window.history.replaceState(null, "", "/");
 });
 
@@ -184,5 +203,67 @@ describe("useBoardSync", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(loadBoard.mock.calls.length).toBe(reads);
+  });
+
+  /* ----------------------- 在线设备与编辑租约（§9） ----------------------- */
+
+  it("只有自己时心跳拿到租约，不只读、不重取", async () => {
+    renderHook(() => useBoardSync(), { wrapper });
+    await waitFor(() => expect(positionOf()).toBe(0));
+    await waitFor(() =>
+      expect(useCanvasStore.getState().presence?.lease?.clientId).toBe(
+        presenceClientId(),
+      ),
+    );
+    const reads = loadBoard.mock.calls.length;
+    expect(presenceHeartbeat.mock.calls[0]?.[2]).toMatchObject({
+      clientId: presenceClientId(),
+    });
+    expect(isReadOnly(useCanvasStore.getState())).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(loadBoard.mock.calls.length).toBe(reads);
+  });
+
+  it("别的设备接管后转只读，并按远端重载", async () => {
+    renderHook(() => useBoardSync(), { wrapper });
+    await waitFor(() => expect(positionOf()).toBe(0));
+    await waitFor(() =>
+      expect(useCanvasStore.getState().presence?.lease).toBeTruthy(),
+    );
+    const reads = loadBoard.mock.calls.length;
+    remote = document(77, later);
+    act(() => {
+      dispatchWorkspaceEvent({
+        type: "canvas.presence",
+        boardId: board.id,
+        clients: [
+          { clientId: presenceClientId(), deviceName: "", lastSeenAt: stamp },
+          {
+            clientId: "other-client-01",
+            deviceName: "iPad",
+            lastSeenAt: stamp,
+          },
+        ],
+        lease: {
+          clientId: "other-client-01",
+          deviceName: "iPad",
+          acquiredAt: later,
+        },
+      });
+    });
+    expect(isReadOnly(useCanvasStore.getState())).toBe(true);
+    await waitFor(() => expect(positionOf()).toBe(77));
+    expect(loadBoard.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it("卸载时离开这块画布", async () => {
+    const { unmount } = renderHook(() => useBoardSync(), { wrapper });
+    await waitFor(() => expect(presenceHeartbeat).toHaveBeenCalled());
+    unmount();
+    expect(leavePresence).toHaveBeenCalledWith(
+      workspace.id,
+      board.id,
+      presenceClientId(),
+    );
   });
 });

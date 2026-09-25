@@ -35,6 +35,18 @@ const options = (patch: Partial<WhiteboardPreferences> = {}, extra = {}) =>
     ...extra,
   });
 
+describe("只读（编辑租约在别的设备手里）", () => {
+  it("节点拖不动、连不了线，平移缩放与选中照旧", () => {
+    expect(options({}, { readOnly: true })).toMatchObject({
+      nodesDraggable: false,
+      nodesConnectable: false,
+      elementsSelectable: true,
+      panOnScroll: true,
+      zoomOnPinch: true,
+    });
+  });
+});
+
 describe("手势分工", () => {
   it("默认（触控板 / 自动）：滚轮平移，⌘滚轮与捏合缩放", () => {
     const result = options();

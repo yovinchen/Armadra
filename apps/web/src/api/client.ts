@@ -10,6 +10,7 @@ import { agentsApi } from "./agents";
 import { systemApi } from "./system";
 import { workspacesApi } from "./workspaces";
 import { boardsApi } from "./boards";
+export { isLeaseHeld } from "./boards";
 import { filesApi } from "./files";
 import { languageApi } from "./language";
 import { searchApi } from "./search";

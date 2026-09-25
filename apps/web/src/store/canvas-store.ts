@@ -6,6 +6,7 @@ import { createNodesSlice } from "./canvas/nodes";
 import { createLayoutSlice } from "./canvas/layout";
 import { createEdgesSlice } from "./canvas/edges";
 import { createViewSlice } from "./canvas/view";
+import { createPresenceSlice } from "./canvas/presence";
 import type { CanvasStore } from "./canvas/types";
 
 export type {
@@ -26,6 +27,11 @@ export {
   resetHistory,
   type CommitOptions,
 } from "./canvas/history";
+export {
+  isReadOnly,
+  presenceClientId,
+  useCanvasReadOnly,
+} from "./canvas/presence";
 export {
   useCanRedo,
   useCanUndo,
@@ -56,4 +62,5 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   ...createLayoutSlice(set, get),
   ...createEdgesSlice(set, get),
   ...createViewSlice(set, get),
+  ...createPresenceSlice(set, get),
 }));

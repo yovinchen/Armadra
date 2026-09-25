@@ -8,6 +8,7 @@ import { emptyWhiteboard } from "../../canvas/whiteboard/model";
 import { isCompactLayout } from "../../platform/layout";
 import { diffSnapshots, record, type CommitOptions } from "./history";
 import { markPatch } from "./pending";
+import { isReadOnly } from "./presence";
 import {
   type CanvasStore,
   type PanelState,
@@ -65,6 +66,9 @@ export function commit(
   options: CommitOptions = {},
 ): Partial<CanvasStore> | null {
   if (!state.document) return null;
+  // 租约在别人手里（core JSON §9）：这里一关，所有结构性编辑都落不下来——
+  // 菜单、快捷键、粘贴、拖放走的都是这一个入口。
+  if (isReadOnly(state)) return null;
   const next = mutate(state.document);
   if (!next) return null;
   const items = state.whiteboard.items;
