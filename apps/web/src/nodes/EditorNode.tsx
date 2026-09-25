@@ -31,6 +31,7 @@ import { Centered } from "./editor/Centered";
 import { ComparePanel } from "./editor/ComparePanel";
 import { ExternalBar } from "./editor/ExternalBar";
 import { MarkdownPreview } from "./editor/MarkdownPreview";
+import { MediaPreview } from "./editor/MediaPreview";
 import { StatusBar } from "./editor/StatusBar";
 import {
   MAX_EDITABLE_BYTES,
@@ -101,7 +102,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
   React.useEffect(() => {
     if (!workspaceId || !path) return;
     let cancelled = false;
-    let imageUrl: string | null = null;
+    let mediaUrl: string | null = null;
     const controller = new AbortController();
     setState({ kind: "loading" });
     setSaving(false);
@@ -116,18 +117,25 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     void (async () => {
       const info = await runtimeApi.fileInfo(workspaceId, path);
       if (cancelled) return;
-      if (info.preview === "image") {
+      if (
+        info.preview === "image" ||
+        info.preview === "video" ||
+        info.preview === "audio" ||
+        info.preview === "pdf"
+      ) {
         const response = await fetch(
           runtimeApi.fileDownloadUrl(workspaceId, path),
           { signal: controller.signal },
         );
-        if (!response.ok) throw new Error("Image download failed");
+        if (!response.ok) throw new Error("Media download failed");
         const blob = await response.blob();
         if (cancelled) return;
-        imageUrl = URL.createObjectURL(
+        // 下载路由永远回 octet-stream；类型在这里按 Runtime 报的 MIME 补上，
+        // 引擎才知道该用哪个播放器或查看器。
+        mediaUrl = URL.createObjectURL(
           new Blob([blob], { type: info.mimeType }),
         );
-        setState({ kind: "image", src: imageUrl, info });
+        setState({ kind: "media", media: info.preview, src: mediaUrl, info });
         return;
       }
       if (info.preview !== "text") {
@@ -161,7 +169,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     return () => {
       cancelled = true;
       controller.abort();
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
+      if (mediaUrl) URL.revokeObjectURL(mediaUrl);
     };
   }, [path, workspaceId]);
 
@@ -519,20 +527,19 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
             </Button>
           </div>
         )}
-        {state.kind === "image" && (
-          <img
+        {state.kind === "media" && (
+          <MediaPreview
+            media={state.media}
             src={state.src}
+            title={node.title}
             onError={() => {
               URL.revokeObjectURL(state.src);
               setState((current) =>
-                current.kind === "image" && current.src === state.src
+                current.kind === "media" && current.src === state.src
                   ? { kind: "attachment", info: current.info }
                   : current,
               );
             }}
-            alt={node.title}
-            draggable={false}
-            className="h-full w-full object-contain"
           />
         )}
         {state.kind === "text" && (

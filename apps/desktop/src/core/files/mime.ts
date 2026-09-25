@@ -382,3 +382,47 @@ export function mimeOrTextPlain(path: string): string {
 export function mimeOrOctetStream(path: string): string {
   return TABLE.get(extensionOf(path)) ?? "application/octet-stream";
 }
+
+/** What the editor node can show a file as, besides text. */
+export type MediaPreview = "image" | "video" | "audio" | "pdf";
+
+/**
+ * Formats the page's own `<video>` / `<audio>` can decode. A container the
+ * engine does not play (`.avi`, `.mkv`) would open as a black box with a
+ * spinner, so those stay downloads rather than becoming a preview that lies.
+ */
+const PLAYABLE_VIDEO = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
+  "video/x-m4v",
+]);
+const PLAYABLE_AUDIO = new Set([
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/wave",
+  "audio/ogg",
+  "audio/flac",
+  "audio/aac",
+  "audio/mp4",
+  "audio/m4a",
+  "audio/x-m4a",
+  "audio/webm",
+]);
+
+/**
+ * The media preview for a MIME type from {@link mimeOrOctetStream}, or
+ * `undefined` for anything that is text or a download. Images keep their old
+ * rule — every `image/*` — because the `<img>` fallback to a download card is
+ * already how an undecodable one is handled.
+ */
+export function mediaPreviewOf(mime: string): MediaPreview | undefined {
+  if (mime.startsWith("image/")) return "image";
+  if (PLAYABLE_VIDEO.has(mime)) return "video";
+  if (PLAYABLE_AUDIO.has(mime)) return "audio";
+  if (mime === "application/pdf") return "pdf";
+  return undefined;
+}

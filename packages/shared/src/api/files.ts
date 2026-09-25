@@ -50,7 +50,8 @@ export const fileInfoSchema = z.object({
   name: z.string(),
   size: z.number().int().nonnegative(),
   mimeType: z.string(),
-  preview: z.enum(["text", "image", "download"]),
+  /** `video` / `audio` / `pdf` are fetched whole through `file-download`, so they stop at its limit. */
+  preview: z.enum(["text", "image", "video", "audio", "pdf", "download"]),
 });
 export const importFilesResponseSchema = z.object({
   path: z.string(),

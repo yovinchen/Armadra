@@ -37,7 +37,7 @@ describe("the page's policy", () => {
       if (entry.startsWith("frame-src")) continue;
       expect(entry, entry).not.toMatch(/https?:\/\/(?!127\.0\.0\.1|localhost)/);
     }
-    expect(directive("frame-src")).toBe("frame-src http: https:");
+    expect(directive("frame-src")).toBe("frame-src http: https: blob:");
   });
 
   it("keeps the refusals that have nothing to do with the shell change", () => {

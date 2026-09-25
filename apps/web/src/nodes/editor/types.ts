@@ -9,7 +9,7 @@ export type LoadState =
   | { kind: "loading" }
   | { kind: "error" }
   | { kind: "too-large" }
-  | { kind: "image"; src: string; info: ImportedFileInfo }
+  | { kind: "media"; media: MediaKind; src: string; info: ImportedFileInfo }
   | { kind: "attachment"; info: ImportedFileInfo }
   | {
       kind: "text";
@@ -24,6 +24,9 @@ export type LoadState =
       /** 文件本身不可写，与工作区权限无关。 */
       readonly?: boolean;
     };
+
+/** 由页面自己渲染的非文本预览（`file-info` 的 `preview`）。 */
+export type MediaKind = "image" | "video" | "audio" | "pdf";
 
 /** 编辑区显示什么：正文、并排、纯预览。仅 Markdown 用得上。 */
 export type ViewMode = "edit" | "split" | "preview";

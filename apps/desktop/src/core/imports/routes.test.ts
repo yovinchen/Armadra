@@ -85,7 +85,7 @@ describe("the import routes", () => {
     };
     const path = result.files[0]?.path ?? "";
     expect(path.startsWith(`${IMPORTS_DIRECTORY}/`)).toBe(true);
-    expect(result.files[0]?.preview).toBe("download");
+    expect(result.files[0]?.preview).toBe("pdf");
     expect(readFileSync(join(root, path))).toEqual(data);
 
     const downloaded = await core.call(

@@ -140,4 +140,95 @@ describe("file attachments", () => {
     expect(download.getAttribute("download")).toBe("photo.heic");
     expect(screen.queryByRole("img")).toBeNull();
   });
+
+  function renderMedia(path: string, mimeType: string, preview: string) {
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => `blob:${path}`),
+      revokeObjectURL: vi.fn(),
+    });
+    const fetchMedia = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob([new Uint8Array([1, 2, 3])]),
+    });
+    vi.stubGlobal("fetch", fetchMedia);
+    readFile.mockClear();
+    fileInfo.mockResolvedValue({
+      path,
+      name: path,
+      size: 3,
+      mimeType,
+      preview,
+    });
+    render(
+      <EditorNode
+        id="media"
+        selected={false}
+        collapsed={false}
+        focused={false}
+        node={{ title: path, data: { kind: "editor", path } } as never}
+      />,
+    );
+    return fetchMedia;
+  }
+
+  it("plays video and audio with the engine's own controls", async () => {
+    usePreferencesStore.setState({ locale: "zh-CN" });
+    const fetchMedia = renderMedia("clip.mp4", "video/mp4", "video");
+    await vi.waitFor(() =>
+      expect(document.querySelector("video")?.getAttribute("src")).toBe(
+        "blob:clip.mp4",
+      ),
+    );
+    expect(document.querySelector("video")?.hasAttribute("controls")).toBe(
+      true,
+    );
+    expect(fetchMedia.mock.calls[0]?.[0]).toContain(
+      "file-download?path=clip.mp4",
+    );
+    cleanup();
+
+    renderMedia("take.mp3", "audio/mpeg", "audio");
+    await vi.waitFor(() =>
+      expect(document.querySelector("audio")?.getAttribute("src")).toBe(
+        "blob:take.mp3",
+      ),
+    );
+    // 播放不了就退回下载卡片。
+    fireEvent.error(document.querySelector("audio")!);
+    expect(await screen.findByRole("link", { name: "下载文件" })).toBeTruthy();
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it("shows a PDF in a frame built from its bytes", async () => {
+    renderMedia("spec.pdf", "application/pdf", "pdf");
+    await vi.waitFor(() =>
+      expect(document.querySelector("iframe")?.getAttribute("src")).toBe(
+        "blob:spec.pdf",
+      ),
+    );
+  });
+
+  it("zooms an image: fit, 1:1 and the wheel", async () => {
+    usePreferencesStore.setState({ locale: "zh-CN" });
+    renderMedia("photo.png", "image/png", "image");
+    const image = (await screen.findByRole("img")) as HTMLImageElement;
+    Object.defineProperty(image, "naturalWidth", { value: 200 });
+    Object.defineProperty(image, "naturalHeight", { value: 100 });
+    fireEvent.load(image);
+
+    // 默认适应：不写死尺寸。
+    expect(image.style.width).toBe("");
+    fireEvent.click(screen.getByRole("radio", { name: "1:1" }));
+    expect(image.style.width).toBe("200px");
+    expect(screen.getByText("100%")).toBeTruthy();
+
+    fireEvent.wheel(screen.getByTestId("image-viewport"), { deltaY: -100 });
+    expect(image.style.width).toBe("220px");
+    expect(screen.getByText("110%")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: "适应" }));
+    expect(image.style.width).toBe("");
+    // 透明区域铺棋盘格。
+    expect(image.style.backgroundImage).toContain("repeating-conic-gradient");
+  });
 });

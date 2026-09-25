@@ -136,6 +136,9 @@ export function createMainWindow(
       sandbox: false,
       // Browser nodes (§4) are <webview> guests.
       webviewTag: true,
+      // 编辑器节点的 PDF 预览用内置的 PDF 查看器，它在 Electron 里挂在
+      // `plugins` 之下；不开就是一块空白框。
+      plugins: true,
     },
   });
 

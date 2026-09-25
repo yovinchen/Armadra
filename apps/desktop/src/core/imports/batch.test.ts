@@ -86,7 +86,7 @@ describe("import batches", () => {
     const result = batch.commit(root.path);
     expect(result.files[0]?.preview).toBe("text");
     expect(result.files[1]?.size).toBe(0);
-    expect(result.files[2]?.preview).toBe("download");
+    expect(result.files[2]?.preview).toBe("pdf");
     expect(readFileSync(join(root.path, result.files[0]?.path ?? ""))).toEqual(
       Buffer.from("hello"),
     );
@@ -245,5 +245,24 @@ describe("import batches", () => {
     rmSync(join(other.path, ".armadra"), { recursive: true, force: true });
     symlinkSync(outside.path, join(other.path, ".armadra"));
     expect(refuses(() => ImportBatch.into(other.path))).toBe(true);
+  });
+
+  it("previews playable media and PDFs, and only below the download limit", () => {
+    const root = temp();
+    writeFileSync(join(root.path, "clip.mp4"), Buffer.from([0, 0, 0, 1]));
+    writeFileSync(join(root.path, "take.mp3"), Buffer.from([0xff, 0xfb]));
+    writeFileSync(join(root.path, "spec.pdf"), "%PDF-1.7\n");
+    writeFileSync(join(root.path, "old.avi"), Buffer.from([0, 1]));
+    writeFileSync(
+      join(root.path, "huge.webm"),
+      Buffer.alloc(MAX_FILE_BYTES + 1),
+    );
+    expect(fileInfo(root.path, "clip.mp4").preview).toBe("video");
+    expect(fileInfo(root.path, "take.mp3").preview).toBe("audio");
+    expect(fileInfo(root.path, "spec.pdf").preview).toBe("pdf");
+    // 页面播放不了的容器不装成预览。
+    expect(fileInfo(root.path, "old.avi").preview).toBe("download");
+    // 预览要整份取回，超过下载上限只能下载。
+    expect(fileInfo(root.path, "huge.webm").preview).toBe("download");
   });
 });

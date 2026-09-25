@@ -39,6 +39,7 @@ import { resources } from "./resources";
 import { fileWorkflow } from "./file-workflow";
 import { languageService } from "./language-service";
 import { editorMerge } from "./editor-merge";
+import { editorFiles } from "./editor-files";
 import { terminal } from "./terminal";
 import { updates } from "./updates";
 import { usage } from "./usage";
@@ -94,6 +95,7 @@ export const MESSAGE_MODULES = {
   "file-workflow": fileWorkflow,
   "language-service": languageService,
   "editor-merge": editorMerge,
+  "editor-files": editorFiles,
   explorer,
   mobile,
   modals,

@@ -19,7 +19,7 @@ import {
   resolveInRoot,
 } from "../workspaces/roots";
 import { badRequest, conflict, forbidden } from "../workspaces/support";
-import { mimeOrOctetStream } from "../files/mime";
+import { mediaPreviewOf, mimeOrOctetStream } from "../files/mime";
 import { markManagedDirectory, relativeToRoot } from "../files/paths";
 import { metadata, symlinkMetadata } from "../files/stat";
 import {
@@ -128,7 +128,7 @@ export interface ImportedFile {
   readonly name: string;
   readonly size: number;
   readonly mimeType: string;
-  readonly preview: "image" | "text" | "download";
+  readonly preview: "image" | "video" | "audio" | "pdf" | "text" | "download";
 }
 
 export interface ImportResult {
@@ -318,11 +318,19 @@ export function fileInfo(root: string, requested: string): ImportedFile {
   if (info === undefined) throw badRequest("Requested path does not exist");
   if (!info.isFile()) throw badRequest("Requested path is not a file");
   const mime = mimeOrOctetStream(path);
-  const preview: ImportedFile["preview"] = mime.startsWith("image/")
-    ? "image"
-    : info.size <= 1024 * 1024 && isText(path)
-      ? "text"
-      : "download";
+  const media = mediaPreviewOf(mime);
+  // 音视频与 PDF 由页面整份取回再交给原生播放器，取回走的是下载路由，
+  // 超过它的 16 MiB 上限就只能下载。图片沿用旧规则。
+  const preview: ImportedFile["preview"] =
+    media === "image"
+      ? "image"
+      : media !== undefined
+        ? info.size <= MAX_FILE_BYTES
+          ? media
+          : "download"
+        : info.size <= 1024 * 1024 && isText(path)
+          ? "text"
+          : "download";
   return {
     path: relativeToRoot(base, path),
     name: path.slice(

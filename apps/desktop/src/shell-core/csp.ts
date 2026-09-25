@@ -50,8 +50,13 @@ export function contentSecurityPolicy(
     "img-src 'self' data: blob: http://127.0.0.1:* http://localhost:*",
     "font-src 'self' data:",
     "worker-src 'self' blob:",
-    // Browser nodes (W3 replaces this with <webview>).
-    "frame-src http: https:",
+    // 编辑器节点的音视频预览：字节经 `file-download` 取回，页面自己以声明的
+    // MIME 类型包成 blob 再交给 <video> / <audio>。
+    "media-src 'self' blob:",
+    // Browser nodes (W3 replaces this with <webview>). `blob:` is the editor's
+    // PDF preview: a blob the page itself built with type `application/pdf`,
+    // which the engine hands to its PDF viewer rather than parsing as HTML.
+    "frame-src http: https: blob:",
     // Nothing on this page is ever framed by anything.
     "frame-ancestors 'none'",
     "object-src 'none'",
