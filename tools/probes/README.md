@@ -93,6 +93,10 @@ node tools/probes/core-terminal-packaged.mjs              # 打包版，从页�
 
 真 core（`apps/desktop/out/core/main.js`）、真 Vite 页面、新 profile 的无头 Chrome，经浏览器级 CDP 连接驱动；多设备场景用两个独立的 browser context 当两台设备。场景拆在 `ui-features/` 里，共用一套临时环境（`harness.mjs`），媒体夹具与截图像素统计在 `fixtures.mjs`。
 
+## Agent 协作端到端（真 Claude Code + 真 Codex CLI）
+
+用真 CLI 把投递、依赖编排、组队与节能休眠走一遍。页面必须真的挂着这些终端节点：CLI 起来时的终端查询由 xterm 经页面写回 PTY，[状态文档](../../docs/status/typescript-core-status.md) §31.7 那个「Codex 首条任务投不出去」只在页面挂着时出现。每个 Agent 节点都由页面挂载、由页面敲启动行。
+
 ```sh
 pnpm libs:build
 pnpm --filter @armadra/desktop build
@@ -114,3 +118,21 @@ node tools/probes/ui-features-e2e.mjs [输出目录] [--only=presence,editor,fil
 没验证什么：休眠的**判据与接回**（休眠状态是经 API 结束会话后在数据库里把结束原因置成 `hibernate`，与 `Manager.hibernate` 写的同形；真正走到休眠要一个空闲 5 分钟以上的 Agent CLI）；真实 SSH 与另一台机器；打包应用里的 PDF 查看器与视频解码（这里是无头 Chrome）；触屏手势（窄屏只按视口宽度截图）。
 
 一切都是临时的、回环的：随机端口（不用 1420 / 1421 / 43120-43125）、`mktemp` 的数据目录、HOME、`CLAUDE_CONFIG_DIR` / `CODEX_HOME`、替身脚本与浏览器 profile，结束时全部删除并停掉自己起的 tmux 服务器；不读写操作员自己的数据目录与 CLI 配置，不联网。
+
+node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4]
+
+```
+
+四个场景：
+
+1. **Codex 首投**：普通终端节点当发送方（探针以它的节点身份跑 `armadra-hook canvas`，令牌经 `POST /api/terminals/{id}/node-token/refresh` 签发），`send` 投给两个互相连线的 Codex，再 `open-agent --task` 建第三个；断言投递 `delivered` + `targetState = observed-quiet`，且 hook 随后报了一轮。
+2. **Claude 投递**：hook 状态通道那条路（`targetState = idle`）；半截输入门——经页面在 Claude 输入框里打半行不回车，等人的租约过期后 `send` 排队 `TARGET_INPUT_PENDING`，回车后投出去。
+3. **依赖编排与组队**：`open-agent --after <上游> --after-turn next`、`team --member … --chain`；再关掉页面触发一次，断言由 core 自己起进程并投出任务。
+4. **节能休眠**：`ARMADRA_TEST_ECO_IDLE_SECONDS=20`（`core/terminal/hibernate.ts::ecoTestOverride`，只有启动 core 的进程能给，设置的 5 分钟下限不变），关掉页面让 Claude 与 Codex 都睡着、确认 CLI 进程退出；重开页面点节点唤醒，断言同一会话 id 起下一代、恢复行带同一个 provider 会话 id、还记得之前让它记的数。
+
+隔离：数据目录、工作空间、浏览器 profile 与 CODEX_HOME 全部 `mktemp`，结束删除并停掉自己的 tmux 服务器。Codex 用临时 CODEX_HOME（只复制 `~/.codex/auth.json`，关掉启动时的升级检查，预先信任工作目录；token 超过 7 天没刷新就拒跑）。Claude 的登录在钥匙串里，临时 `CLAUDE_CONFIG_DIR` 认证不上，所以 Claude 进程用真实配置目录——前提是 Armadra 对 Claude 走启动时注入（`--settings` 指向数据目录里的文件），探针启动前就检查这一点；core 自己的 `CLAUDE_CONFIG_DIR` 指向临时目录，技能文件只写在那里。终端子进程的环境按白名单建，于是 `SHELL` 换成一个临时包装脚本（导出临时 CODEX_HOME、去掉 CLAUDE_CONFIG_DIR、`exec zsh -f`）。跑前跑后比对 `~/.claude/settings.json`、`~/.codex` 的 `config.toml` / `hooks.json` / `auth.json` 与两个 CLI 的版本；Claude 仍会像平常一样在 `~/.claude.json` 与 `~/.claude/projects/` 里记下这个临时目录的会话。
+
+产物默认在 `target/agent-e2e/`：`result.json`（逐条断言、时间线、投递记录、控制台错误、配置比对）、每个场景的截图与 `core.log`。一次全量约 4–5 分钟（实测 245 秒），花费是十几轮「回复 OK」量级的 token。
+
+没验证的：direct / 会话宿主后端（macOS 缺省是 tmux）；Claude 的权限提示与审批路径；休眠后经 `send` 唤醒（只验了点击唤醒）；打包版。
+```
