@@ -36,6 +36,7 @@ import { BranchTree } from "./BranchTree";
 import { CommitDetails } from "./CommitDetails";
 import { LogTable, UNCOMMITTED_KEY } from "./LogTable";
 import { LogToolbar } from "./LogToolbar";
+import { followOperation } from "./follow-operation";
 import { filterKey, logRequestFromPreferences } from "./filters";
 import { commitKey } from "./graph";
 import { defaultExpanded, refKey, type BranchTreeNode } from "./build-tree";
@@ -236,7 +237,12 @@ export function LogPage({ workspaceId }: LogPageProps) {
         input.expected,
         `${input.repository}/${crypto.randomUUID()}`,
       ),
-    onSuccess: invalidate,
+    // 交出去之后跟到结束：状态、进度与「取消」在一条提示里，结束时再重读。
+    // 不随页面卸载停止——操作还在跑，关掉窗口不该让人失去取消它的地方。
+    onSuccess: (operation, input) => {
+      invalidate();
+      followOperation(at(input.repository), operation, invalidate);
+    },
     onError: (error) => toast.error(error.message),
   });
   /** 待确认的那一次写记着它属于哪个仓库；确认框本身只会复述一次动作。 */
