@@ -77,6 +77,30 @@ export function anonymousPath(path: string): boolean {
   );
 }
 
+/**
+ * 同源只读请求里浏览器没发的那个 Origin。
+ *
+ * Fetch 规范只对跨源请求与写方法发 Origin；服务器壳的页面与接口同源，于是页面
+ * 的每一个 GET 都不带它。门对 API 要求 Origin（会话也绑在来源上），所以这里按
+ * 浏览器自己的说法补上：`Sec-Fetch-Site: same-origin` 说明发起者就是这个来源，
+ * 这个来源就是 `https://<Host>`，而且它必须在白名单里。其余情况一律不补——
+ * 不是浏览器（没有 Sec-Fetch-Site）、跨站、写方法（浏览器一定带 Origin），
+ * 仍由 {@link admit} 照原样拒绝。
+ */
+export function impliedOrigin(
+  method: string,
+  headers: IncomingHttpHeaders,
+  origins: ReadonlySet<string>,
+): string | undefined {
+  if (headers.origin !== undefined || !safeMethod(method)) return undefined;
+  if (singleHeader(headers, "sec-fetch-site") !== "same-origin")
+    return undefined;
+  const host = singleHeader(headers, "host");
+  if (host === undefined) return undefined;
+  const origin = canonicalOrigin(`https://${host}`);
+  return origin !== undefined && origins.has(origin) ? origin : undefined;
+}
+
 /** 只读方法。CSRF 只对会改变状态的那些要求。 */
 export function safeMethod(method: string): boolean {
   return ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());

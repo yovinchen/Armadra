@@ -39,11 +39,12 @@ function call(
     cookie?: string;
     csrf?: string;
     body?: string;
+    headers?: Record<string, string>;
   } = {},
 ): Promise<Answer> {
   const url = new URL(path, origin);
   return new Promise((done, failed) => {
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...options.headers };
     if (options.origin !== null) headers.origin = options.origin ?? origin;
     if (options.cookie !== undefined) headers.cookie = options.cookie;
     if (options.csrf !== undefined) headers["x-armadra-csrf"] = options.csrf;
@@ -243,6 +244,72 @@ describe("服务器壳的装配", () => {
     expect(revoked.status).toBe(200);
     const after = await call("/api/workspaces", { cookie });
     expect(after.status).toBe(401);
+  });
+
+  it("同源的只读请求不带 Origin：凭 Sec-Fetch-Site 与 Host 补上页面来源", async () => {
+    // 浏览器对同源的 GET / HEAD 不发 Origin（Fetch 规范只对跨源与写方法发）。
+    // 服务器壳的页面与接口同源，所以页面的每一个读请求都长这样——此前一律
+    // 403「来源不被允许」，真浏览器里连配对面板都打不开。
+    const pairedAgain = await call("/api/identity/pair", {
+      method: "POST",
+      body: JSON.stringify({ ticket: running.pair().ticket }),
+    });
+    expect(pairedAgain.status).toBe(200);
+    const cookie = (pairedAgain.headers["set-cookie"] as string[])
+      .map((value) => (value.split(";")[0] as string).trim())
+      .join("; ");
+    const sameOrigin = { "sec-fetch-site": "same-origin" };
+
+    const session = await call("/api/identity/session", {
+      origin: null,
+      cookie,
+      headers: sameOrigin,
+    });
+    expect(session.status).toBe(200);
+    const listed = await call("/api/workspaces", {
+      origin: null,
+      cookie,
+      headers: sameOrigin,
+    });
+    expect(listed.status).toBe(200);
+    expect(
+      (await call("/api/health", { origin: null, headers: sameOrigin })).status,
+    ).toBe(200);
+
+    // 没有 Sec-Fetch-Site 的（不是浏览器）、跨站的、Host 不在白名单里的，照旧拒绝。
+    expect(
+      (await call("/api/workspaces", { origin: null, cookie })).status,
+    ).toBe(403);
+    expect(
+      (
+        await call("/api/workspaces", {
+          origin: null,
+          cookie,
+          headers: { "sec-fetch-site": "cross-site" },
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await call("/api/workspaces", {
+          origin: null,
+          cookie,
+          headers: { ...sameOrigin, host: "evil.example" },
+        })
+      ).status,
+    ).toBe(403);
+    // 写方法浏览器一定带 Origin；不带的写照旧拒绝，不替它补。
+    expect(
+      (
+        await call("/api/workspaces", {
+          method: "POST",
+          origin: null,
+          cookie,
+          headers: sameOrigin,
+          body: JSON.stringify({ name: "x" }),
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it("再铸一张配对码不会复用上一张", async () => {

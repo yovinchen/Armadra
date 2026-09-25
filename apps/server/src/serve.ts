@@ -20,7 +20,7 @@ import { canonicalOrigin } from "../../desktop/src/core/identity/origin";
 import { allScopes } from "../../desktop/src/core/identity/scopes";
 import type { CoreLog } from "../../desktop/src/core/platform";
 import { type ListenAddress, loopbackHost } from "./cli";
-import { type Admission, type Refusal, admit } from "./auth";
+import { type Admission, type Refusal, admit, impliedOrigin } from "./auth";
 import { serverPlatform } from "./platform-node";
 import { type TlsMaterial, resolveTls } from "./tls";
 import {
@@ -331,6 +331,14 @@ async function handle(
 ): Promise<void> {
   const path = pathOf(request);
   const method = (request.method ?? "GET").toUpperCase();
+  // 补在请求头上而不是只给门看：core 的身份域（`GET /api/identity/session`）
+  // 与 CORS 也各自读 Origin，三处必须看到同一个来源。
+  const implied = impliedOrigin(
+    method,
+    request.headers,
+    options.context.origins,
+  );
+  if (implied !== undefined) request.headers.origin = implied;
   const admission = admit(
     { method, path, headers: request.headers },
     options.context,

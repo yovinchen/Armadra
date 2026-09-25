@@ -7,6 +7,7 @@ import {
   anonymousPath,
   cookieValue,
   gate,
+  impliedOrigin,
   loopbackOnlyPath,
   safeMethod,
 } from "./auth";
@@ -142,6 +143,31 @@ describe("认证门", () => {
         },
         ctx,
       ),
+    ).toBeUndefined();
+  });
+
+  it("同源只读请求缺的 Origin 按 Sec-Fetch-Site 与 Host 补，其余不补", () => {
+    const origins = new Set(["https://127.0.0.1:8443"]);
+    const same = { "sec-fetch-site": "same-origin", host: "127.0.0.1:8443" };
+    expect(impliedOrigin("GET", same, origins)).toBe("https://127.0.0.1:8443");
+    expect(impliedOrigin("HEAD", same, origins)).toBe("https://127.0.0.1:8443");
+    // 写方法、已带 Origin、非浏览器、跨站、Host 不在白名单：都不补。
+    expect(impliedOrigin("POST", same, origins)).toBeUndefined();
+    expect(
+      impliedOrigin("GET", { ...same, origin: "https://x" }, origins),
+    ).toBeUndefined();
+    expect(
+      impliedOrigin("GET", { host: "127.0.0.1:8443" }, origins),
+    ).toBeUndefined();
+    expect(
+      impliedOrigin(
+        "GET",
+        { ...same, "sec-fetch-site": "cross-site" },
+        origins,
+      ),
+    ).toBeUndefined();
+    expect(
+      impliedOrigin("GET", { ...same, host: "evil.example" }, origins),
     ).toBeUndefined();
   });
 
