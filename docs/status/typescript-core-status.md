@@ -5,18 +5,19 @@
 
 ## 1. 阶段状态
 
-| 阶段   | 范围                                                                               | 状态                                                     |
-| ------ | ---------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                    | 已合入（`6f2207dd4`）                                    |
-| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                          | 已合入（`e7cbaf38c`）                                    |
-| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                   | 已合入（`00d551f71`）                                    |
-| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                           | 已合入（`00d551f71`）                                    |
-| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                            | 已合入（`9131d4f59`）                                    |
-| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                   | 已合入（`9131d4f59`）                                    |
-| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d） | 全部已合入                                               |
-| R7a    | GitHub 与自动化改打 JSON 面（R7 的前置）                                           | 已合入                                                   |
-| R7c    | 页面的身份 / 会话 / 事件流 / 更新脱离 `host-client`                                | 已合入                                                   |
-| R7d    | 收尾：删 Rust / Go / proto 与 `/rpc/` 面，CI、规则、打包与文档收口                 | 全部已合入；发布干跑六目标 + 公证 + 汇总全绿（§17、§18） |
+| 阶段   | 范围                                                                                                                                                                                                                                                                                              | 状态                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                                                                                                                                                                                                                                   | 已合入（`6f2207dd4`）                                    |
+| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                                                                                                                                                                                                                                         | 已合入（`e7cbaf38c`）                                    |
+| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                                                                                                                                                                                                                                  | 已合入（`00d551f71`）                                    |
+| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                                                                                                                                                                                                                                          | 已合入（`00d551f71`）                                    |
+| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                                                                                                                                                                                                                                           | 已合入（`9131d4f59`）                                    |
+| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                                                                                                                                                                                                                                  | 已合入（`9131d4f59`）                                    |
+| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d）                                                                                                                                                                                                                | 全部已合入                                               |
+| R7a    | GitHub 与自动化改打 JSON 面（R7 的前置）                                                                                                                                                                                                                                                          | 已合入                                                   |
+| R7c    | 页面的身份 / 会话 / 事件流 / 更新脱离 `host-client`                                                                                                                                                                                                                                               | 已合入                                                   |
+| R7d    | 收尾：删 Rust / Go / proto 与 `/rpc/` 面，CI、规则、打包与文档收口                                                                                                                                                                                                                                | 全部已合入；发布干跑六目标 + 公证 + 汇总全绿（§17、§18） |
+| 补齐轮 | 2026-09-25/26 两批：远端执行主机 Worker 与补齐（§34、§44）、冷启动与防休眠（§35）、依赖编排（§36）、编辑器节点（§37）、搜索 / 文件树 / 语言授权 / Projects（§38）、浏览器与状态徽标（§39）、快捷键与更新器（§40）、在线设备与编辑租约（§41）、账号与共享（§42）、节能休眠（§43）、零散缺口（§45） | 全部已合入                                               |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -1549,31 +1550,31 @@ Windows 仍剩那两条 `EBUSY`，而 33.4 的等待把那个文件从 12 秒拖
 
 第三轮之后 `apps/desktop` 在 Windows 上全绿。
 
-## 40. 快捷键补齐三项、更新器拆掉 host 依赖（2026-09-26）
+## 34. 远端执行主机：Worker 服务端与按执行主机路由（2026-09-26）
 
-### 40.1 快捷键（终端宿主设计 §10.1）
+H02 的控制端（帧、握手、重连）早就在，远端那一侧从没写过：`core` 没有 `worker` 子命令，建远端工作空间与切换执行主机两条路由校验完参数就抛 `unsupported`，文件与导入路由遇到 `executionHostId` 一律 501，Git 路由更糟——根本不看执行主机，直接在控制端磁盘上对一条远端路径跑 `git`。
 
-S01 剩下的三项补上了，存储形状只加不改，旧数据不需要迁移：
+### 34.1 做了什么
 
-- **设为无。** 一条空串覆盖。`readLayer` 以前把空串当「没写」丢掉，现在留下：没有这个键是「没覆盖」，空串是「覆盖为空」，来源照报本层，↺ 退回下一层。旧的扁平写法里空串仍然丢掉——那一版没有「清空」这回事。
-- **多组替代键。** 存储本来就是逗号分隔。每行的「更多」菜单里「再添加一组按键」进入追加录制（`addChord`，修饰键别名归一后重复的不加），多于一组时可逐组移除（`removeChord`，删掉最后一组就是清空）。冲突检测逐组比较，第二组撞车或是窗口保留键同样报。
-- **自定义 `when`。** 每层新增不分平台的 `when` 表（默认档在 `settings.keymap.when`，其余档在 `profiles.<id>.when`，本设备同形），空串表示「不设条件」。不按平台分是因为条件里本来就能写 `platform == mac`。对话框按 `when.ts` 的语法校验，语法错与不认识的键分开提示，有错时保存按钮不可用；读设置和导入时读不懂的条件直接丢掉，免得一条命令在任何地方都悄悄不触发。`keymapConflicts` 与 `useKeybindings` 都改读合并之后的条件（`commandWhen`）。
+- **Worker 服务端**（`core/remote/server.ts`）：`armadra-core worker --stdio [--state-dir D] [--language-link]`，由 `main.ts` 在 `run()` 之前分流，不开数据库、不监听、不写端点文件。先主动发握手帧（`requestId = "hello"`，协议 2.0、服务契约 1、能力 `remote.execution.v1` / `remote.files.v1` / `remote.git.v1`），之后按 `action` 执行；发给别的会话的请求答 `instance_mismatch`，超过帧上限的答复答 413 `resource_exhausted`，不截断。`--language-link` 直接拒绝（退出码 3）。
+- **一张操作表两处用**（`core/remote/operations.ts`）：控制端对本机工作空间直接调，Worker 收到帧后查同一张表。文件（列表、读写、版本、条目、回收站、索引、搜索、下载）、导入、Git（status、diff、head、init、stage / unstage / resolve / revert / commit、hunks、repositories、log、refs、identity、branches、tags、remotes、worktrees、stashes、history、reflog、commit / commit-file、cherry-pick 与 rebase 预览、message source）和根登记（规范路径 + 指纹）。每项标明能否重放。
+- **唯一的缝**（`core/remote/execute.ts` 的 `executeOn`）：执行主机为空在本进程跑，否则经远端域发给 Worker；远端域没装配就是 501，绝不回退到本机磁盘。控制端 `RemoteWorker.request` 按合同处理传输失败：没写出去的在新连接上重发一次；写出去又丢了答复的，读重放一次、写报 `unknown_outcome` 不重发。
+- **路由接通**：`files/routes.ts` 全部、`git/routes.ts` 除操作队列外全部、`imports/routes.ts` 的上传与本机拖入（字节在控制端读，在执行主机上暂存 → 原子发布）。`POST /api/workspaces/remote` 与 `PATCH …/execution-host` 在目标主机上登记根之后才写库；切换按 `remote/switch.ts` 的既有规则判：终端（库里仍在运行的会话）与进行中的 Git 操作列为阻塞项，`stopBlockers` 经终端域自己的 `terminate` 路由结束终端，HEAD 与顶层目录不一致答 409 `root_mismatch`，旧根读不到时也只有 `force` 能越过；成功后释放两种监听、清仓库发现缓存、发 `workspace.updated`。
+- **远端文件监听**：控制端每 2 秒批量问一次版本（`core/remote/watch.ts`），变化发与本机相同的 `file.changed`，注册答 `mode: poll`，编辑器已有「轮询」徽标。
+- **界面**：设置 → SSH 里「在执行主机上打开」成功后直接切到新工作空间；切换执行主机的界面原样可用（接口形状本来就对）。
 
-顺带修了一处：编辑器、浏览器节点装在子树上的监听器不传 `keymap`，以前只认默认键——用户在设置里改的编辑器 / 浏览器键位到了节点里不作数。`useKeybindings` 不传 `keymap` 时改读 `setActiveKeymap` 那一份。
+### 34.2 没做 / 明确拒绝的
 
-全部重置时 `when` 那一格没改过就不带进 PATCH，平台两格照旧总是带上，与从前的形状一致。
+- **语言服务**：远端工作空间的服务行与开会话一律 `unsupported_remote`（501），不再报暗示「重连能好」的 `link_lost`；共享包的 `LANGUAGE_UNSUPPORTED_REASONS` 与中英文案同步加了这个键。要做需要一条承载 JSON-RPC 流的第二连接。
+- **Git 操作队列、集成状态、工作树绑定、AI 提交信息生成**：远端答具名 501（列表答空数组），因为它们依赖控制端的操作归属表或要在两台机器上各跑一半。
+- **交接**：远端工作空间与 SSH 终端里的 Agent 都拒绝（501，说明原因）。交接材料是同步读工作空间文件与仓库采出来的，照原样会读控制端磁盘上同名路径里不相干的东西。
+- **大文件**：没有分块上传。远端导入合计上限 11 MiB（一帧 16 MiB 里放得下 base64），超过答 413；下载超过一帧同样 413。
+- **Worker 主动推事件**、协议兼容范围放宽、白板资产导入（`assets/routes.ts` 仍拒绝远端）不在这一轮。
 
-### 40.2 更新器拆掉遗留的 host 依赖（§18.6）
+### 34.3 验证
 
-`UpdatesDeps.host` 与装配处的空实现一起删掉；`shell-core/updates/coordinate.ts` 里只为它存在的 `launcherPath` / `hostDataDir` / `probeHostVersion` / `hostIsOurs` 一并删除，`HealthReadings` 与 `Component` 去掉 `host`。
-
-这不只是清理：`restartReport()` 以前把「探不到 Host 版本」读成 `null`，而 `null` 永远算不一致——每一次更新重启后都会报「更新没有完成」。现在只核对壳与 Runtime 两个版本。原因码 `hostStopFailed` 保留原名：它是页面与文案共用的线上取值，含义仍是「后台停不下来，所以不装」。页面那边 `mismatched` 的联合类型里还留着 `"host"`，是超集，不影响。
-
-### 40.3 验证
-
-- `pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test`：2653 过、1 失败，失败的是 `i18n.test.ts` 的未引用键检查，报的是 `integration.legacy.list`，基线 77b62763 上就已存在，与本节无关。
-- `pnpm --filter @armadra/desktop test`：2829 过、13 跳过，无失败（其中 `src/main/updates` 与 `src/shell-core/updates` 8 个文件 265 条）。
-- `pnpm check`、`pnpm format:check` 通过。
+- `remote/execution.test.ts`：把 core 真入口用 vite 打成 CJS 包，本机子进程跑 `worker --stdio`，控制端经同一套帧与握手说话，不需要 sshd。覆盖握手与能力、按会话拒绝、读重放 / 写不重放（第一个子进程握手后在首个请求上断开）、远端文件路由全套、远端轮询监听、上传与拖入导入、Git 读写与提交、操作队列 501、建远端工作空间（不存在的根不落库）、切换的一致 / 不一致 / 强制 / 终端阻塞 / 迁移文件拒绝，以及没装配远端执行时不回退本机。
+- `pnpm --filter @armadra/desktop test`、`pnpm --filter @armadra/web test`（`i18n.test.ts` 里 `integration.legacy.list` 未引用是基线 b1811c85 带来的，与本节无关）、`pnpm --filter @armadra/web typecheck`、`pnpm --filter @armadra/server test`、`pnpm check`、`pnpm format:check`。
 
 ## 35. 冷启动、半截输入门、工作时防休眠与投递依据徽标（2026-09-26）
 
@@ -1608,6 +1609,69 @@ shared 的 `agentDeliverySchema` 加 `targetState`（缺省空串）。投递队
 - `pnpm --filter @armadra/desktop test`：243 文件 / 2848 条通过（新增 `schedule/dispatch.test.ts` 冷启动 6 条、`collab/send.test.ts` 半截输入 1 条、`resources/keep-awake.test.ts` 7 条、settings 默认值断言）。
 - `pnpm --filter @armadra/server test`：通过。
 - `pnpm --filter @armadra/web typecheck` 通过；`test` 只剩 `i18n.test.ts` 一条失败，是基线 b1811c85 留下的 `integration.legacy.list` 未被引用，与本节无关。
+
+## 36. 依赖编排挪进 core（2026-09-25）
+
+设计 `design/agent-automation-design.md` §6。此前 `open-agent --after` 只往节点数据里写一份 `pendingLaunch`，由页面挂载节点时自己判定、自己敲启动行：页面没开就没人等；判定看的是「现在是不是 done」，一条早就躺着的 done 当场放行。
+
+### 36.1 做了什么
+
+- **迁移 0027**：`agent_dependency_launches`（一个下游一行：状态、重试次数、延后的第一条任务及其来源链）与 `agent_dependencies`（一条边一行：上游、`condition`、基准状态与基准上报时刻、`observed_busy`、状态、原因、TTL）。
+- **`core/dependencies/`**：`evaluate.ts` 是纯判定；`service.ts` 订阅 `agent.status` / `terminal.exit` / `board.changed`，外加 30 秒一次的扫描（过期、上下游被删、重启后的补判与启动重试）；`launch.ts` 在条件满足时启动下游——节点已有活着的 shell（页面开着）就往里敲，没有就经终端桥新增的 `spawnForNode` 起一个（与 `POST /api/terminals` 共用环境与节点令牌，抽成 `ownedEnvironment`），再把会话 id 写进节点数据。启动行与页面拼的是同一份（`planLaunch` + `GET /api/agents` 的解析路径与 `launchArgs`）。第一条任务在启动之后才以 `origin = 'first-task'` 进 `agent_send_queue`（带幂等键），出队泵照旧等第一条真正的 idle——没有另写往 PTY 里敲正文的路。
+- **`open-agent`**：`--after` 写依赖表，新增 `--after-turn current|next`（缺省 `current`）与 `--ttl <分钟>`（缺省一天，上限一周）；建节点之前就拒掉普通终端、环与别的画布上的上游；带 `--after` 时任务不再当场入队（队列 TTL 五分钟，等依赖会过期）。节点数据不再写 `pendingLaunch`。
+- **路由**（契约 `core-json-api.md` §8）：`GET/POST /api/workspaces/{id}/dependencies`（列出 / 迁入旧 `pendingLaunch`）、`DELETE …/dependencies/{dependencyId}`（取消一条边）。
+- **页面**：节点头新增「等待 X」徽标（`DependencyWaitBadge`，浮层里可「不等了，现在启动」）；`use-launch` 在 core 说还在等时只起 shell 不敲启动行；带依赖的旧 `pendingLaunch` 在挂载时迁进 core 再从节点数据里摘掉（迁不进去才退回旧的页面侧等待）；rope 边的等待改由依赖表派生。不带依赖的 `pendingLaunch`（命令面板恢复会话）照旧由页面敲。
+
+### 36.2 取舍
+
+- **基准**：没有 turn id，用「创建时上游的状态 + 最后一次上报时刻」作基准；一次结束要晚于那个时刻，或者基准之后见过它忙（过期扫描把 working 改成 done 时不一定挪时刻）。`current` 遇到上游已干净停下的当场满足（旧 `--after` 的语义）；`next` 只认下一次成功结束，失败的一轮挪基准继续等。
+- **不放行**：失败、中断、上游终端退出 → `failed`；上游被删 → `missing`（旧实现当作满足，这里不再）；过期 → `expired`。都要人取消那条边，其余边都满足时就在取消里启动。
+- **启动安全**：已有 shell 时先看前台——已经在跑这个 Agent 就只记账不再敲；前台是别的程序或有半截输入就改天再试（最多 5 次，之后启动记 `failed`）。页面读不到依赖状态时放行，靠的就是这一条。
+- 批量组队 / 多角度评审这一组合操作没有做；技能文案改了但没有提 `SKILLS_REVISION`（留给统一改技能的那一次）。
+
+### 36.3 验证
+
+- `pnpm --filter @armadra/desktop test`：243 文件通过（本 worktree 的 node-pty `spawn-helper` 没有执行位，`chmod +x` 之后终端用例全绿，与本改动无关）；新增 `core/dependencies/service.test.ts` 25 条（无页面服务端触发、已有 shell 时复用、旧 done 不重放、多上游、失败 / 中断 / 退出 / 删除、TTL、取消与列出、旧数据迁入、core 重启后补判、写完行未落账的重启不重敲）。
+- `pnpm --filter @armadra/server test`：9 文件 68 条通过。
+- `pnpm --filter @armadra/web test` / `typecheck`：新增 `DependencyWaitBadge.test.tsx`；唯一失败是基线就有的 `i18n.test.ts` 未引用键 `integration.legacy.list`（上一个提交留下，与本改动无关）。
+
+## 37. 编辑器节点：最近文件、跳转行列、Git 行边标记、媒体预览与草稿保护（2026-09-26）
+
+设计见[编辑器与浏览器设计](../design/editor-browser-design.md) §2 与 §3，这一节把两处「尚未实现」里除「搜索结果的取消按钮」「重新定位」之外的项都落了。
+
+### 37.1 最近文件与跳转到行列
+
+- 最近文件按工作空间记在本机 localStorage（`files/recent-files.ts`，二十条，最近的在前），编辑器节点每打开一个文件记一次；快速打开输入为空时先列这一组。不进 core：这是「这台设备上刚看过什么」，换台设备本来就该是另一份。
+- 输入 `路径:行[:列]` 时只拿路径去查文件索引，选中后打开到那个位置；`:行[:列]` 不查文件，直接跳当前编辑器。`editor-reveal` 与 `revealLine` 加了列号，越界的行、列都夹到实际范围。
+- 命令表加 `editor.goToLine`（⌃G，两个平台一样——macOS 上 ⌘G 是查找下一个）。编辑器里按下时带着那个节点的路径打开快速打开（`panels/quick-open-seed.ts`，单独一个模块，免得编辑器把快速打开连同符号查询一起拖进包里）；从命令面板执行时落在选中的编辑器上。
+
+### 37.2 Git 行边标记
+
+core 没有「取 HEAD 里这个文件」的接口，也不需要新加：`git/diff` 的 `worktree` 与 `staged` 两个作用域已经给出这个文件的两段 patch，拿磁盘正文依次倒着打回去就是 HEAD 的行（`nodes/editor/git-gutter.ts`）。倒打时逐行核对上下文与新增行，对不上（取 diff 与读正文之间磁盘又变了）就不画——错位的标记比没有标记更误导。未跟踪或刚 `git add` 的新文件整份算新增。
+
+HEAD 的行交给 CodeMirror 的一个 StateField，按键后 250ms 用 `lib/line-diff` 的同一套对齐重算，所以标记跟着草稿走而不是等保存。重取时机：视图重建、保存 / 重载 / 草稿合并之后、窗口回焦，以及 Git 面板做完写操作（它会让 `git-status` 查询失效，这里订阅 QueryCache 的那一下；拿不到 QueryClient 时——比如单测——只是少这一条触发）。不在仓库、没有执行权限、旧 Runtime：没有标记，不报错。
+
+### 37.3 媒体预览
+
+`file-info` 的 `preview` 加了 `video` / `audio` / `pdf`（`shared/api/files.ts`）。判定在 core 的 `files/mime.ts`（`mediaPreviewOf`），`imports/batch.ts` 的 `fileInfo` 调它：只收页面引擎能播的容器（`.avi` / `.mkv` 仍是下载，免得打开一个永远在转圈的黑框），而且不超过下载路由的 16 MiB——页面是整份取回再包成 blob 的。
+
+没有加路由：`file-download` 为了不让上传的 HTML 在 core 的来源里执行，永远回 `application/octet-stream` 附件，所以和图片一样由页面按 Runtime 报的 MIME 包成 blob 再交给原生 `<video>` / `<audio>` / `<iframe>`。为此 CSP 加了 `media-src 'self' blob:`、`frame-src` 加了 `blob:`（服务器壳的策略逐字继承），Electron 窗口开 `plugins: true`，内置 PDF 查看器才会启动。PDF 的框不加 `sandbox`：带沙箱时引擎直接拒绝启动查看器，而那个 blob 是页面自己按 PDF 类型包的，不会被当成 HTML 解析。
+
+图片：适应 / 1:1 两档加滚轮缩放（节点体本来就是 `nowheel`，画布不会跟着缩；从「适应」开始滚以当前实际显示比例为起点），透明区域铺两种表面色的棋盘格，放大到 4 倍以上改成像素化采样。引擎解不开的媒体仍退回下载卡片。
+
+### 37.4 草稿保护
+
+- 未保存的正文去抖 400ms 写进 localStorage（`nodes/editor/drafts.ts`，工作空间 + 路径一条，记着改起时的内容版本与那一版正文）；关页面、切走标签页、节点卸载时立刻写掉排着队的那一截。用 localStorage 而不是 IndexedDB 是因为最后那次写必须同步——`pagehide` 里等不到一个异步事务提交。
+- 重开时：磁盘还是那一版就原样放回，提示「已恢复」并可一键丢弃；磁盘变了就放回草稿，但保存凭据退回旧版本（直接保存会 409，不会悄悄盖掉别人的修改），提示条出现「合并」。
+- 合并复用 `editor/merge/`：`merge-store` 加了 `draft` 模式与 `beginDraft`，对话框在这个模式下换成「打开时的版本 / 草稿 / 磁盘上的版本」的叫法，只有一个「应用到草稿」——结果放回编辑器，磁盘那一版成为新的保存凭据，写不写盘仍由保存决定。会话中途磁盘变了、有草稿时，提示条同样给出「合并」，base 是上一次读到或保存的正文。
+- 打开时文件读不到而本机有草稿：先问 `file-version`，确认是文件没了（不是断线）才把草稿当正文打开，按新建保存。文件被删或移走时提示条多一个「另存为」：按新建写到新路径（已有文件就是 409，对话框里说出来），然后节点改指过去、标题原本是旧文件名时跟着改。
+- 监听注册的回答可能比恢复后的那次渲染先到，恢复时同步写 `dirtyRef`，免得它把刚放回的草稿当成干净编辑器自动重载掉。
+
+### 37.5 验证
+
+`pnpm libs:build` 之后：`pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test` 2658/2660，失败的两条是 `i18n.test.ts` 的 `integration.legacy.list`（基线 `77b62763` 就在，不是这里引入的）和 `AutomationDrawer.test.tsx` 的一条（整套跑时超时，单独重跑 18/18 通过）；`pnpm --filter @armadra/desktop test` 2835 通过 13 跳过；`pnpm --filter @armadra/server test` 68/68；`pnpm check` 与 `pnpm format:check` 通过。新增用例：`nodes/editor/git-gutter.test.ts`（倒打 patch、核对失败、只删的 hunk、三种标记、新文件、CRLF）、`files/recent-files.test.ts`、`nodes/EditorNode.drafts.test.tsx`（草稿落本机与放回、保存后清掉、磁盘变了走合并再按新版本保存、文件没了另存为、行边标记随编辑变化），`QuickOpen.test.tsx` 补最近文件 / `路径:行:列` / 跳转到行，`EditorNode.test.tsx` 补音视频 / PDF / 图片缩放，`imports/batch.test.ts` 补媒体判定与下载上限。
+
+没做：在打包应用里实测 PDF 查看器与视频解码（只在单测里验证了 DOM 与 CSP 串）；「重新定位」——把草稿接到一个已存在的文件上；标题的「未同步」状态。
 
 ## 38. 搜索取消、文件树路径项、语言服务随授权停、Projects 全量翻页（2026-09-26）
 
@@ -1667,94 +1731,31 @@ shared 的 `agentDeliverySchema` 加 `targetState`（缺省空串）。投递队
 - `pnpm --filter @armadra/desktop test`：`main.test.ts` 的 health 文档断言补上 `capabilities` 后全绿（vitest 2850 通过，live 1/1，脚本 38/38）。
 - `pnpm --filter @armadra/server test` 通过；`pnpm check`（含 `format:check`、两边 `typecheck`、`repo:check`）通过。
 
-## 34. 远端执行主机：Worker 服务端与按执行主机路由（2026-09-26）
+## 40. 快捷键补齐三项、更新器拆掉 host 依赖（2026-09-26）
 
-H02 的控制端（帧、握手、重连）早就在，远端那一侧从没写过：`core` 没有 `worker` 子命令，建远端工作空间与切换执行主机两条路由校验完参数就抛 `unsupported`，文件与导入路由遇到 `executionHostId` 一律 501，Git 路由更糟——根本不看执行主机，直接在控制端磁盘上对一条远端路径跑 `git`。
+### 40.1 快捷键（终端宿主设计 §10.1）
 
-### 34.1 做了什么
+S01 剩下的三项补上了，存储形状只加不改，旧数据不需要迁移：
 
-- **Worker 服务端**（`core/remote/server.ts`）：`armadra-core worker --stdio [--state-dir D] [--language-link]`，由 `main.ts` 在 `run()` 之前分流，不开数据库、不监听、不写端点文件。先主动发握手帧（`requestId = "hello"`，协议 2.0、服务契约 1、能力 `remote.execution.v1` / `remote.files.v1` / `remote.git.v1`），之后按 `action` 执行；发给别的会话的请求答 `instance_mismatch`，超过帧上限的答复答 413 `resource_exhausted`，不截断。`--language-link` 直接拒绝（退出码 3）。
-- **一张操作表两处用**（`core/remote/operations.ts`）：控制端对本机工作空间直接调，Worker 收到帧后查同一张表。文件（列表、读写、版本、条目、回收站、索引、搜索、下载）、导入、Git（status、diff、head、init、stage / unstage / resolve / revert / commit、hunks、repositories、log、refs、identity、branches、tags、remotes、worktrees、stashes、history、reflog、commit / commit-file、cherry-pick 与 rebase 预览、message source）和根登记（规范路径 + 指纹）。每项标明能否重放。
-- **唯一的缝**（`core/remote/execute.ts` 的 `executeOn`）：执行主机为空在本进程跑，否则经远端域发给 Worker；远端域没装配就是 501，绝不回退到本机磁盘。控制端 `RemoteWorker.request` 按合同处理传输失败：没写出去的在新连接上重发一次；写出去又丢了答复的，读重放一次、写报 `unknown_outcome` 不重发。
-- **路由接通**：`files/routes.ts` 全部、`git/routes.ts` 除操作队列外全部、`imports/routes.ts` 的上传与本机拖入（字节在控制端读，在执行主机上暂存 → 原子发布）。`POST /api/workspaces/remote` 与 `PATCH …/execution-host` 在目标主机上登记根之后才写库；切换按 `remote/switch.ts` 的既有规则判：终端（库里仍在运行的会话）与进行中的 Git 操作列为阻塞项，`stopBlockers` 经终端域自己的 `terminate` 路由结束终端，HEAD 与顶层目录不一致答 409 `root_mismatch`，旧根读不到时也只有 `force` 能越过；成功后释放两种监听、清仓库发现缓存、发 `workspace.updated`。
-- **远端文件监听**：控制端每 2 秒批量问一次版本（`core/remote/watch.ts`），变化发与本机相同的 `file.changed`，注册答 `mode: poll`，编辑器已有「轮询」徽标。
-- **界面**：设置 → SSH 里「在执行主机上打开」成功后直接切到新工作空间；切换执行主机的界面原样可用（接口形状本来就对）。
+- **设为无。** 一条空串覆盖。`readLayer` 以前把空串当「没写」丢掉，现在留下：没有这个键是「没覆盖」，空串是「覆盖为空」，来源照报本层，↺ 退回下一层。旧的扁平写法里空串仍然丢掉——那一版没有「清空」这回事。
+- **多组替代键。** 存储本来就是逗号分隔。每行的「更多」菜单里「再添加一组按键」进入追加录制（`addChord`，修饰键别名归一后重复的不加），多于一组时可逐组移除（`removeChord`，删掉最后一组就是清空）。冲突检测逐组比较，第二组撞车或是窗口保留键同样报。
+- **自定义 `when`。** 每层新增不分平台的 `when` 表（默认档在 `settings.keymap.when`，其余档在 `profiles.<id>.when`，本设备同形），空串表示「不设条件」。不按平台分是因为条件里本来就能写 `platform == mac`。对话框按 `when.ts` 的语法校验，语法错与不认识的键分开提示，有错时保存按钮不可用；读设置和导入时读不懂的条件直接丢掉，免得一条命令在任何地方都悄悄不触发。`keymapConflicts` 与 `useKeybindings` 都改读合并之后的条件（`commandWhen`）。
 
-### 34.2 没做 / 明确拒绝的
+顺带修了一处：编辑器、浏览器节点装在子树上的监听器不传 `keymap`，以前只认默认键——用户在设置里改的编辑器 / 浏览器键位到了节点里不作数。`useKeybindings` 不传 `keymap` 时改读 `setActiveKeymap` 那一份。
 
-- **语言服务**：远端工作空间的服务行与开会话一律 `unsupported_remote`（501），不再报暗示「重连能好」的 `link_lost`；共享包的 `LANGUAGE_UNSUPPORTED_REASONS` 与中英文案同步加了这个键。要做需要一条承载 JSON-RPC 流的第二连接。
-- **Git 操作队列、集成状态、工作树绑定、AI 提交信息生成**：远端答具名 501（列表答空数组），因为它们依赖控制端的操作归属表或要在两台机器上各跑一半。
-- **交接**：远端工作空间与 SSH 终端里的 Agent 都拒绝（501，说明原因）。交接材料是同步读工作空间文件与仓库采出来的，照原样会读控制端磁盘上同名路径里不相干的东西。
-- **大文件**：没有分块上传。远端导入合计上限 11 MiB（一帧 16 MiB 里放得下 base64），超过答 413；下载超过一帧同样 413。
-- **Worker 主动推事件**、协议兼容范围放宽、白板资产导入（`assets/routes.ts` 仍拒绝远端）不在这一轮。
+全部重置时 `when` 那一格没改过就不带进 PATCH，平台两格照旧总是带上，与从前的形状一致。
 
-### 34.3 验证
+### 40.2 更新器拆掉遗留的 host 依赖（§18.6）
 
-- `remote/execution.test.ts`：把 core 真入口用 vite 打成 CJS 包，本机子进程跑 `worker --stdio`，控制端经同一套帧与握手说话，不需要 sshd。覆盖握手与能力、按会话拒绝、读重放 / 写不重放（第一个子进程握手后在首个请求上断开）、远端文件路由全套、远端轮询监听、上传与拖入导入、Git 读写与提交、操作队列 501、建远端工作空间（不存在的根不落库）、切换的一致 / 不一致 / 强制 / 终端阻塞 / 迁移文件拒绝，以及没装配远端执行时不回退本机。
-- `pnpm --filter @armadra/desktop test`、`pnpm --filter @armadra/web test`（`i18n.test.ts` 里 `integration.legacy.list` 未引用是基线 b1811c85 带来的，与本节无关）、`pnpm --filter @armadra/web typecheck`、`pnpm --filter @armadra/server test`、`pnpm check`、`pnpm format:check`。
+`UpdatesDeps.host` 与装配处的空实现一起删掉；`shell-core/updates/coordinate.ts` 里只为它存在的 `launcherPath` / `hostDataDir` / `probeHostVersion` / `hostIsOurs` 一并删除，`HealthReadings` 与 `Component` 去掉 `host`。
 
-## 37. 编辑器节点：最近文件、跳转行列、Git 行边标记、媒体预览与草稿保护（2026-09-26）
+这不只是清理：`restartReport()` 以前把「探不到 Host 版本」读成 `null`，而 `null` 永远算不一致——每一次更新重启后都会报「更新没有完成」。现在只核对壳与 Runtime 两个版本。原因码 `hostStopFailed` 保留原名：它是页面与文案共用的线上取值，含义仍是「后台停不下来，所以不装」。页面那边 `mismatched` 的联合类型里还留着 `"host"`，是超集，不影响。
 
-设计见[编辑器与浏览器设计](../design/editor-browser-design.md) §2 与 §3，这一节把两处「尚未实现」里除「搜索结果的取消按钮」「重新定位」之外的项都落了。
+### 40.3 验证
 
-### 37.1 最近文件与跳转到行列
-
-- 最近文件按工作空间记在本机 localStorage（`files/recent-files.ts`，二十条，最近的在前），编辑器节点每打开一个文件记一次；快速打开输入为空时先列这一组。不进 core：这是「这台设备上刚看过什么」，换台设备本来就该是另一份。
-- 输入 `路径:行[:列]` 时只拿路径去查文件索引，选中后打开到那个位置；`:行[:列]` 不查文件，直接跳当前编辑器。`editor-reveal` 与 `revealLine` 加了列号，越界的行、列都夹到实际范围。
-- 命令表加 `editor.goToLine`（⌃G，两个平台一样——macOS 上 ⌘G 是查找下一个）。编辑器里按下时带着那个节点的路径打开快速打开（`panels/quick-open-seed.ts`，单独一个模块，免得编辑器把快速打开连同符号查询一起拖进包里）；从命令面板执行时落在选中的编辑器上。
-
-### 37.2 Git 行边标记
-
-core 没有「取 HEAD 里这个文件」的接口，也不需要新加：`git/diff` 的 `worktree` 与 `staged` 两个作用域已经给出这个文件的两段 patch，拿磁盘正文依次倒着打回去就是 HEAD 的行（`nodes/editor/git-gutter.ts`）。倒打时逐行核对上下文与新增行，对不上（取 diff 与读正文之间磁盘又变了）就不画——错位的标记比没有标记更误导。未跟踪或刚 `git add` 的新文件整份算新增。
-
-HEAD 的行交给 CodeMirror 的一个 StateField，按键后 250ms 用 `lib/line-diff` 的同一套对齐重算，所以标记跟着草稿走而不是等保存。重取时机：视图重建、保存 / 重载 / 草稿合并之后、窗口回焦，以及 Git 面板做完写操作（它会让 `git-status` 查询失效，这里订阅 QueryCache 的那一下；拿不到 QueryClient 时——比如单测——只是少这一条触发）。不在仓库、没有执行权限、旧 Runtime：没有标记，不报错。
-
-### 37.3 媒体预览
-
-`file-info` 的 `preview` 加了 `video` / `audio` / `pdf`（`shared/api/files.ts`）。判定在 core 的 `files/mime.ts`（`mediaPreviewOf`），`imports/batch.ts` 的 `fileInfo` 调它：只收页面引擎能播的容器（`.avi` / `.mkv` 仍是下载，免得打开一个永远在转圈的黑框），而且不超过下载路由的 16 MiB——页面是整份取回再包成 blob 的。
-
-没有加路由：`file-download` 为了不让上传的 HTML 在 core 的来源里执行，永远回 `application/octet-stream` 附件，所以和图片一样由页面按 Runtime 报的 MIME 包成 blob 再交给原生 `<video>` / `<audio>` / `<iframe>`。为此 CSP 加了 `media-src 'self' blob:`、`frame-src` 加了 `blob:`（服务器壳的策略逐字继承），Electron 窗口开 `plugins: true`，内置 PDF 查看器才会启动。PDF 的框不加 `sandbox`：带沙箱时引擎直接拒绝启动查看器，而那个 blob 是页面自己按 PDF 类型包的，不会被当成 HTML 解析。
-
-图片：适应 / 1:1 两档加滚轮缩放（节点体本来就是 `nowheel`，画布不会跟着缩；从「适应」开始滚以当前实际显示比例为起点），透明区域铺两种表面色的棋盘格，放大到 4 倍以上改成像素化采样。引擎解不开的媒体仍退回下载卡片。
-
-### 37.4 草稿保护
-
-- 未保存的正文去抖 400ms 写进 localStorage（`nodes/editor/drafts.ts`，工作空间 + 路径一条，记着改起时的内容版本与那一版正文）；关页面、切走标签页、节点卸载时立刻写掉排着队的那一截。用 localStorage 而不是 IndexedDB 是因为最后那次写必须同步——`pagehide` 里等不到一个异步事务提交。
-- 重开时：磁盘还是那一版就原样放回，提示「已恢复」并可一键丢弃；磁盘变了就放回草稿，但保存凭据退回旧版本（直接保存会 409，不会悄悄盖掉别人的修改），提示条出现「合并」。
-- 合并复用 `editor/merge/`：`merge-store` 加了 `draft` 模式与 `beginDraft`，对话框在这个模式下换成「打开时的版本 / 草稿 / 磁盘上的版本」的叫法，只有一个「应用到草稿」——结果放回编辑器，磁盘那一版成为新的保存凭据，写不写盘仍由保存决定。会话中途磁盘变了、有草稿时，提示条同样给出「合并」，base 是上一次读到或保存的正文。
-- 打开时文件读不到而本机有草稿：先问 `file-version`，确认是文件没了（不是断线）才把草稿当正文打开，按新建保存。文件被删或移走时提示条多一个「另存为」：按新建写到新路径（已有文件就是 409，对话框里说出来），然后节点改指过去、标题原本是旧文件名时跟着改。
-- 监听注册的回答可能比恢复后的那次渲染先到，恢复时同步写 `dirtyRef`，免得它把刚放回的草稿当成干净编辑器自动重载掉。
-
-### 37.5 验证
-
-`pnpm libs:build` 之后：`pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test` 2658/2660，失败的两条是 `i18n.test.ts` 的 `integration.legacy.list`（基线 `77b62763` 就在，不是这里引入的）和 `AutomationDrawer.test.tsx` 的一条（整套跑时超时，单独重跑 18/18 通过）；`pnpm --filter @armadra/desktop test` 2835 通过 13 跳过；`pnpm --filter @armadra/server test` 68/68；`pnpm check` 与 `pnpm format:check` 通过。新增用例：`nodes/editor/git-gutter.test.ts`（倒打 patch、核对失败、只删的 hunk、三种标记、新文件、CRLF）、`files/recent-files.test.ts`、`nodes/EditorNode.drafts.test.tsx`（草稿落本机与放回、保存后清掉、磁盘变了走合并再按新版本保存、文件没了另存为、行边标记随编辑变化），`QuickOpen.test.tsx` 补最近文件 / `路径:行:列` / 跳转到行，`EditorNode.test.tsx` 补音视频 / PDF / 图片缩放，`imports/batch.test.ts` 补媒体判定与下载上限。
-
-没做：在打包应用里实测 PDF 查看器与视频解码（只在单测里验证了 DOM 与 CSP 串）；「重新定位」——把草稿接到一个已存在的文件上；标题的「未同步」状态。
-
-## 36. 依赖编排挪进 core（2026-09-25）
-
-设计 `design/agent-automation-design.md` §6。此前 `open-agent --after` 只往节点数据里写一份 `pendingLaunch`，由页面挂载节点时自己判定、自己敲启动行：页面没开就没人等；判定看的是「现在是不是 done」，一条早就躺着的 done 当场放行。
-
-### 36.1 做了什么
-
-- **迁移 0027**：`agent_dependency_launches`（一个下游一行：状态、重试次数、延后的第一条任务及其来源链）与 `agent_dependencies`（一条边一行：上游、`condition`、基准状态与基准上报时刻、`observed_busy`、状态、原因、TTL）。
-- **`core/dependencies/`**：`evaluate.ts` 是纯判定；`service.ts` 订阅 `agent.status` / `terminal.exit` / `board.changed`，外加 30 秒一次的扫描（过期、上下游被删、重启后的补判与启动重试）；`launch.ts` 在条件满足时启动下游——节点已有活着的 shell（页面开着）就往里敲，没有就经终端桥新增的 `spawnForNode` 起一个（与 `POST /api/terminals` 共用环境与节点令牌，抽成 `ownedEnvironment`），再把会话 id 写进节点数据。启动行与页面拼的是同一份（`planLaunch` + `GET /api/agents` 的解析路径与 `launchArgs`）。第一条任务在启动之后才以 `origin = 'first-task'` 进 `agent_send_queue`（带幂等键），出队泵照旧等第一条真正的 idle——没有另写往 PTY 里敲正文的路。
-- **`open-agent`**：`--after` 写依赖表，新增 `--after-turn current|next`（缺省 `current`）与 `--ttl <分钟>`（缺省一天，上限一周）；建节点之前就拒掉普通终端、环与别的画布上的上游；带 `--after` 时任务不再当场入队（队列 TTL 五分钟，等依赖会过期）。节点数据不再写 `pendingLaunch`。
-- **路由**（契约 `core-json-api.md` §8）：`GET/POST /api/workspaces/{id}/dependencies`（列出 / 迁入旧 `pendingLaunch`）、`DELETE …/dependencies/{dependencyId}`（取消一条边）。
-- **页面**：节点头新增「等待 X」徽标（`DependencyWaitBadge`，浮层里可「不等了，现在启动」）；`use-launch` 在 core 说还在等时只起 shell 不敲启动行；带依赖的旧 `pendingLaunch` 在挂载时迁进 core 再从节点数据里摘掉（迁不进去才退回旧的页面侧等待）；rope 边的等待改由依赖表派生。不带依赖的 `pendingLaunch`（命令面板恢复会话）照旧由页面敲。
-
-### 36.2 取舍
-
-- **基准**：没有 turn id，用「创建时上游的状态 + 最后一次上报时刻」作基准；一次结束要晚于那个时刻，或者基准之后见过它忙（过期扫描把 working 改成 done 时不一定挪时刻）。`current` 遇到上游已干净停下的当场满足（旧 `--after` 的语义）；`next` 只认下一次成功结束，失败的一轮挪基准继续等。
-- **不放行**：失败、中断、上游终端退出 → `failed`；上游被删 → `missing`（旧实现当作满足，这里不再）；过期 → `expired`。都要人取消那条边，其余边都满足时就在取消里启动。
-- **启动安全**：已有 shell 时先看前台——已经在跑这个 Agent 就只记账不再敲；前台是别的程序或有半截输入就改天再试（最多 5 次，之后启动记 `failed`）。页面读不到依赖状态时放行，靠的就是这一条。
-- 批量组队 / 多角度评审这一组合操作没有做；技能文案改了但没有提 `SKILLS_REVISION`（留给统一改技能的那一次）。
-
-### 36.3 验证
-
-- `pnpm --filter @armadra/desktop test`：243 文件通过（本 worktree 的 node-pty `spawn-helper` 没有执行位，`chmod +x` 之后终端用例全绿，与本改动无关）；新增 `core/dependencies/service.test.ts` 25 条（无页面服务端触发、已有 shell 时复用、旧 done 不重放、多上游、失败 / 中断 / 退出 / 删除、TTL、取消与列出、旧数据迁入、core 重启后补判、写完行未落账的重启不重敲）。
-- `pnpm --filter @armadra/server test`：9 文件 68 条通过。
-- `pnpm --filter @armadra/web test` / `typecheck`：新增 `DependencyWaitBadge.test.tsx`；唯一失败是基线就有的 `i18n.test.ts` 未引用键 `integration.legacy.list`（上一个提交留下，与本改动无关）。
+- `pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test`：2653 过、1 失败，失败的是 `i18n.test.ts` 的未引用键检查，报的是 `integration.legacy.list`，基线 77b62763 上就已存在，与本节无关。
+- `pnpm --filter @armadra/desktop test`：2829 过、13 跳过，无失败（其中 `src/main/updates` 与 `src/shell-core/updates` 8 个文件 265 条）。
+- `pnpm check`、`pnpm format:check` 通过。
 
 ## 41. 多设备画布：在线设备与编辑租约（2026-09-26）
 
@@ -1813,42 +1814,6 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/server test`：10 文件 79 条通过。新增 `sharing.integration.test.ts`：真起 `serve`，首个管理员配对，三人经邀请注册；矩阵（列表 / 读 / 写 / 开终端 / 改工作空间与全局设置 / 改共享）、非成员升级前 403、成员只收自己画布的帧、邀请一次性与作废、撤销共享后事件流 4403 关闭且下一个请求 403。
 - `pnpm --filter @armadra/web test` / `typecheck`：新增 `AccountsSharingPage.test.tsx` 6 条；全量跑时 `AutomationDrawer` 与 `KeybindingsPage` 各有用例超时，单独重跑通过（负载所致）。
 - `pnpm check`、`pnpm format:check` 通过。
-
-## 45. 第一批留下的零散缺口（2026-09-26）
-
-补 §35–§40 各自记下的「没做 / 已知限制」。
-
-### 45.1 Issues 分组的「部分」标记（§38.4）
-
-`allIssues` 任一页回 `statusGroupsPartial: true` 就在 `IssuePage` 上记下；`IssueList` 在分组上方放一个描边徽标「分组不完整」，悬停说明原因。没有 Issue 时不显示。
-
-### 45.2 挂着的终端节点跟上 core 起的会话（§35.1 已知限制）
-
-冷启动与依赖编排的 `spawnForNode` 都把新会话 id 写进节点数据并发 `board.changed`，页面合并后 `TerminalSurface` 的 `data.sessionId` 就变了。新增 `surface/use-session.ts::useAdoptedSession`：只在节点数据里的 id **变化**时换过去，不和手里的那个比——挂载时 `find` 可能找到比节点数据更新的会话，那时两者不同是正常的；自己新建的会话两边同时写，不触发；正在新建时不抢。换过去的会话不算本次挂载新建（`freshSessionRef = false`），启动行不会再敲一遍。`TerminalNode.tsx` 没有改动。
-
-### 45.3 批量组队 `canvas team`（§36.2 没做的组合操作）
-
-`team --member "agent[@模型]|标题|任务"`（最多 6 个，只切前两个 `|`）一次建一组 Agent 节点，每个都等同一次 `open-agent`：同样的节点数据、从调用者连主从线、第一条任务走投递队列。编排三种：缺省并行（带 `--after` 时一起等外部节点）；`--chain` 让第 N 个等第 N−1 个并互连对等线；`--gather` 加一个汇总节点，并行时等全部成员、流水线时等最后一个，与每个成员连对等线。`--after-turn` / `--ttl` / `--permission-mode` / `--inbox-wake` / `--dry-run` 作用于整队。所有校验（agent、模型、权限模式、外部依赖、来源链）都在建节点之前；依赖在节点全部存好之后写，团内上游那时才是画布上的 Agent 节点。`Args` 新增 `all(name)`：`list` 会按逗号切，任务正文里的逗号不能切。
-
-`SKILLS_REVISION` 10 → 11，技能文本与 CLI 用法同步加了 `team`；`architecture.md` 的动词清单补齐（它还写着 `send` 已移除）。
-
-### 45.4 编辑器草稿重新定位（§37.5 没做）
-
-文件被删或移走时提示条多一个「重新定位」：填一个已存在的文件，「合并」以草稿改起时的正文（本机副本里的 `base`，没有就用编辑器基准）为 base、目标为 theirs 走同一个草稿合并对话框，结果写成**目标文件**的本机草稿（带它的内容版本）再把节点改指过去，由草稿保护放回——不写盘；「覆盖」再确认一次后带读到的 size / sha256 写盘，期间被改就 409。目标不存在答「该路径没有文件」，不代为新建（那是另存为）。代码在 `nodes/editor/use-relocate.ts` 与 `RelocateDialog.tsx`。
-
-### 45.5 切换执行主机发 `workspace.grants`（§38.3）
-
-`PATCH …/execution-host` 成功且主机或根目录真的变了才发，事件多一个可选的 `executionHostId`（新主机，本机为空串）。语言服务的 `grantChange` 据此停掉按旧根起的服务器：搬到别的主机报 `unsupported_remote`，本机换目录报 `workspace_closed`。原地「切换」到同一个根不发。
-
-### 45.6 过期注释
-
-`settings/execution-hosts.ts` 说 `/validate` 仍是 501（早由 `core/remote` 接上）；`language/index.ts` 说 Worker 的 `registerRoot` 等还没实现、远端答 `link_lost`（§34 已实现、现答 `unsupported_remote`）；`collab/control/index.ts` 的「十三个动词」。都改成现状。
-
-### 45.7 验证
-
-- `pnpm --filter @armadra/desktop test`：vitest 2921 通过、13 跳过；live 1/1；脚本 38/38。新用例：`collab/control.test.ts` 的 `team` 三条（并行 + 汇总、带外部依赖的流水线、建节点前拒绝与演练），`language/policy.test.ts`（搬家即停），`language/routes.integration.test.ts`（真 HTTP 切换根目录 → 会话收到 `stopped` + `workspace_closed`，原地切换不再发）。
-- `pnpm --filter @armadra/web test`：2711 通过，4 条失败都是 `KeybindingsPage.test.tsx` 的 5 秒超时（机器负载 200+），单独以 `--testTimeout=30000` 重跑 20/20 通过，与本节无关。新用例：`TerminalSurface.render.test.tsx`（节点数据换 id 后重连到新会话且不新建、数据没变时不被拽回）、`GithubDrawer.test.tsx`（部分标记）、`EditorNode.drafts.test.tsx`（重新定位的合并、确认后覆盖、目标不存在）。
-- `pnpm --filter @armadra/server test` 68/68；`pnpm check`、`pnpm format:check` 通过。
 
 ## 43. 节能休眠：空闲 Agent 会话结束进程、用 resume 接回（2026-09-26）
 
@@ -1913,3 +1878,39 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/web test`：全量跑时 `AutomationDrawer.test.tsx` 与 `KeybindingsPage.test.tsx` 在机器高负载下超时，单独重跑两文件 38 条全过；`typecheck` 通过。
 - `pnpm --filter @armadra/server test`：9 文件 68 条通过；`pnpm --filter @armadra/shared test`：155 条通过。
 - `pnpm check`（含 `format:check`）通过。
+
+## 45. 第一批留下的零散缺口（2026-09-26）
+
+补 §35–§40 各自记下的「没做 / 已知限制」。
+
+### 45.1 Issues 分组的「部分」标记（§38.4）
+
+`allIssues` 任一页回 `statusGroupsPartial: true` 就在 `IssuePage` 上记下；`IssueList` 在分组上方放一个描边徽标「分组不完整」，悬停说明原因。没有 Issue 时不显示。
+
+### 45.2 挂着的终端节点跟上 core 起的会话（§35.1 已知限制）
+
+冷启动与依赖编排的 `spawnForNode` 都把新会话 id 写进节点数据并发 `board.changed`，页面合并后 `TerminalSurface` 的 `data.sessionId` 就变了。新增 `surface/use-session.ts::useAdoptedSession`：只在节点数据里的 id **变化**时换过去，不和手里的那个比——挂载时 `find` 可能找到比节点数据更新的会话，那时两者不同是正常的；自己新建的会话两边同时写，不触发；正在新建时不抢。换过去的会话不算本次挂载新建（`freshSessionRef = false`），启动行不会再敲一遍。`TerminalNode.tsx` 没有改动。
+
+### 45.3 批量组队 `canvas team`（§36.2 没做的组合操作）
+
+`team --member "agent[@模型]|标题|任务"`（最多 6 个，只切前两个 `|`）一次建一组 Agent 节点，每个都等同一次 `open-agent`：同样的节点数据、从调用者连主从线、第一条任务走投递队列。编排三种：缺省并行（带 `--after` 时一起等外部节点）；`--chain` 让第 N 个等第 N−1 个并互连对等线；`--gather` 加一个汇总节点，并行时等全部成员、流水线时等最后一个，与每个成员连对等线。`--after-turn` / `--ttl` / `--permission-mode` / `--inbox-wake` / `--dry-run` 作用于整队。所有校验（agent、模型、权限模式、外部依赖、来源链）都在建节点之前；依赖在节点全部存好之后写，团内上游那时才是画布上的 Agent 节点。`Args` 新增 `all(name)`：`list` 会按逗号切，任务正文里的逗号不能切。
+
+`SKILLS_REVISION` 10 → 11，技能文本与 CLI 用法同步加了 `team`；`architecture.md` 的动词清单补齐（它还写着 `send` 已移除）。
+
+### 45.4 编辑器草稿重新定位（§37.5 没做）
+
+文件被删或移走时提示条多一个「重新定位」：填一个已存在的文件，「合并」以草稿改起时的正文（本机副本里的 `base`，没有就用编辑器基准）为 base、目标为 theirs 走同一个草稿合并对话框，结果写成**目标文件**的本机草稿（带它的内容版本）再把节点改指过去，由草稿保护放回——不写盘；「覆盖」再确认一次后带读到的 size / sha256 写盘，期间被改就 409。目标不存在答「该路径没有文件」，不代为新建（那是另存为）。代码在 `nodes/editor/use-relocate.ts` 与 `RelocateDialog.tsx`。
+
+### 45.5 切换执行主机发 `workspace.grants`（§38.3）
+
+`PATCH …/execution-host` 成功且主机或根目录真的变了才发，事件多一个可选的 `executionHostId`（新主机，本机为空串）。语言服务的 `grantChange` 据此停掉按旧根起的服务器：搬到别的主机报 `unsupported_remote`，本机换目录报 `workspace_closed`。原地「切换」到同一个根不发。
+
+### 45.6 过期注释
+
+`settings/execution-hosts.ts` 说 `/validate` 仍是 501（早由 `core/remote` 接上）；`language/index.ts` 说 Worker 的 `registerRoot` 等还没实现、远端答 `link_lost`（§34 已实现、现答 `unsupported_remote`）；`collab/control/index.ts` 的「十三个动词」。都改成现状。
+
+### 45.7 验证
+
+- `pnpm --filter @armadra/desktop test`：vitest 2921 通过、13 跳过；live 1/1；脚本 38/38。新用例：`collab/control.test.ts` 的 `team` 三条（并行 + 汇总、带外部依赖的流水线、建节点前拒绝与演练），`language/policy.test.ts`（搬家即停），`language/routes.integration.test.ts`（真 HTTP 切换根目录 → 会话收到 `stopped` + `workspace_closed`，原地切换不再发）。
+- `pnpm --filter @armadra/web test`：2711 通过，4 条失败都是 `KeybindingsPage.test.tsx` 的 5 秒超时（机器负载 200+），单独以 `--testTimeout=30000` 重跑 20/20 通过，与本节无关。新用例：`TerminalSurface.render.test.tsx`（节点数据换 id 后重连到新会话且不新建、数据没变时不被拽回）、`GithubDrawer.test.tsx`（部分标记）、`EditorNode.drafts.test.tsx`（重新定位的合并、确认后覆盖、目标不存在）。
+- `pnpm --filter @armadra/server test` 68/68；`pnpm check`、`pnpm format:check` 通过。
