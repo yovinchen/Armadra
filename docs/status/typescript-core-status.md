@@ -1755,3 +1755,31 @@ HEAD 的行交给 CodeMirror 的一个 StateField，按键后 250ms 用 `lib/lin
 - `pnpm --filter @armadra/desktop test`：243 文件通过（本 worktree 的 node-pty `spawn-helper` 没有执行位，`chmod +x` 之后终端用例全绿，与本改动无关）；新增 `core/dependencies/service.test.ts` 25 条（无页面服务端触发、已有 shell 时复用、旧 done 不重放、多上游、失败 / 中断 / 退出 / 删除、TTL、取消与列出、旧数据迁入、core 重启后补判、写完行未落账的重启不重敲）。
 - `pnpm --filter @armadra/server test`：9 文件 68 条通过。
 - `pnpm --filter @armadra/web test` / `typecheck`：新增 `DependencyWaitBadge.test.tsx`；唯一失败是基线就有的 `i18n.test.ts` 未引用键 `integration.legacy.list`（上一个提交留下，与本改动无关）。
+
+## 41. 多设备画布：在线设备与编辑租约（2026-09-26）
+
+H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/server-accounts-and-sharing.md` §5）。此前同一块画布被两台设备同时打开时，只有 revision CAS 兜底：后写的撞 409 再变基，两边对写时来回互相覆盖，谁也不知道对面有人。契约写在 `contracts/core-json-api.md` §9。
+
+### 41.1 做了什么
+
+- **core `canvas/presence.ts`**：按画布的在线表与写租约，**全在内存**，没有迁移（0028 没用）。客户端按 `clientId` 心跳，30 秒没心跳算断开；租约至多一个持有者。规则：只有一个客户端时第一次心跳就拿到租约；有别人在看时空租约归带 `active` 的心跳或带 `clientId` 的保存；持有者断开立刻释放，空闲 3 分钟且有别人在看时释放；`takeover` 无条件转手。5 秒一次的扫描把断开的设备摘掉并发事件。
+- **路由**：`POST …/boards/{boardId}/presence`（心跳，只要 `canvas:read`）、`DELETE …/presence/{clientId}`（离开）、`POST …/boards/{boardId}/lease`（拿 / 接管）。`PUT …/document` 多一个可选 `clientId`：租约在别人手里时 423 `canvas_lease_held`，判在 CAS 之前，CAS 的 409 语义不变。core 自己的写者（控制动词、调度、依赖编排）直接调 `saveBoard`，不经过租约。
+- **事件**：新增 `canvas.presence`（`bus.ts`、`packages/shared` 的事件联合），只在有人来、有人走、租约换手时发。它不进 outbox（`events/stream.ts` 的 `EPHEMERAL_EVENTS`）。
+- **页面**：`store/canvas/presence.ts` 存最近一份在线表并回答「只读吗」（租约在**别人**手里才算）。`internal.commit`、`setWhiteboard`（本地编辑）与撤销回放在只读时不落，所以菜单、快捷键、粘贴、拖放一起被拦。`flowOptions` 在只读时关掉节点拖动和连线，自动保存不写编辑也不写视口。`use-board-sync` 负责每 10 秒心跳、回前台补一次、被 423 拒时马上补一次，切板或关页面时离开；丢了租约时丢掉本地未落盘的改动并按远端重载。画布右上角工具簇左侧的 `PresenceBar` 只在有别的设备时出现：每台设备一个小圆点，持有者用主色；只读时加一句「X 正在编辑」和「接管」，接管前弹确认框。
+- `clientId` 存在 sessionStorage，读出后立即删除，页面隐藏时再写回。这样刷新一次沿用同一个 id，不会被刷新前的自己占住租约；复制出来的标签页则拿到新 id。
+
+### 41.2 取舍
+
+- 设备名来自客户端（系统，网页里再加浏览器名），没有读身份域的设备表。原因是域路由今天还不携带会话（`identity/gate.ts`），路由看不到请求来自哪台设备。等 R8 让路由带上 principal 之后，改成从会话取设备名，客户端报上来的值只作兜底。
+- 没带 `clientId` 的保存：租约空着时放行、不拿租约，别人持有时拒绝。这样没有身份的旧写者不会被一刀切断，也绕不过别人手里的租约。
+- 同一台机器开两个窗口也算两个客户端，后开的那个是只读。这是「同时只有一个写者」的直接结果。
+- 只对画布文档加了租约。画布改名、删除和上下文链接的 PUT 不经过租约。
+
+### 41.3 验证
+
+- `pnpm --filter @armadra/desktop test`：253 个文件、2934 条通过（13 条跳过）。新增 `canvas/presence.test.ts` 12 条（单客户端无感、首拍之前的写入拿租约、两客户端争用、匿名写被拒 / 放行、接管、空闲释放、没人争时不释放、断线释放并交给剩下那台、显式离开、过期清表、参数校验）；`canvas/routes.test.ts` 加了 5 条 HTTP 用例（单客户端只发一帧、423 与接管、持有者的旧修订号仍然 409、离开释放、参数与 404）；`events/outbox.integration.test.ts` 加了「在线表只扇出、不进 outbox」；`stream.test.ts` 的事件类型表加上 `canvas.presence`。
+- `pnpm --filter @armadra/server test`：9 个文件、68 条通过。
+- `pnpm --filter @armadra/web test` / `typecheck`：277 个文件、2721 条全部通过。新增 `canvas/PresenceBar.test.tsx`（只有自己时不渲染、空租约可写、别人持有时只读且拦下编辑、别的画布的快照不算、接管先确认），`use-board-sync.test.tsx` 加了 3 条（单客户端无感、被接管后只读并重载、卸载时离开），`autosave.test.ts` 加了 3 条（带 `clientId`、只读不写、423 不报错），`flow-options.test.ts` 加了 1 条。
+- `pnpm check`、`pnpm format:check`：通过。
+
+没做：浏览器里的两设备实测（只跑了单测与路由测试）；审计日志里记一条「画布接管」；把设备名接到身份域。
