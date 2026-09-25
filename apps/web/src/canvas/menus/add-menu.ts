@@ -284,10 +284,16 @@ export function buildAddMenu(
             icon: Globe,
             group: "content",
             run: (context: AddMenuContext) => {
+              // 设置里的起始页优先；没设就用节点默认数据里的那一页。
+              const startPage =
+                usePreferencesStore.getState().browser.startPage;
               create(context, "browser", {
                 position: nodeDropPosition("browser", {
                   anchor: context.position,
                 }),
+                ...(startPage
+                  ? { data: { kind: "browser" as const, url: startPage } }
+                  : {}),
               });
             },
           } satisfies AddMenuItem,

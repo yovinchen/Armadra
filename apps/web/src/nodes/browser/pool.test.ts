@@ -25,7 +25,12 @@ import {
 beforeEach(() => {
   (window as unknown as Record<string, unknown>).armadra = {};
   usePreferencesStore.setState({
-    browser: { discard: true, discardMinutes: 5, backgroundMax: 8 },
+    browser: {
+      discard: true,
+      discardMinutes: 5,
+      backgroundMax: 8,
+      startPage: "",
+    },
   });
   resetWebviewPool();
 });

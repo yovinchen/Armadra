@@ -65,6 +65,7 @@ describe("the IPC table", () => {
         "browser:unregister",
         "browser:view",
         "browser:control",
+        "browser:clear-data",
       ].sort(),
     );
   });

@@ -180,6 +180,12 @@ export const IPC = {
   browserView: spec("browser:view", "invoke", "window"),
   browserControl: spec("browser:control", "invoke", "window"),
   browserDrive: spec("browser:drive", "event", "shared"),
+  /**
+   * 设置 → 浏览器 →「清理浏览数据」：清掉浏览器节点那一族 partition 的存储
+   * 与缓存（`main/browser/clear-data.ts`）。渲染侧只能报工作空间 id，清哪些
+   * partition 由主进程按前缀判定。
+   */
+  browserClearData: spec("browser:clear-data", "invoke", "window"),
 } as const satisfies Record<string, ChannelSpec>;
 
 export type ChannelName = (typeof IPC)[keyof typeof IPC]["channel"];
@@ -217,7 +223,14 @@ export const IMPLEMENTED_CHANNELS: readonly string[] = [
   IPC.browserUnregister.channel,
   IPC.browserView.channel,
   IPC.browserControl.channel,
+  IPC.browserClearData.channel,
 ];
+
+/** What `browser:clear-data` answers. */
+export interface BrowserClearDataResult {
+  readonly ok: boolean;
+  readonly cleared: number;
+}
 
 /** What the renderer sends on `browser:register`, once per guest `dom-ready`. */
 export interface BrowserRegistration {

@@ -24,6 +24,8 @@ import { control, isDriven, useDrive } from "./drive";
 import { ActivityStatus, LeaseBadge } from "./Lease";
 import { useIsGhost } from "./pool";
 import { GuestBoundary } from "./GuestBoundary";
+import { recordBrowserHistory } from "./history";
+import { HistoryMenu } from "./HistoryMenu";
 import { WebviewGuest } from "./WebviewGuest";
 import { WebviewTabs } from "./WebviewTabs";
 import {
@@ -198,12 +200,15 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
   const persist = React.useCallback(
     (next: string) => {
       if (ghost || !next || next === "about:blank") return;
+      // 项目内历史跟着写回节点的那一页走：只记人（或 Agent）真正停下来的
+      // 活动标签，后台标签与 ghost 不算。
+      if (workspaceId) recordBrowserHistory(workspaceId, next);
       const store = useCanvasStore.getState();
       const current = store.document?.nodes.find((each) => each.id === id);
       if (current?.data.kind === "browser" && current.data.url === next) return;
       store.updateNodeData(id, { url: next });
     },
-    [id, ghost],
+    [id, ghost, workspaceId],
   );
 
   /* -------------------------------- 导航 --------------------------------- */
@@ -397,6 +402,7 @@ export function WebviewSurface({ id, node, selected }: NodeBodyProps) {
               if (event.key === "Enter") commit(address);
             }}
           />
+          <HistoryMenu workspaceId={workspaceId} onOpen={commit} />
         </div>
         {/*
           加载条。**不定值**，不是百分比：`<webview>` 给不出已加载字节数，画

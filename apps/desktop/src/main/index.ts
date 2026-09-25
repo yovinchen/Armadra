@@ -1,4 +1,4 @@
-import { app, dialog, ipcMain } from "electron";
+import { app, dialog, ipcMain, session } from "electron";
 import { join } from "node:path";
 import {
   ALL_CHANNELS,
@@ -60,6 +60,7 @@ import {
   setCanvasZoom,
   setHostRect,
 } from "./browser";
+import { clearBrowsingData } from "./browser/clear-data";
 import { setDriveEnvironment } from "./runtime-process";
 import { pickDirectory, pickFiles } from "./dialogs";
 import { openExternal, showItemInFolder } from "./external";
@@ -167,6 +168,14 @@ function registerIpc(): void {
       });
       return { ok: driveConnected() };
     },
+    [IPC.browserClearData.channel]: (request) =>
+      clearBrowsingData(
+        {
+          partitionsDir: join(app.getPath("userData"), "Partitions"),
+          sessionFor: (partition) => session.fromPartition(partition),
+        },
+        request,
+      ),
   };
   // The page decides its Runtime base before its first `await`, so the same
   // channel also answers synchronously from the snapshot taken at startup.

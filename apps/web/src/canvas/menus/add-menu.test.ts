@@ -277,6 +277,24 @@ describe("buildAddMenu", () => {
     expect(addNode).toHaveBeenCalledWith("browser", { position: centered });
   });
 
+  it("设置了起始页时新浏览器节点打开它", async () => {
+    desktop = true;
+    const { usePreferencesStore } = await import("../../app/preferences-store");
+    const before = usePreferencesStore.getState().browser;
+    usePreferencesStore.setState({
+      browser: { ...before, startPage: "https://start.test/" },
+    });
+    try {
+      itemById("add.browser").run(ctx);
+      expect(addNode).toHaveBeenCalledWith("browser", {
+        position: centered,
+        data: { kind: "browser", url: "https://start.test/" },
+      });
+    } finally {
+      usePreferencesStore.setState({ browser: before });
+    }
+  });
+
   it("非桌面上整项不出现，而不是列一项点不动的", () => {
     desktop = false;
     expect(

@@ -32,6 +32,7 @@ describe("storedBrowserPreferences", () => {
       discard: true,
       discardMinutes: BROWSER_DEFAULT_DISCARD_MINUTES,
       backgroundMax: BROWSER_DEFAULT_BACKGROUND_MAX,
+      startPage: "",
     });
     expect(BROWSER_DEFAULT_DISCARD_MINUTES).toBe(5);
     expect(BROWSER_DEFAULT_BACKGROUND_MAX).toBe(8);
@@ -41,10 +42,12 @@ describe("storedBrowserPreferences", () => {
     localStorage.setItem(BROWSER_KEYS.discard, "false");
     localStorage.setItem(BROWSER_KEYS.discardMinutes, "12");
     localStorage.setItem(BROWSER_KEYS.backgroundMax, "3");
+    localStorage.setItem(BROWSER_KEYS.startPage, "https://example.com");
     expect(storedBrowserPreferences()).toEqual({
       discard: false,
       discardMinutes: 12,
       backgroundMax: 3,
+      startPage: "https://example.com",
     });
   });
 

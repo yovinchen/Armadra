@@ -1,8 +1,9 @@
-import { storedBoolean, storedNumber } from "./storage";
+import { readStored, storedBoolean, storedNumber } from "./storage";
 
 const BROWSER_DISCARD_KEY = "armadra.browser.discard";
 const BROWSER_DISCARD_MINUTES_KEY = "armadra.browser.discardMinutes";
 const BROWSER_BACKGROUND_MAX_KEY = "armadra.browser.backgroundMax";
+const BROWSER_START_PAGE_KEY = "armadra.browser.startPage";
 
 /**
  * 浏览器节点的内存偏好（electron-migration.md §4.1「guest 生命周期」行）。
@@ -19,6 +20,8 @@ export interface BrowserPreferences {
   discardMinutes: number;
   /** 后台（ghost）guest 的上限。超过就逐出最久退休的那个。 */
   backgroundMax: number;
+  /** 新建浏览器节点打开的地址；空串 = 用内置的默认页。 */
+  startPage: string;
 }
 
 /** 分钟数的上下界。1 分钟已经很急，60 分钟之后留着也没什么意义。 */
@@ -33,6 +36,7 @@ export const BROWSER_KEYS: Record<keyof BrowserPreferences, string> = {
   discard: BROWSER_DISCARD_KEY,
   discardMinutes: BROWSER_DISCARD_MINUTES_KEY,
   backgroundMax: BROWSER_BACKGROUND_MAX_KEY,
+  startPage: BROWSER_START_PAGE_KEY,
 };
 
 export function storedBrowserPreferences(): BrowserPreferences {
@@ -50,5 +54,6 @@ export function storedBrowserPreferences(): BrowserPreferences {
       BROWSER_BACKGROUND_MAX_RANGE[0],
       BROWSER_BACKGROUND_MAX_RANGE[1],
     ),
+    startPage: readStored(BROWSER_START_PAGE_KEY) ?? "",
   };
 }

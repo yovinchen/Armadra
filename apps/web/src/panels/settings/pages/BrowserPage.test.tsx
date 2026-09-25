@@ -1,9 +1,32 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render as renderPlain,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 
 import { usePreferencesStore } from "../../../app/preferences-store";
 import { visibleSettingsSections } from "../nav";
 import { BrowserPage } from "./BrowserPage";
+import {
+  browserHistory,
+  recordBrowserHistory,
+  resetBrowserHistoryCache,
+} from "@/nodes/browser/history";
+
+function render(element: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  client.setQueryData(["workspaces"], [{ id: "ws-1" }]);
+  return renderPlain(
+    <QueryClientProvider client={client}>{element}</QueryClientProvider>,
+  );
+}
 
 /**
  * 设置 → 浏览器（复查 §5.2「设置页的隐藏回收开关」）。
@@ -14,7 +37,12 @@ import { BrowserPage } from "./BrowserPage";
 
 beforeEach(() => {
   usePreferencesStore.setState({
-    browser: { discard: true, discardMinutes: 5, backgroundMax: 8 },
+    browser: {
+      discard: true,
+      discardMinutes: 5,
+      backgroundMax: 8,
+      startPage: "",
+    },
   });
 });
 
@@ -50,6 +78,39 @@ describe("设置 → 浏览器", () => {
     expect(usePreferencesStore.getState().browser.backgroundMax).toBe(2);
     fireEvent.change(max, { target: { value: "99" } });
     expect(usePreferencesStore.getState().browser.backgroundMax).toBe(16);
+  });
+});
+
+describe("起始页与清理浏览数据", () => {
+  it("起始页按地址栏的规则补全后存进偏好，清空就回到默认", () => {
+    render(<BrowserPage />);
+    const input = screen.getByLabelText("新节点起始页");
+    fireEvent.change(input, { target: { value: "example.com" } });
+    fireEvent.blur(input);
+    expect(usePreferencesStore.getState().browser.startPage).toBe(
+      "https://example.com",
+    );
+    fireEvent.change(input, { target: { value: "  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(usePreferencesStore.getState().browser.startPage).toBe("");
+  });
+
+  it("确认之后经壳清掉 partition，并清掉地址历史", async () => {
+    const clearData = vi.fn().mockResolvedValue({ ok: true, cleared: 2 });
+    (window as unknown as Record<string, unknown>).armadra = {
+      browser: { clearData },
+    };
+    resetBrowserHistoryCache();
+    recordBrowserHistory("ws-1", "https://example.com/");
+    render(<BrowserPage />);
+    fireEvent.click(screen.getByRole("button", { name: "清理" }));
+    // 确认框里的那一个。
+    const buttons = await screen.findAllByRole("button", { name: "清理" });
+    fireEvent.click(buttons[buttons.length - 1]!);
+    await waitFor(() =>
+      expect(clearData).toHaveBeenCalledWith({ workspaceIds: ["ws-1"] }),
+    );
+    expect(browserHistory("ws-1")).toEqual([]);
   });
 });
 

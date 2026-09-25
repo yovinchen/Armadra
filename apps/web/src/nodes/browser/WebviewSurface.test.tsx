@@ -98,7 +98,12 @@ beforeEach(() => {
   store.document.nodes = [node];
   store.updateNodeData.mockClear();
   usePreferencesStore.setState({
-    browser: { discard: true, discardMinutes: 5, backgroundMax: 8 },
+    browser: {
+      discard: true,
+      discardMinutes: 5,
+      backgroundMax: 8,
+      startPage: "",
+    },
   });
   (window as unknown as Record<string, unknown>).armadra = {};
 });

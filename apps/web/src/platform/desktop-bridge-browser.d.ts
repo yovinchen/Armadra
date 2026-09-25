@@ -78,6 +78,10 @@ interface ArmadraBridge {
     view(view: ArmadraBrowserView): Promise<{ ok: boolean }>;
     control(control: ArmadraBrowserControl): Promise<{ ok: boolean }>;
     onDrive(listener: (command: ArmadraBrowserCommand) => void): () => void;
+    /** 清掉浏览器节点那一族 partition 的存储与缓存（设置 → 浏览器）。 */
+    clearData(request: {
+      workspaceIds: readonly string[];
+    }): Promise<{ ok: boolean; cleared: number }>;
   };
 }
 

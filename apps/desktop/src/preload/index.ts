@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import {
   DESKTOP_DOCUMENT_ATTRIBUTE,
   IPC,
+  type BrowserClearDataResult,
   type BrowserControl,
   type BrowserDriveCommand,
   type BrowserRegistration,
@@ -140,6 +141,9 @@ export interface ArmadraDesktopApi {
     view(view: BrowserView): Promise<{ ok: boolean }>;
     control(control: BrowserControl): Promise<{ ok: boolean }>;
     onDrive(listener: (command: BrowserDriveCommand) => void): () => void;
+    clearData(request: {
+      workspaceIds: readonly string[];
+    }): Promise<BrowserClearDataResult>;
   };
   /**
    * The absolute path of a dropped or picked `File`. The page hands the path
@@ -204,6 +208,8 @@ const api: ArmadraDesktopApi = {
     control: (control) =>
       ipcRenderer.invoke(IPC.browserControl.channel, control),
     onDrive: (listener) => onBrowserDrive(listener),
+    clearData: (request) =>
+      ipcRenderer.invoke(IPC.browserClearData.channel, request),
   },
   pathForFile: (file) => webUtils.getPathForFile(file),
 };

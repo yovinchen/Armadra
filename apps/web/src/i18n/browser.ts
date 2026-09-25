@@ -86,6 +86,19 @@ const zh = {
   "browser.settings.discardMinutes": "隐藏多少分钟后回收",
   "browser.settings.backgroundMax": "后台页面上限",
   "browser.settings.backgroundMaxHint": "超过上限时释放最久没回去的那个页面。",
+  "browser.settings.startPage": "新节点起始页",
+  "browser.settings.startPageDefault": "默认",
+  "browser.settings.clearData": "清理浏览数据",
+  "browser.settings.clearDataHint":
+    "清除所有浏览器节点的 Cookie、网站存储、缓存和地址历史，已登录的站点需要重新登录。",
+  "browser.settings.clear": "清理",
+  "browser.settings.clearConfirm": "清理所有浏览器节点的浏览数据？",
+  "browser.settings.cleared": "浏览数据已清理",
+  "browser.settings.clearFailed": "有部分浏览数据没能清理",
+
+  /* 地址栏旁的项目内历史。 */
+  "browser.history": "历史",
+  "browser.history.clear": "清空本项目历史",
 } as const;
 
 const en: Record<keyof typeof zh, string> = {
@@ -154,6 +167,19 @@ const en: Record<keyof typeof zh, string> = {
   "browser.settings.backgroundMax": "Background page limit",
   "browser.settings.backgroundMaxHint":
     "Past the limit, the page you went back to least recently is released.",
+  "browser.settings.startPage": "New node start page",
+  "browser.settings.startPageDefault": "Default",
+  "browser.settings.clearData": "Clear browsing data",
+  "browser.settings.clearDataHint":
+    "Clears cookies, site storage, cache and address history for every browser node. Signed-in sites will ask you to sign in again.",
+  "browser.settings.clear": "Clear",
+  "browser.settings.clearConfirm":
+    "Clear browsing data for every browser node?",
+  "browser.settings.cleared": "Browsing data cleared",
+  "browser.settings.clearFailed": "Some browsing data could not be cleared",
+
+  "browser.history": "History",
+  "browser.history.clear": "Clear this project's history",
 };
 
 export const browser: MessageModule = { "zh-CN": zh, en };
