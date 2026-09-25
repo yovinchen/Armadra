@@ -117,9 +117,11 @@ describe("followOperation", () => {
     loading.mockReset();
     followOperation(target, operation("unknownOutcome"), () => {});
     expect(loading).not.toHaveBeenCalled();
-    expect(warning).toHaveBeenCalledWith(
-      t("gitRepo.unknown"),
-      expect.anything(),
-    );
+    // 结局不带进行中那条的「取消」，也不再常驻。
+    expect(warning).toHaveBeenCalledWith(t("gitRepo.unknown"), {
+      id: "git-operation-op-1",
+      action: undefined,
+      duration: undefined,
+    });
   });
 });

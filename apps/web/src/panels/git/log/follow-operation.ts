@@ -61,16 +61,20 @@ export function followOperation(
 
   const finish = (operation: GitRepositoryOperation) => {
     stopped = true;
+    // 同一个 id 的提示是合并更新的：不显式清掉，进行中那条的「取消」与常驻
+    // 时长会留在结局上。
+    const settled = { id, action: undefined, duration: undefined };
     switch (operation.state) {
       case "failed":
-        toast.error(operation.message ?? t("gitRepo.failed"), { id });
+        toast.error(operation.message ?? t("gitRepo.failed"), settled);
         break;
       case "cancelled":
-        toast.info(`${label} · ${t("gitRepo.state.cancelled")}`, { id });
+        toast.info(`${label} · ${t("gitRepo.state.cancelled")}`, settled);
         break;
       // 结果未知**不是**失败：渲染成失败会请人去做那件绝不能自动做的事。
+      // 取消一条已经在跑的网络命令也落在这里——被打断的推送可能已被远端收下。
       case "unknownOutcome":
-        toast.warning(t("gitRepo.unknown"), { id });
+        toast.warning(t("gitRepo.unknown"), settled);
         break;
       default:
         toast.dismiss(id);
