@@ -1,6 +1,7 @@
-import { useId } from "react";
+import { useEffect, useId } from "react";
 
 import { useT } from "../../../app/preferences-store";
+import { hasPairingFragment } from "../../../api/identity";
 import { useHostConnection } from "../../../host/use-host-connection";
 import { SettingsGroup } from "../SettingsGroup";
 import { Button } from "@/ui/button";
@@ -18,6 +19,13 @@ export function HostPage() {
   const t = useT();
   const id = useId();
   const { state, check, cancel } = useHostConnection();
+  // 从配对链接打开时自己检查一次：身份面要先确认服务身份才会取走票，这一步
+  // 让人再点一次「检查连接」只是多一道没人知道的门槛。其余时候照旧等人点。
+  useEffect(() => {
+    if (hasPairingFragment()) void check();
+    // 只在打开这一页时看一次地址栏。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const message =
     state.status === "error"
       ? state.messageKey

@@ -24,6 +24,7 @@ import {
 import { AgentSettingsDialog } from "@/nodes/AgentSettingsDialog";
 import { NodeNameDialog } from "@/nodes/NodeNameDialog";
 import { useMountedOnce, useOverlayRequested } from "./overlay-gates";
+import { useLinkFragments } from "./use-link-fragments";
 
 /**
  * 所有浮层的挂载点。
@@ -54,6 +55,7 @@ export function Overlays() {
   const codeAction = useOverlayRequested("codeAction");
   const editPreview = useOverlayRequested("editPreview");
   const merge = useOverlayRequested("merge");
+  useLinkFragments();
 
   return (
     <Suspense fallback={null}>

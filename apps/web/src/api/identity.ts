@@ -408,6 +408,11 @@ export function permits(
   );
 }
 
+/** 地址栏里有没有一张待用的配对票（不取走）。 */
+export function hasPairingFragment(): boolean {
+  return /^#pair=[A-Za-z0-9._~-]+$/.test(globalThis.location?.hash ?? "");
+}
+
 /**
  * 地址栏里带来的配对票（服务器壳，R6a）。
  *

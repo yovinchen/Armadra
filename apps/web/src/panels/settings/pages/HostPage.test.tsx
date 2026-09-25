@@ -54,6 +54,27 @@ describe("HostPage", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
+  it("opened from a pairing link it checks once by itself, so the ticket can be used", async () => {
+    // 服务器壳的配对链接 `…/#pair=<票>`：票要等身份面「可用」才会被取走，而
+    // 可用要先检查一次连接。不自己检查，链接打开后什么都不会发生。
+    probe.mockResolvedValue(hello);
+    const original = window.location.hash;
+    window.history.replaceState(null, "", "#pair=abc.def");
+    try {
+      render(<HostPage />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(probe).toHaveBeenCalledTimes(1);
+    } finally {
+      window.history.replaceState(
+        null,
+        "",
+        original || window.location.pathname,
+      );
+    }
+  });
+
   it("keeps a confirmed identity in expandable details", async () => {
     probe.mockResolvedValue(hello);
     render(<HostPage />);
