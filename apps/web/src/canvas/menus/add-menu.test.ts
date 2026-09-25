@@ -284,6 +284,15 @@ describe("buildAddMenu", () => {
     ).toBe(false);
   });
 
+  it("非桌面但 core 带 headless 浏览器时照样给入口", () => {
+    desktop = false;
+    expect(
+      buildAddMenu([claude], t, [], true).some(
+        (item) => item.id === "add.browser",
+      ),
+    ).toBe(true);
+  });
+
   it("定时计划开的是自动化页，不建空卡片", () => {
     itemById("add.automation").run(ctx);
     expect(openAutomationPanel).toHaveBeenCalledWith(null);

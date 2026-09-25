@@ -7,6 +7,7 @@ import { useCanvasStore } from "../store/canvas-store";
 import { NODE_BODY, nodeMeta } from "../nodes/registry";
 import { terminalHandle } from "../nodes/terminal-registry";
 import { canFocusOnPhone } from "./mobile-focus";
+import { useHeadlessBrowser } from "../nodes/browser/availability";
 import { MOBILE_CONTROL_KEYS, MOBILE_KEYS } from "./mobile-keys";
 import { cn } from "@/lib/cn";
 import { Button } from "@/ui/button";
@@ -37,13 +38,19 @@ export function MobileFocusPage() {
   const nodes = useCanvasStore((state) => state.document?.nodes);
   const selectNodes = useCanvasStore((state) => state.selectNodes);
 
+  const headlessBrowser = useHeadlessBrowser(compact);
+
   const node = nodes?.find((item) => item.id === focusNodeId);
   const focusable = React.useMemo(
-    () => (nodes ?? []).filter((item) => canFocusOnPhone(item.type)),
-    [nodes],
+    () =>
+      (nodes ?? []).filter((item) =>
+        canFocusOnPhone(item.type, headlessBrowser),
+      ),
+    [nodes, headlessBrowser],
   );
 
-  if (!compact || !node || !canFocusOnPhone(node.type)) return null;
+  if (!compact || !node || !canFocusOnPhone(node.type, headlessBrowser))
+    return null;
   const Body = NODE_BODY[node.type];
   const meta = nodeMeta(node.type);
 

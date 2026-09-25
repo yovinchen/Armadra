@@ -155,6 +155,7 @@ export function buildAddMenu(
   agents: AgentInfo[],
   t: Translate,
   hosts: SshHost[] = [],
+  browser: boolean = isDesktop(),
 ): AddMenuItem[] {
   const agentItems: AddMenuItem[] = agents.map((agent) => ({
     id: `add.agent.${agent.id}`,
@@ -270,11 +271,12 @@ export function buildAddMenu(
       run: () => openMermaidImport(),
     },
     /*
-      浏览器节点只在桌面壳里有可嵌入的页面，所以非桌面上整项不出现。
-      不做成「显示但禁用」：菜单里少一项，比多一项点不动的灰项干净，而且
-      手机与浏览器标签页上这一项永远不会变得可用，灰着也没有等待的意义。
+      浏览器节点要么是桌面壳里的 `<webview>`，要么是 core 起的 headless
+      Chromium（服务器壳）。两样都没有时整项不出现，不做成「显示但禁用」：
+      这个页面开着的时候它不会变得可用，灰着也没有等待的意义。`browser` 由
+      调用方从 `useCanCreateBrowser()` 传进来。
     */
-    ...(isDesktop()
+    ...(browser
       ? [
           {
             id: "add.browser",

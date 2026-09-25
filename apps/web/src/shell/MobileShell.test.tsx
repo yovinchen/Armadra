@@ -199,10 +199,15 @@ describe("what a phone opens full screen", () => {
       "files",
       "automation",
       "agentActivity",
-      // 浏览器节点要壳里的 `<webview>`；手机上整屏打开只有一张空卡片。
+      // core 不带 headless 浏览器时，手机上整屏打开只有一张空卡片。
       "browser",
     ] as const)
       expect(canFocusOnPhone(type)).toBe(false);
+  });
+
+  it("opens a browser node when the core streams one", () => {
+    expect(canFocusOnPhone("browser", true)).toBe(true);
+    expect(canFocusOnPhone("sticky", true)).toBe(false);
   });
 });
 

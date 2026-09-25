@@ -1,3 +1,4 @@
+import { useCanCreateBrowser } from "@/nodes/browser/availability";
 import * as React from "react";
 import {
   ContextMenuItem,
@@ -46,9 +47,10 @@ export function AddMenuContent({ ctx, kind }: AddMenuContentProps) {
   const t = useT();
   // `t` 按 locale 记忆化，所以切语言时菜单会重建，平时不会每帧重算。
   const hosts = useSshHosts();
+  const browser = useCanCreateBrowser();
   const items = React.useMemo(
-    () => buildAddMenu(ctx.agents, t, hosts),
-    [ctx.agents, hosts, t],
+    () => buildAddMenu(ctx.agents, t, hosts, browser),
+    [ctx.agents, hosts, t, browser],
   );
   const Item = kind === "context" ? ContextMenuItem : DropdownMenuItem;
   const Label = kind === "context" ? ContextMenuLabel : DropdownMenuLabel;

@@ -15,9 +15,14 @@ const FOCUSABLE: ReadonlySet<CanvasNodeType> = new Set<CanvasNodeType>([
 /**
  * 便签、分组与那两张只读卡片在画布上就够看，不进焦点页。
  *
- * 浏览器节点也不在：它要的是壳里的 `<webview>`，而手机上打开画布的永远是
- * 一个浏览器标签页，整屏打开只会得到一张「只在桌面应用里可用」的空卡片。
+ * 浏览器节点看 core：手机上打开画布的永远是一个浏览器标签页，没有
+ * `<webview>`；只有 core 带 headless 浏览器（`headlessBrowser`，见
+ * `nodes/browser/availability.ts`）时节点体才是画面流，整屏打开才有东西看。
  */
-export function canFocusOnPhone(type: CanvasNodeType): boolean {
+export function canFocusOnPhone(
+  type: CanvasNodeType,
+  headlessBrowser = false,
+): boolean {
+  if (type === "browser") return headlessBrowser;
   return FOCUSABLE.has(type);
 }

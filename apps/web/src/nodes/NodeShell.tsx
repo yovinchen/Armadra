@@ -29,6 +29,7 @@ import { useT } from "@/app/preferences-store";
 import { useCanvasStore } from "@/store/canvas-store";
 import { useCompactLayout } from "@/platform/layout";
 import { canFocusOnPhone } from "@/shell/mobile-focus";
+import { useHeadlessBrowser } from "./browser/availability";
 import { runCanvasCommand } from "@/canvas/commands";
 import { containerSize, getFlow } from "@/canvas/flow/flow-context";
 import { ConnectionHandles } from "@/canvas/flow/nodes/ConnectionHandles";
@@ -426,6 +427,9 @@ export function NodeMenuContent({
 }) {
   const t = useT();
   const compact = useCompactLayout();
+  const headlessBrowser = useHeadlessBrowser(
+    compact && node.type === "browser",
+  );
   return (
     <DropdownMenuContent align="end" className="min-w-52">
       {items}
@@ -439,7 +443,7 @@ export function NodeMenuContent({
         {t("node.name.edit")}
       </DropdownMenuItem>
       {/* 手机上画布只有一屏宽，进入单节点焦点页是这里唯一的入口。 */}
-      {compact && canFocusOnPhone(node.type) ? (
+      {compact && canFocusOnPhone(node.type, headlessBrowser) ? (
         <DropdownMenuItem
           onSelect={() => {
             focusNode(node.id);

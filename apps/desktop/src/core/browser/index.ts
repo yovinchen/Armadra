@@ -150,6 +150,12 @@ export function install(context: CoreContext): BrowserContext {
   // route answers 501 rather than a second copy of it.
   const headless = client instanceof HeadlessBackend ? client : undefined;
   const deps = { database: context.db.database, backend: headless };
+  // 页面据此决定非桌面环境要不要给「新建浏览器」入口：只有找到了 Chromium
+  // 的 headless 后端才算，没有就不给一个建出来只会报不可用的节点。
+  context.server.capability(
+    "headlessBrowser",
+    () => headless?.isConnected() === true,
+  );
   context.server.stream(
     BROWSER_STREAM_PATH,
     (socket, params) => {

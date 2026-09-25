@@ -30,11 +30,21 @@ export interface HealthDocument {
   readonly instanceId: string;
   readonly build: string;
   readonly hook: HookHealth;
+  /**
+   * 这个 core 带了哪些要让页面知道的能力，追加在末尾。
+   *
+   * 页面光凭「有没有壳」判断不了所有事：服务器壳没有窗口，但如果 core 起得了
+   * headless Chromium，浏览器节点照样能建。键名稳定、值只有布尔，旧页面不认
+   * 的键直接忽略。
+   */
+  readonly capabilities: Readonly<Record<string, boolean>>;
 }
 
 export interface HealthSource {
   readonly version: string;
   hookHealth(): HookHealth;
+  /** 省略时一项能力都不报。 */
+  capabilities?(): Readonly<Record<string, boolean>>;
 }
 
 /**
@@ -51,5 +61,6 @@ export function healthDocument(source: HealthSource): HealthDocument {
     instanceId: instanceId(),
     build: BUILD,
     hook: source.hookHealth(),
+    capabilities: source.capabilities?.() ?? {},
   };
 }

@@ -14,6 +14,7 @@ describe("the health document", () => {
       "instanceId",
       "build",
       "hook",
+      "capabilities",
     ]);
     expect(document.status).toBe("ok");
     expect(document.instanceId).toBe(instanceId());
@@ -48,5 +49,19 @@ describe("the health document", () => {
       healthDocument({ version: "9.9.9", hookHealth: () => NO_HOOK_SERVICE })
         .version,
     ).toBe("9.9.9");
+  });
+
+  it("reports the capabilities it was given, and none when it was given none", () => {
+    expect(
+      healthDocument({ version: "0.1.0", hookHealth: () => NO_HOOK_SERVICE })
+        .capabilities,
+    ).toEqual({});
+    expect(
+      healthDocument({
+        version: "0.1.0",
+        hookHealth: () => NO_HOOK_SERVICE,
+        capabilities: () => ({ headlessBrowser: true }),
+      }).capabilities,
+    ).toEqual({ headlessBrowser: true });
   });
 });

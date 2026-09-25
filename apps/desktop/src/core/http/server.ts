@@ -61,6 +61,7 @@ export class CoreServer {
   private readonly rawRoutes: { prefix: string; handler: RawHandler }[] = [];
   private readonly bodyLimits = new Map<string, number>();
   private readonly options: CoreServerOptions;
+  private readonly capabilityProbes = new Map<string, () => boolean>();
 
   constructor(options: CoreServerOptions) {
     this.options = options;
@@ -75,10 +76,33 @@ export class CoreServer {
       body: healthDocument({
         version: options.version,
         hookHealth: options.hookHealth ?? (() => NO_HOOK_SERVICE),
+        capabilities: () => this.capabilities(),
       }),
     });
     this.router.handle("GET", "/health", health);
     this.router.handle("GET", "/api/health", health);
+  }
+
+  /**
+   * 一个域登记一项页面要知道的能力，`/health` 每次现问。
+   *
+   * 由域自己登记而不是在 main 里汇总：能力有没有，只有装配它的域说得清，
+   * 比如浏览器域知道自己选的是哪个后端、找没找到 Chromium。
+   */
+  capability(name: string, probe: () => boolean): void {
+    this.capabilityProbes.set(name, probe);
+  }
+
+  private capabilities(): Record<string, boolean> {
+    const out: Record<string, boolean> = {};
+    for (const [name, probe] of this.capabilityProbes) {
+      try {
+        out[name] = probe();
+      } catch {
+        out[name] = false;
+      }
+    }
+    return out;
   }
 
   /**
