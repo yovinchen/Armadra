@@ -1849,3 +1849,32 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：vitest 2921 通过、13 跳过；live 1/1；脚本 38/38。新用例：`collab/control.test.ts` 的 `team` 三条（并行 + 汇总、带外部依赖的流水线、建节点前拒绝与演练），`language/policy.test.ts`（搬家即停），`language/routes.integration.test.ts`（真 HTTP 切换根目录 → 会话收到 `stopped` + `workspace_closed`，原地切换不再发）。
 - `pnpm --filter @armadra/web test`：2711 通过，4 条失败都是 `KeybindingsPage.test.tsx` 的 5 秒超时（机器负载 200+），单独以 `--testTimeout=30000` 重跑 20/20 通过，与本节无关。新用例：`TerminalSurface.render.test.tsx`（节点数据换 id 后重连到新会话且不新建、数据没变时不被拽回）、`GithubDrawer.test.tsx`（部分标记）、`EditorNode.drafts.test.tsx`（重新定位的合并、确认后覆盖、目标不存在）。
 - `pnpm --filter @armadra/server test` 68/68；`pnpm check`、`pnpm format:check` 通过。
+
+## 43. 节能休眠：空闲 Agent 会话结束进程、用 resume 接回（2026-09-26）
+
+设计 `design/terminal-host-design.md` §7.2，实现记录在同文件 §7.4。起因：tmux 后端下应用退出后闲置的 Claude / Codex 会话仍常驻，7 个闲置 5–9 天的会话占了约 800 MB；tmux 探测修好之后打包版恢复跨重启存活，这个问题会更明显。
+
+### 43.1 做了什么
+
+- **core**：`terminal/hibernate.ts`（判据、设置读取、计划目标检查、库里的休眠状态、唤醒接缝，纯函数为主）与 `terminal/hibernator.ts`（60 秒一轮的巡检、结束、接回）。`manager.ts` 只加三个钩子：`hibernate`（确认退出后才把行记成 `termination_intent = 'hibernate'`）、`revive`（同一会话 id、同一 `session_key` 起下一代）、`liveRecords`；会话行多一个 `hibernation` 字段。接回时把 `agent_status` 标成 `restored`，投递门链因此等 CLI 自己报一条再投。
+- **唤醒**：`POST /api/terminals/{sessionId}/wake`（页面点击 / 聚焦）；终端桥新增 `wakeNode`，`collab/control/index.ts` 在 `send` 走门链之前调它（`send.ts` 未改），出队泵的排队项由巡检发现并叫醒；`schedule/dispatch.ts` 对授权了 `LAUNCH_FROZEN` 的休眠目标改走 resume，不另起会话，没授权的照旧答离线。同一节点并发唤醒只起一个。
+- **事件与设置**：工作空间事件 `terminal.hibernation`（`hibernated` / `resuming` / `running` / `failed`）；设置键 `terminal.ecoMode`（缺省开）与 `terminal.ecoIdleMinutes`（5–1440，缺省 30）。
+- **资源面板**：休眠的会话照列，`unknownReason: "hibernated"`，数字为空，不给「结束」。
+- **页面**：`render-state.ts` 新增 `hibernated` 档；`use-session` 读到休眠不新建会话，新增 `surface/use-hibernation.ts`；节点头「休眠中 / 正在唤醒 / 唤醒失败」，终端体上「唤醒」按钮，点任何位置或聚焦都唤醒；设置 → 终端加「节能休眠」开关与「空闲多久后休眠」。
+- 契约 `core-json-api.md` §9，架构指南补一段。
+
+### 43.2 取舍
+
+- **不加迁移**：休眠就是那一行以 `termination_intent = 'hibernate'` 结束；cwd、shell、Agent、provider 会话 id、权限模式与模型都已在库里，进程不在时没有东西改写它们。分配的 0030 没有用。
+- **缺省开**：与 §7.2「首版默认只回收视图」不同，按上面的实测改；判据从严（有附着、半截输入、租约、排队、审批、后台作业、计划、状态不明都不睡）。
+- **不看可见性**：有 socket 附着就不睡，页面隐藏只是让前端按原有规则关 socket，本身不触发休眠。
+- **后台作业**：pane shell 下除 Agent 外还有作业，或 Agent 下面挂着 shell（CLI 放到后台的命令），都不睡；MCP 这类常驻子进程不是 shell，不算。
+- **被取代**：依赖编排、手动「重新运行」起的新会话排在休眠行前面，休眠自然失效，不会同一节点两个 CLI。
+- 「友好退出」就是结束会话，没有先发 CLI 的退出命令；原生循环与浏览器控制依赖没有可观测信号，没有实现。
+
+### 43.3 验证
+
+- `pnpm --filter @armadra/desktop test`：256 文件 2969 条通过、13 跳过（worktree 里 node-pty 的 `spawn-helper` 缺执行位，`chmod +x` 后通过）。新增 `terminal/hibernate.test.ts`（判据逐格、设置、后台作业）、`terminal/hibernator.test.ts`（假 CLI 后端：running → idle → hibernated、退出未确认不记休眠、关掉不睡、重启后重新起算、十余种不该睡的情况、同一 id 下一代接回并敲 `--resume <同一个 id>`、并发只起一个、被取代不再接回、失败、排队唤醒、Codex 子命令形状）、`terminal/hibernator.pty.test.ts`（真 PTY 上的假 `claude`：进程确实结束，接回后收到 `--resume prov-7`）、`terminal/hibernate-wake.test.ts`（`send` 先唤醒再排队、接不回来如实拒绝、计划授权与未授权两种）；`events/stream.test.ts` 事件类型表改为 24 个。
+- `pnpm --filter @armadra/web test`：2711/2714，失败的三条（`AutomationDrawer.test.tsx` 一条、`KeybindingsPage.test.tsx` 两条）是整套跑时超时，单独重跑全过；新增 `session/gateway.test.ts`，`TerminalSurface.render.test.tsx` 补「读到休眠不新建、点唤醒后原样重连」，`render-state.test.ts`、`metrics.test.ts` 各补一条。`pnpm --filter @armadra/web typecheck` 通过。
+- `pnpm --filter @armadra/server test` 68/68；`pnpm check` 与 `pnpm format:check` 通过。
+- 没有在打包应用里实测 tmux 后端下的真实 Claude / Codex 续接。
