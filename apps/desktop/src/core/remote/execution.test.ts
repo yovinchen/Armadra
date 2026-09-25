@@ -333,7 +333,7 @@ describe("file routes on a remote workspace", () => {
     expect(download.raw?.toString("utf8")).toContain("43");
   }, 60_000);
 
-  it("polls a watched remote file and publishes its change", async () => {
+  it("falls back to polling a watched remote file and publishes its change", async () => {
     writeFileSync(join(far.path, "watched.txt"), "one");
     const events: unknown[] = [];
     core.bus.on("workspace.event", ({ event }) => events.push(event));
@@ -343,7 +343,12 @@ describe("file routes on a remote workspace", () => {
       { path: "watched.txt", nodeId: "node-1" },
     );
     expect(registered.status).toBe(200);
-    expect(registered.body).toMatchObject({ status: "watching", mode: "poll" });
+    // Worker 认 `files.watch`，所以登记成推送；这里的连接没接推送通道，轮询这条
+    // 退路照样能读出变化（推送本身见 `worker-push.test.ts`）。
+    expect(registered.body).toMatchObject({
+      status: "watching",
+      mode: "events",
+    });
 
     writeFileSync(join(far.path, "watched.txt"), "two");
     await remoteWatches.poll(id);

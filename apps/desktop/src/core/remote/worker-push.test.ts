@@ -1,6 +1,6 @@
 /**
  * 第一批之后补上的远端能力：Git 长操作与它推回来的进度、集成状态与工作树绑定、
- * 以及两台机器各跑一半的 AI 提交信息。
+ * 两台机器各跑一半的 AI 提交信息与 Worker 侧推送的文件监听。
  *
  * 与 `execution.test.ts` 同一个办法：core 的真入口打成包，本机子进程跑
  * `worker --stdio`，控制端经同一套帧、握手与推送
@@ -20,6 +20,7 @@ import {
   it,
 } from "vitest";
 import { temporary, type Temporary } from "../files/workspace.fixture";
+import { install as installFiles } from "../files/routes";
 import { install as installGit } from "../git";
 import {
   cleanupFixtures,
@@ -45,6 +46,7 @@ import {
   setRemoteCaller,
 } from "./execute";
 import { RemoteGitOperations } from "./git-operations";
+import { remoteWatches } from "./watch";
 import { RemoteWorker } from "./worker";
 import { disposeWorkerBundle, spawnWorker } from "./worker.fixture";
 
@@ -318,4 +320,76 @@ describe("the controller's mirror of a remote operation", () => {
       mirror.dispose();
     }
   });
+});
+
+describe("watching remote files", () => {
+  let core: Fixture;
+  let remote: RemoteWorker;
+  let far: Temporary;
+  let id: string;
+
+  beforeEach(() => {
+    core = fixture([installWorkspaces, installFiles]);
+    far = temporary("armadra-far-watch-");
+    remote = worker(start);
+    setRemoteCaller(async (_hostId, operation, payload, replay) =>
+      remote.request(operation, payload, replay),
+    );
+    id = createRemoteWorkspace(core.database, {
+      name: "far-watch",
+      executionHostId: HOST.id,
+      rootPath: far.path,
+    }).id;
+  });
+  afterEach(() => {
+    remoteWatches.releaseWorkspace(id);
+    setRemoteCaller(undefined);
+    remote.close();
+    far.remove();
+    core.close();
+  });
+
+  it("is told of a change by the worker's own watcher, and survives a dropped link", async () => {
+    writeFileSync(join(far.path, "pushed.txt"), "one");
+    const events: Record<string, unknown>[] = [];
+    core.bus.on("workspace.event", ({ event }) =>
+      events.push(event as unknown as Record<string, unknown>),
+    );
+    const registered = await core.call(
+      "POST",
+      `/api/workspaces/${id}/file-watch`,
+      { path: "pushed.txt", nodeId: "node-1" },
+    );
+    expect(registered.body).toMatchObject({
+      status: "watching",
+      mode: "events",
+    });
+
+    writeFileSync(join(far.path, "pushed.txt"), "two");
+    // 没有人调 `poll`：变化是 Worker 推过来的。
+    await until(() =>
+      events.find(
+        (event) =>
+          event.type === "file.changed" &&
+          event.path === "pushed.txt" &&
+          event.kind === "modified",
+      ),
+    );
+
+    // 连接断了：先退回轮询。轮询的请求把连接拉起来，握手之后整组重登回推送，
+    // 断线期间的改动在重登时比对出来。
+    remote.resume();
+    expect(remoteWatches.modeOf(id)).toBe("poll");
+    events.length = 0;
+    writeFileSync(join(far.path, "pushed.txt"), "three");
+    await remoteWatches.poll(id);
+    await until(() =>
+      remoteWatches.modeOf(id) === "events" ? true : undefined,
+    );
+    await until(() =>
+      events.find(
+        (event) => event.type === "file.changed" && event.path === "pushed.txt",
+      ),
+    );
+  }, 60_000);
 });

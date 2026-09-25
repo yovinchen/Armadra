@@ -65,6 +65,7 @@ import { badRequest } from "../workspaces/support";
 import type { WorkerSession } from "./session";
 import { type RootFingerprint, fingerprintOf } from "./switch";
 import { trackOperation } from "./git-worker";
+import { unwatchFiles, watchFiles } from "./watch-worker";
 
 /** 操作执行时拿得到的东西：本机是控制端的 Git 服务，远端是 Worker 自己的。 */
 export interface OperationContext {
@@ -581,6 +582,23 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
       await captureStaged(service(context, args), root),
   ),
 
+  /* ------------------------------ 监听 ------------------------------ */
+  /**
+   * 一个工作空间在这台机器上要被看着的文件，整组替换。变化作为 `files.changed`
+   * 推送帧回去。整组而不是增量：重连后控制端把它有的那一组原样再发一次即可。
+   */
+  "files.watch": read((context, root, args) =>
+    watchFiles(
+      session(context),
+      root,
+      text(args, "watchId"),
+      texts(args, "paths"),
+    ),
+  ),
+  "files.unwatch": read((context, _root, args) =>
+    unwatchFiles(session(context), text(args, "watchId")),
+  ),
+
   "git.rebaseTodo": read(
     async (context, root, args) =>
       await rebaseTodoPreview(
@@ -597,6 +615,8 @@ export const FILES_CAPABILITY = "remote.files.v1";
 export const GIT_CAPABILITY = "remote.git.v1";
 /** 长操作队列、集成状态、工作树绑定与 AI 提交信息的采集。 */
 export const GIT_OPERATIONS_CAPABILITY = "remote.git.operations.v1";
+/** Worker 侧文件监听，变化主动推送。 */
+export const WATCH_CAPABILITY = "remote.watch.v1";
 
 const GIT_OPERATION_NAMES = new Set([
   "git.operationStart",
@@ -610,6 +630,9 @@ const GIT_OPERATION_NAMES = new Set([
 
 /** 一个操作属于哪个能力组。 */
 export function capabilityOf(operation: string): string | undefined {
+  if (operation === "files.watch" || operation === "files.unwatch") {
+    return WATCH_CAPABILITY;
+  }
   if (operation.startsWith("files.") || operation.startsWith("imports.")) {
     return FILES_CAPABILITY;
   }
