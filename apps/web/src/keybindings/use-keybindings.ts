@@ -15,7 +15,7 @@ import * as React from "react";
 import { isMacPlatform, isWindowShortcut, matchKeyboardEvent } from "./chords";
 import { COMMANDS, type CommandId, type CommandScope } from "./commands";
 import type { MatchOptions } from "./chords";
-import type { PlatformKeys } from "./commands";
+import { commandWhen, getActiveKeymap, type ActiveKeymap } from "./active";
 import { keybindingContext } from "./context";
 import { evaluateWhen } from "./when";
 
@@ -39,8 +39,11 @@ export interface UseKeybindingsOptions extends MatchOptions {
   enabled?: boolean;
   /** 只启用这些 scope 的命令。 */
   scopes?: readonly CommandScope[];
-  /** 用户自定义键位。 */
-  keymap?: Partial<Record<CommandId, PlatformKeys>>;
+  /**
+   * 用户自定义键位。不传时读 `setActiveKeymap` 推进来的那一份：编辑器、浏览器
+   * 节点各自装在子树上的监听器也该认用户改过的键和条件，而不是只认默认值。
+   */
+  keymap?: ActiveKeymap;
   /** 监听目标，默认 `window`。 */
   target?: Window | Document | HTMLElement | null;
 }
@@ -86,6 +89,7 @@ export function useKeybindings(
       const inTerminal = context.terminalFocus === true;
       const typing = context.editing === true;
 
+      const keymap = current.keymap ?? getActiveKeymap();
       for (const command of COMMANDS) {
         const handler = handlersRef.current[command.id];
         if (!handler) continue;
@@ -93,10 +97,10 @@ export function useKeybindings(
         // 终端优先：终端里的 textarea 也算 typing，但只看 allowInTerminal
         if (inTerminal && !command.allowInTerminal) continue;
         if (typing && !command.allowWhileTyping) continue;
-        if (!evaluateWhen(whenOf(command), context)) continue;
+        if (!evaluateWhen(commandWhen(command.id, keymap), context)) continue;
 
         const keys =
-          current.keymap?.[command.id]?.[mac ? "mac" : "other"] ??
+          keymap[command.id]?.[mac ? "mac" : "other"] ??
           command.defaultKeys[mac ? "mac" : "other"];
         if (!matchKeyboardEvent(keyboardEvent, keys, { mac })) continue;
 
@@ -114,9 +118,4 @@ export function useKeybindings(
     host.addEventListener("keydown", onKeyDown, true);
     return () => host.removeEventListener("keydown", onKeyDown, true);
   }, [enabled, target]);
-}
-
-/** `COMMANDS` 是 `as const`，只有写了 `when` 的那几条才有这个键。 */
-function whenOf(command: (typeof COMMANDS)[number]): string | undefined {
-  return "when" in command ? command.when : undefined;
 }

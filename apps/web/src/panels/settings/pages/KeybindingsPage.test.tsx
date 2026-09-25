@@ -26,7 +26,11 @@ vi.mock("sonner", () => ({
 
 import { installDomPolyfills, TestProviders } from "../../../app/test-harness";
 import { translate } from "../../../i18n";
-import { isMacPlatform, useKeybindings } from "../../../keybindings";
+import {
+  formatKeys,
+  isMacPlatform,
+  useKeybindings,
+} from "../../../keybindings";
 import { useDeviceKeymapStore } from "../device-keymap-store";
 import { currentPlatform, emptyKeymap, otherPlatform } from "../keymap";
 import { KeybindingsPage } from "./KeybindingsPage";
@@ -445,4 +449,141 @@ describe("KeybindingsPage", () => {
     await waitFor(() => expect(patchSettings).toHaveBeenCalled());
     expect(paletteChip()).toBeTruthy();
   });
+
+  it("设为无写一条空串覆盖，与没覆盖分得开，重置能退回默认", async () => {
+    view();
+    await screen.findByRole("button", { name: zh("cmd.app.commandPalette") });
+    await pick(zh("settings.shortcut.clear"));
+    await waitFor(() =>
+      expect(patchSettings).toHaveBeenCalledWith({
+        keymap: { [here]: { "app.commandPalette": "" } },
+      }),
+    );
+    // 来源是「全局」而不是「默认」，键位写「未绑定」，↺ 还在。
+    await waitFor(() =>
+      expect(paletteSource()).toContain(zh("settings.shortcut.source.global")),
+    );
+    expect(paletteChip().textContent).toContain(
+      zh("settings.shortcut.unbound"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: resetLabel() }));
+    await waitFor(() =>
+      expect(patchSettings).toHaveBeenLastCalledWith({
+        keymap: { [here]: { "app.commandPalette": null } },
+      }),
+    );
+  });
+
+  it("再录一组替代键加在末尾，不替换原来那组", async () => {
+    view();
+    await screen.findByRole("button", { name: zh("cmd.app.commandPalette") });
+    await pick(zh("settings.shortcut.add"));
+    expect(screen.getByText(zh("settings.shortcut.recording"))).toBeTruthy();
+    fireEvent.keyDown(window, {
+      key: "j",
+      code: "KeyJ",
+      shiftKey: true,
+      ...mod(),
+    });
+    await waitFor(() =>
+      expect(patchSettings).toHaveBeenCalledWith({
+        keymap: { [here]: { "app.commandPalette": "Mod+K,Mod+Shift+J" } },
+      }),
+    );
+  });
+
+  it("多组键逐组移除，每组都参与冲突检测", async () => {
+    fetchSettings.mockResolvedValue(
+      documentWith({ [here]: { "app.commandPalette": "Mod+Alt+K,Mod+Z" } }),
+    );
+    view();
+    // 第二组撞上撤销：两条都挂冲突。
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(zh("settings.shortcut.conflict")),
+      ).toHaveLength(2),
+    );
+    await pick(
+      zh("settings.shortcut.removeOne").replace(
+        "{keys}",
+        formatKeys("Mod+Z", { mac: here === "mac" }),
+      ),
+    );
+    await waitFor(() =>
+      expect(patchSettings).toHaveBeenCalledWith({
+        keymap: { [here]: { "app.commandPalette": "Mod+Alt+K" } },
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText(zh("settings.shortcut.conflict"))).toBeNull(),
+    );
+  });
+
+  it("条件按已有语法校验，写错时说明原因且不能保存", async () => {
+    view();
+    await screen.findByRole("button", { name: zh("cmd.app.commandPalette") });
+    await pick(zh("settings.shortcut.when.edit"));
+    const input = await screen.findByRole("textbox", {
+      name: zh("settings.shortcut.when"),
+    });
+    const save = () =>
+      screen.getByRole("button", {
+        name: zh("settings.shortcut.when.save"),
+      }) as HTMLButtonElement;
+
+    fireEvent.change(input, { target: { value: "editorFocus &&" } });
+    expect(screen.getByRole("alert").textContent).toBe(
+      zh("settings.shortcut.when.syntax"),
+    );
+    expect(save().disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: "editorFocuss" } });
+    expect(screen.getByRole("alert").textContent).toContain("editorFocuss");
+    expect(save().disabled).toBe(true);
+
+    fireEvent.change(input, { target: { value: " editorFocus " } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(save());
+    await waitFor(() =>
+      expect(patchSettings).toHaveBeenCalledWith({
+        keymap: { when: { "app.commandPalette": "editorFocus" } },
+      }),
+    );
+    // 改过的条件写在那一行上。
+    await waitFor(() => expect(paletteSource()).toContain("editorFocus"));
+  });
+
+  it("恢复默认条件删掉那一条覆盖", async () => {
+    fetchSettings.mockResolvedValue(
+      documentWith({ when: { "app.commandPalette": "editorFocus" } }),
+    );
+    view();
+    await waitFor(() => expect(paletteSource()).toContain("editorFocus"));
+    await pick(zh("settings.shortcut.when.edit"));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: zh("settings.shortcut.when.reset"),
+      }),
+    );
+    await waitFor(() =>
+      expect(patchSettings).toHaveBeenCalledWith({
+        keymap: { when: { "app.commandPalette": null } },
+      }),
+    );
+  });
 });
+
+/** 打开命令面板那一行的「更多」菜单，点其中一项。 */
+async function pick(item: string) {
+  const trigger = screen.getByRole("button", {
+    name: zh("settings.shortcut.more").replace(
+      "{command}",
+      zh("cmd.app.commandPalette"),
+    ),
+  });
+  fireEvent.pointerDown(
+    trigger,
+    new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+  );
+  fireEvent.click(await screen.findByRole("menuitem", { name: item }));
+}

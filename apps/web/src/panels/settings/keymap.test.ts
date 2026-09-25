@@ -16,9 +16,17 @@ import {
   parseStoredKeymap,
   resolveKeymap,
   saveDeviceKeymap,
+  addChord,
+  removeChord,
+  splitChords,
+  whenProblem,
   type StoredKeymap,
 } from "./keymap";
-import { commandKeys, matchKeyboardEvent } from "../../keybindings";
+import {
+  commandKeys,
+  commandWhen,
+  matchKeyboardEvent,
+} from "../../keybindings";
 
 function press(init: KeyboardEventInit & { code?: string }): KeyboardEvent {
   return new KeyboardEvent("keydown", init);
@@ -29,13 +37,19 @@ function layers(overrides: Partial<StoredKeymap>): StoredKeymap {
 }
 
 describe("parseStoredKeymap", () => {
-  it("按平台分开读，未知命令与空写法直接丢掉", () => {
+  it("按平台分开读，未知命令丢掉，空写法是一条「清空」", () => {
     const stored = parseStoredKeymap({
       mac: { "canvas.tidy": "Mod+Shift+K", "nope.command": "Mod+J" },
       other: { "canvas.tidy": "Mod+Alt+K", "canvas.undo": "   " },
     });
     expect(stored.mac).toEqual({ "canvas.tidy": "Mod+Shift+K" });
-    expect(stored.other).toEqual({ "canvas.tidy": "Mod+Alt+K" });
+    expect(stored.other).toEqual({
+      "canvas.tidy": "Mod+Alt+K",
+      "canvas.undo": "",
+    });
+    expect(
+      commandKeys("canvas.undo", { mac: false, keymap: resolveKeymap(stored) }),
+    ).toBe("");
     // 两个平台各读各的，不互相污染。
     const keymap = resolveKeymap(stored);
     expect(commandKeys("canvas.tidy", { mac: true, keymap })).toBe(
@@ -365,5 +379,168 @@ describe("keymapConflicts", () => {
     expect(chordFromEvent(press({ key: "q", ctrlKey: true }), false)).toBe(
       "Mod+Q",
     );
+  });
+});
+
+describe("清空一条绑定", () => {
+  it("空串是一条覆盖：盖住下面各层，来源照报，重置能退回去", () => {
+    const global = layers({ mac: { "canvas.tidy": "Mod+Alt+K" } });
+    const device = layers({ mac: { "canvas.tidy": "" } });
+    const keymap = resolveKeymap(global, device);
+    expect(commandKeys("canvas.tidy", { mac: true, keymap })).toBe("");
+    // 另一个平台没清，照旧是默认。
+    expect(commandKeys("canvas.tidy", { mac: false, keymap })).toBe(
+      commandKeys("canvas.tidy", { mac: false, keymap: {} }),
+    );
+    // 「没覆盖」与「覆盖为空」分得开：前者是 default，后者是 device。
+    expect(keymapSource("canvas.tidy", "mac", global, device)).toBe("device");
+    expect(keymapSource("canvas.undo", "mac", global, device)).toBe("default");
+    // 重置本设备那一条会落回全局的写法，而不是也变成空。
+    expect(keysBelow("canvas.tidy", "mac", "device", global)).toBe("Mod+Alt+K");
+    // 清空的键不参与冲突：它什么也不占。
+    const cleared = resolveKeymap(
+      layers({ mac: { "canvas.tidy": "Mod+Z", "canvas.undo": "" } }),
+    );
+    expect(keymapConflicts(cleared, true).size).toBe(0);
+  });
+
+  it("清空能存进本设备，也能原样导出导入", () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    });
+    const id = "cleared-device";
+    saveDeviceKeymap(layers({ mac: { "canvas.tidy": "" } }), id);
+    expect(loadDeviceKeymap(id).mac).toEqual({ "canvas.tidy": "" });
+    saveDeviceKeymap(emptyKeymap(), id);
+    vi.unstubAllGlobals();
+    const back = importKeymap(
+      exportKeymap(layers({ other: { "canvas.undo": "" } }), emptyKeymap()),
+    );
+    expect(back.global.other).toEqual({ "canvas.undo": "" });
+  });
+
+  it("旧的扁平写法里空串不算清空：那一版没有这回事", () => {
+    const stored = parseStoredKeymap({ "canvas.tidy": "" });
+    expect(stored.mac).toEqual({});
+    expect(stored.other).toEqual({});
+  });
+});
+
+describe("多组替代键", () => {
+  it("增、删单组，重复的组合不加第二遍", () => {
+    expect(splitChords("Mod+K, Mod+J,")).toEqual(["Mod+K", "Mod+J"]);
+    expect(splitChords("")).toEqual([]);
+    expect(splitChords(null)).toEqual([]);
+    expect(addChord("Mod+K", "Mod+J", true)).toBe("Mod+K,Mod+J");
+    expect(addChord(null, "Mod+J", true)).toBe("Mod+J");
+    // 修饰键别名归一之后是同一个组合。
+    expect(addChord("Mod+K", "Command+K", true)).toBe("Mod+K");
+    expect(removeChord("Mod+K,Mod+J", 0)).toBe("Mod+J");
+    // 删掉最后一组就是清空。
+    expect(removeChord("Mod+J", 0)).toBe("");
+  });
+
+  it("每一组都能触发", () => {
+    const keymap = resolveKeymap(
+      layers({ mac: { "canvas.tidy": "Mod+Alt+K,Mod+Alt+J" } }),
+    );
+    const keys = commandKeys("canvas.tidy", { mac: true, keymap });
+    for (const code of ["KeyK", "KeyJ"])
+      expect(
+        matchKeyboardEvent(
+          press({
+            key: code.slice(3).toLowerCase(),
+            code,
+            metaKey: true,
+            altKey: true,
+          }),
+          keys,
+          { mac: true },
+        ),
+      ).toBe(true);
+  });
+
+  it("冲突逐组比较：只有第二组撞车也要报", () => {
+    const keymap = resolveKeymap(
+      layers({ mac: { "canvas.tidy": "Mod+Alt+K,Mod+Z" } }),
+    );
+    expect([...keymapConflicts(keymap, true)].sort()).toEqual([
+      "canvas.tidy",
+      "canvas.undo",
+    ]);
+    // 第二组是窗口保留键，也算。
+    const reserved = resolveKeymap(
+      layers({ mac: { "canvas.tidy": "Mod+Alt+K,Meta+W" } }),
+    );
+    expect([...keymapConflicts(reserved, true)]).toEqual(["canvas.tidy"]);
+  });
+});
+
+describe("自定义条件", () => {
+  it("条件不分平台，合并时本设备压过全局，读不懂的条件不进来", () => {
+    const global = parseStoredKeymap({
+      when: { "canvas.tidy": "editorFocus", "canvas.undo": "editorFocus &&" },
+    });
+    expect(global.when).toEqual({ "canvas.tidy": "editorFocus" });
+    const device = layers({ when: { "canvas.tidy": "terminalFocus" } });
+    expect(commandWhen("canvas.tidy", resolveKeymap(global))).toBe(
+      "editorFocus",
+    );
+    expect(commandWhen("canvas.tidy", resolveKeymap(global, device))).toBe(
+      "terminalFocus",
+    );
+    expect(keymapSource("canvas.tidy", "when", global, device)).toBe("device");
+    // 没改过的沿用命令表。
+    expect(commandWhen("canvas.toggleFocus", resolveKeymap(global))).toBe(
+      "!editorFocus",
+    );
+  });
+
+  it("改过的条件参与冲突判断", () => {
+    // 默认：⌘. 在编辑器里是代码操作，在别处是专注模式，互斥，不报。
+    expect(keymapConflicts(resolveKeymap(emptyKeymap()), true).size).toBe(0);
+    // 用户把专注模式的条件改成「哪儿都算」，两条就会同时成立。
+    const everywhere = resolveKeymap(
+      layers({ when: { "canvas.toggleFocus": "" } }),
+    );
+    expect([...keymapConflicts(everywhere, true)].sort()).toEqual([
+      "canvas.toggleFocus",
+      "editor.codeActions",
+    ]);
+    // 反过来，给两条撞车的命令写上互斥条件，冲突就消失了。
+    const apart = resolveKeymap(
+      layers({
+        mac: { "canvas.tidy": "Mod+Z" },
+        when: { "canvas.tidy": "terminalFocus", "canvas.undo": "canvasFocus" },
+      }),
+    );
+    expect(keymapConflicts(apart, true).size).toBe(0);
+  });
+
+  it("语法错与不认识的键分开报", () => {
+    expect(whenProblem("")).toBeNull();
+    expect(whenProblem("editorFocus && platform == mac")).toBeNull();
+    expect(whenProblem("editorFocus &&")).toEqual({
+      problem: "syntax",
+      keys: [],
+    });
+    expect(whenProblem("editorFocuss || terminalFocus")).toEqual({
+      problem: "unknownKey",
+      keys: ["editorFocuss"],
+    });
+  });
+
+  it("条件随导出导入一起走", () => {
+    const back = importKeymap(
+      exportKeymap(
+        layers({ when: { "canvas.tidy": "canvasFocus" } }),
+        layers({ when: { "canvas.undo": "" } }),
+      ),
+    );
+    expect(back.global.when).toEqual({ "canvas.tidy": "canvasFocus" });
+    expect(back.device.when).toEqual({ "canvas.undo": "" });
   });
 });

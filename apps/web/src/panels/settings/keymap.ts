@@ -1,14 +1,18 @@
 import {
   COMMANDS,
   COMMAND_BY_ID,
+  WHEN_KEYS,
   commandKeys,
+  commandWhen,
   chordSignature,
   isReservedChord,
+  isValidWhen,
   isWindowShortcut,
   isMacPlatform,
   whenOverlaps,
+  whenReferences,
+  type ActiveKeymap,
   type CommandId,
-  type PlatformKeys,
 } from "../../keybindings";
 
 /**
@@ -27,6 +31,12 @@ import {
  *
  * 读取时按 `设备[平台] → 全局[平台] → 默认[平台]` 取第一个有值的。
  * 冲突检测跑在合并后的结果上：只看某一层是看不出撞车的。
+ *
+ * 「有值」包括空串：空串是用户明确清空的绑定（设成「无」），它盖住下面各层；
+ * 没有这个键才是「没覆盖」。一条写法里可以用逗号列几组替代键。
+ *
+ * 每层另有一张不分平台的 `when` 表，放用户改过的条件（条件里本来就能写
+ * `platform == mac`，再按平台分一次只会让两处打架）。空串在这里是「不设条件」。
  */
 
 export type PlatformName = "mac" | "other";
@@ -36,11 +46,23 @@ export const KEYMAP_PLATFORMS: readonly PlatformName[] = ["mac", "other"];
 /** 一个平台上的覆盖：命令 id → 和弦写法。 */
 export type KeymapLayer = Partial<Record<CommandId, string>>;
 
-/** 一层存储（两个平台各一份覆盖表）。 */
-export type StoredKeymap = Record<PlatformName, KeymapLayer>;
+/** 一层存储：两个平台各一份键位覆盖，外加一份条件覆盖。 */
+export interface StoredKeymap {
+  mac: KeymapLayer;
+  other: KeymapLayer;
+  when: KeymapLayer;
+}
+
+/** 一层存储里的三格。 */
+export type KeymapSection = PlatformName | "when";
+
+export const KEYMAP_SECTIONS: readonly KeymapSection[] = [
+  ...KEYMAP_PLATFORMS,
+  "when",
+];
 
 /** 合并后的键位，`useKeybindings` / `commandKeys` 直接认这个形状。 */
-export type Keymap = Partial<Record<CommandId, PlatformKeys>>;
+export type Keymap = ActiveKeymap;
 
 /**
  * 一条键位当前由哪一层决定。
@@ -63,21 +85,22 @@ export function otherPlatform(platform: PlatformName): PlatformName {
 }
 
 export function emptyKeymap(): StoredKeymap {
-  return { mac: {}, other: {} };
+  return { mac: {}, other: {}, when: {} };
 }
 
-function readLayer(raw: unknown): KeymapLayer {
+function readLayer(raw: unknown, section: KeymapSection): KeymapLayer {
   const layer: KeymapLayer = {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return layer;
-  for (const [id, chords] of Object.entries(raw as Record<string, unknown>)) {
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
     // PATCH 用 `null` 表示「删回上一层」，乐观更新后的本地数据里会短暂出现它。
-    if (
-      !COMMAND_IDS.has(id) ||
-      typeof chords !== "string" ||
-      chords.trim() === ""
-    )
-      continue;
-    layer[id as CommandId] = chords;
+    if (!COMMAND_IDS.has(id) || typeof value !== "string") continue;
+    // 空串留着：那是「清空」或「不设条件」，和没有这一条是两回事。
+    const trimmed = value.trim();
+    // 读不懂的条件不进来：它会让这条命令在任何地方都不触发，而页面上看起来
+    // 只是「条件：某某」。导入别人的配置或手改文件时尤其容易出现。
+    if (section === "when" && !isValidWhen(trimmed)) continue;
+    layer[id as CommandId] =
+      section === "when" || trimmed === "" ? trimmed : value;
   }
   return layer;
 }
@@ -96,11 +119,13 @@ export function parseStoredKeymap(raw: unknown): StoredKeymap {
   const stored = emptyKeymap();
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return stored;
   const entries = raw as Record<string, unknown>;
-  for (const platform of KEYMAP_PLATFORMS)
-    stored[platform] = readLayer(entries[platform]);
-  const legacy = readLayer(entries);
+  for (const section of KEYMAP_SECTIONS)
+    stored[section] = readLayer(entries[section], section);
+  const legacy = readLayer(entries, "mac");
+  // 旧的扁平写法从没有过「清空」，空串在那里只是没写。
   for (const [id, chords] of Object.entries(legacy) as [CommandId, string][])
-    for (const platform of KEYMAP_PLATFORMS) stored[platform][id] ??= chords;
+    if (chords.trim() !== "")
+      for (const platform of KEYMAP_PLATFORMS) stored[platform][id] ??= chords;
   return stored;
 }
 
@@ -131,6 +156,7 @@ export function keymapMigrationPatch(raw: unknown): KeymapPatch | null {
   const patch: KeymapPatch = {};
   for (const key of legacy) patch[key] = null;
   for (const platform of KEYMAP_PLATFORMS) patch[platform] = stored[platform];
+  if (Object.keys(stored.when).length > 0) patch.when = stored.when;
   return patch;
 }
 
@@ -185,8 +211,8 @@ export function loadDeviceKeymap(id = deviceId()): StoredKeymap {
 
 export function saveDeviceKeymap(next: StoredKeymap, id = deviceId()): void {
   try {
-    const empty = KEYMAP_PLATFORMS.every(
-      (platform) => Object.keys(next[platform]).length === 0,
+    const empty = KEYMAP_SECTIONS.every(
+      (section) => Object.keys(next[section] ?? {}).length === 0,
     );
     if (empty) localStorage.removeItem(deviceKeymapKey(id));
     else localStorage.setItem(deviceKeymapKey(id), JSON.stringify(next));
@@ -213,10 +239,13 @@ export function resolveKeymap(
       (platform) =>
         device[platform][command.id] ?? global[platform][command.id] ?? null,
     );
-    if (resolved.every((value) => value === null)) continue;
+    const when = device.when?.[command.id] ?? global.when?.[command.id];
+    if (resolved.every((value) => value === null) && when === undefined)
+      continue;
     keymap[command.id] = {
       mac: resolved[0] ?? command.defaultKeys.mac,
       other: resolved[1] ?? command.defaultKeys.other,
+      ...(when === undefined ? {} : { when }),
     };
   }
   return keymap;
@@ -226,18 +255,21 @@ export function resolveKeymap(
  * 这条命令在这个平台上由哪一层决定。
  *
  * `preset` 是当前配置档自带的那张表；不传就是「没有预设」，行为与从前完全
- * 一样（只有 default / global / device 三种答案）。
+ * 一样（只有 default / global / device 三种答案）。`platform` 传 `"when"` 问的
+ * 是条件由哪一层决定。
  */
 export function keymapSource(
   id: CommandId,
-  platform: PlatformName,
+  platform: KeymapSection,
   global: StoredKeymap,
   device: StoredKeymap = emptyKeymap(),
   preset: StoredKeymap = emptyKeymap(),
 ): KeymapSource {
-  if (device[platform][id] !== undefined) return "device";
-  if (global[platform][id] !== undefined)
-    return preset[platform][id] === global[platform][id] ? "profile" : "global";
+  if (device[platform]?.[id] !== undefined) return "device";
+  if (global[platform]?.[id] !== undefined)
+    return preset[platform]?.[id] === global[platform][id]
+      ? "profile"
+      : "global";
   return "default";
 }
 
@@ -261,6 +293,72 @@ export function keysBelow(
     if (below !== undefined) return below;
   }
   return COMMAND_BY_ID[id].defaultKeys[platform];
+}
+
+/* ------------------------------- 多组替代键 -------------------------------- */
+
+/** 一条写法里的各组替代键，按写的顺序；空串与 `null` 是零组。 */
+export function splitChords(keys: string | null | undefined): string[] {
+  if (!keys) return [];
+  return keys
+    .split(",")
+    .map((chord) => chord.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 在末尾加一组替代键。已经有一组按起来一模一样的（修饰键别名归一之后）
+ * 就原样返回：同一个组合写两遍不会多一种按法，只会让列表看起来有两项。
+ */
+export function addChord(
+  keys: string | null | undefined,
+  chord: string,
+  mac = isMacPlatform(),
+): string {
+  const list = splitChords(keys);
+  const signature = chordSignature(chord, mac);
+  if (
+    list.some(
+      (existing) =>
+        existing === chord ||
+        (signature !== null && chordSignature(existing, mac) === signature),
+    )
+  )
+    return list.join(",");
+  return [...list, chord].join(",");
+}
+
+/**
+ * 去掉第 `index` 组。去掉的是最后一组时结果是空串——也就是「清空」，
+ * 它仍然是一条覆盖，而不是退回下一层。
+ */
+export function removeChord(
+  keys: string | null | undefined,
+  index: number,
+): string {
+  return splitChords(keys)
+    .filter((_, position) => position !== index)
+    .join(",");
+}
+
+/* ------------------------------- 自定义条件 -------------------------------- */
+
+export type WhenProblem = "syntax" | "unknownKey";
+
+/**
+ * 一条用户输入的条件哪里不对；没问题是 `null`。
+ *
+ * 语法错与键名写错分开报：前者整条作废，后者语法上成立、求值时那个键永远为
+ * 假——两种都会让这条命令悄悄不再触发，所以都拦在保存之前。
+ */
+export function whenProblem(expression: string): {
+  problem: WhenProblem;
+  keys: string[];
+} | null {
+  if (!isValidWhen(expression)) return { problem: "syntax", keys: [] };
+  const known = new Set<string>(WHEN_KEYS);
+  const unknown = whenReferences(expression).filter((key) => !known.has(key));
+  return unknown.length > 0 ? { problem: "unknownKey", keys: unknown } : null;
 }
 
 /* --------------------------------- 录制 ----------------------------------- */
@@ -346,7 +444,7 @@ export function keymapConflicts(
   for (const command of COMMANDS) {
     const keys = commandKeys(command.id, { mac, keymap });
     if (!keys) continue;
-    for (const chord of keys.split(",")) {
+    for (const chord of splitChords(keys)) {
       if (isReservedChord(chord, mac)) conflicts.add(command.id);
       const token = chordSignature(chord, mac);
       if (!token) continue;
@@ -359,7 +457,14 @@ export function keymapConflicts(
         if (owner === command.id) continue;
         // 同一个组合键在互斥的条件下不算撞车：编辑器里的 ⌘R 和浏览器里的
         // ⌘R 永远不会同时有机会触发，标成冲突只是在制造假警报。
-        if (!whenOverlaps(whenOf(owner), whenOf(command.id))) continue;
+        // 条件取合并之后的那条：用户改过的条件也要参与判断。
+        if (
+          !whenOverlaps(
+            commandWhen(owner, keymap),
+            commandWhen(command.id, keymap),
+          )
+        )
+          continue;
         conflicts.add(owner);
         conflicts.add(command.id);
       }
@@ -367,12 +472,6 @@ export function keymapConflicts(
     }
   }
   return conflicts;
-}
-
-/** 命令表是 `as const`，只有写了 `when` 的那几条才有这个键。 */
-function whenOf(id: CommandId): string | undefined {
-  const command = COMMAND_BY_ID[id];
-  return "when" in command ? command.when : undefined;
 }
 
 /* ------------------------------ 导入 / 导出 ------------------------------- */

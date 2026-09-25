@@ -14,6 +14,8 @@ import {
   isWindowShortcut,
   suspendKeybindings,
   matchKeyboardEvent,
+  setActiveKeymap,
+  SCOPE_ATTRIBUTE,
   useKeybindings,
   type CommandId,
 } from "./index";
@@ -420,4 +422,56 @@ describe("useKeybindings", () => {
     });
     expect(onPalette).not.toHaveBeenCalled();
   });
+
+  it("用户改过的条件决定这组键在哪儿算数", () => {
+    const onPalette = vi.fn();
+    mount(
+      { "app.commandPalette": onPalette },
+      { keymap: { "app.commandPalette": { ...PALETTE, when: "editorFocus" } } },
+    );
+    fire({ key: "k", metaKey: true });
+    expect(onPalette).not.toHaveBeenCalled();
+
+    const editor = document.createElement("div");
+    editor.setAttribute(SCOPE_ATTRIBUTE, "editor");
+    const inside = document.createElement("span");
+    editor.append(inside);
+    document.body.append(editor);
+    fire({ key: "k", metaKey: true }, inside);
+    expect(onPalette).toHaveBeenCalledTimes(1);
+  });
+
+  it("清空的绑定什么也不截", () => {
+    const onPalette = vi.fn();
+    mount(
+      { "app.commandPalette": onPalette },
+      { keymap: { "app.commandPalette": { mac: "", other: "" } } },
+    );
+    const event = fire({ key: "k", metaKey: true });
+    expect(onPalette).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  /**
+   * 节点自己装在子树上的监听器不传 `keymap`。它们以前只认默认键，用户在设置
+   * 里改过的编辑器 / 浏览器键位与条件到了节点里就不作数。
+   */
+  it("不传 keymap 时认生效中的那一份", () => {
+    const onPalette = vi.fn();
+    setActiveKeymap({
+      "app.commandPalette": { mac: "Mod+J,Mod+Alt+J", other: "Mod+J" },
+    });
+    try {
+      mount({ "app.commandPalette": onPalette });
+      fire({ key: "k", metaKey: true });
+      expect(onPalette).not.toHaveBeenCalled();
+      fire({ key: "j", metaKey: true });
+      fire({ key: "j", code: "KeyJ", metaKey: true, altKey: true });
+      expect(onPalette).toHaveBeenCalledTimes(2);
+    } finally {
+      setActiveKeymap({});
+    }
+  });
 });
+
+const PALETTE = COMMAND_BY_ID["app.commandPalette"].defaultKeys;

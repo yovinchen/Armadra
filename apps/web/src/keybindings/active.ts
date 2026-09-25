@@ -18,19 +18,48 @@ import { formatKeys, isMacPlatform, type MatchOptions } from "./chords";
  * 唯一装监听器的那处）在合并出结果时推一份进来，显示与派发读同一份。
  * 设置页仍然显式传 `keymap`：它要预览另一个平台。
  */
-let activeKeymap: Partial<Record<CommandId, PlatformKeys>> = {};
+/**
+ * 合并之后一条命令的样子：两个平台的键，外加用户改过的 `when`。
+ *
+ * `when` 缺省表示「沿用命令表里写的那条」；空串是用户明确写的「不设条件」，
+ * 两者不能混：前者跟着版本走，后者是用户的决定。
+ */
+export interface ResolvedKeys extends PlatformKeys {
+  when?: string;
+}
 
-export function setActiveKeymap(
-  keymap: Partial<Record<CommandId, PlatformKeys>>,
-): void {
+export type ActiveKeymap = Partial<Record<CommandId, ResolvedKeys>>;
+
+let activeKeymap: ActiveKeymap = {};
+
+export function setActiveKeymap(keymap: ActiveKeymap): void {
   activeKeymap = keymap;
+}
+
+/** 生效中的那一份。节点内的监听器没有自己的 `keymap`，读的就是它。 */
+export function getActiveKeymap(): ActiveKeymap {
+  return activeKeymap;
+}
+
+/**
+ * 这条命令实际生效的 `when`：用户改过的优先，没改过就是命令表里的。
+ * 空串与 `undefined` 都表示「任何地方都算数」。
+ */
+export function commandWhen(
+  id: CommandId,
+  keymap: ActiveKeymap = activeKeymap,
+): string | undefined {
+  const override = keymap[id]?.when;
+  if (override !== undefined) return override;
+  const command = COMMAND_BY_ID[id];
+  return "when" in command ? command.when : undefined;
 }
 
 /** 取某条命令在当前平台上的按键（可被用户自定义键位覆盖）。 */
 export function commandKeys(
   id: CommandId,
   options: MatchOptions & {
-    keymap?: Partial<Record<CommandId, PlatformKeys>>;
+    keymap?: ActiveKeymap;
   } = {},
 ): KeyChords {
   const mac = options.mac ?? isMacPlatform();
@@ -43,7 +72,7 @@ export function commandKeys(
 export function commandKeysLabel(
   id: CommandId,
   options: MatchOptions & {
-    keymap?: Partial<Record<CommandId, PlatformKeys>>;
+    keymap?: ActiveKeymap;
   } = {},
 ): string {
   return formatKeys(commandKeys(id, options), options);

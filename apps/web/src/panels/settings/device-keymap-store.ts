@@ -5,7 +5,7 @@ import {
   emptyKeymap,
   loadDeviceKeymap,
   saveDeviceKeymap,
-  type PlatformName,
+  type KeymapSection,
   type StoredKeymap,
 } from "./keymap";
 
@@ -18,10 +18,13 @@ import {
  */
 export interface DeviceKeymapStore {
   keymap: StoredKeymap;
-  /** 写入当前平台那一格；另一个平台保持原样。 */
-  setChord: (platform: PlatformName, id: CommandId, chord: string) => void;
+  /**
+   * 写入一格：当前平台的键位，或不分平台的 `when`；其余格保持原样。
+   * 空串也是一条覆盖（清空 / 不设条件），要删回下一层用 `clearChord`。
+   */
+  setChord: (section: KeymapSection, id: CommandId, value: string) => void;
   /** 删掉本设备这一条，落回全局或默认。 */
-  clearChord: (platform: PlatformName, id: CommandId) => void;
+  clearChord: (section: KeymapSection, id: CommandId) => void;
   replace: (next: StoredKeymap) => void;
   clearAll: () => void;
 }
@@ -33,21 +36,21 @@ function persist(keymap: StoredKeymap): StoredKeymap {
 
 export const useDeviceKeymapStore = create<DeviceKeymapStore>((set) => ({
   keymap: loadDeviceKeymap(),
-  setChord: (platform, id, chord) =>
+  setChord: (section, id, value) =>
     set((state) =>
       // 每次都换出新的对象，`resolveKeymap` 的 memo 才知道要重算。
       ({
         keymap: persist({
           ...state.keymap,
-          [platform]: { ...state.keymap[platform], [id]: chord },
+          [section]: { ...state.keymap[section], [id]: value },
         }),
       }),
     ),
-  clearChord: (platform, id) =>
+  clearChord: (section, id) =>
     set((state) => {
-      const next = { ...state.keymap[platform] };
+      const next = { ...state.keymap[section] };
       delete next[id];
-      return { keymap: persist({ ...state.keymap, [platform]: next }) };
+      return { keymap: persist({ ...state.keymap, [section]: next }) };
     }),
   replace: (next) => set({ keymap: persist(next) }),
   clearAll: () => set({ keymap: persist(emptyKeymap()) }),

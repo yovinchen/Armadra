@@ -25,6 +25,7 @@
  * {
  *   "profile": "vscode",              // 当前用哪个档，缺省 "default"
  *   "mac": { … }, "other": { … },     // 默认档的用户修改——就是旧的那两格
+ *   "when": { … },                    // 默认档里改过的条件（不分平台）
  *   "profiles": { "vscode": { "mac": { … }, "other": { … } } }
  * }
  * ```
@@ -35,11 +36,11 @@
 import type { CommandId } from "../../keybindings";
 
 import {
-  KEYMAP_PLATFORMS,
+  KEYMAP_SECTIONS,
   emptyKeymap,
   parseStoredKeymap,
   type KeymapLayer,
-  type PlatformName,
+  type KeymapSection,
   type StoredKeymap,
 } from "./keymap";
 
@@ -87,6 +88,7 @@ export const PROFILE_PRESETS: Record<BuiltinProfileId, StoredKeymap> = {
       "canvas.focusMode": "Mod+Shift+Backslash",
       "canvas.newTerminal": "Ctrl+Backquote",
     }),
+    when: {},
   },
 };
 
@@ -142,8 +144,8 @@ export function mergeLayers(
   user: StoredKeymap,
 ): StoredKeymap {
   const merged = emptyKeymap();
-  for (const platform of KEYMAP_PLATFORMS)
-    merged[platform] = { ...preset[platform], ...user[platform] };
+  for (const section of KEYMAP_SECTIONS)
+    merged[section] = { ...preset[section], ...user[section] };
   return merged;
 }
 
@@ -169,10 +171,13 @@ export function profileLayersPatch(
   return id === DEFAULT_PROFILE_ID ? layers : { profiles: { [id]: layers } };
 }
 
-/** 往这个档的一个平台写若干条覆盖（`null` 表示删回上一层）。 */
+/**
+ * 往这个档的一格写若干条覆盖（`null` 表示删回上一层，空串是「清空」或
+ * 「不设条件」）。格是一个平台，或者不分平台的 `when`。
+ */
 export function profilePatch(
   id: string,
-  platform: PlatformName,
+  platform: KeymapSection,
   entries: Record<string, string | null>,
 ): Record<string, unknown> {
   return profileLayersPatch(id, { [platform]: entries });

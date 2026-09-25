@@ -1,11 +1,14 @@
 import * as React from "react";
-import { Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Ellipsis, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useT } from "../../../app/preferences-store";
 import {
   COMMANDS,
-  commandKeysLabel,
+  COMMAND_BY_ID,
+  WHEN_KEYS,
+  commandKeys,
+  commandWhen,
   formatKeys,
   isMacPlatform,
   isWindowShortcut,
@@ -16,6 +19,7 @@ import {
 } from "../../../keybindings";
 import { useDeviceKeymapStore } from "../device-keymap-store";
 import {
+  addChord,
   chordFromEvent,
   currentPlatform,
   emptyKeymap,
@@ -25,7 +29,11 @@ import {
   keymapSource,
   keysBelow,
   otherPlatform,
+  removeChord,
   resolveKeymap,
+  splitChords,
+  whenProblem,
+  type KeymapSection,
   type KeymapSource,
   type PlatformName,
 } from "../keymap";
@@ -50,6 +58,13 @@ import { useRuntimeSettings } from "../use-runtime-settings";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { Input } from "@/ui/input";
 import { Kbd } from "@/ui/kbd";
 import {
@@ -60,7 +75,6 @@ import {
   SelectValue,
 } from "@/ui/select";
 import { Textarea } from "@/ui/textarea";
-import { cn } from "@/lib/cn";
 import { isDesktop } from "@/platform";
 
 const SCOPES: readonly CommandScope[] = [
@@ -77,6 +91,15 @@ const SCOPES: readonly CommandScope[] = [
 type WriteLayer = "global" | "device";
 
 /**
+ * 正在录哪一条、录完怎么写：`replace` 整条换成这一组，`append` 加在末尾成为
+ * 又一组替代键。
+ */
+interface Recording {
+  id: CommandId;
+  mode: "replace" | "append";
+}
+
+/**
  * 设置 → 快捷键（§24.1；终端宿主设计 §10）。
  *
  * 三层：内置默认（按 mac / other 分平台）→ 用户全局覆盖（Runtime settings，
@@ -86,6 +109,9 @@ type WriteLayer = "global" | "device";
  * 点键位进入录制态：下一个带修饰键的组合就是新键位，Esc 取消，Backspace 重置
  * 当前层。录制只写当前平台那一格；另一个平台可以切过去看，但不能在这台机器上
  * 录——抓到的是本机的物理按键，替另一个平台猜是错的。
+ *
+ * 每行的「更多」菜单：再录一组替代键、移除其中一组、设为无（一条空串覆盖，
+ * 与「没覆盖」不同，↺ 能把它撤回），以及编辑这一条的 `when` 条件。
  *
  * 冲突跑在三层合并之后的结果上，不自动改判谁赢：用户看得见才改得动。
  */
@@ -108,7 +134,11 @@ export function KeybindingsPage() {
   const here = currentPlatform();
   const [platform, setPlatform] = React.useState<PlatformName>(here);
   const [layer, setLayer] = React.useState<WriteLayer>("global");
-  const [recording, setRecording] = React.useState<CommandId | null>(null);
+  const [recording, setRecording] = React.useState<Recording | null>(null);
+  const [editingWhen, setEditingWhen] = React.useState<{
+    id: CommandId;
+    text: string;
+  } | null>(null);
   const [transfer, setTransfer] = React.useState<string | null>(null);
   const [naming, setNaming] = React.useState<string | null>(null);
   // 壳最后一次向系统注册全局热键的结果。空表就是「这一轮什么也没确认」，
@@ -126,25 +156,34 @@ export function KeybindingsPage() {
   // 只能录当前平台：另一个平台是只读预览。
   const preview = platform !== here;
 
+  /** 写一格：当前平台的键位（`section` 缺省），或不分平台的 `when`。 */
   const write = React.useCallback(
-    (id: CommandId, chord: string) => {
-      if (layer === "device") setDeviceChord(here, id, chord);
+    (id: CommandId, value: string, section: KeymapSection = here) => {
+      if (layer === "device") setDeviceChord(section, id, value);
       // 写进**当前档**，不是写进一张全局表：换个档回来，改的还在。
       else
-        save.mutate({ keymap: profilePatch(profile, here, { [id]: chord }) });
+        save.mutate({
+          keymap: profilePatch(profile, section, { [id]: value }),
+        });
     },
     [layer, here, profile, save, setDeviceChord],
   );
 
   /** 重置到上一层：本设备 → 这个档里自己的修改 → 档预设 / 内置默认。 */
   const resetOne = React.useCallback(
-    (id: CommandId) => {
-      const source = keymapSource(id, here, global, device, preset);
-      if (source === "device") clearDeviceChord(here, id);
+    (id: CommandId, section: KeymapSection = here) => {
+      const source = keymapSource(id, section, global, device, preset);
+      if (source === "device") clearDeviceChord(section, id);
       else if (source === "global")
-        save.mutate({ keymap: profilePatch(profile, here, { [id]: null }) });
+        save.mutate({ keymap: profilePatch(profile, section, { [id]: null }) });
     },
     [here, global, device, preset, profile, clearDeviceChord, save],
+  );
+
+  /** 这台机器上这条命令现在生效的那几组键（录制与增删都以它为底）。 */
+  const keysHere = React.useCallback(
+    (id: CommandId) => commandKeys(id, { keymap, mac: here === "mac" }),
+    [keymap, here],
   );
 
   const resetAll = React.useCallback(() => {
@@ -155,6 +194,8 @@ export function KeybindingsPage() {
       cleared[name] = Object.fromEntries(
         Object.keys(layerMap).map((id) => [id, null]),
       );
+    // 条件那一格没改过就不带：平台两格照旧总是带上，形状与从前一致。
+    if (Object.keys(cleared.when ?? {}).length === 0) delete cleared.when;
     if (Object.values(cleared).some((entry) => Object.keys(entry).length > 0))
       save.mutate({ keymap: profileLayersPatch(profile, cleared) });
   }, [clearDevice, user, profile, save]);
@@ -197,13 +238,18 @@ export function KeybindingsPage() {
         return;
       }
       if (event.key === "Backspace") {
-        resetOne(recording);
+        resetOne(recording.id);
         setRecording(null);
         return;
       }
       const chord = chordFromEvent(event);
       if (!chord) return;
-      write(recording, chord);
+      write(
+        recording.id,
+        recording.mode === "append"
+          ? addChord(keysHere(recording.id), chord, here === "mac")
+          : chord,
+      );
       setRecording(null);
     };
     window.addEventListener("keydown", onKeyDown, true);
@@ -211,7 +257,15 @@ export function KeybindingsPage() {
       window.removeEventListener("keydown", onKeyDown, true);
       resume();
     };
-  }, [recording, write, resetOne]);
+  }, [recording, write, resetOne, keysHere, here]);
+
+  const whenCheck = editingWhen ? whenProblem(editingWhen.text) : null;
+
+  function saveWhen() {
+    if (!editingWhen || whenProblem(editingWhen.text)) return;
+    write(editingWhen.id, editingWhen.text.trim(), "when");
+    setEditingWhen(null);
+  }
 
   function applyImport(text: string) {
     let imported;
@@ -391,6 +445,19 @@ export function KeybindingsPage() {
                 source === "default" || source === "profile"
                   ? null
                   : keysBelow(command.id, platform, source, global, preset);
+              const mac = platform === "mac";
+              const chords = splitChords(
+                commandKeys(command.id, { keymap, mac }),
+              );
+              const whenSource = keymapSource(
+                command.id,
+                "when",
+                global,
+                device,
+              );
+              const when = commandWhen(command.id, keymap);
+              const active =
+                recording?.id === command.id ? recording.mode : null;
               return (
                 <SettingsRow
                   key={command.id}
@@ -420,52 +487,127 @@ export function KeybindingsPage() {
                       {t(`settings.shortcut.global.${registered[command.id]}`)}
                     </Badge>
                   )}
+                  {/* 用户改过的条件写出来：它决定这组键在哪儿算数。 */}
+                  {whenSource !== "default" && when && (
+                    <code className="max-w-40 truncate font-mono text-[11px] text-muted-foreground">
+                      {when}
+                    </code>
+                  )}
                   <span className="text-[11px] text-muted-foreground">
                     {t(`settings.shortcut.source.${source}`)}
                   </span>
-                  <button
-                    type="button"
-                    data-recording={recording === command.id}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    data-recording={active !== null}
                     aria-label={t(command.labelKey)}
                     disabled={preview}
-                    className={cn(
-                      "rounded-md px-1 py-0.5 transition-colors hover:bg-muted/60",
-                      "data-[recording=true]:bg-muted disabled:cursor-default disabled:hover:bg-transparent",
-                    )}
+                    className="h-auto gap-1 px-1 py-0.5 data-[recording=true]:bg-muted"
                     onClick={() =>
                       setRecording((current) =>
-                        current === command.id ? null : command.id,
+                        current?.id === command.id
+                          ? null
+                          : { id: command.id, mode: "replace" },
                       )
                     }
                   >
-                    {recording === command.id ? (
+                    {active === "replace" ? (
                       <span className="text-[11px] text-muted-foreground">
                         {t("settings.shortcut.recording")}
                       </span>
+                    ) : chords.length === 0 ? (
+                      <Kbd>{t("settings.shortcut.unbound")}</Kbd>
                     ) : (
-                      <Kbd>
-                        {commandKeysLabel(command.id, {
-                          keymap,
-                          mac: platform === "mac",
-                        }) || t("settings.shortcut.unbound")}
-                      </Kbd>
+                      chords.map((chord, position) => (
+                        <Kbd key={`${position}:${chord}`}>
+                          {formatKeys(chord, { mac })}
+                        </Kbd>
+                      ))
                     )}
-                  </button>
+                    {active === "append" && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {t("settings.shortcut.recording")}
+                      </span>
+                    )}
+                  </Button>
+                  {!preview && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={t("settings.shortcut.more", {
+                            command: t(command.labelKey),
+                          })}
+                          className="text-muted-foreground"
+                        >
+                          <Ellipsis />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="z-[var(--z-dialog)]"
+                      >
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            setRecording({ id: command.id, mode: "append" })
+                          }
+                        >
+                          {t("settings.shortcut.add")}
+                        </DropdownMenuItem>
+                        {chords.length > 1 &&
+                          chords.map((chord, position) => (
+                            <DropdownMenuItem
+                              key={`${position}:${chord}`}
+                              onSelect={() =>
+                                write(
+                                  command.id,
+                                  removeChord(keysHere(command.id), position),
+                                )
+                              }
+                            >
+                              {t("settings.shortcut.removeOne", {
+                                keys: formatKeys(chord, { mac }),
+                              })}
+                            </DropdownMenuItem>
+                          ))}
+                        {chords.length > 0 && (
+                          <DropdownMenuItem
+                            onSelect={() => write(command.id, "")}
+                          >
+                            {t("settings.shortcut.clear")}
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            setEditingWhen({
+                              id: command.id,
+                              text: when ?? "",
+                            })
+                          }
+                        >
+                          {t("settings.shortcut.when.edit")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                   {source !== "default" && source !== "profile" && !preview && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
                       aria-label={t("settings.shortcut.reset", {
                         command: t(command.labelKey),
                         // 说清会落到哪个键位，不然「上一层」只是个说法。
                         keys:
-                          formatKeys(below, { mac: platform === "mac" }) ||
+                          formatKeys(below, { mac }) ||
                           t("settings.shortcut.unbound"),
                       })}
-                      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                      className="text-muted-foreground"
                       onClick={() => resetOne(command.id)}
                     >
-                      <RotateCcw className="size-3.5" />
-                    </button>
+                      <RotateCcw />
+                    </Button>
                   )}
                 </SettingsRow>
               );
@@ -473,6 +615,74 @@ export function KeybindingsPage() {
           )}
         </SettingsGroup>
       ))}
+
+      <Dialog
+        open={editingWhen !== null}
+        onOpenChange={(open) => !open && setEditingWhen(null)}
+      >
+        <DialogContent className="z-[var(--z-dialog)] sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>
+              {editingWhen &&
+                t("settings.shortcut.when.title", {
+                  command: t(COMMAND_BY_ID[editingWhen.id].labelKey),
+                })}
+            </DialogTitle>
+          </DialogHeader>
+          <Input
+            aria-label={t("settings.shortcut.when")}
+            aria-invalid={whenCheck !== null}
+            className="font-mono text-[12px]"
+            spellCheck={false}
+            autoFocus
+            value={editingWhen?.text ?? ""}
+            onChange={(event) => {
+              const text = event.target.value;
+              setEditingWhen((current) => current && { ...current, text });
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") saveWhen();
+            }}
+          />
+          {whenCheck && (
+            <p role="alert" className="text-[13px] text-destructive">
+              {whenCheck.problem === "syntax"
+                ? t("settings.shortcut.when.syntax")
+                : t("settings.shortcut.when.unknown", {
+                    keys: whenCheck.keys.join(", "),
+                    known: WHEN_KEYS.join(", "),
+                  })}
+            </p>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            {editingWhen &&
+              keymapSource(editingWhen.id, "when", global, device) !==
+                "default" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mr-auto"
+                  onClick={() => {
+                    resetOne(editingWhen.id, "when");
+                    setEditingWhen(null);
+                  }}
+                >
+                  {t("settings.shortcut.when.reset")}
+                </Button>
+              )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setEditingWhen(null)}
+            >
+              {t("settings.shortcut.transfer.close")}
+            </Button>
+            <Button size="sm" disabled={whenCheck !== null} onClick={saveWhen}>
+              {t("settings.shortcut.when.save")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={naming !== null}
