@@ -45,6 +45,7 @@ export const LANGUAGE_UNSUPPORTED_REASONS = [
   "too_many_servers",
   "containment_unavailable",
   "resource_exhausted",
+  "unsupported_remote",
 ] as const;
 
 /** What a running server actually answers, from its own capabilities. */

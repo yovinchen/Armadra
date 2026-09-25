@@ -66,6 +66,14 @@ function isRemote(workspace: Workspace): boolean {
   return (workspace.executionHostId ?? "") !== "";
 }
 
+/**
+ * The answer for a language request on a remote workspace: 501 with the stable
+ * reason key, so the editor degrades to plain editing and says why.
+ */
+function unsupportedRemote(): DomainError {
+  return new DomainError(501, "unsupported", reason.UNSUPPORTED_REMOTE);
+}
+
 function readable(deps: LanguageRouteDeps, workspaceId: string): Workspace {
   const workspace = deps.workspace(workspaceId);
   if (!workspace.permissions.read) {
@@ -105,7 +113,7 @@ export async function languageService(
     // missing before this can be a real answer.
     return {
       status: "unavailable",
-      reason: reason.LINK_LOST,
+      reason: reason.UNSUPPORTED_REMOTE,
       executionHostId: executionHostId(workspace),
       servers: remoteRows(),
     };
@@ -165,14 +173,15 @@ function withoutReason(descriptor: ServerDescriptor): ServerDescriptor {
  * another machine.
  *
  * The remote language link is meant to be a second `ssh` connection carrying
- * `LanguageFrame`s to a Worker that runs the servers there (the pre-merge
- * implementation did this over Protobuf; this one would use JSON, matching
- * `core/remote`'s frames). The core's remote domain brings up the *control*
- * connection and its handshake, but not the
- * Worker service surface those frames ride on, so there is nothing to route to
- * yet. Answering rows rather than an error is deliberate: the settings page
- * still lists every language and says, per language, that it is unavailable
- * here — which is exactly what a person needs to see.
+ * JSON-RPC frames to a Worker that runs the servers there
+ * (`worker --stdio --language-link`). The Worker's control connection now
+ * executes files and Git on the execution host, but it refuses the language
+ * link outright: carrying a server's stream needs its own framing, lifetime
+ * and restart rules, and none of them exist yet. So every row says
+ * `unsupported_remote` — a stable key the settings page translates — rather
+ * than `link_lost`, which would promise that reconnecting could help.
+ * Answering rows rather than an error is deliberate: the settings page still
+ * lists every language and says, per language, that it is unavailable here.
  */
 function remoteRows(): ServerDescriptor[] {
   const rows: ServerDescriptor[] = [];
@@ -186,7 +195,7 @@ function remoteRows(): ServerDescriptor[] {
       executable: "",
       version: "",
       state: "unsupported",
-      reason: reason.LINK_LOST,
+      reason: reason.UNSUPPORTED_REMOTE,
       features: [...candidate.features],
       restartCount: 0,
       pid: null,
@@ -306,7 +315,7 @@ export async function openSession(
   const languageId = requiredString(body, "languageId");
   const clientId = optionalString(body, "clientId") ?? "";
   if (isRemote(workspace)) {
-    throw conflict(reason.LINK_LOST);
+    throw unsupportedRemote();
   }
   const { outbox, attach } = sockets.park(workspaceId);
   const opened = await deps.manager.openSession({
@@ -410,9 +419,7 @@ export async function controlServer(
   if (action === "restart" && !workspace.permissions.execute) {
     throw forbidden(reason.EXECUTION_NOT_GRANTED);
   }
-  if (isRemote(workspace)) {
-    throw notFound("No language server is running on that host");
-  }
+  if (isRemote(workspace)) throw unsupportedRemote();
   if (action === "stop") {
     await deps.manager.stop(workspaceId, serverId);
   } else {

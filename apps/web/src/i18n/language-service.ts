@@ -59,6 +59,7 @@ export const languageService: MessageModule = {
     "lsp.reason.initialize_failed": "server 拒绝了初始化",
     "lsp.reason.restart_budget_exhausted": "重启次数已用尽",
     "lsp.reason.workspace_closed": "工作区已关闭",
+    "lsp.reason.unsupported_remote": "远端执行主机上没有语言服务",
 
     "lsp.rename.prompt": "新名称",
     "lsp.rename.submit": "重命名",
@@ -164,6 +165,8 @@ export const languageService: MessageModule = {
     "lsp.reason.initialize_failed": "The server refused to initialise",
     "lsp.reason.restart_budget_exhausted": "Out of restart attempts",
     "lsp.reason.workspace_closed": "The workspace was closed",
+    "lsp.reason.unsupported_remote":
+      "No language servers run on remote execution hosts",
 
     "lsp.rename.prompt": "New name",
     "lsp.rename.submit": "Rename",
