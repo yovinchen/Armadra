@@ -1914,3 +1914,33 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：vitest 2921 通过、13 跳过；live 1/1；脚本 38/38。新用例：`collab/control.test.ts` 的 `team` 三条（并行 + 汇总、带外部依赖的流水线、建节点前拒绝与演练），`language/policy.test.ts`（搬家即停），`language/routes.integration.test.ts`（真 HTTP 切换根目录 → 会话收到 `stopped` + `workspace_closed`，原地切换不再发）。
 - `pnpm --filter @armadra/web test`：2711 通过，4 条失败都是 `KeybindingsPage.test.tsx` 的 5 秒超时（机器负载 200+），单独以 `--testTimeout=30000` 重跑 20/20 通过，与本节无关。新用例：`TerminalSurface.render.test.tsx`（节点数据换 id 后重连到新会话且不新建、数据没变时不被拽回）、`GithubDrawer.test.tsx`（部分标记）、`EditorNode.drafts.test.tsx`（重新定位的合并、确认后覆盖、目标不存在）。
 - `pnpm --filter @armadra/server test` 68/68；`pnpm check`、`pnpm format:check` 通过。
+
+## 46. 测试收尾：临时目录泄漏、i18n 死键与高负载超时（2026-09-26）
+
+### 46.1 临时目录泄漏
+
+- 做法：`apps/desktop/src/core/testing/temp-dir.ts` 的 `tempDir(prefix)` 建目录即登记，`testing/setup.ts` 作为 desktop（含 live 配置）与 server 两个 vitest 配置的 `setupFiles`，在每个测试文件跑完后统一删（先停掉目录下的 tmux 服务器；`rmSync` 带重试，删不掉就放过）。setupFiles 的 afterAll 最先注册、最后执行，排在文件自己的收尾之后。只把确实漏删的 36 个测试文件（desktop 29、server 7）与工作区夹具改成 `tempDir`，已经自己删干净的没动。`killTmuxServer` 挪进同一模块，工作区夹具与 `tmux.test.ts` 从这里取。
+- 实浏览器用例（`live.integration.test.ts`）的 profile 目录改为关掉浏览器后反复删、最多约 15 秒，Chromium 的辅助进程晚退或重写时不再留目录；`tools/probes` 下三份终端探针的收尾删除改成重试后放过，`browser-cdp.mjs` 的 profile 删除重试放宽到 20 次。`tools/release`、`tools/repo-check.test.mjs`、`apps/desktop/scripts` 的用例本来就用 try/finally 或 `after` 删，没有改。
+- 前后数字（每次用独立的 `TMPDIR`，跑完数 `ls $TMPDIR | grep -c armadra`）：desktop 230 → 0，server 37 → 0，web 0 → 0；`pnpm release:test` + `pnpm ci:workflows` 为 0。desktop 在高负载下（与 web 全量并行）再跑一次也是 0。跑前跑后 `pgrep -fl "tmux.*armadra"` 均为空，09-26 修过的夹具与 `tmux.test.ts` 没有回退。
+
+### 46.2 i18n 死键
+
+- `UNREFERENCED` 白名单 139 → 0：
+  - 97 个键全仓库（apps / packages / tools）无人引用，也不在任何动态前缀下，从中英两份模块里删掉，随之空掉的分组注释一并去掉。
+  - `gitIntegration.continue${label}` / `abort${label}`（6 个）与 `mobile.key.ctrl${letter}`（9 个）是把变量接在词尾的拼法：`dynamicPrefixes` 改为认「静态部分至少含一个点」的前缀，不要求停在点上。
+  - `desktop` 模块的 27 个 `menu.*` / `tray.*` 由 Electron 主进程引用，不在前端语料里；它们已由 `shell-core/messages.test.ts` 按「托盘与菜单要的键」全等守住，前端检查用 `REFERENCED_ELSEWHERE` 跳过这个模块。
+- 白名单断言仍是全等，今后只许保持为空。
+
+### 46.3 高负载下超时的 web 用例
+
+- `KeybindingsPage.test.tsx`：剖析显示一半以上时间花在 `getByRole` 的可访问名与可见性计算上（整页上百个按钮，jsdom 的 `getComputedStyle` 每次都要过默认样式表）。改为按 `aria-label` 查按钮（`getByLabelText(…, { selector: "button" })`），对话框里的查询用 `within` 限在对话框内，菜单项按文字加角色选择器找。单独跑整文件 4.7 s → 2.9 s，最慢一条 570 ms → 350 ms。剩下的是每条用例挂整页的 React 渲染，改不动产品代码就压不下去，给这一组 `describe` 放宽到 15 s 并注明原因。
+- `AutomationDrawer.test.tsx`：编辑表单的时区下拉即使关着也把全部选项（四百多个 IANA 时区）渲染进片段，每次重渲染都要走一遍。用例里把 `timezoneOptions` 换成三项，整文件 1.4 s → 0.75 s，编辑类用例 400 ms → 110 ms。产品里同样的开销仍在，没有在这里改。
+- `ChangesHunks.test.tsx`：单独跑最慢 133 ms，负载 100 以上时最慢 239 ms，找不到可以省的地方，也复现不出超时；没有改。
+- 负载平均 109（10 核，与 desktop 全量并行）下的全量 web：快捷键页最慢一条 1.65 s，自动化抽屉 0.2 s，全部通过。没有改全局 vitest 超时。
+
+### 46.4 验证
+
+- `pnpm --filter @armadra/desktop test`：260 文件通过、2 跳过（3015 条通过、13 跳过），scripts 的 node:test 全过。
+- `pnpm --filter @armadra/server test`：10 文件 79 条通过。
+- `pnpm --filter @armadra/web test`：279 文件 2741 条通过（含高负载一轮）；`typecheck` 通过。
+- `pnpm release:test`、`pnpm ci:workflows`、`pnpm check`、`pnpm format:check` 通过。
