@@ -16,15 +16,16 @@ Armadra 是一个 local-first 的桌面画布：把 Claude Code、Codex、
 opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之间连一条线即
 建立上下文链接，Agent 可以读取被链接一端的转录、终端画面或白板内容。
 
-所有数据留在本机：SQLite 一个库 + 工作区里的 `.armadra/` 目录，没有服务端。
+所有数据留在本机：SQLite 一个库 + 工作区里的 `.armadra/` 目录。桌面安装没有服务端；
+要多设备或多人时，把同一套 core 装进服务器壳（见 §2 末段）。
 
 ## 2. 三层结构
 
 ```text
 ┌──────────────────────────── apps/desktop ────────────────────────────┐
 │ Electron 桌面壳：窗口、托盘、通知、系统目录选择器、外部链接、          │
-│ 拖入文件的真实路径，以及把 core 作为 utilityProcess 拉起 / 健康检查 / │
-│ 停止                                                                  │
+│ 拖入文件的真实路径，以及把 core 作为子进程（`ELECTRON_RUN_AS_NODE`）  │
+│ 拉起 / 健康检查 / 停止                                                │
 │ 健康检查只认自己拉起的那个实例（`/health` 的 instanceId 与子进程      │
 │ 启动时打到 stdout 的一致）；不一致时按 endpoints.json 与进程表确认    │
 │ 是同一数据目录、由桌面启动的旧 core 后发 SIGTERM 再重拉               │
@@ -64,7 +65,7 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 第四个目录 `apps/server` 是无窗口服务器壳：同一份 `apps/web` 产物、同一套 core，
 对外只有 TLS 一个面，认证走设备配对与可撤销会话。用法见
 [开发指南](development.md#无窗口服务器壳)，进度见
-[TypeScript Core 实施进度](../status/typescript-core-status.md) §10。
+[TypeScript Core 实施进度](../status/typescript-core-status.md) §11。
 
 ## 3. 画布层
 
@@ -97,8 +98,8 @@ worktrees、stashes、tags、remotes、integration、hunks、commit / commit-fil
 都带一个工作空间相对的 `path`，缺省是工作空间根。工作空间级的三条不带：
 `POST …/git/log` 把所有已发现检出的提交合并成一张图，`GET …/git/refs` 一次
 给出所有检出的分支树，`GET …/git/identity` 说这个检出提交出去会署谁的名。写
-全部经仓库队列（`GitRepositoryAction`），队列在 Host 接管 git 域之后搬到
-Host，Git 命令始终在执行主机上跑。
+全部经仓库队列（`GitRepositoryAction`）；队列与 Git 命令都在执行主机上——本机
+工作空间在 core 里，远端工作空间在 Worker 里（下一段）。
 
 执行位置只有一条缝：`core/remote/execute.ts` 的 `executeOn`。文件、导入与
 Git 的路由做完权限与参数解析后，按工作空间的 `executionHostId` 要么在本进程
@@ -137,8 +138,9 @@ Git 的路由做完权限与参数解析后，按工作空间的 `executionHostI
   不依赖 React Flow 的按键状态：那份状态由 keydown 落在谁身上决定，终端拿到
   焦点时并不可靠。
 
-节点类型共 7 种（`packages/shared/src/domain.ts`）：
-`terminal`（含 Agent）、`sticky`、`group`、`editor`、`diff`、`files`、`browser`。
+节点类型共 9 种（`packages/shared/src/domain/primitives.ts` 的 `NODE_TYPES`）：
+`terminal`（含 Agent）、`sticky`、`group`、`editor`、`diff`、`files`、`browser`、
+`automation`、`agentActivity`。
 入库的连线只有一种：`link`；派生的视觉边（子代理 rope 等）每帧算出来，不入库。
 
 ## 4. Agent 运行时
@@ -180,6 +182,13 @@ Agent 之间的协作走 core 的两个动词表面：
 - `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `team` / `sticky` /
   `link` / `rename` / `color` / `post` / `inbox` / `ack` / `handoff-read` / `interrupt` / `close` / `send` / `outbox` / `cancel`。`team` 一次建一组 Agent 节点，成员之间的先后写进依赖表（`core/dependencies`）。
 
+依赖编排在 core 里（`core/dependencies/`，迁移 0027）：`open-agent --after` 与 `team`
+把「下游等哪些上游、等当前还是下一轮结束」写进依赖表，服务订阅 `agent.status` /
+`terminal.exit` / `board.changed` 并每 30 秒扫一次（过期、上游被删、重启后补判）。
+条件满足时由 core 启动下游——节点已有 shell 就往里敲，没有就经终端桥起一个——
+再把第一条任务放进投递队列，与 `send` 走同一条出队路；页面不在也照样生效。节点头的
+「等待 X」徽标读的是这张表，不再是节点数据里的 `pendingLaunch`。契约见 [core JSON 契约](../contracts/core-json-api.md) §8。
+
 所有 Agent 终端都能调用 `armadra-hook canvas help` 读取短帮助。默认协作采用
 `post` / `inbox` / `ack` 拉取消息箱，不自动注入终端输入或追加启动提示。显式安装
 Hook 时提供独立的按需技能，不再追加全局长指令。详见
@@ -215,6 +224,11 @@ Hook 时提供独立的按需技能，不再追加全局长指令。详见
   经 `canvas/sync/merge.ts` 合进 `canvas-store`——视口留本地的，本地这一轮动过的
   实体（`store/canvas/pending.ts` 记账）留本地的，其余照收远端的。远端灌入
   **不进也不清**撤销栈，手势进行中先不合，等松手。
+- 多设备同开一块板时，core 在内存里记在线表与**一把写租约**（`core/canvas/presence.ts`，
+  不入库、不进 outbox）：页面每 10 秒心跳，只有一个客户端时无感；有别人在看时租约归
+  正在编辑的一方，别人手里的租约让 `PUT …/document` 答 423 `canvas_lease_held`（判在
+  CAS 之前），本页转只读并在右上角显示谁在编辑、可确认接管。core 自己的写者（控制
+  动词、调度、依赖编排）不经租约。契约见 [core JSON 契约](../contracts/core-json-api.md) §9。
 - 控制动词新建节点时，core 在 `board.changed` **之后**再广播一条
   `node.created{boardId, nodeId, nodeType, originNodeId}`。前者只说「板变新了」，
   后者说「新出现的是哪一个、谁要的」：正开着这块板的页面据此把新节点选中并把
@@ -223,7 +237,7 @@ Hook 时提供独立的按需技能，不再追加全局长指令。详见
 - 节点的默认尺寸只有一份，在 `apps/web/src/nodes/registry.ts`：控制动词建节点
   时**不写 `size`**，页面投影时按类型补（`canvas/sync/project.ts`）。
 
-SQLite 的迁移只有一个目录——`apps/desktop/src/core/db/migrations/`，0001–0020 一条
+SQLite 的迁移只有一个目录——`apps/desktop/src/core/db/migrations/`，0001 起一条
 连续序列，字节由根 `migrations.lock` 守住（R7d 把原先分散在两处的来源合成一处）。
 基础表由 `0001_initial.sql` 创建；`0002_agent_mailbox.sql` 增量添加消息箱：
 
@@ -317,14 +331,19 @@ id 上起下一代并敲恢复行。设计见 [terminal-host-design.md](../desig
   http/ws，`<webview>` 供浏览器节点使用。
 - 服务器壳默认不监听非回环地址，对外服务是显式动作；它的配对码不可复用，
   token 不出现在 URL 里，撤销设备后正在进行的流立即终止。
+- 服务器壳认证出的主体经 `AsyncLocalStorage` 跟着请求走（`core/identity/gate.ts` 的
+  `runAs`），`core/identity/route-access.ts` 挂在 core 分发与升级之前，按
+  `route-scopes.ts` 给每条路由的 scope 判定：成员只拿到被共享工作空间上的授权，
+  全局路由一律 403，工作空间列表按授权过滤；授权一变，已开的事件流重新判定，不够就
+  以 4403 关掉。没有请求主体时放行——桌面壳里没有第二个人，行为不变。契约见
+  [core JSON 契约](../contracts/core-json-api.md) §10。
 
 ## 8. 未实现
 
-- **网关 / 外部端**：`GET /api/gateway` 只返回配置与 `implemented: false`，
-  不开监听端口，也不返回伪造设备。
-- **Windows 持久化会话**：只有设计文档。
-- **多人协同**：白板快照对 Runtime 是不透明字符串，跨端协议不会直接用画布引擎的
-  内部数据结构；真要做实时协作时再引入 CRDT。
+- **Windows 持久化会话**：session host 已实现并在 Windows CI 上通过，没有在真机上
+  长时间运行过（进度 §13、§33）。
+- **多人实时协同**：同一块板同时只有一个写者（§5 的编辑租约）；白板快照对 core 是
+  不透明字符串，真要多人同时改时再引入 CRDT。
 - **自动更新**：electron-updater 已接通（`apps/desktop/src/main/updates/`），但未
   签名的构建里更新器是关闭的——「没签名 = 什么也验证不了 = `notConfigured`」，
   它绝不会报 `upToDate`（`shell-core/updates/availability.ts`）。
