@@ -1548,3 +1548,29 @@ Windows 仍剩那两条 `EBUSY`，而 33.4 的等待把那个文件从 12 秒拖
 修法是在 `stop()` 里 `await language?.stop()`。`language` 在装配循环之后就地取下来而不是关停时再读：那个访问器是模块级单例，同一进程里起第二个 core 会把它改掉，关停时再读就会停错人。
 
 第三轮之后 `apps/desktop` 在 Windows 上全绿。
+
+## 40. 快捷键补齐三项、更新器拆掉 host 依赖（2026-09-26）
+
+### 40.1 快捷键（终端宿主设计 §10.1）
+
+S01 剩下的三项补上了，存储形状只加不改，旧数据不需要迁移：
+
+- **设为无。** 一条空串覆盖。`readLayer` 以前把空串当「没写」丢掉，现在留下：没有这个键是「没覆盖」，空串是「覆盖为空」，来源照报本层，↺ 退回下一层。旧的扁平写法里空串仍然丢掉——那一版没有「清空」这回事。
+- **多组替代键。** 存储本来就是逗号分隔。每行的「更多」菜单里「再添加一组按键」进入追加录制（`addChord`，修饰键别名归一后重复的不加），多于一组时可逐组移除（`removeChord`，删掉最后一组就是清空）。冲突检测逐组比较，第二组撞车或是窗口保留键同样报。
+- **自定义 `when`。** 每层新增不分平台的 `when` 表（默认档在 `settings.keymap.when`，其余档在 `profiles.<id>.when`，本设备同形），空串表示「不设条件」。不按平台分是因为条件里本来就能写 `platform == mac`。对话框按 `when.ts` 的语法校验，语法错与不认识的键分开提示，有错时保存按钮不可用；读设置和导入时读不懂的条件直接丢掉，免得一条命令在任何地方都悄悄不触发。`keymapConflicts` 与 `useKeybindings` 都改读合并之后的条件（`commandWhen`）。
+
+顺带修了一处：编辑器、浏览器节点装在子树上的监听器不传 `keymap`，以前只认默认键——用户在设置里改的编辑器 / 浏览器键位到了节点里不作数。`useKeybindings` 不传 `keymap` 时改读 `setActiveKeymap` 那一份。
+
+全部重置时 `when` 那一格没改过就不带进 PATCH，平台两格照旧总是带上，与从前的形状一致。
+
+### 40.2 更新器拆掉遗留的 host 依赖（§18.6）
+
+`UpdatesDeps.host` 与装配处的空实现一起删掉；`shell-core/updates/coordinate.ts` 里只为它存在的 `launcherPath` / `hostDataDir` / `probeHostVersion` / `hostIsOurs` 一并删除，`HealthReadings` 与 `Component` 去掉 `host`。
+
+这不只是清理：`restartReport()` 以前把「探不到 Host 版本」读成 `null`，而 `null` 永远算不一致——每一次更新重启后都会报「更新没有完成」。现在只核对壳与 Runtime 两个版本。原因码 `hostStopFailed` 保留原名：它是页面与文案共用的线上取值，含义仍是「后台停不下来，所以不装」。页面那边 `mismatched` 的联合类型里还留着 `"host"`，是超集，不影响。
+
+### 40.3 验证
+
+- `pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test`：2653 过、1 失败，失败的是 `i18n.test.ts` 的未引用键检查，报的是 `integration.legacy.list`，基线 77b62763 上就已存在，与本节无关。
+- `pnpm --filter @armadra/desktop test`：2829 过、13 跳过，无失败（其中 `src/main/updates` 与 `src/shell-core/updates` 8 个文件 265 条）。
+- `pnpm check`、`pnpm format:check` 通过。
