@@ -1944,3 +1944,52 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/server test`：10 文件 79 条通过。
 - `pnpm --filter @armadra/web test`：279 文件 2741 条通过（含高负载一轮）；`typecheck` 通过。
 - `pnpm release:test`、`pnpm ci:workflows`、`pnpm check`、`pnpm format:check` 通过。
+
+## 47. 端到端探针全量复跑与打包版验证（2026-09-26）
+
+基线 `8e436cfd`。`tools/probes/` 的六个探针逐个对当前代码跑；再打一次本机包（无签名），用 launchd 的 PATH 起打包版。机器同时在跑其他任务，负载平均 16–22（10 核），帧时类数字只作参考。
+
+### 47.1 探针结果
+
+| 探针                          | 结果                  | 说明                                                                                                                                                                                                                                                                           |
+| ----------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `browser-cdp.mjs`             | 通过                  | Chrome 153.0.8010.53，七项能力全过                                                                                                                                                                                                                                             |
+| `core-terminal-smoke.mjs`     | 通过                  | tmux 后端；回显、重附看得见前一屏、销毁、未知会话升级前 404                                                                                                                                                                                                                    |
+| `core-terminal-lifecycle.mjs` | 通过                  | tmux 与 direct 两套：跨 core 接管、capture / paste / scroll / recycle、GC 空闲判定                                                                                                                                                                                             |
+| `connection-drag.mjs`         | 探针过时 → 已改，通过 | 20/20，把手 14×14 px。§23 记过它在当时的代码上 0/3 落不成边；这次边能落下（第一次就连上），失败在「撤销后还剩 1 条边」：两端节点没有名字，连线一建立就弹起名对话框（`agent-delivery.md` §2.2），它的遮罩吃掉了紧接着的撤销点击。种子里给两端起好名字；点撤销前看到遮罩直接报错 |
+| `git-tool-window.mjs`         | 通过                  | 9 张截图（`target/git-tool-window/`），目视正常                                                                                                                                                                                                                                |
+| `canvas-stress.mjs`（30）     | 探针有误 → 已改，通过 | 见 47.2                                                                                                                                                                                                                                                                        |
+| `core-terminal-packaged.mjs`  | 发现产品问题 → 已修   | 见 47.3                                                                                                                                                                                                                                                                        |
+
+### 47.2 画布压力（30 个终端 + 真实会话）
+
+- 探针的便签一段一直没打进便签：`document.querySelector("textarea")` 取到的是第一个终端 xterm 的 helper textarea（排在便签前面），100 个字符进了 PTY。这次暴露出来，是因为人在终端里每敲一下都会续一次驱动租约（`expiresAt` 变了），`terminal.lease` 广播一帧，`DriveBadge` 跟着重渲——输入期间 107 次 commit 里 98 次是它。改为点便签正文、只在 `[data-slot="sticky-node"]` 里找 textarea 之后，107 次 commit 里 100 次是 `StickyNode` 自己（受控 textarea，每键一次），保存 0 次。**`canvas-performance-baseline.md` 里「输入 100 字符」那几行（11 次 commit 等）量的也不是便签。**
+- 改后两次复跑（`target/canvas-stress/`、`target/canvas-stress-2/`）与该文档 §5 对比：
+
+| 指标                           | §5（P1–P3 后） | 本次                              |
+| ------------------------------ | -------------- | --------------------------------- |
+| 一次会话状态跳动的重渲组件数   | 7,894          | 7,985 / 7,985（首跑旧探针 7,125） |
+| 一次会话状态跳动的 commit 次数 | 31             | 18 / 18                           |
+| 平移最慢一帧 / >33.4 ms 帧数   | 33.4 ms / 1    | 100 ms / 4、99.9 ms / 4           |
+| 拖节点最慢一帧                 | 50.0 ms        | 33.4 ms / 33.4 ms                 |
+| 空闲、输入最慢一帧             | 16.8 ms        | 16.8 ms                           |
+| 撤销栈深度                     | 1              | 2（拖节点一条 + 便签正文一条）    |
+
+- 重渲组件数持平，commit 次数少了约四成；大头仍是 §5.3 说的两处（一次 `NodeComponentWrapperInner` 全表 ≈3,105，`AppShell` 查询失效四次 ≈3,560）。平移最慢一帧回到 100 ms，但同一台机器负载 20 以上，第一次（旧探针、负载较低时）是 33.3 ms / 0 帧，不据此判为回退。撤销栈多出的一条是便签这回真的提交了。
+
+### 47.3 打包版
+
+- `pnpm --filter @armadra/desktop dist`：没有 `CSC_LINK`，`signing-electron.mjs` 自动走 skip，electron-builder 报「0 identities」跳过签名与公证，产出 `apps/desktop/release/mac-arm64/Armadra.app` 与 dmg / zip。没有安装或替换 `/Applications/Armadra.app`。
+- 探针改为按访达的方式起：`PATH=/usr/bin:/bin:/usr/sbin:/sbin`，`ARMADRA_DATA_DIR` 与 Chromium 的 `--user-data-dir` 都在临时目录（原来没有后者，第二个 Electron 会写操作员的 `~/Library/Application Support/Armadra`；`ps` 核对过辅助进程的 profile 都在临时目录）。
+- c2df3466 的修复在打包版里生效：会话 `backend: "tmux"`。
+- **新问题（已修，6189c391）**：资源面板里两个活着的 tmux 会话都显示「没有可用的进程号」。`resources/sessions.ts` 的 `panePids` 与 `resources/index.ts` 回收会话时的 `kill-session` 用继承来的 PATH 找 tmux，与 c2df3466 修的探测是同一类问题。改为和终端域一样用 `agentPath` 补过的 PATH；先加了单测（`sessions.test.ts`：PATH 为空、tmux 只在 `~/.local/bin` 时仍能读出 pane pid），修复前失败。探针同时要求资源采样给得出这个会话的 pid：旧包上失败（`no-pid`），重打包后通过（`resourcePid` 有值）。
+- 目视（`target/packaged-visual/`，一次性脚本驱动，未入库）：`resources.png` 修复后会话行有 pid、CPU、内存估计，平台组件五行齐全；`settings-integration.png` 六个 CLI 集成行、中文、无溢出、无遮挡；控制台无 error / 异常。截图里侧栏发灰是窗口毛玻璃在 CDP 截图里没有底色，不是界面问题。集成页读的是本机真实 CLI 配置（只读展示），没有点安装 / 卸载。
+
+### 47.4 发布演练
+
+- `pnpm release:dry-run` 通过：0.1.0，16 个文件校验和、6 个更新平台，签名用本次生成的临时密钥。本机没有 `minisign`，签名只用 Node 实现校验过；真签名、公证与上传需要密钥，未做。
+
+### 47.5 验证
+
+- `pnpm --filter @armadra/desktop test`：261 文件通过、1 跳过（3023 条通过、6 跳过），scripts 的 node:test 38 条全过。
+- 探针：上表六项 + 打包版 `core-terminal-packaged.mjs` 退出码 0。
