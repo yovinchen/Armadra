@@ -97,6 +97,10 @@ node tools/probes/core-terminal-packaged.mjs              # 打包版，从页�
 
 用真 CLI 把投递、依赖编排、组队与节能休眠走一遍。页面必须真的挂着这些终端节点：CLI 起来时的终端查询由 xterm 经页面写回 PTY，[状态文档](../../docs/status/typescript-core-status.md) §31.7 那个「Codex 首条任务投不出去」只在页面挂着时出现。每个 Agent 节点都由页面挂载、由页面敲启动行。
 
+## 服务器壳端到端（账号、共享与 headless 浏览器）
+
+真进程走一遍多人使用服务器壳的主线（[TypeScript Core 进度](../../docs/status/typescript-core-status.md) §42、§39，结果记在 §50）。
+
 ```sh
 pnpm libs:build
 pnpm --filter @armadra/desktop build
@@ -136,3 +140,27 @@ node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4]
 
 没验证的：direct / 会话宿主后端（macOS 缺省是 tmux）；Claude 的权限提示与审批路径；休眠后经 `send` 唤醒（只验了点击唤醒）；打包版。
 ```
+
+pnpm --filter @armadra/server build
+pnpm --filter @armadra/web build
+node tools/probes/server-e2e.mjs [输出目录]
+
+````
+
+`apps/server/out/main.js serve` 用临时数据目录启动并托管 `apps/web/dist`（自签名 HTTPS，Chrome 带 `--ignore-certificate-errors`）。无头 Chrome 开两个互不共享 Cookie 的浏览器上下文：管理员打开启动日志里的配对链接完成配对，在「账号与共享」生成只读邀请；成员在另一个上下文打开 `#invite=` 链接注册。之后依次验证：成员打开共享画布时全局路由的 403 逐条记下（`memberForbidden`、`memberSettings`），界面没有报错横幅与控制台错误；只读时右上角写「只读」、便签拖不动、不发被拒的保存，直接写接口是 403；管理员改成「编辑」后下一拍心跳解除只读、拖动落盘；撤销共享后成员的事件流以 4403 关闭、下一个请求 403、页面离开那块工作空间；最后管理员在服务器壳上新建浏览器节点，起始页是探针自己的回环页面，取画面流上的像素确认第一帧到了。
+
+产物默认在 `target/server-e2e/`：`result.json` 与 `01-admin-paired.png` … `11-admin-browser-stream.png`。端口随机，数据目录、项目目录与浏览器 profile 都是 `mktemp`，服务器壳先 SIGTERM（让它收掉自己起的 headless Chromium）再删目录、停 tmux。没有验证：`--public-origin` 与真证书、passkey / OAuth、多于一个成员、手机布局。
+
+## 远端执行主机端到端（假 ssh）
+
+在界面上把远端工作空间用一遍（§34、§44，结果记在 §50），不需要 sshd，也不改任何 SSH 或系统配置。
+
+```sh
+pnpm libs:build
+pnpm --filter @armadra/desktop build
+node tools/probes/remote-e2e.mjs [输出目录]
+````
+
+「远端」就是这台机器：core 本来就读 `ARMADRA_REMOTE_WORKER_LAUNCHER` 替换每条 `ssh` 启动行的 argv[0]（`core/remote/index.ts`），探针把它指到临时目录里的一个假 ssh——按 `ssh(1)` 的规则吃掉选项与目的主机，把剩下的远端命令交给本机 `/bin/sh -c`；Worker 就是 `apps/desktop/out/core/main.js worker --stdio`。执行主机登记与 mock-lsp 的语言服务器设置走接口，其余全在界面上：设置 → SSH 打开远程项目；资源管理器打开文件、编辑、⌘S 落盘；Git 窗口的状态、勾选暂存、提交；日志页右键「获取远端更新」看进行中的提示与百分比，再对一次 upload-pack 睡 30 秒的 fetch 点「取消」；打开 `notes.md` 看 mock-lsp 的诊断（并按进程树确认它跑在 `worker --stdio --language-link` 下面）；在远端磁盘上改开着的文件看编辑器跟上（登记答 `mode: events`）；资源面板按主机筛选；设置 → 执行主机把一个本机工作空间切到假远端再切回来。
+
+产物默认在 `target/remote-e2e/`：`result.json` 与每一步的截图（`01-remote-workspace.png` … `07c-switched-local.png`）。上游是临时目录里的裸仓库，`remote.origin.uploadpack` 指向一个先睡几秒的包装，本机传输才看得到进行中与取消。没有验证：真实的 ssh 传输、主机密钥与 askpass、跨机器的路径与平台差异、远端终端节点（它走真 `ssh`，不经这个替换）。
