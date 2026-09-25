@@ -14,7 +14,7 @@ import type { CoreContext } from "../main";
 import { settingsDomain } from "../settings";
 import type { UsageSnapshot } from "./snapshot";
 import { UsageService } from "./service";
-import { StatusService } from "./status";
+import { StatusService, statusSources } from "./status";
 import { catalogPrices, modelsDomain } from "../models";
 
 export { emptySnapshot, USAGE_PROVIDER_IDS } from "./snapshot";
@@ -174,7 +174,9 @@ export function install(context: CoreContext): UsageDomain {
 
   // Provider 状态页（roadmap §3.9）。和用量一样惰性：第一次有人问才联网，
   // 开关关着就一个请求都不发，只回 `enabled: false`。
-  const status = new StatusService();
+  const status = new StatusService({
+    sources: statusSources(process.env.ARMADRA_STATUS_PAGE_BASE),
+  });
   router.handle("GET", "/api/usage/status", async () => {
     const enabled =
       settingsDomain()?.settings.get("usage.statusPage") !== false;

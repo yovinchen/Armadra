@@ -68,6 +68,27 @@ export const STATUS_SOURCES: Readonly<Record<StatusProviderId, StatusSource>> =
     },
   };
 
+/**
+ * 三家的状态页换成同一个根地址下的 `/<id>/api/v2/status.json`。只给探针与
+ * 测试用：`ARMADRA_STATUS_PAGE_BASE` 设了才走这里（与
+ * `ARMADRA_GITHUB_API_BASE` 同一种做法），好让实浏览器探针把徽标对着本机的
+ * fixture 服务器跑，而不是真网络。空串与没设一样按官方地址。
+ */
+export function statusSources(
+  base: string | undefined,
+): Readonly<Record<StatusProviderId, StatusSource>> {
+  const root = base?.trim().replace(/\/+$/, "") ?? "";
+  if (root === "") return STATUS_SOURCES;
+  const out = {} as Record<StatusProviderId, StatusSource>;
+  for (const id of STATUS_PROVIDER_IDS) {
+    out[id] = {
+      url: `${root}/${id}/api/v2/status.json`,
+      pageUrl: `${root}/${id}`,
+    };
+  }
+  return out;
+}
+
 /** 五分钟：状态页本身也不是秒级更新的。 */
 export const STATUS_TTL_MS = 5 * 60_000;
 /** 一家不回话不能拖住另外两家，也不能拖住看板。 */

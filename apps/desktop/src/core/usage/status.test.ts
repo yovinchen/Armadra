@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   STATUS_PROVIDER_IDS,
+  STATUS_SOURCES,
   StatusService,
   parseStatusDocument,
+  statusSources,
   type StatusProviderId,
   type StatusSource,
 } from "./status";
@@ -129,6 +131,28 @@ describe("provider status pages", () => {
     const later = await service.current();
     expect(hits).toHaveLength(6);
     expect(later[1]!.indicator).toBe("critical");
+  });
+});
+
+describe("statusSources", () => {
+  it("points every provider under one base when one is given", async () => {
+    replies["/anthropic/api/v2/status.json"] = document("minor");
+    replies["/openai/api/v2/status.json"] = document("none");
+    replies["/github/api/v2/status.json"] = document("maintenance");
+    const result = await new StatusService({
+      sources: statusSources(`${base}/`),
+    }).current();
+    expect(result.map((entry) => entry.indicator)).toEqual([
+      "minor",
+      "none",
+      "maintenance",
+    ]);
+    expect(result[0]!.pageUrl).toBe(`${base}/anthropic`);
+  });
+
+  it("keeps the real pages when unset or blank", () => {
+    expect(statusSources(undefined)).toBe(STATUS_SOURCES);
+    expect(statusSources("  ")).toBe(STATUS_SOURCES);
   });
 });
 
