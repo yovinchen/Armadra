@@ -60,6 +60,31 @@ describe("canvas presence and the edit lease", () => {
     expect(() => presence.authorizeWrite(WS, BOARD, A)).not.toThrow();
   });
 
+  it("never hands the lease to a client that cannot write the board", () => {
+    // 服务器壳上只读共享的成员也心跳（让别人看见自己在看），但租约只该落在
+    // 能写的人手里：否则一个查看者独自开着画布，管理员来了反而只读。
+    const viewer = presence.heartbeat(WS, BOARD, {
+      clientId: A,
+      deviceName: "viewer",
+      active: true,
+      writer: false,
+    });
+    expect(viewer.lease).toBeNull();
+    clock += 10_000;
+    const owner = beat(B, true);
+    expect(owner.lease?.clientId).toBe(B);
+    // 持有者空闲、查看者在动：租约也不会换到查看者手里。
+    clock += 200_000;
+    beat(B);
+    const again = presence.heartbeat(WS, BOARD, {
+      clientId: A,
+      deviceName: "viewer",
+      active: true,
+      writer: false,
+    });
+    expect(again.lease?.clientId).not.toBe(A);
+  });
+
   it("lets a write that arrives before the first heartbeat take the free lease", () => {
     presence.authorizeWrite(WS, BOARD, A);
     expect(presence.snapshot(BOARD).lease?.clientId).toBe(A);

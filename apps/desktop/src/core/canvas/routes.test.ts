@@ -275,6 +275,7 @@ describe("the board routes", () => {
       expect(beat.status).toBe(200);
       expect(beat.body).toMatchObject({
         boardId,
+        writable: true,
         lease: { clientId: A, deviceName: "MacBook" },
         clients: [{ clientId: A, deviceName: "MacBook" }],
       });

@@ -258,6 +258,31 @@ describe("共享的权限矩阵", () => {
     expect((await write(outsider, "局外人的看板")).status).toBe(403);
   });
 
+  it("在线心跳：查看者登记在线但不拿写租约，回答里 writable 为假", async () => {
+    const boards = JSON.parse(
+      (await call(`/api/workspaces/${w1}/boards`, { person: admin })).body,
+    ) as { id: string }[];
+    const uri = `/api/workspaces/${w1}/boards/${boards[0]?.id}/presence`;
+    const beat = (who: Person, clientId: string) =>
+      call(uri, {
+        method: "POST",
+        person: who,
+        body: { clientId, deviceName: clientId, active: true },
+      });
+    // 查看者独自开着画布：此前心跳会把空着的租约给他，管理员来了反而只读。
+    const alone = await beat(viewer, "viewer-client-1");
+    expect(alone.status).toBe(200);
+    expect(JSON.parse(alone.body)).toMatchObject({
+      writable: false,
+      lease: null,
+    });
+    const writer = await beat(editor, "editor-client-1");
+    expect(JSON.parse(writer.body)).toMatchObject({
+      writable: true,
+      lease: { clientId: "editor-client-1" },
+    });
+  });
+
   it("执行：开终端要 operator，editor 与 viewer 都不行", async () => {
     const spawn = (who: Person) =>
       call("/api/terminals", {

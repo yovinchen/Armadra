@@ -1,6 +1,8 @@
 import type { EventBus } from "../bus";
 import type { RouteMatch } from "../http/router";
 import type { CoreContext } from "../main";
+import { allows } from "../identity/gate";
+import { scope } from "../identity/scopes";
 import { answered, workspaceId } from "../workspaces/routes";
 import {
   badRequest,
@@ -170,13 +172,21 @@ export function install(context: CoreContext): void {
       if (body.active !== undefined && typeof body.active !== "boolean") {
         throw badRequest("active must be a boolean");
       }
+      // 心跳只要读权限；能不能写在这里另判一次：租约只落在能写的人手里，
+      // 回答里的 `writable` 让页面把只读共享的画布当只读画（契约 §9.1）。
+      // 每次心跳都现判，改角色、撤销共享在下一拍就反映出来。
+      const writable = allows([scope("canvas:write", id)]);
       return {
         status: 200,
-        body: presence.heartbeat(id, board, {
-          clientId: parseClientId(body.clientId),
-          deviceName: parseDeviceName(body.deviceName),
-          active: body.active === true,
-        }),
+        body: {
+          ...presence.heartbeat(id, board, {
+            clientId: parseClientId(body.clientId),
+            deviceName: parseDeviceName(body.deviceName),
+            active: body.active === true,
+            writer: writable,
+          }),
+          writable,
+        },
       };
     }),
   );

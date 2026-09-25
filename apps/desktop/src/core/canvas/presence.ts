@@ -66,6 +66,12 @@ export interface HeartbeatInput {
   readonly deviceName: string;
   /** 自上次心跳以来这个客户端有没有被人操作过（指针、键盘）。 */
   readonly active: boolean;
+  /**
+   * 发心跳的人能不能写这块画布。缺省为能：桌面壳里只有本机 owner。服务器壳上
+   * 只读共享的成员为假——他照样登记在线，但租约永远不会落到他手里，否则一个
+   * 查看者独自开着画布，真正能写的人来了反而只读。
+   */
+  readonly writer?: boolean;
 }
 
 interface Client {
@@ -73,6 +79,8 @@ interface Client {
   deviceName: string;
   lastSeenAt: number;
   lastActiveAt: number;
+  /** 见 {@link HeartbeatInput.writer}；租约只在能写的人之间分。 */
+  writer: boolean;
 }
 
 interface Lease {
@@ -128,6 +136,7 @@ export class CanvasPresence {
     const entry = this.entry(workspaceId, boardId);
     let changed = this.expire(entry);
     const at = this.now();
+    const writer = input.writer !== false;
     const existing = entry.clients.get(input.clientId);
     if (existing === undefined) {
       entry.clients.set(input.clientId, {
@@ -135,10 +144,13 @@ export class CanvasPresence {
         deviceName: input.deviceName,
         lastSeenAt: at,
         lastActiveAt: at,
+        writer,
       });
       changed = true;
     } else {
       existing.lastSeenAt = at;
+      // 授权随时会变（改角色、撤销共享），每次心跳按这一次的判定记。
+      existing.writer = writer;
       if (input.active) existing.lastActiveAt = at;
       if (input.deviceName !== "" && existing.deviceName !== input.deviceName) {
         existing.deviceName = input.deviceName;
@@ -147,7 +159,7 @@ export class CanvasPresence {
     }
     // 先放空闲的，再分：一个动了手的人不该等下一次心跳才接到别人放下的租约。
     if (this.releaseIdle(entry)) changed = true;
-    if (entry.lease === null) {
+    if (entry.lease === null && writer) {
       // 只有它一个在看，或者它刚被人操作过：拿走空着的租约。两个都在看、
       // 谁都没动的时候不分——否则后到的那个会凭一次心跳把「正在编辑」的
       // 标签从先到的那个人头上摘走。
@@ -285,9 +297,11 @@ export class CanvasPresence {
     deviceName: string,
     at: number,
   ): Client {
+    // 走到这里的是写入与拿租约，两者的路由都要求写权限。
     const existing = entry.clients.get(clientId);
     if (existing !== undefined) {
       existing.lastSeenAt = at;
+      existing.writer = true;
       if (deviceName !== "") existing.deviceName = deviceName;
       return existing;
     }
@@ -296,6 +310,7 @@ export class CanvasPresence {
       deviceName,
       lastSeenAt: at,
       lastActiveAt: at,
+      writer: true,
     };
     entry.clients.set(clientId, created);
     return created;
@@ -333,7 +348,7 @@ export class CanvasPresence {
   private handToSole(entry: BoardEntry): boolean {
     if (entry.lease !== null || entry.clients.size !== 1) return false;
     const [only] = entry.clients.values();
-    if (only === undefined) return false;
+    if (only === undefined || !only.writer) return false;
     entry.lease = { clientId: only.clientId, acquiredAt: this.now() };
     return true;
   }
