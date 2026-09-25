@@ -261,7 +261,8 @@ describe("执行主机", () => {
   });
 
   it("没有覆盖时跟随工作空间；工作空间也没有就是本机", () => {
-    const row = session({ sessionId: "a", nodeId: "n-1" });
+    // 更旧的 core 不给 executionHostId，只能按画布推断。
+    const row = session({ sessionId: "a", nodeId: "n-1", executionHostId: "" });
     expect(executionHostOf(row, [terminal("n-1")], "ci-box")).toBe("ci-box");
     expect(executionHostOf(row, [terminal("n-1")], "")).toBe(LOCAL_HOST);
   });
@@ -276,6 +277,20 @@ describe("执行主机", () => {
     expect(executionHostOf(row, [terminal("n-1", "build-box")], "")).toBe(
       "from-core",
     );
+  });
+
+  /**
+   * 绑定了执行主机的工作空间里，普通终端节点起的是本机 shell（core 只给 SSH
+   * 终端拼 `ssh …`）：进程在本机进程表里，数字也是本机的。core 明说了
+   * `local`，就不能再按工作空间把它算到远端主机上——实浏览器探针里它曾
+   * 被列在「构建机」下面，带着本机的 pid 与内存。
+   */
+  it("core 明说是本机的会话，不跟着工作空间算到远端主机上", () => {
+    const row = session({ sessionId: "a", nodeId: "n-1" });
+    expect(executionHostOf(row, [terminal("n-1")], "ci-box")).toBe(LOCAL_HOST);
+    expect(
+      sessionsOnHost([row], "ci-box", [terminal("n-1")], "ci-box"),
+    ).toEqual([]);
   });
 
   it("筛选到哪台主机就只给哪台主机的总览", () => {

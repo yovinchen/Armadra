@@ -175,6 +175,11 @@ export function executionHostOf(
   ) {
     return session.executionHostId;
   }
+  // core 明说在本机：进程就在本机进程表里（绑定了执行主机的工作空间里，
+  // 普通终端节点起的也是本机 shell），不能再按工作空间算到远端主机上。
+  if (session.location !== "remote" && session.executionHostId === LOCAL_HOST) {
+    return LOCAL_HOST;
+  }
   const node = session.nodeId
     ? nodes?.find((candidate) => candidate.id === session.nodeId)
     : undefined;
