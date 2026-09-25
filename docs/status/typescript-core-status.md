@@ -1730,3 +1730,28 @@ HEAD 的行交给 CodeMirror 的一个 StateField，按键后 250ms 用 `lib/lin
 `pnpm libs:build` 之后：`pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test` 2658/2660，失败的两条是 `i18n.test.ts` 的 `integration.legacy.list`（基线 `77b62763` 就在，不是这里引入的）和 `AutomationDrawer.test.tsx` 的一条（整套跑时超时，单独重跑 18/18 通过）；`pnpm --filter @armadra/desktop test` 2835 通过 13 跳过；`pnpm --filter @armadra/server test` 68/68；`pnpm check` 与 `pnpm format:check` 通过。新增用例：`nodes/editor/git-gutter.test.ts`（倒打 patch、核对失败、只删的 hunk、三种标记、新文件、CRLF）、`files/recent-files.test.ts`、`nodes/EditorNode.drafts.test.tsx`（草稿落本机与放回、保存后清掉、磁盘变了走合并再按新版本保存、文件没了另存为、行边标记随编辑变化），`QuickOpen.test.tsx` 补最近文件 / `路径:行:列` / 跳转到行，`EditorNode.test.tsx` 补音视频 / PDF / 图片缩放，`imports/batch.test.ts` 补媒体判定与下载上限。
 
 没做：在打包应用里实测 PDF 查看器与视频解码（只在单测里验证了 DOM 与 CSP 串）；「重新定位」——把草稿接到一个已存在的文件上；标题的「未同步」状态。
+
+## 36. 依赖编排挪进 core（2026-09-25）
+
+设计 `design/agent-automation-design.md` §6。此前 `open-agent --after` 只往节点数据里写一份 `pendingLaunch`，由页面挂载节点时自己判定、自己敲启动行：页面没开就没人等；判定看的是「现在是不是 done」，一条早就躺着的 done 当场放行。
+
+### 36.1 做了什么
+
+- **迁移 0027**：`agent_dependency_launches`（一个下游一行：状态、重试次数、延后的第一条任务及其来源链）与 `agent_dependencies`（一条边一行：上游、`condition`、基准状态与基准上报时刻、`observed_busy`、状态、原因、TTL）。
+- **`core/dependencies/`**：`evaluate.ts` 是纯判定；`service.ts` 订阅 `agent.status` / `terminal.exit` / `board.changed`，外加 30 秒一次的扫描（过期、上下游被删、重启后的补判与启动重试）；`launch.ts` 在条件满足时启动下游——节点已有活着的 shell（页面开着）就往里敲，没有就经终端桥新增的 `spawnForNode` 起一个（与 `POST /api/terminals` 共用环境与节点令牌，抽成 `ownedEnvironment`），再把会话 id 写进节点数据。启动行与页面拼的是同一份（`planLaunch` + `GET /api/agents` 的解析路径与 `launchArgs`）。第一条任务在启动之后才以 `origin = 'first-task'` 进 `agent_send_queue`（带幂等键），出队泵照旧等第一条真正的 idle——没有另写往 PTY 里敲正文的路。
+- **`open-agent`**：`--after` 写依赖表，新增 `--after-turn current|next`（缺省 `current`）与 `--ttl <分钟>`（缺省一天，上限一周）；建节点之前就拒掉普通终端、环与别的画布上的上游；带 `--after` 时任务不再当场入队（队列 TTL 五分钟，等依赖会过期）。节点数据不再写 `pendingLaunch`。
+- **路由**（契约 `core-json-api.md` §8）：`GET/POST /api/workspaces/{id}/dependencies`（列出 / 迁入旧 `pendingLaunch`）、`DELETE …/dependencies/{dependencyId}`（取消一条边）。
+- **页面**：节点头新增「等待 X」徽标（`DependencyWaitBadge`，浮层里可「不等了，现在启动」）；`use-launch` 在 core 说还在等时只起 shell 不敲启动行；带依赖的旧 `pendingLaunch` 在挂载时迁进 core 再从节点数据里摘掉（迁不进去才退回旧的页面侧等待）；rope 边的等待改由依赖表派生。不带依赖的 `pendingLaunch`（命令面板恢复会话）照旧由页面敲。
+
+### 36.2 取舍
+
+- **基准**：没有 turn id，用「创建时上游的状态 + 最后一次上报时刻」作基准；一次结束要晚于那个时刻，或者基准之后见过它忙（过期扫描把 working 改成 done 时不一定挪时刻）。`current` 遇到上游已干净停下的当场满足（旧 `--after` 的语义）；`next` 只认下一次成功结束，失败的一轮挪基准继续等。
+- **不放行**：失败、中断、上游终端退出 → `failed`；上游被删 → `missing`（旧实现当作满足，这里不再）；过期 → `expired`。都要人取消那条边，其余边都满足时就在取消里启动。
+- **启动安全**：已有 shell 时先看前台——已经在跑这个 Agent 就只记账不再敲；前台是别的程序或有半截输入就改天再试（最多 5 次，之后启动记 `failed`）。页面读不到依赖状态时放行，靠的就是这一条。
+- 批量组队 / 多角度评审这一组合操作没有做；技能文案改了但没有提 `SKILLS_REVISION`（留给统一改技能的那一次）。
+
+### 36.3 验证
+
+- `pnpm --filter @armadra/desktop test`：243 文件通过（本 worktree 的 node-pty `spawn-helper` 没有执行位，`chmod +x` 之后终端用例全绿，与本改动无关）；新增 `core/dependencies/service.test.ts` 25 条（无页面服务端触发、已有 shell 时复用、旧 done 不重放、多上游、失败 / 中断 / 退出 / 删除、TTL、取消与列出、旧数据迁入、core 重启后补判、写完行未落账的重启不重敲）。
+- `pnpm --filter @armadra/server test`：9 文件 68 条通过。
+- `pnpm --filter @armadra/web test` / `typecheck`：新增 `DependencyWaitBadge.test.tsx`；唯一失败是基线就有的 `i18n.test.ts` 未引用键 `integration.legacy.list`（上一个提交留下，与本改动无关）。
