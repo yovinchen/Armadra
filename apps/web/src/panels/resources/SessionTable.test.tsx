@@ -90,6 +90,28 @@ describe("会话表", () => {
     expect(screen.getByText("这个工作空间没有正在运行的会话")).toBeTruthy();
   });
 
+  it("没有会话也照样给出执行主机筛选：它同时管上面的主机总览", () => {
+    // 远端工作空间刚建好、还没开终端时，抽屉里有本机与远端两张主机卡，却
+    // 没有筛选——筛选长在会话表里，而会话表一行都没有就整段不画（远端探针
+    // 实测）。
+    const onHost = vi.fn();
+    render(
+      <SessionTable
+        sessions={[]}
+        sort="cpu"
+        onSorted={() => {}}
+        host="all"
+        onHost={onHost}
+        extraHosts={["local", "fake-remote"]}
+        hostName={(id) => (id === "fake-remote" ? "假远端" : id)}
+      />,
+    );
+    expect(screen.getByText("这个工作空间没有正在运行的会话")).toBeTruthy();
+    screen.getByRole("button", { name: "假远端" }).click();
+    expect(onHost).toHaveBeenCalledWith("fake-remote");
+    expect(screen.getByRole("button", { name: "全部主机" })).toBeTruthy();
+  });
+
   it("远端会话测不到指标，但仍然留在列表里", () => {
     render(
       <SessionTable

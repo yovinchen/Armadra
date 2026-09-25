@@ -116,42 +116,44 @@ export function SessionTable({
       .catch(() => toast.error(t("resources.endFailed")));
   };
 
+  // 执行主机过滤只在真的有第二台主机时出现：一台机器上的「全部主机」是一个
+  // 只有一个选项的控件。一行会话都没有时也要有它——它同时管上面的主机总览，
+  // 远端工作空间还没开终端时正是要看远端那张卡的时候。
+  const filter = hosts.length > 1 && (
+    <div className="flex items-center gap-1 pb-1">
+      <span className="text-[11px] text-muted-foreground">
+        {t("resources.host.filter")}
+      </span>
+      {(["all", ...hosts] as const).map((value) => (
+        <button
+          key={value === "all" ? "all" : (value ?? "unknown")}
+          type="button"
+          data-slot="resource-host-filter"
+          data-host={value === "all" ? "all" : (value ?? "unknown")}
+          data-active={host === value ? "true" : undefined}
+          onClick={() => setHost(value)}
+          className="max-w-32 truncate rounded-[var(--r-control)] px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground"
+        >
+          {value === "all" ? t("resources.host.filter.all") : hostLabel(value)}
+        </button>
+      ))}
+    </div>
+  );
+
   if (live.length === 0) {
     return (
-      <p className="px-1 py-2 text-[12px] text-muted-foreground">
-        {t("resources.noSessions")}
-      </p>
+      <>
+        {filter}
+        <p className="px-1 py-2 text-[12px] text-muted-foreground">
+          {t("resources.noSessions")}
+        </p>
+      </>
     );
   }
 
   return (
     <>
-      {/*
-        执行主机过滤只在真的有第二台主机时出现：一台机器上的「全部主机」下拉
-        是一个只有一个选项的控件。
-      */}
-      {hosts.length > 1 && (
-        <div className="flex items-center gap-1 pb-1">
-          <span className="text-[11px] text-muted-foreground">
-            {t("resources.host.filter")}
-          </span>
-          {(["all", ...hosts] as const).map((value) => (
-            <button
-              key={value === "all" ? "all" : (value ?? "unknown")}
-              type="button"
-              data-slot="resource-host-filter"
-              data-host={value === "all" ? "all" : (value ?? "unknown")}
-              data-active={host === value ? "true" : undefined}
-              onClick={() => setHost(value)}
-              className="max-w-32 truncate rounded-[var(--r-control)] px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground"
-            >
-              {value === "all"
-                ? t("resources.host.filter.all")
-                : hostLabel(value)}
-            </button>
-          ))}
-        </div>
-      )}
+      {filter}
 
       {rows.length === 0 && (
         <p className="px-1 py-2 text-[12px] text-muted-foreground">
