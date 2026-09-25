@@ -1,5 +1,8 @@
 import type { EditorView } from "codemirror";
-import type { Compartment, Extension } from "@codemirror/state";
+import type { Compartment, Extension, RangeSet } from "@codemirror/state";
+import type { GutterMarker, ViewUpdate } from "@codemirror/view";
+
+import { gutterMarks, type GutterKind } from "./git-gutter";
 
 /** 超过这个大小不进编辑器，只挂一个徽标（§3.4：内容区不放解释段落）。 */
 export const MAX_EDITABLE_BYTES = 1024 * 1024;
@@ -80,7 +83,15 @@ export interface EditorCore {
   };
   /** 打开查找/替换面板；替换那一半由 `EditorState.readOnly` 决定是否出现。 */
   openSearch(view: EditorView): void;
+  /**
+   * 换一份 HEAD 的行（见 `git-gutter.ts`）；`null` 清掉行边标记。标记随后
+   * 跟着编辑实时重算，调用方只在磁盘或 HEAD 可能变了的时候来一次。
+   */
+  setGitHead(view: EditorView, head: readonly string[] | null): void;
 }
+
+/** 按键之后等这么久再重算行边标记：连续打字时只算最后一次。 */
+const GUTTER_DEBOUNCE_MS = 250;
 
 /** CodeMirror 内核 + 主题；只在第一次打开编辑器节点时加载一次。 */
 let corePromise: Promise<EditorCore> | null = null;
@@ -90,13 +101,114 @@ export function loadEditorCore(): Promise<EditorCore> {
     import("codemirror"),
     import("@codemirror/state"),
     import("@codemirror/search"),
+    import("@codemirror/view"),
   ]).then(
     ([
       { basicSetup, EditorView },
-      { Compartment, EditorState },
+      {
+        Compartment,
+        EditorState,
+        RangeSet: RangeSets,
+        StateEffect,
+        StateField,
+      },
       { search, openSearchPanel },
+      { GutterMarker: GutterMarkerBase, ViewPlugin, gutter },
     ]) => {
       const theme = EditorView.theme(EDITOR_THEME_SPEC, { dark: true });
+
+      /* ----------------------------- Git 行边标记 ---------------------------- */
+
+      class GitMarker extends GutterMarkerBase {
+        constructor(readonly kind: GutterKind) {
+          super();
+        }
+        override eq(other: GutterMarker): boolean {
+          return other instanceof GitMarker && other.kind === this.kind;
+        }
+        override toDOM(): Node {
+          const element = document.createElement("div");
+          element.className = `cm-git-${this.kind}`;
+          return element;
+        }
+      }
+      const markers: Record<GutterKind, GitMarker> = {
+        added: new GitMarker("added"),
+        modified: new GitMarker("modified"),
+        removed: new GitMarker("removed"),
+      };
+      const setHead = StateEffect.define<readonly string[] | null>();
+      const setMarks = StateEffect.define<RangeSet<GutterMarker>>();
+      const headField = StateField.define<readonly string[] | null>({
+        create: () => null,
+        update(value, transaction) {
+          for (const effect of transaction.effects)
+            if (effect.is(setHead)) return effect.value;
+          return value;
+        },
+      });
+      const marksField = StateField.define<RangeSet<GutterMarker>>({
+        create: () => RangeSets.empty,
+        update(value, transaction) {
+          for (const effect of transaction.effects) {
+            if (effect.is(setMarks)) return effect.value;
+            if (effect.is(setHead) && effect.value === null)
+              return RangeSets.empty;
+          }
+          // 重算之前先跟着改动挪位置，打字时标记不会先闪回原处。
+          return transaction.docChanged
+            ? value.map(transaction.changes)
+            : value;
+        },
+      });
+      const marksOf = (view: EditorView): RangeSet<GutterMarker> => {
+        const head = view.state.field(headField);
+        if (!head) return RangeSets.empty;
+        const { doc } = view.state;
+        // 末尾换行之后那一格空行不是一行内容，和 `linesOf` 切 HEAD 的口径一致。
+        const lines = doc.toJSON().map((line) => line.replace(/\r$/, ""));
+        if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+        return RangeSets.of(
+          gutterMarks(head, lines).map((mark) =>
+            markers[mark.kind].range(doc.line(mark.line).from),
+          ),
+          true,
+        );
+      };
+      // 重算放在更新之外：CodeMirror 不许在一次更新里再派发事务。
+      const recompute = ViewPlugin.fromClass(
+        class {
+          timer: ReturnType<typeof setTimeout> | undefined;
+          constructor(readonly view: EditorView) {}
+          update(update: ViewUpdate) {
+            const headChanged = update.transactions.some((transaction) =>
+              transaction.effects.some((effect) => effect.is(setHead)),
+            );
+            if (!headChanged && !update.docChanged) return;
+            if (!this.view.state.field(headField)) return;
+            clearTimeout(this.timer);
+            this.timer = setTimeout(
+              () =>
+                this.view.dispatch({
+                  effects: setMarks.of(marksOf(this.view)),
+                }),
+              headChanged ? 0 : GUTTER_DEBOUNCE_MS,
+            );
+          }
+          destroy() {
+            clearTimeout(this.timer);
+          }
+        },
+      );
+      const gitGutter = [
+        headField,
+        marksField,
+        recompute,
+        gutter({
+          class: "cm-git-gutter",
+          markers: (view) => view.state.field(marksField),
+        }),
+      ];
       return {
         create({
           parent,
@@ -116,6 +228,7 @@ export function loadEditorCore(): Promise<EditorCore> {
               extensions: [
                 basicSetup,
                 theme,
+                gitGutter,
                 // basicSetup 已经带了 searchKeymap（⌘F / ⌘⌥F），这里把
                 // search 本身显式装上，才能把面板固定在顶部并给它文案。
                 search({ top: true }),
@@ -136,6 +249,9 @@ export function loadEditorCore(): Promise<EditorCore> {
         },
         openSearch(view: EditorView) {
           openSearchPanel(view);
+        },
+        setGitHead(view: EditorView, head: readonly string[] | null) {
+          view.dispatch({ effects: setHead.of(head) });
         },
       };
     },
@@ -216,4 +332,11 @@ const EDITOR_THEME_SPEC = {
     backgroundColor: "var(--brand-soft)",
   },
   ".cm-scroller": { overflow: "auto" },
+  // Git 行边标记：一条细竖线，新增 / 修改 / 删除各一种颜色；删除画在被删
+  // 位置的那一行顶上，因为被删的行已经不在了。
+  ".cm-git-gutter .cm-gutterElement": { width: "3px", padding: "0" },
+  ".cm-git-added, .cm-git-modified": { height: "100%" },
+  ".cm-git-added": { backgroundColor: "var(--success)" },
+  ".cm-git-modified": { backgroundColor: "var(--brand)" },
+  ".cm-git-removed": { height: "3px", backgroundColor: "var(--danger)" },
 };

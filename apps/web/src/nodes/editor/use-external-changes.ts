@@ -38,6 +38,8 @@ export function useExternalChanges(
      */
     setWatchMode: React.Dispatch<React.SetStateAction<WatchMode>>;
     setWatchReason: React.Dispatch<React.SetStateAction<string | null>>;
+    /** 重载完成、编辑器又和磁盘一致了（行边标记据此重取）。 */
+    onReloaded?: () => void;
   },
 ): ExternalChangeActions {
   const {
@@ -54,6 +56,7 @@ export function useExternalChanges(
     setDegraded,
     setWatchMode,
     setWatchReason,
+    onReloaded,
   } = options;
   const t = useT();
 
@@ -75,7 +78,8 @@ export function useExternalChanges(
     setDirty(false);
     setExternal(null);
     setDiskContent(null);
-  }, [identity, path, workspaceId]);
+    onReloaded?.();
+  }, [identity, onReloaded, path, workspaceId]);
 
   /** 一次外部改动：没有草稿就直接重载并提示，有草稿交给用户决定。 */
   const applyExternal = React.useCallback(

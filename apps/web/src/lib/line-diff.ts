@@ -99,6 +99,17 @@ function operationsOf(before: string[], after: string[]): Operation[] {
 }
 
 /**
+ * 两组行之间的逐行操作，编辑器的 Git 行边标记用它把「HEAD 的行」和「现在的
+ * 行」对齐。与下面的 patch 用的是同一套对齐，两处不会各算出一个样子。
+ */
+export function lineOperations(
+  before: readonly string[],
+  after: readonly string[],
+): ReadonlyArray<{ sign: " " | "-" | "+" }> {
+  return operationsOf([...before], [...after]);
+}
+
+/**
  * `before` → `after` 的 unified patch 正文（不含文件头）。
  * 两段文本一致时返回空串，调用方据此显示「无差异」。
  */

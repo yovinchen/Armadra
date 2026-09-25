@@ -46,6 +46,7 @@ import type { ExternalChange, LoadState, ViewMode } from "./editor/types";
 import { useExternalChanges } from "./editor/use-external-changes";
 import { useEditorKeybindings } from "./editor/use-editor-keys";
 import { useFileSave } from "./editor/use-save";
+import { useGitGutter } from "./editor/use-git-gutter";
 import { rememberRecentFile } from "@/files/recent-files";
 import { openQuickOpen } from "@/panels/quick-open-seed";
 import { useLanguageService } from "@/editor/language/use-language";
@@ -84,6 +85,11 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
   const [viewMode, setViewMode] = React.useState<ViewMode>("edit");
   /** 每重建一次 CodeMirror 就自增：语言扩展要重新插一遍。 */
   const [viewGeneration, setViewGeneration] = React.useState(0);
+  /** 保存、重载或合并之后自增：编辑器与磁盘重新对齐了，行边标记要重取。 */
+  const [diskRevision, bumpDiskRevision] = React.useReducer(
+    (value: number) => value + 1,
+    0,
+  );
 
   const identity = JSON.stringify([workspaceId, path]);
   const refs = useEditorRefs(identity);
@@ -285,6 +291,18 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     setDegraded,
     setWatchMode,
     setWatchReason,
+    onReloaded: bumpDiskRevision,
+  });
+
+  /* ------------------------------ Git 行边标记 ----------------------------- */
+
+  useGitGutter(refs, {
+    workspaceId,
+    path,
+    identity,
+    active: state.kind === "text" && state.identity === identity,
+    viewGeneration,
+    diskRevision,
   });
 
   /* ------------------------------- 语言服务 ------------------------------- */
@@ -317,6 +335,12 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     null,
   );
 
+  const languageAfterSave = language.afterSave;
+  const afterSave = React.useCallback(() => {
+    languageAfterSave?.();
+    bumpDiskRevision();
+  }, [languageAfterSave]);
+
   const { save } = useFileSave(refs, {
     path,
     workspaceId,
@@ -326,7 +350,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     setSaving,
     setExternal,
     beforeSave: language.beforeSave,
-    afterSave: language.afterSave,
+    afterSave,
   });
 
   // 编辑器内部的五条键位（`editor` 作用域）。监听器装在这个节点自己的根元素
