@@ -10,6 +10,8 @@ import {
   usageResetLabel,
   usageWindowLabel,
 } from "../../lib/usage";
+import { Badge } from "@/ui/badge";
+import { useProviderIncident } from "./provider-status";
 
 /**
  * 用量看板里的 Provider 卡（§4.2）。
@@ -31,6 +33,7 @@ export function ProviderCard({
   const name = t(`usage.provider.${provider.id}`);
   const fetchedAt = Date.parse(provider.fetchedAt ?? "");
   const stale = provider.status === "ok" && usageIsStale(provider, now);
+  const incident = useProviderIncident(provider.id);
 
   return (
     <section
@@ -40,7 +43,24 @@ export function ProviderCard({
       className="flex min-w-0 flex-col gap-3 rounded-lg border border-border bg-panel p-3"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="text-sm font-medium">{name}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="text-sm font-medium">{name}</span>
+          {/* 状态页报了故障或维护才出现；原文（英文）只放在悬停提示里。 */}
+          {incident && (
+            <Badge
+              data-slot="usage-incident"
+              data-indicator={incident.indicator}
+              variant={
+                incident.indicator === "maintenance"
+                  ? "secondary"
+                  : "destructive"
+              }
+              title={incident.description}
+            >
+              {t(`usage.incident.${incident.indicator}`)}
+            </Badge>
+          )}
+        </span>
         {provider.status === "ok" && Number.isFinite(fetchedAt) && (
           <time
             dateTime={provider.fetchedAt!}

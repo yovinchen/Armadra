@@ -5,7 +5,34 @@ import {
   modelCatalogSchema,
   usageSchema,
 } from "@armadra/shared";
+import { z } from "zod";
 import { request } from "./request";
+
+/**
+ * `GET /api/usage/status`：三家公开状态页的总指示（roadmap §3.9）。
+ * 取不到就是 `unknown`，从不回退成正常；设置里关掉时 `enabled: false`。
+ */
+export const providerStatusSchema = z.object({
+  enabled: z.boolean(),
+  providers: z.array(
+    z.object({
+      id: z.string(),
+      indicator: z.enum([
+        "none",
+        "minor",
+        "major",
+        "critical",
+        "maintenance",
+        "unknown",
+      ]),
+      description: z.string().optional(),
+      pageUrl: z.string(),
+      checkedAt: z.string(),
+    }),
+  ),
+});
+
+export type ProviderStatusReport = z.infer<typeof providerStatusSchema>;
 
 export const usageApi = {
   /* ----------------------------------- 用量 ----------------------------- */
@@ -50,4 +77,8 @@ export const usageApi = {
     request("/api/usage/copilot/poll", copilotPollSchema, { method: "POST" }),
   copilotLogout: () =>
     request("/api/usage/copilot/logout", copilotAuthSchema, { method: "POST" }),
+
+  /* ------------------------------- 状态页 ------------------------------- */
+  /** Runtime 侧缓存五分钟；关掉时不联网。 */
+  providerStatus: () => request("/api/usage/status", providerStatusSchema),
 };

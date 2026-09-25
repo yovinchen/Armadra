@@ -45,6 +45,8 @@ const DEFAULT_USAGE_REFRESH_MINUTES = 5;
 /** A provider that is off is never contacted and reports `unavailable`. */
 export const USAGE_PROVIDER_IDS = ["claude", "codex", "copilot"] as const;
 const DEFAULT_CODEX_CLI_FALLBACK = false;
+/** Provider 状态页徽标默认开：只读三家公开的 status.json，不带任何凭据。 */
+const DEFAULT_USAGE_STATUS_PAGE = true;
 const DEFAULT_COST_ENABLED = true;
 
 /* ------------------------------ logs / updates ----------------------------- */
@@ -226,6 +228,7 @@ function normalizeUsage(document: JsonObject): void {
   usage.providers = providers;
   usage.codexCliFallback =
     asBool(usage.codexCliFallback) ?? DEFAULT_CODEX_CLI_FALLBACK;
+  usage.statusPage = asBool(usage.statusPage) ?? DEFAULT_USAGE_STATUS_PAGE;
   const cost = section(usage, "cost");
   cost.enabled = asBool(cost.enabled) ?? DEFAULT_COST_ENABLED;
   usage.cost = cost;

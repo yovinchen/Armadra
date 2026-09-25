@@ -887,6 +887,12 @@ export const ROUTES: readonly RouteEntry[] = [
     implemented: true,
   },
   {
+    path: "/api/usage/status",
+    methods: ["GET"],
+    surface: "runtime",
+    implemented: true,
+  },
+  {
     path: "/api/approvals/{pendingId}/answer",
     methods: ["POST"],
     surface: "runtime",

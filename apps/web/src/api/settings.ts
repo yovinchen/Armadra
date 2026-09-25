@@ -100,6 +100,8 @@ export const runtimeSettingsSchema = z.looseObject({
       refreshMinutes: z.number().int().nonnegative().optional(),
       providers: z.record(z.string(), z.boolean()).optional(),
       codexCliFallback: z.boolean().optional(),
+      /** Provider 状态页徽标（roadmap §3.9），默认开。 */
+      statusPage: z.boolean().optional(),
       cost: z.looseObject({ enabled: z.boolean().optional() }).optional(),
     })
     .optional(),
@@ -198,6 +200,7 @@ export interface RuntimeSettingsPatch {
     refreshMinutes?: number;
     providers?: Record<string, boolean>;
     codexCliFallback?: boolean;
+    statusPage?: boolean;
     cost?: { enabled?: boolean };
   };
   logs?: { retentionDays?: number };

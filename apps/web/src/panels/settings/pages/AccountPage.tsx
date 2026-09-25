@@ -50,6 +50,7 @@ export function AccountPage() {
   const usageEnabled = settings.data?.usage?.enabled !== false;
   const costEnabled = settings.data?.usage?.cost?.enabled !== false;
   const cliFallback = settings.data?.usage?.codexCliFallback === true;
+  const statusPage = settings.data?.usage?.statusPage !== false;
   const refreshMinutes = settings.data?.usage?.refreshMinutes ?? 5;
   const providerOn = (id: string) =>
     settings.data?.usage?.providers?.[id] !== false;
@@ -133,6 +134,27 @@ export function AccountPage() {
             aria-label={t("settings.codexCliFallback")}
             onCheckedChange={(next) =>
               save.mutate({ usage: { codexCliFallback: next } })
+            }
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={t("usage.statusPage")}
+          footnote={t("usage.statusPageHint")}
+        >
+          <Switch
+            checked={statusPage}
+            disabled={busy}
+            aria-label={t("usage.statusPage")}
+            onCheckedChange={(next) =>
+              save.mutate(
+                { usage: { statusPage: next } },
+                {
+                  onSuccess: () =>
+                    void queryClient.invalidateQueries({
+                      queryKey: ["usage-status"],
+                    }),
+                },
+              )
             }
           />
         </SettingsRow>

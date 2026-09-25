@@ -14,6 +14,7 @@ import type { CoreContext } from "../main";
 import { settingsDomain } from "../settings";
 import type { UsageSnapshot } from "./snapshot";
 import { UsageService } from "./service";
+import { StatusService } from "./status";
 import { catalogPrices, modelsDomain } from "../models";
 
 export { emptySnapshot, USAGE_PROVIDER_IDS } from "./snapshot";
@@ -26,6 +27,8 @@ export type {
   UsageWindow,
 } from "./snapshot";
 export { UsageService } from "./service";
+export { StatusService, STATUS_PROVIDER_IDS, STATUS_SOURCES } from "./status";
+export type { ProviderStatus, StatusIndicator } from "./status";
 export { CopilotLogin } from "./copilot-login";
 export type { AuthState, LoginProgress, LoginPrompt } from "./copilot-login";
 export { SecretStore } from "./secret-store";
@@ -167,6 +170,21 @@ export function install(context: CoreContext): UsageDomain {
         },
       };
     }
+  });
+
+  // Provider 状态页（roadmap §3.9）。和用量一样惰性：第一次有人问才联网，
+  // 开关关着就一个请求都不发，只回 `enabled: false`。
+  const status = new StatusService();
+  router.handle("GET", "/api/usage/status", async () => {
+    const enabled =
+      settingsDomain()?.settings.get("usage.statusPage") !== false;
+    if (!enabled) {
+      return { status: 200, body: { enabled: false, providers: [] } };
+    }
+    return {
+      status: 200,
+      body: { enabled: true, providers: await status.current() },
+    };
   });
 
   assembled = { service, stop: () => service.stop() };

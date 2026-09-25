@@ -10,6 +10,14 @@ import type { MessageModule } from "./index";
 export const usage: MessageModule = {
   "zh-CN": {
     "usage.used": "已用 {value}%",
+    /* 状态页报的事故（roadmap §3.9）。 */
+    "usage.incident.minor": "轻微故障",
+    "usage.incident.major": "部分中断",
+    "usage.incident.critical": "严重中断",
+    "usage.incident.maintenance": "维护中",
+    "usage.statusPage": "服务状态徽标",
+    "usage.statusPageHint":
+      "读取 Anthropic、OpenAI、GitHub 的公开状态页，有事故时在用量卡上标出。",
     "usage.updated": "更新于 {value}",
     "usage.resetUnknown": "重置时间未知",
     "usage.awaitingRefresh": "窗口已到期，等待刷新",
@@ -110,6 +118,13 @@ export const usage: MessageModule = {
   },
   en: {
     "usage.used": "{value}% used",
+    "usage.incident.minor": "Minor incident",
+    "usage.incident.major": "Partial outage",
+    "usage.incident.critical": "Major outage",
+    "usage.incident.maintenance": "Maintenance",
+    "usage.statusPage": "Service status badges",
+    "usage.statusPageHint":
+      "Reads the public status pages of Anthropic, OpenAI and GitHub and marks incidents on the usage cards.",
     "usage.updated": "Updated {value}",
     "usage.resetUnknown": "Reset time unknown",
     "usage.awaitingRefresh": "Window ended; awaiting refresh",
