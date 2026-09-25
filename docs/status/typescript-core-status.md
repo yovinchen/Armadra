@@ -1861,7 +1861,7 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - **事件与设置**：工作空间事件 `terminal.hibernation`（`hibernated` / `resuming` / `running` / `failed`）；设置键 `terminal.ecoMode`（缺省开）与 `terminal.ecoIdleMinutes`（5–1440，缺省 30）。
 - **资源面板**：休眠的会话照列，`unknownReason: "hibernated"`，数字为空，不给「结束」。
 - **页面**：`render-state.ts` 新增 `hibernated` 档；`use-session` 读到休眠不新建会话，新增 `surface/use-hibernation.ts`；节点头「休眠中 / 正在唤醒 / 唤醒失败」，终端体上「唤醒」按钮，点任何位置或聚焦都唤醒；设置 → 终端加「节能休眠」开关与「空闲多久后休眠」。
-- 契约 `core-json-api.md` §9，架构指南补一段。
+- 契约 `core-json-api.md` §11，架构指南补一段。
 
 ### 43.2 取舍
 
