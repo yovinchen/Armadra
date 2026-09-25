@@ -96,6 +96,37 @@ describe("language service settings", () => {
     expect(screen.queryByRole("button", { name: /install/i })).toBeNull();
   });
 
+  it("lists one server that serves two languages as two rows without a key clash", async () => {
+    // typescript-language-server 同时服务 typescript 与 javascript：按
+    // serverId 当 key，React 报重复 key，而且两行可能只剩一行。
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    languageService.mockResolvedValue({
+      status: "available",
+      executionHostId: "local",
+      servers: [
+        descriptor({
+          serverId: "typescript-language-server",
+          languageId: "typescript",
+        }),
+        descriptor({
+          serverId: "typescript-language-server",
+          languageId: "javascript",
+        }),
+      ],
+    });
+    view(<LanguageServicePanel workspaceId="w1" />);
+    expect(
+      await screen.findByText("typescript · typescript-language-server"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("javascript · typescript-language-server"),
+    ).toBeTruthy();
+    expect(
+      errors.mock.calls.some((call) => String(call[0]).includes("same key")),
+    ).toBe(false);
+    errors.mockRestore();
+  });
+
   it("shows the version a probe found and can restart that server", async () => {
     languageService.mockResolvedValue({
       status: "available",

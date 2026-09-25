@@ -117,7 +117,7 @@ export function LanguageServicePanel({ workspaceId }: { workspaceId: string }) {
         const tail = stderr[`${workspaceId} ${server.serverId}`];
         return (
           <div
-            key={server.serverId}
+            key={`${server.languageId} ${server.serverId}`}
             className="flex flex-col gap-2 px-4 py-3"
             data-testid={`lsp-row-${server.serverId}`}
           >
