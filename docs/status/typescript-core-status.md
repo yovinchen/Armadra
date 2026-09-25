@@ -1786,7 +1786,7 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 
 ## 42. 服务器账号、组与共享真正启用（R8，2026-09-26）
 
-设计 `design/server-accounts-and-sharing.md`，契约 `contracts/core-json-api.md` §9。此前数据模型与接口都在（0019、`accounts-http.ts`），但判定恒为 owner：服务器壳认证完请求就把人丢了，core 里的每一处 `allows()` 问到的都是本机 owner；成员会话还把登录时的授予写进快照，撤销一条共享要等会话过期。
+设计 `design/server-accounts-and-sharing.md`，契约 `contracts/core-json-api.md` §10。此前数据模型与接口都在（0019、`accounts-http.ts`），但判定恒为 owner：服务器壳认证完请求就把人丢了，core 里的每一处 `allows()` 问到的都是本机 owner；成员会话还把登录时的授予写进快照，撤销一条共享要等会话过期。
 
 ### 42.1 做了什么
 

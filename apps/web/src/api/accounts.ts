@@ -14,7 +14,7 @@ import { RUNTIME_URL } from "./request";
 /**
  * 账号、组、邀请与共享的客户端 —— core 的 `/api/identity/*` 管理面
  * （`docs/design/server-accounts-and-sharing.md` §3，契约
- * `docs/contracts/core-json-api.md` §9）。
+ * `docs/contracts/core-json-api.md` §10）。
  *
  * 只在服务器壳托管的页面上用：那里的会话是 HttpOnly Cookie + 双提交 CSRF，
  * 所以这里不碰 Bearer，写请求带 `X-Armadra-CSRF`。桌面单机只有一个 owner，

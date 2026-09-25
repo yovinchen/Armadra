@@ -342,7 +342,7 @@ R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消�
 - 事件只在有人来、有人走、租约换手时发；普通的续期心跳不发，所以事件里的 `lastSeenAt` 可能落后，最新值以心跳的回答为准。
 - `canvas.presence` **不进 outbox**（`core/events/stream.ts` 的 `EPHEMERAL_EVENTS`）：带游标续订的客户端不会补到过去的在线表，它重连后的第一次心跳自己会拿到当前那一份。
 
-## 9. 账号、组、邀请与共享：`/api/identity/*` 的管理面
+## 10. 账号、组、邀请与共享：`/api/identity/*` 的管理面
 
 规格是 [服务器账号与共享](../design/server-accounts-and-sharing.md) §3；实现在 `core/identity/accounts-http.ts`。和 §3 同一个前缀、同一套认证（Origin、写操作的 CSRF、会话凭据）；失败的 `code` 是身份域的 UPPER_SNAKE（`UNAUTHENTICATED` / `PERMISSION_DENIED` / `INVALID_ARGUMENT` / `NOT_FOUND` / `CONFLICT`），做不到的是 501 `NOT_IMPLEMENTED`。
 
