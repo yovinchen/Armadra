@@ -20,6 +20,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
+import { remoteResources } from "./remote";
 import { isRemoteExecutable, type SessionTarget } from "./sample";
 
 /** `terminal_sessions` 里一行的样子，只取采样要用的列。 */
@@ -143,9 +144,22 @@ export function sessionTargets(
       `${SESSION_COLUMNS} WHERE workspace_id = ? AND status = 'running' ORDER BY id`,
     )
     .all(workspaceId) as Record<string, unknown>[];
+  const workspaceHost = executionHostOf(database, workspaceId);
   const targets: SessionTarget[] = rows.map((raw) => {
     const row = toRow(raw);
     const pid = row.backendRef === null ? undefined : pids.get(row.backendRef);
+    const remote = isRemoteExecutable(row.shell);
+    // SSH 会话连的是哪台主机：节点数据里记着；没有节点时退回工作空间的执行主机。
+    const remoteHostId = remote
+      ? (sshHostOfNode(database, row.ownerNodeId) ??
+        (workspaceHost === "" ? undefined : workspaceHost))
+      : undefined;
+    // 远端的数字来自上一轮对那台主机的读取；这一次顺便登记下一轮要读谁。读取是
+    // 异步的一轮，不挡这次采样——第一次打开面板时远端行先是 `null`，下一拍才有数。
+    const remoteMetrics =
+      remoteHostId === undefined || row.attachState === "exited"
+        ? undefined
+        : remoteResources.session(remoteHostId, row.id, pid ?? null);
     return {
       sessionId: row.id,
       sessionKey: row.sessionKey,
@@ -156,7 +170,9 @@ export function sessionTargets(
       cwd: row.cwd,
       pid: pid ?? null,
       exited: row.attachState === "exited",
-      remote: isRemoteExecutable(row.shell),
+      remote,
+      remoteHostId,
+      remoteMetrics,
     } satisfies SessionTarget;
   });
   // Eco 休眠的会话（终端宿主设计 §7.2）：进程没了，但节点还挂着它、点一下就会
@@ -193,6 +209,40 @@ export function sessionTargets(
       rank(left) - rank(right) || left.sessionId.localeCompare(right.sessionId),
   );
   return targets;
+}
+
+/** 工作空间绑定的执行主机；本机或读不到是空串。 */
+export function executionHostOf(
+  database: DatabaseSync,
+  workspaceId: string,
+): string {
+  try {
+    const row = database
+      .prepare("SELECT execution_host_id FROM workspaces WHERE id = ?")
+      .get(workspaceId) as Record<string, unknown> | undefined;
+    return row === undefined ? "" : text(row, "execution_host_id");
+  } catch {
+    return "";
+  }
+}
+
+/** 终端节点数据里的 `ssh.hostId`：这个 SSH 终端连的是哪台主机。 */
+function sshHostOfNode(
+  database: DatabaseSync,
+  nodeId: string | null,
+): string | undefined {
+  if (nodeId === null) return undefined;
+  try {
+    const row = database
+      .prepare(
+        "SELECT json_extract(data_json, '$.ssh.hostId') AS host_id FROM nodes WHERE id = ?",
+      )
+      .get(nodeId) as Record<string, unknown> | undefined;
+    const hostId = row === undefined ? "" : text(row, "host_id");
+    return hostId === "" ? undefined : hostId;
+  } catch {
+    return undefined;
+  }
 }
 
 /* -------------------------------- 孤立会话 -------------------------------- */

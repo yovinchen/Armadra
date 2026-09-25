@@ -48,10 +48,20 @@ export function SessionTable({
   sessions,
   sort,
   onSorted,
+  host: controlledHost,
+  onHost,
+  extraHosts = [],
+  hostName = (id) => id,
 }: {
   sessions: readonly SessionResources[];
   sort: SessionSort;
   onSorted: (sort: SessionSort) => void;
+  /** 由抽屉持有时，主机总览与会话表跟着同一个筛选走。 */
+  host?: string | null | "all";
+  onHost?: (host: string | null | "all") => void;
+  /** 没有会话、但工作空间牵涉到的远端主机，也要能被选中看总览。 */
+  extraHosts?: readonly string[];
+  hostName?: (id: string) => string;
 }) {
   const t = useT();
   const nodes = useCanvasStore((state) => state.document?.nodes);
@@ -61,7 +71,9 @@ export function SessionTable({
   const selectNodes = useCanvasStore((state) => state.selectNodes);
   const [ending, setEnding] = useState<SessionResources | null>(null);
   // `"all"` 或者一个具体主机；`null` 是「判不出来的那些」。
-  const [host, setHost] = useState<string | null | "all">("all");
+  const [ownHost, setOwnHost] = useState<string | null | "all">("all");
+  const host = controlledHost ?? ownHost;
+  const setHost = onHost ?? setOwnHost;
   // 展开的会话；默认全收起，因为大多数会话下面只有一个 shell。
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -77,7 +89,11 @@ export function SessionTable({
 
   // 结束了的会话不留占位行：进程不在了就从列表消失（`liveSessions`）。
   const live = liveSessions(sessions);
-  const hosts = executionHosts(live, nodes, workspaceHostId);
+  const seen = executionHosts(live, nodes, workspaceHostId);
+  const hosts = [
+    ...seen,
+    ...extraHosts.filter((entry) => !seen.includes(entry)),
+  ];
   const rows = sortSessions(
     sessionsOnHost(live, host, nodes, workspaceHostId),
     sort,
@@ -86,7 +102,7 @@ export function SessionTable({
   const hostLabel = (value: string | null) => {
     if (value === null) return t("resources.host.filter.unknown");
     if (value === LOCAL_HOST) return t("resources.host.filter.local");
-    return value;
+    return hostName(value);
   };
 
   const endSession = (session: SessionResources) => {

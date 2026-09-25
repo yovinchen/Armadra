@@ -28,7 +28,8 @@ import {
   type PowerLeaseSource,
 } from "./power";
 import { KeepAwake } from "./keep-awake";
-import { ResourceService, type SubscribeRequest } from "./service";
+import { HostAwareResourceService } from "./hosts";
+import type { ResourceService, SubscribeRequest } from "./service";
 import { OrphanError, adoptOrphan, orphanTarget, panePids } from "./sessions";
 
 export { ResourceService } from "./service";
@@ -93,7 +94,8 @@ export function install(context: CoreContext): ResourceDomain {
     }
   });
   keepAwake.start();
-  const service = new ResourceService({
+  // 远端主机的总览与 SSH 会话的远端进程树叠在本机那一份上（`hosts.ts`）。
+  const service = new HostAwareResourceService({
     database: context.db.database,
     settings: settingsDomain()?.settings,
     bus: context.bus,

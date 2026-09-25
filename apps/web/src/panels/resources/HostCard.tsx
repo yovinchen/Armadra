@@ -18,7 +18,14 @@ import {
   memoryUsedPercent,
 } from "./metrics";
 
-export function HostCard({ host }: { host: HostResources }) {
+export function HostCard({
+  host,
+  name,
+}: {
+  host: HostResources;
+  /** 远端主机的名字；本机不需要。 */
+  name?: string;
+}) {
   const t = useT();
   const uptime = formatUptime(host.uptimeSeconds, {
     day: t("resources.unit.day"),
@@ -61,6 +68,11 @@ export function HostCard({ host }: { host: HostResources }) {
         <Badge variant="ghost" className="text-[11px]">
           {t(`resources.location.${host.location}`)}
         </Badge>
+        {name !== undefined && (
+          <Badge variant="secondary" className="max-w-40 truncate text-[11px]">
+            {name}
+          </Badge>
+        )}
         <div className="flex-1" />
         <PowerBadge host={host} />
       </header>

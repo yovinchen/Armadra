@@ -153,10 +153,10 @@ export function liveSessions(
 /**
  * 一个会话跑在哪台执行主机上。
  *
- * 这条信息不在采样结果里，因为 Runtime 的会话记录本身没存 SSH 主机 id——它只
- * 知道「这个会话的首进程是 ssh」。真正的主机 id 在画布上：终端节点的
- * `ssh.hostId`，或者工作空间自己的执行主机。所以判定顺序是
- * **节点覆盖 → 工作空间 → 本机**。
+ * core 认得出来时直接在采样里给（`executionHostId`，读的是终端节点的
+ * `ssh.hostId` 加工作空间绑定）。更旧的 core 不给，那时按画布推断：终端节点的
+ * `ssh.hostId`，或者工作空间自己的执行主机。判定顺序是
+ * **core → 节点覆盖 → 工作空间 → 本机**。
  *
  * 判不出来时返回 `null`，界面归到「未知主机」——不默认算本机：一个远程会话
  * 被算成本机，比说不知道更糟。
@@ -168,6 +168,13 @@ export function executionHostOf(
   nodes: readonly CanvasNode[] | undefined,
   workspaceExecutionHostId: string | undefined,
 ): string | null {
+  if (
+    session.location === "remote" &&
+    session.executionHostId !== "" &&
+    session.executionHostId !== LOCAL_HOST
+  ) {
+    return session.executionHostId;
+  }
   const node = session.nodeId
     ? nodes?.find((candidate) => candidate.id === session.nodeId)
     : undefined;
@@ -194,6 +201,21 @@ export function executionHosts(
     .filter((host): host is string => host !== null)
     .sort((left, right) => left.localeCompare(right));
   return seen.has(null) ? [...known, null] : known;
+}
+
+/**
+ * 某个筛选下要显示哪些主机总览：全部是本机加每台远端主机，本机就是本机，一台
+ * 远端主机就是它那一张；判不出来的那一组没有总览。
+ */
+export function hostOverviews(
+  local: HostResources,
+  remote: readonly HostResources[],
+  host: string | null | "all",
+): HostResources[] {
+  if (host === "all") return [local, ...remote];
+  if (host === LOCAL_HOST) return [local];
+  if (host === null) return [];
+  return remote.filter((entry) => entry.hostId === host);
 }
 
 /** 按执行主机过滤；`"all"` 不过滤。 */

@@ -44,6 +44,7 @@ import {
   GIT_CAPABILITY,
   GIT_OPERATIONS_CAPABILITY,
   OPERATIONS,
+  RESOURCES_CAPABILITY,
   WATCH_CAPABILITY,
   type Operation,
   type OperationContext,
@@ -57,6 +58,7 @@ export const WORKER_CAPABILITIES: readonly string[] = [
   GIT_CAPABILITY,
   GIT_OPERATIONS_CAPABILITY,
   WATCH_CAPABILITY,
+  RESOURCES_CAPABILITY,
 ];
 
 /** 远端的协议次版本；主版本见 {@link PROTOCOL_MAJOR}。 */

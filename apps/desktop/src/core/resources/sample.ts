@@ -137,6 +137,8 @@ export interface SessionResources {
   readonly generation: number;
   readonly backend: string;
   readonly location: Location;
+  /** 会话在哪台执行主机上：`local`，或 SSH 主机的 id。面板按它筛选。 */
+  readonly executionHostId: string;
   readonly cwd: string;
   readonly pid: number | null;
   readonly alive: boolean;
@@ -181,6 +183,26 @@ export interface SessionTarget {
    * 这一行、写明「已休眠」，但它不占内存，数字恒为空。
    */
   readonly hibernated?: boolean;
+  /** SSH 会话连的是哪台主机；认不出来是 `undefined`。 */
+  readonly remoteHostId?: string | undefined;
+  /**
+   * 远端那台主机上一轮读到的这个会话的进程树（`resources/remote.ts`）。没有就是
+   * 没读到——行照样列出，数字是 `null`，原因 `remote`。
+   */
+  readonly remoteMetrics?: RemoteTreeMetrics | undefined;
+}
+
+/** 远端一轮读取交回来的一个会话的数字。 */
+export interface RemoteTreeMetrics {
+  readonly pid: number | null;
+  readonly cpuPercent: number | null;
+  readonly memoryBytes: number | null;
+  readonly memoryEstimated: boolean;
+  readonly childCount: number | null;
+  readonly state: string | null;
+  readonly startTimeUnixMs: number | null;
+  readonly children: readonly ProcessSample[];
+  readonly unknownReason: string | null;
 }
 
 /** `ps` 一行读出来的东西。 */
@@ -528,6 +550,7 @@ export function sessionResources(
     generation: target.generation,
     backend: target.backend,
     location: target.remote ? "remote" : "local",
+    executionHostId: target.remote ? (target.remoteHostId ?? "") : "local",
     cwd: target.cwd,
     pid: target.pid,
     alive: !target.exited,
@@ -541,12 +564,18 @@ export function sessionResources(
     unknownReason: reason,
   });
 
-  // SSH 会话的树住在另一台主机上。把本地那个 `ssh` 客户端的几兆报成这个会话的
-  // 占用是撒谎。
+  // 休眠的会话进程已经结束，不占内存。
   if (target.hibernated === true) {
     return { ...unknown("hibernated"), pid: null, alive: false };
   }
-  if (target.remote) return unknown("remote");
+  // SSH 会话的树住在另一台主机上。把本地那个 `ssh` 客户端的几兆报成这个会话的
+  // 占用是撒谎：有远端读到的数字就用它，没有就如实是 `null`。
+  if (target.remote) {
+    if (target.exited) return unknown("exited");
+    const measured = target.remoteMetrics;
+    if (measured === undefined) return unknown("remote");
+    return { ...unknown("remote"), ...measured };
+  }
   if (target.exited) return unknown("exited");
   if (target.pid === null || target.pid <= 0) return unknown("no-pid");
   const leader = refresh.table.get(target.pid);

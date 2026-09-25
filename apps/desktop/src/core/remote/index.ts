@@ -64,6 +64,7 @@ import {
   remotePushed,
   setRemoteCaller,
 } from "./execute";
+import { remoteResources } from "../resources/remote";
 import { missingCapability } from "./handshake";
 import { capabilityOf } from "./operations";
 import { RemoteWorker, RemoteWorkers, unsupported } from "./worker";
@@ -270,6 +271,8 @@ export function install(context: CoreContext): RemoteDomain {
     return await worker.request(operation, payload, replay);
   };
   setRemoteCaller(call);
+  // SSH 会话与远端进程树按连接端口对上；设置里写了端口就按它筛。
+  remoteResources.setHostPort((hostId) => host(hostId)?.port);
 
   const domain: RemoteDomain = {
     askpass,

@@ -22,8 +22,13 @@ import { HostCard } from "./resources/HostCard";
 import { OrphanList } from "./resources/OrphanList";
 import { PowerSection } from "./resources/PowerSection";
 import { SessionTable } from "./resources/SessionTable";
-import type { SessionSort } from "./resources/metrics";
+import {
+  LOCAL_HOST,
+  hostOverviews,
+  type SessionSort,
+} from "./resources/metrics";
 import { useResources } from "./resources/use-resources";
+import { useSshHosts } from "./settings/ssh-hosts";
 
 export function ResourceDrawer() {
   const mode = useCanvasStore((state) => state.panels.resources);
@@ -31,6 +36,11 @@ export function ResourceDrawer() {
   const workspaceId = useCanvasStore((state) => state.workspace?.id ?? null);
   const t = useT();
   const [sort, setSort] = useState<SessionSort>("cpu");
+  // 主机筛选由抽屉持有：主机总览与会话表看的是同一台机器。
+  const [host, setHost] = useState<string | null | "all">("all");
+  const sshHosts = useSshHosts();
+  const hostName = (id: string) =>
+    sshHosts.find((entry) => entry.id === id)?.name ?? id;
 
   const open = mode === "drawer";
   const { snapshot, error, loading, refresh } = useResources(workspaceId, open);
@@ -70,7 +80,19 @@ export function ResourceDrawer() {
 
           {snapshot && (
             <>
-              <HostCard host={snapshot.host} />
+              {hostOverviews(snapshot.host, snapshot.executionHosts, host).map(
+                (overview) => (
+                  <HostCard
+                    key={overview.hostId}
+                    host={overview}
+                    name={
+                      overview.location === "remote"
+                        ? hostName(overview.hostId)
+                        : undefined
+                    }
+                  />
+                ),
+              )}
 
               <section>
                 <h3 className="mb-1 text-[13px] font-semibold">
@@ -80,6 +102,13 @@ export function ResourceDrawer() {
                   sessions={snapshot.sessions}
                   sort={sort}
                   onSorted={setSort}
+                  host={host}
+                  onHost={setHost}
+                  extraHosts={[
+                    ...(snapshot.executionHosts.length > 0 ? [LOCAL_HOST] : []),
+                    ...snapshot.executionHosts.map((entry) => entry.hostId),
+                  ]}
+                  hostName={hostName}
                 />
               </section>
 

@@ -1,6 +1,6 @@
 /**
  * 第一批之后补上的远端能力：Git 长操作与它推回来的进度、集成状态与工作树绑定、
- * 两台机器各跑一半的 AI 提交信息与 Worker 侧推送的文件监听。
+ * 两台机器各跑一半的 AI 提交信息、Worker 侧推送的文件监听与一轮读取的远端资源。
  *
  * 与 `execution.test.ts` 同一个办法：core 的真入口打成包，本机子进程跑
  * `worker --stdio`，控制端经同一套帧、握手与推送
@@ -9,6 +9,7 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { chmodSync, writeFileSync } from "node:fs";
+import { type Socket, connect } from "node:net";
 import { join } from "node:path";
 import {
   afterAll,
@@ -33,6 +34,7 @@ import {
   type GitMessageSource,
 } from "../git/message";
 import type { OperationSnapshot } from "../git/repository/types";
+import { RemoteResources } from "../resources/remote";
 import type { SshHost } from "../settings/ssh-hosts";
 import { type Fixture, fixture } from "../workspaces/fixture";
 import { install as installWorkspaces } from "../workspaces/routes";
@@ -46,6 +48,7 @@ import {
   setRemoteCaller,
 } from "./execute";
 import { RemoteGitOperations } from "./git-operations";
+import type { RemoteResourceRead } from "./resources-worker";
 import { remoteWatches } from "./watch";
 import { RemoteWorker } from "./worker";
 import { disposeWorkerBundle, spawnWorker } from "./worker.fixture";
@@ -391,5 +394,116 @@ describe("watching remote files", () => {
         (event) => event.type === "file.changed" && event.path === "pushed.txt",
       ),
     );
+  }, 60_000);
+});
+
+describe("remote resources", () => {
+  let remote: RemoteWorker;
+  let sshd: ChildProcess | undefined;
+  let client: Socket | undefined;
+
+  beforeEach(() => {
+    remote = worker(start);
+    setRemoteCaller(async (_hostId, operation, payload, replay) =>
+      remote.request(operation, payload, replay),
+    );
+  });
+  afterEach(() => {
+    client?.destroy();
+    sshd?.kill();
+    setRemoteCaller(undefined);
+    remote.close();
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "finds a session's tree by its connection and measures it in one round",
+    async () => {
+      // 一个替身 `sshd`：接受连接后派生一个子进程，就像真的 sshd 派生登录 shell。
+      const script = `
+        const net = require("node:net");
+        const { spawn } = require("node:child_process");
+        const server = net.createServer(() => {
+          spawn("sleep", ["30"], { stdio: "ignore" });
+        });
+        server.listen(0, "127.0.0.1", () => {
+          process.stdout.write(String(server.address().port) + "\\n");
+        });
+      `;
+      sshd = spawn(process.execPath, ["-e", script], {
+        stdio: ["ignore", "pipe", "inherit"],
+      });
+      const port = await new Promise<number>((resolve) => {
+        sshd?.stdout?.once("data", (chunk: Buffer) =>
+          resolve(Number(chunk.toString("utf8").trim())),
+        );
+      });
+      client = connect(port, "127.0.0.1");
+      await new Promise((resolve) => client?.once("connect", resolve));
+      const clientPort = client.localPort as number;
+      // 让替身把子进程派生出来。
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const read = async () =>
+        (await remote.request(
+          "resources.read",
+          {
+            root: "/",
+            args: {
+              sessions: [
+                { sessionId: "matched", clientPort },
+                { sessionId: "unmatched", clientPort: 1 },
+                { sessionId: "unknown", clientPort: null },
+              ],
+            },
+          },
+          true,
+        )) as RemoteResourceRead;
+      const first = await read();
+      expect(first.host.memory.totalBytes).toBeGreaterThan(0);
+      const matched = first.sessions.find(
+        (entry) => entry.sessionId === "matched",
+      );
+      expect(matched?.pid).toBe(sshd.pid);
+      expect(matched?.memoryBytes).toBeGreaterThan(0);
+      expect(matched?.childCount).toBeGreaterThanOrEqual(1);
+      // 第一轮没有 CPU 基线：是 `null`，不是 0。
+      expect(first.host.cpuPercent).toBeNull();
+      for (const sessionId of ["unmatched", "unknown"]) {
+        const row = first.sessions.find(
+          (entry) => entry.sessionId === sessionId,
+        );
+        expect(row?.memoryBytes).toBeNull();
+        expect(row?.unknownReason).toBe("remote");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const second = await read();
+      expect(second.host.cpuPercent).not.toBeNull();
+      expect(
+        second.sessions.find((entry) => entry.sessionId === "matched")
+          ?.cpuPercent,
+      ).not.toBeNull();
+    },
+    60_000,
+  );
+
+  it("hands out a host overview only after a round has come back, and nothing once unreadable", async () => {
+    const cache = new RemoteResources();
+    expect(cache.host(HOST.id)).toBeUndefined();
+    await cache.settled();
+    const overview = cache.host(HOST.id);
+    expect(overview).toMatchObject({ hostId: HOST.id, location: "remote" });
+    expect(overview?.memory.totalBytes).toBeGreaterThan(0);
+
+    // 读不到时不留旧数。
+    setRemoteCaller(async () => {
+      throw new Error("host is gone");
+    });
+    let now = Date.now() + 5_000;
+    const later = new RemoteResources(() => now);
+    later.host(HOST.id);
+    await later.settled();
+    now += 5_000;
+    expect(later.host(HOST.id)).toBeUndefined();
   }, 60_000);
 });

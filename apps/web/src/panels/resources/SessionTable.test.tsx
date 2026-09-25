@@ -26,6 +26,7 @@ const session = (patch: Partial<SessionResources> = {}): SessionResources => ({
   generation: 1,
   backend: "direct",
   location: "local",
+  executionHostId: "local",
   cwd: "/tmp/alpha",
   pid: 100,
   alive: true,

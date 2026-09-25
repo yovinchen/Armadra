@@ -202,6 +202,35 @@ describe("一个会话的一行", () => {
     expect(result.unknownReason).toBe("remote");
   });
 
+  it("远端读到的进程树原样交出，控制机上那个 ssh 客户端不计", () => {
+    const result = sessionResources(
+      target({
+        remote: true,
+        remoteHostId: "far",
+        remoteMetrics: {
+          pid: 4242,
+          cpuPercent: 3,
+          memoryBytes: 64 * 1024 * 1024,
+          memoryEstimated: true,
+          childCount: 2,
+          state: "sleeping",
+          startTimeUnixMs: 1_000,
+          children: [],
+          unknownReason: null,
+        },
+      }),
+      refresh(table(row({ pid: 100, rssBytes: 9_999 }))),
+      undefined,
+      0,
+      new Map(),
+    );
+    expect(result.location).toBe("remote");
+    expect(result.executionHostId).toBe("far");
+    expect(result.pid).toBe(4242);
+    expect(result.memoryBytes).toBe(64 * 1024 * 1024);
+    expect(result.unknownReason).toBeNull();
+  });
+
   it("没有 pid 的会话说出原因，而不是报零", () => {
     const result = sessionResources(
       target({ pid: null }),

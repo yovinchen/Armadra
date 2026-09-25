@@ -65,6 +65,7 @@ import { badRequest } from "../workspaces/support";
 import type { WorkerSession } from "./session";
 import { type RootFingerprint, fingerprintOf } from "./switch";
 import { trackOperation } from "./git-worker";
+import { readRemoteResources } from "./resources-worker";
 import { unwatchFiles, watchFiles } from "./watch-worker";
 
 /** 操作执行时拿得到的东西：本机是控制端的 Git 服务，远端是 Worker 自己的。 */
@@ -599,6 +600,15 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
     unwatchFiles(session(context), text(args, "watchId")),
   ),
 
+  /* ------------------------------ 资源 ------------------------------ */
+  /** 一轮读取：主机总览加上若干会话进程树；CPU 基线存在会话里。 */
+  "resources.read": read((context, _root, args) =>
+    readRemoteResources(
+      session(context),
+      Array.isArray(args.sessions) ? (args.sessions as unknown[]) : [],
+    ),
+  ),
+
   "git.rebaseTodo": read(
     async (context, root, args) =>
       await rebaseTodoPreview(
@@ -617,6 +627,8 @@ export const GIT_CAPABILITY = "remote.git.v1";
 export const GIT_OPERATIONS_CAPABILITY = "remote.git.operations.v1";
 /** Worker 侧文件监听，变化主动推送。 */
 export const WATCH_CAPABILITY = "remote.watch.v1";
+/** 远端主机总览与会话进程树的一轮读取。 */
+export const RESOURCES_CAPABILITY = "remote.resources.v1";
 
 const GIT_OPERATION_NAMES = new Set([
   "git.operationStart",
@@ -638,5 +650,6 @@ export function capabilityOf(operation: string): string | undefined {
   }
   if (GIT_OPERATION_NAMES.has(operation)) return GIT_OPERATIONS_CAPABILITY;
   if (operation.startsWith("git.")) return GIT_CAPABILITY;
+  if (operation.startsWith("resources.")) return RESOURCES_CAPABILITY;
   return undefined;
 }

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ResourceSnapshot } from "@armadra/shared";
 
 const resources = vi.fn();
@@ -23,6 +29,11 @@ vi.mock("@/api/client", () => ({
     acquirePowerLease: (...args: unknown[]) => acquirePowerLease(...args),
     releasePowerLease: (...args: unknown[]) => releasePowerLease(...args),
   },
+}));
+
+// 主机名来自设置里的 SSH 主机；这里不起查询客户端，直接给一台。
+vi.mock("./settings/ssh-hosts", () => ({
+  useSshHosts: () => [{ id: "far", name: "构建机", host: "far.example" }],
 }));
 
 import { ResourceDrawer } from "./ResourceDrawer";
@@ -64,6 +75,7 @@ const snapshot: ResourceSnapshot = {
     uptimeSeconds: 3_720,
     sampledAt: "2026-09-05T10:00:00+00:00",
   },
+  executionHosts: [],
   sessions: [
     {
       sessionId: "s-busy",
@@ -73,6 +85,7 @@ const snapshot: ResourceSnapshot = {
       generation: 1,
       backend: "direct",
       location: "local",
+      executionHostId: "local",
       cwd: "/tmp/busy",
       pid: 100,
       alive: true,
@@ -102,6 +115,7 @@ const snapshot: ResourceSnapshot = {
       generation: 1,
       backend: "direct",
       location: "remote",
+      executionHostId: "",
       cwd: "/tmp/remote",
       pid: 200,
       alive: true,
@@ -208,6 +222,51 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ResourceDrawer", () => {
+  it("按执行主机筛选时，主机总览与会话表看的是同一台机器", async () => {
+    resources.mockResolvedValue({
+      ...snapshot,
+      executionHosts: [
+        {
+          ...snapshot.host,
+          hostId: "far",
+          location: "remote",
+          platform: "linux",
+          cpuPercent: 7.5,
+        },
+      ],
+      sessions: snapshot.sessions.map((session) =>
+        session.location === "remote"
+          ? {
+              ...session,
+              executionHostId: "far",
+              cpuPercent: 2,
+              memoryBytes: 1_048_576,
+              memoryEstimated: true,
+              unknownReason: null,
+            }
+          : session,
+      ),
+    });
+    useCanvasStore.getState().setPanel("resources", "drawer");
+    render(<ResourceDrawer />);
+
+    // 全部：本机与远端两张总览都在。
+    await waitFor(() => expect(screen.getByText("7.5%")).toBeTruthy());
+    expect(screen.getByText("31.7%")).toBeTruthy();
+
+    // 抽屉渲染在门户里，所以在整个文档里找。
+    const far = document.querySelector(
+      '[data-slot="resource-host-filter"][data-host="far"]',
+    ) as HTMLElement;
+    expect(far.textContent).toBe("构建机");
+    fireEvent.click(far);
+    await waitFor(() => expect(screen.queryByText("31.7%")).toBeNull());
+    expect(screen.getByText("7.5%")).toBeTruthy();
+    expect(screen.getAllByText("构建机").length).toBeGreaterThan(1);
+    // 远端会话有了真数，不再写「测不到」。
+    expect(screen.queryByText("在远程主机上运行，本机测不到指标")).toBeNull();
+  });
+
   it("关着的时候既不请求也不订阅", () => {
     render(<ResourceDrawer />);
     expect(resources).not.toHaveBeenCalled();

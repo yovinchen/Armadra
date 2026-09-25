@@ -46,6 +46,7 @@ const session = (patch: Partial<SessionResources> = {}): SessionResources => ({
   generation: 1,
   backend: "direct",
   location: "local",
+  executionHostId: "local",
   cwd: "/tmp",
   pid: 100,
   alive: true,
@@ -64,6 +65,7 @@ const snapshot = (sessions: SessionResources[]): ResourceSnapshot =>
   ({
     workspaceId: "w-1",
     host: {} as never,
+    executionHosts: [],
     sessions,
     components: [],
     orphans: [],

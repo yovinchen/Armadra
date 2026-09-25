@@ -17,6 +17,7 @@ import {
   formatMetricBytes,
   formatPercent,
   formatUptime,
+  hostOverviews,
   liveSessions,
   memoryUsedPercent,
   sessionsOnHost,
@@ -63,6 +64,7 @@ const session = (patch: Partial<SessionResources> = {}): SessionResources => ({
   generation: 1,
   backend: "direct",
   location: "local",
+  executionHostId: "local",
   cwd: "/tmp",
   pid: 1,
   alive: true,
@@ -262,6 +264,27 @@ describe("执行主机", () => {
     const row = session({ sessionId: "a", nodeId: "n-1" });
     expect(executionHostOf(row, [terminal("n-1")], "ci-box")).toBe("ci-box");
     expect(executionHostOf(row, [terminal("n-1")], "")).toBe(LOCAL_HOST);
+  });
+
+  it("core 认出的主机优先于画布推断", () => {
+    const row = session({
+      sessionId: "a",
+      nodeId: "n-1",
+      location: "remote",
+      executionHostId: "from-core",
+    });
+    expect(executionHostOf(row, [terminal("n-1", "build-box")], "")).toBe(
+      "from-core",
+    );
+  });
+
+  it("筛选到哪台主机就只给哪台主机的总览", () => {
+    const local = host();
+    const far = host({ hostId: "far", location: "remote" });
+    expect(hostOverviews(local, [far], "all")).toEqual([local, far]);
+    expect(hostOverviews(local, [far], LOCAL_HOST)).toEqual([local]);
+    expect(hostOverviews(local, [far], "far")).toEqual([far]);
+    expect(hostOverviews(local, [far], null)).toEqual([]);
   });
 
   it("远端会话说不出是哪台机器时是 null，而不是被算成本机", () => {

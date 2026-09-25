@@ -108,6 +108,12 @@ export const sessionResourcesSchema = z.object({
   generation: z.number().int().nonnegative(),
   backend: terminalBackendKindSchema,
   location: resourceLocationSchema,
+  /**
+   * Which execution host the session runs on: `local`, or the SSH host id. An
+   * SSH session whose host cannot be told is `""`. Absent on a core that
+   * predates the field, which only ever measured this machine.
+   */
+  executionHostId: z.string().default("local"),
   cwd: z.string(),
   pid: z.number().int().nullable(),
   alive: z.boolean(),
@@ -264,6 +270,13 @@ export const powerStateSchema = z.object({
 export const resourceSnapshotSchema = z.object({
   workspaceId: z.string(),
   host: hostResourcesSchema,
+  /**
+   * The remote execution hosts this workspace involves — the one it is bound
+   * to and every host an SSH terminal on it connects to. Each overview comes
+   * from that host's last one-round read; a host that could not be read is
+   * still listed, with every metric `null`.
+   */
+  executionHosts: z.array(hostResourcesSchema).default([]),
   sessions: z.array(sessionResourcesSchema),
   /** Armadra's own processes, never mixed into the session rows. */
   components: z.array(platformComponentSchema),
