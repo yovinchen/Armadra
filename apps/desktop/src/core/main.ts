@@ -1,5 +1,5 @@
 import type { Server } from "node:http";
-import { USAGE, parseArguments } from "./args";
+import { USAGE, parseArguments, parseWorkerArguments } from "./args";
 import { install as installAssets } from "./assets/routes";
 import { install as installCanvas } from "./canvas/routes";
 import { install as installWorkspaces } from "./workspaces/routes";
@@ -38,6 +38,7 @@ import {
 } from "./platform";
 import { install as installLanguage, languageDomain } from "./language";
 import { install as installRemote } from "./remote";
+import { runWorker } from "./remote/server";
 import { install as installResources } from "./resources";
 import { install as installTerminals } from "./terminal/install";
 import { install as installAgents } from "./agent";
@@ -414,7 +415,29 @@ const isEntryPoint =
   require.main === module &&
   (globalThis as Record<string, unknown>)[CLAIMED] === undefined;
 
-if (isEntryPoint) {
+/**
+ * `worker …` is a different program sharing this bundle: no database, no
+ * listener, no endpoint file — only stdio frames for the controller that
+ * started it over `ssh` (`remote/server.ts`). It is decided before `run` so
+ * that none of the core's start-up steps happen on an execution host.
+ */
+const workerMode = isEntryPoint && process.argv[2] === "worker";
+
+if (workerMode) {
+  const parsed = parseWorkerArguments(process.argv.slice(3));
+  if (parsed.kind === "error") {
+    process.stderr.write(`armadra worker: ${parsed.reason}\n`);
+    process.exit(2);
+  } else {
+    runWorker(parsed.args).then(
+      (code) => process.exit(code),
+      (error: unknown) => {
+        process.stderr.write(`armadra worker: ${describe(error)}\n`);
+        process.exit(1);
+      },
+    );
+  }
+} else if (isEntryPoint) {
   run({
     moduleDir: typeof __dirname === "string" ? __dirname : undefined,
   }).catch((error: unknown) => {

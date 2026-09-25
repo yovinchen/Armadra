@@ -16,7 +16,11 @@ export const USAGE = `Usage: armadra-core [--listen SPEC]... [--data-dir DIRECTO
   pipe:NAME       named pipe \\\\.\\pipe\\NAME (Windows)
 
 With no --listen the core falls back to ARMADRA_RUNTIME_HOST /
-ARMADRA_RUNTIME_PORT, and then to 127.0.0.1:43120.`;
+ARMADRA_RUNTIME_PORT, and then to 127.0.0.1:43120.
+
+       armadra-core worker --stdio [--state-dir DIRECTORY] [--language-link]
+
+runs the remote Worker an execution host's controller reaches over ssh.`;
 
 /** The core's default loopback port; the hook endpoint file advertises it. */
 export const DEFAULT_PORT = 43120;
@@ -126,4 +130,53 @@ function defaultListen(
         ok: false,
         reason: `ARMADRA_RUNTIME_HOST/PORT is not an address: ${host}:${port}`,
       };
+}
+
+/**
+ * `worker --stdio [--state-dir DIR] [--language-link]` — the remote Worker.
+ *
+ * The words are the ones the controller's `workerArgv` writes, and nothing
+ * else is accepted: the far side is started by a line this build composed,
+ * so an unknown word means the two ends disagree about the protocol and the
+ * right answer is to refuse before a single frame is exchanged.
+ */
+export type WorkerArgumentsResult =
+  | {
+      readonly kind: "worker";
+      readonly args: {
+        readonly stdio: boolean;
+        readonly stateDir: string | undefined;
+        readonly languageLink: boolean;
+      };
+    }
+  | { readonly kind: "error"; readonly reason: string };
+
+export function parseWorkerArguments(
+  argv: readonly string[],
+): WorkerArgumentsResult {
+  let stdio = false;
+  let languageLink = false;
+  let stateDir: string | undefined;
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index] as string;
+    if (argument === "--stdio") {
+      stdio = true;
+    } else if (argument === "--language-link") {
+      languageLink = true;
+    } else if (argument === "--state-dir") {
+      const value = argv[index + 1];
+      if (value === undefined || value === "") {
+        return { kind: "error", reason: "--state-dir needs a value" };
+      }
+      stateDir = value;
+      index += 1;
+    } else {
+      return {
+        kind: "error",
+        reason: `unsupported worker argument ${JSON.stringify(argument)}`,
+      };
+    }
+  }
+  if (!stdio) return { kind: "error", reason: "worker needs --stdio" };
+  return { kind: "worker", args: { stdio, stateDir, languageLink } };
 }

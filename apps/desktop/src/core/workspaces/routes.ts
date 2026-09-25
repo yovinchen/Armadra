@@ -41,25 +41,38 @@ import {
  * back up would put the interesting part of each function inside a match.
  */
 export function answered(
-  handle: (match: RouteMatch, request: CoreRequest) => HandlerResult,
-): (match: RouteMatch, request: CoreRequest) => HandlerResult {
+  handle: (
+    match: RouteMatch,
+    request: CoreRequest,
+  ) => HandlerResult | Promise<HandlerResult>,
+): (
+  match: RouteMatch,
+  request: CoreRequest,
+) => HandlerResult | Promise<HandlerResult> {
   return (match, request) => {
     try {
-      return handle(match, request);
+      const result = handle(match, request);
+      // A handler that reaches another machine answers later; its refusal has
+      // to take the same shape as one thrown before the first await.
+      return result instanceof Promise ? result.catch(refusal) : result;
     } catch (error) {
-      if (error instanceof DomainError) {
-        const { status, body } = error.response();
-        return { status, body };
-      }
-      if (error instanceof SyntaxError) {
-        const { status, body } = badRequest(
-          "Request body is not valid JSON",
-        ).response();
-        return { status, body };
-      }
-      throw error;
+      return refusal(error);
     }
   };
+}
+
+function refusal(error: unknown): HandlerResult {
+  if (error instanceof DomainError) {
+    const { status, body } = error.response();
+    return { status, body };
+  }
+  if (error instanceof SyntaxError) {
+    const { status, body } = badRequest(
+      "Request body is not valid JSON",
+    ).response();
+    return { status, body };
+  }
+  throw error;
 }
 
 function permissionsOf(

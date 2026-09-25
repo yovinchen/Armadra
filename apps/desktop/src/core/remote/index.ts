@@ -23,14 +23,11 @@
  *     this core over a 0600 unix socket of its own (`terminal/ssh/askpass.ts`),
  *     so the prompt-opening endpoint is not on the general HTTP surface at
  *     all. Nothing else ever called those paths.
- *   * `POST /api/workspaces/remote` and `PATCH …/execution-host` stay 501.
- *     The decision half of a switch is written and tested here
- *     ({@link ./switch}), but committing one needs the remote Worker's
- *     *service* surface — `registerRoot` to prove the new root exists,
- *     `listDirectory` and `gitHeadCommit` to fingerprint it — and those
- *     operations are R4 and R5's. Answering them now would mean rebinding a
- *     workspace to a directory nothing verified, which is the one outcome
- *     the pre-merge implementation exists to prevent.
+ *
+ * It also registers the {@link setRemoteCaller} every workspace-scoped domain
+ * reaches its execution host through. `POST /api/workspaces/remote` and
+ * `PATCH …/execution-host` belong to the workspace domain; they prove a root
+ * through that same caller before a row may name it.
  */
 
 import { VERSION } from "../instance";
@@ -56,7 +53,10 @@ import {
   validateExecutionHost,
   ValidationRefused,
 } from "./validate";
-import { RemoteWorker, RemoteWorkers } from "./worker";
+import { setRemoteCaller } from "./execute";
+import { missingCapability } from "./handshake";
+import { capabilityOf } from "./operations";
+import { RemoteWorker, RemoteWorkers, unsupported } from "./worker";
 
 /**
  * Substitutes argv[0] of every `ssh` this domain starts.
@@ -235,12 +235,34 @@ export function install(context: CoreContext): RemoteDomain {
     },
   );
 
+  const call: Parameters<typeof setRemoteCaller>[0] = async (
+    hostId,
+    operation,
+    payload,
+    replay,
+  ) => {
+    const entry = host(hostId);
+    const worker = workers.get(entry, hostId);
+    // The askpass socket has to exist before an `ssh` child is told to use it.
+    await askpass.start();
+    const capability = capabilityOf(operation);
+    // Only a Worker that has already said what it offers can be refused here;
+    // before the first handshake the request itself opens the connection.
+    if (capability !== undefined && worker.capability(capability) === false) {
+      throw unsupported(missingCapability(entry?.name ?? hostId, capability));
+    }
+    return await worker.request(operation, payload, replay);
+  };
+  setRemoteCaller(call);
+
   const domain: RemoteDomain = {
     askpass,
     workers,
     host,
     stop: async () => {
       if (assembled === domain) assembled = undefined;
+      const current = setRemoteCaller(undefined);
+      if (current !== call) setRemoteCaller(current);
       workers.closeAll();
       await askpass.stop();
     },

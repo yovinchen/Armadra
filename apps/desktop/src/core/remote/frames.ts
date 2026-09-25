@@ -35,6 +35,9 @@
  */
 export const MAX_FRAME = 16 * 1024 * 1024;
 
+/** The request id a Worker's unprompted greeting carries. */
+export const HELLO_ID = "hello";
+
 /** One request to a Worker. */
 export interface WorkerRequest {
   readonly requestId: string;

@@ -1,9 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { WorkspaceEvent } from "../bus";
 import type { CoreContext } from "../main";
-import type { CoreRequest } from "../http/router";
-import { fileInfo } from "../imports/batch";
-import { answeredAsync } from "../language/routes";
+import type { CoreRequest, HandlerResult, RouteMatch } from "../http/router";
+import { executeOn, isRemote } from "../remote/execute";
+import { remoteWatches } from "../remote/watch";
 import { answered, workspaceId } from "../workspaces/routes";
 import {
   DomainError,
@@ -13,18 +13,9 @@ import {
   requiredString,
 } from "../workspaces/support";
 import { type Workspace, getWorkspace } from "../workspaces/table";
-import {
-  createEntry,
-  listTrash,
-  renameEntry,
-  restoreTrash,
-  trashEntry,
-} from "./entries";
 import { baseName } from "./paths";
-import { listDirectory, readRawFile, readTextFile } from "./read";
-import { type SearchRequest, indexFiles, searchContent } from "./search";
-import { fileVersion, register, releaseWorkspace, unregister } from "./watch";
-import { writeTextFile } from "./write";
+import { type SearchRequest, searchContent } from "./search";
+import { register, releaseWorkspace, unregister } from "./watch";
 
 /**
  * The twelve `file*` routes: browsing, reading, writing, creating, renaming,
@@ -38,9 +29,12 @@ import { writeTextFile } from "./write";
  *     domain — with one process there is no second answer (design §6, D4);
  *   * `spawn_blocking`, which existed to keep synchronous filesystem calls off
  *     an async runtime's worker threads. Here they are the handler;
- *   * the execution-host branch, which R5 brings back. Until then a workspace
- *     whose files live on another machine is refused by name rather than
- *     answered from the controller's disk.
+ *
+ * Where the work runs is not decided here: every route resolves its workspace,
+ * checks the grant, and hands the operation to `remote/execute`, which runs it
+ * in this process for a local workspace and on the execution host's Worker for
+ * a remote one. A remote workspace is never answered from the controller's
+ * disk.
  */
 
 export function install(context: CoreContext): void {
@@ -49,40 +43,47 @@ export function install(context: CoreContext): void {
   const publish = (id: string, event: WorkspaceEvent): void => {
     bus.emit("workspace.event", { workspaceId: id, event });
   };
+  const handle = (
+    method: string,
+    path: string,
+    handler: (
+      match: RouteMatch,
+      request: CoreRequest,
+    ) => Promise<HandlerResult>,
+  ): void => {
+    server.router.handle(method, path, answered(handler));
+  };
+  const ok = (body: unknown): HandlerResult => ({ status: 200, body });
 
-  server.router.handle(
-    "GET",
-    "/api/workspaces/{workspaceId}/files",
-    answered((match, request) => ({
-      status: 200,
-      body: listDirectory(
-        local(database, workspaceId(match)).rootPath,
-        requestedPath(request),
-      ),
-    })),
+  handle("GET", "/api/workspaces/{workspaceId}/files", async (match, request) =>
+    ok(
+      await executeOn(workspaceOf(database, workspaceId(match)), "files.list", {
+        path: requestedPath(request),
+      }),
+    ),
   );
 
-  server.router.handle(
+  handle(
     "GET",
     "/api/workspaces/{workspaceId}/file-info",
-    answered((match, request) => ({
-      status: 200,
-      body: fileInfo(
-        local(database, workspaceId(match)).rootPath,
-        requestedPath(request),
+    async (match, request) =>
+      ok(
+        await executeOn(
+          workspaceOf(database, workspaceId(match)),
+          "files.info",
+          { path: requestedPath(request) },
+        ),
       ),
-    })),
   );
 
-  server.router.handle(
+  handle(
     "GET",
     "/api/workspaces/{workspaceId}/file-download",
-    answered((match, request) => {
-      const workspace = local(database, workspaceId(match));
-      const { path, bytes } = readRawFile(
-        workspace.rootPath,
-        requestedPath(request),
-      );
+    async (match, request) => {
+      const workspace = workspaceOf(database, workspaceId(match));
+      const { path, base64 } = (await executeOn(workspace, "files.download", {
+        path: requestedPath(request),
+      })) as { path: string; base64: string };
       // Always an attachment, and never sniffed: an uploaded HTML or SVG file
       // must not be able to execute in the core's origin on the way out.
       const encoded = [...Buffer.from(baseName(path), "utf8")]
@@ -90,32 +91,28 @@ export function install(context: CoreContext): void {
         .join("");
       return {
         status: 200,
-        raw: bytes,
+        raw: Buffer.from(base64, "base64"),
         headers: {
           "content-type": "application/octet-stream",
           "content-disposition": `attachment; filename*=UTF-8''${encoded}`,
           "x-content-type-options": "nosniff",
         },
       };
-    }),
+    },
   );
 
-  server.router.handle(
-    "GET",
-    "/api/workspaces/{workspaceId}/file",
-    answered((match, request) => ({
-      status: 200,
-      body: readTextFile(
-        local(database, workspaceId(match)).rootPath,
-        requestedPath(request),
-      ),
-    })),
+  handle("GET", "/api/workspaces/{workspaceId}/file", async (match, request) =>
+    ok(
+      await executeOn(workspaceOf(database, workspaceId(match)), "files.read", {
+        path: requestedPath(request),
+      }),
+    ),
   );
 
-  server.router.handle(
+  handle(
     "PUT",
     "/api/workspaces/{workspaceId}/file",
-    answered((match, request) => {
+    async (match, request) => {
       const workspace = writable(database, workspaceId(match));
       const body = jsonObject(request.body);
       const expected = optionalString(body, "expectedSha256");
@@ -129,123 +126,127 @@ export function install(context: CoreContext): void {
           );
         }
       }
-      return {
-        status: 200,
-        body: writeTextFile(
-          workspace.rootPath,
-          requiredString(body, "path"),
-          requiredString(body, "content"),
-          expected,
-          body.bom === true,
-        ),
-      };
-    }),
+      return ok(
+        await executeOn(workspace, "files.write", {
+          path: requiredString(body, "path"),
+          content: requiredString(body, "content"),
+          ...(expected === undefined ? {} : { expectedSha256: expected }),
+          bom: body.bom === true,
+        }),
+      );
+    },
   );
 
-  server.router.handle(
+  handle(
     "POST",
     "/api/workspaces/{workspaceId}/file-entries",
-    answered((match, request) => {
+    async (match, request) => {
       const workspace = writable(database, workspaceId(match));
       const body = jsonObject(request.body);
       const kind = body.kind;
       if (kind !== "file" && kind !== "directory") {
         throw badRequest("kind must be file or directory");
       }
-      return {
-        status: 200,
-        body: createEntry(
-          workspace.rootPath,
-          requiredString(body, "path"),
+      return ok(
+        await executeOn(workspace, "files.create", {
+          path: requiredString(body, "path"),
           kind,
-        ),
-      };
-    }),
+        }),
+      );
+    },
   );
 
-  server.router.handle(
+  handle(
     "POST",
     "/api/workspaces/{workspaceId}/file-entries/rename",
-    answered((match, request) => {
+    async (match, request) => {
       const workspace = writable(database, workspaceId(match));
       const body = jsonObject(request.body);
-      return {
-        status: 200,
-        body: renameEntry(
-          workspace.rootPath,
-          requiredString(body, "from"),
-          requiredString(body, "to"),
-        ),
-      };
-    }),
+      return ok(
+        await executeOn(workspace, "files.rename", {
+          from: requiredString(body, "from"),
+          to: requiredString(body, "to"),
+        }),
+      );
+    },
   );
 
-  server.router.handle(
+  handle(
     "POST",
     "/api/workspaces/{workspaceId}/file-entries/trash",
-    answered((match, request) => {
+    async (match, request) => {
       const workspace = writable(database, workspaceId(match));
       const body = jsonObject(request.body);
-      return {
-        status: 200,
-        body: trashEntry(workspace.rootPath, requiredString(body, "path")),
-      };
-    }),
+      return ok(
+        await executeOn(workspace, "files.trash", {
+          path: requiredString(body, "path"),
+        }),
+      );
+    },
   );
 
-  server.router.handle(
+  handle(
     "GET",
     "/api/workspaces/{workspaceId}/file-entries/trash",
-    answered((match) => ({
-      status: 200,
-      body: listTrash(readable(database, workspaceId(match)).rootPath),
-    })),
+    async (match) =>
+      ok(
+        await executeOn(
+          readable(database, workspaceId(match)),
+          "files.trashList",
+        ),
+      ),
   );
 
-  server.router.handle(
+  handle(
     "POST",
     "/api/workspaces/{workspaceId}/file-entries/restore",
-    answered((match, request) => {
+    async (match, request) => {
       const workspace = writable(database, workspaceId(match));
       const body = jsonObject(request.body);
-      return {
-        status: 200,
-        body: restoreTrash(workspace.rootPath, requiredString(body, "id")),
-      };
-    }),
+      return ok(
+        await executeOn(workspace, "files.restore", {
+          id: requiredString(body, "id"),
+        }),
+      );
+    },
   );
 
-  server.router.handle(
+  handle(
     "GET",
     "/api/workspaces/{workspaceId}/file-index",
-    answered((match, request) => {
+    async (match, request) => {
       const workspace = readable(database, workspaceId(match));
       const limit = request.query.get("limit");
-      return {
-        status: 200,
-        body: indexFiles(
-          workspace.rootPath,
-          request.query.get("query") ?? "",
-          limit === null || limit === "" ? undefined : numeric(limit, "limit"),
-        ),
-      };
-    }),
+      return ok(
+        await executeOn(workspace, "files.index", {
+          query: request.query.get("query") ?? "",
+          ...(limit === null || limit === ""
+            ? {}
+            : { limit: numeric(limit, "limit") }),
+        }),
+      );
+    },
   );
 
-  server.router.handle(
+  handle(
     "POST",
     "/api/workspaces/{workspaceId}/file-search",
-    answeredAsync(async (match, request) => {
-      const root = readable(database, workspaceId(match)).rootPath;
+    async (match, request) => {
+      const workspace = readable(database, workspaceId(match));
       const parsed = searchRequest(request);
+      // 远端由 Worker 扫，取消随连接断开时 Worker 那一轮自己跑完为止。
+      if (isRemote(workspace)) {
+        return ok(
+          await executeOn(workspace, "files.search", { request: parsed }),
+        );
+      }
       // 页面换了查询、关了面板或点了「停止」就会掐断这次请求；连接一断就别再
       // 替它把整棵树读完。
       const connection = connectionSignal(request);
       try {
-        return {
-          status: 200,
-          body: await searchContent(root, parsed, connection.signal),
-        };
+        return ok(
+          await searchContent(workspace.rootPath, parsed, connection.signal),
+        );
       } catch (error) {
         if (connection.signal?.aborted === true) {
           throw new DomainError(499, "cancelled", "The search was cancelled");
@@ -254,61 +255,61 @@ export function install(context: CoreContext): void {
       } finally {
         connection.release();
       }
-    }),
+    },
   );
 
   /* ------------------------------ file watching ---------------------------- */
 
-  server.router.handle(
+  handle(
     "POST",
     "/api/workspaces/{workspaceId}/file-watch",
-    answered((match, request) => {
+    async (match, request) => {
       const id = workspaceId(match);
       const workspace = getWorkspace(database, id);
       if (!workspace.permissions.read) {
         // A workspace that lost read access must not keep an OS watcher alive
         // on a folder the canvas may no longer look at.
         releaseWorkspace(id);
+        remoteWatches.releaseWorkspace(id);
         throw new DomainError(
           403,
           "forbidden",
           "This workspace is not readable",
         );
       }
-      remoteIsR5(workspace);
       const body = jsonObject(request.body);
-      return {
-        status: 200,
-        body: register(
-          id,
-          workspace.rootPath,
-          requiredString(body, "path"),
-          requiredString(body, "nodeId"),
-          publish,
-        ),
-      };
-    }),
+      const path = requiredString(body, "path");
+      const nodeId = requiredString(body, "nodeId");
+      if (isRemote(workspace)) {
+        // No watcher reaches another machine: the controller polls the Worker
+        // for the registered files instead, and says so with `mode: poll`.
+        return ok(
+          await remoteWatches.register(workspace, id, path, nodeId, publish),
+        );
+      }
+      return ok(register(id, workspace.rootPath, path, nodeId, publish));
+    },
   );
 
-  server.router.handle(
+  handle(
     "DELETE",
     "/api/workspaces/{workspaceId}/file-watch",
-    answered((match, request) => {
+    async (match, request) => {
       // Unknown registrations are a no-op, so a late close after a workspace
       // switch is not an error.
-      unregister(
-        workspaceId(match),
-        request.query.get("path") ?? "",
-        request.query.get("nodeId") ?? "",
-      );
+      const id = workspaceId(match);
+      const path = request.query.get("path") ?? "";
+      const nodeId = request.query.get("nodeId") ?? "";
+      unregister(id, path, nodeId);
+      remoteWatches.unregister(id, path, nodeId);
       return { status: 204 };
-    }),
+    },
   );
 
-  server.router.handle(
+  handle(
     "GET",
     "/api/workspaces/{workspaceId}/file-version",
-    answered((match, request) => {
+    async (match, request) => {
       const workspace = getWorkspace(database, workspaceId(match));
       if (!workspace.permissions.read) {
         throw new DomainError(
@@ -317,12 +318,12 @@ export function install(context: CoreContext): void {
           "This workspace is not readable",
         );
       }
-      remoteIsR5(workspace);
-      return {
-        status: 200,
-        body: fileVersion(workspace.rootPath, requestedPath(request)),
-      };
-    }),
+      return ok(
+        await executeOn(workspace, "files.version", {
+          path: requestedPath(request),
+        }),
+      );
+    },
   );
 }
 
@@ -383,10 +384,8 @@ function optional<T>(name: string, value: T | undefined): Record<string, T> {
  * `permissions.read` gates the watching surfaces, which is where the Runtime
  * does ask. Changing it here would be a behaviour change smuggled into a port.
  */
-function local(database: DatabaseSync, id: string): Workspace {
-  const workspace = getWorkspace(database, id);
-  remoteIsR5(workspace);
-  return workspace;
+function workspaceOf(database: DatabaseSync, id: string): Workspace {
+  return getWorkspace(database, id);
 }
 
 function readable(database: DatabaseSync, id: string): Workspace {
@@ -394,7 +393,6 @@ function readable(database: DatabaseSync, id: string): Workspace {
   if (!workspace.permissions.read) {
     throw new DomainError(403, "forbidden", "This workspace is not readable");
   }
-  remoteIsR5(workspace);
   return workspace;
 }
 
@@ -407,19 +405,7 @@ function writable(database: DatabaseSync, id: string): Workspace {
       "This workspace is opened read-only",
     );
   }
-  remoteIsR5(workspace);
   return workspace;
-}
-
-/**
- * A workspace whose files live on an execution host has no local root, and
- * answering from the controller's disk would be answering about the wrong
- * machine. R5 brings the remote half back.
- */
-function remoteIsR5(workspace: Workspace): void {
-  if ((workspace.executionHostId ?? "") !== "") {
-    throw new DomainError(501, "unsupported", "执行主机上的文件操作（R5）");
-  }
 }
 
 /**

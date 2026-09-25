@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PORT, USAGE, parseArguments } from "./args";
+import {
+  DEFAULT_PORT,
+  USAGE,
+  parseArguments,
+  parseWorkerArguments,
+} from "./args";
 
 const NOTHING: NodeJS.ProcessEnv = {};
 
@@ -102,5 +107,30 @@ describe("core arguments", () => {
   it("accepts the desktop control flag the orphan sweep looks for", () => {
     const parsed = run(["--desktop-control-stdin"]);
     expect(parsed.kind === "run" && parsed.args.desktopControlStdin).toBe(true);
+  });
+});
+
+describe("worker arguments", () => {
+  it("reads the line the controller's workerArgv writes", () => {
+    expect(
+      parseWorkerArguments(["--stdio", "--state-dir", "/var/lib/armadra"]),
+    ).toEqual({
+      kind: "worker",
+      args: {
+        stdio: true,
+        stateDir: "/var/lib/armadra",
+        languageLink: false,
+      },
+    });
+    const link = parseWorkerArguments(["--stdio", "--language-link"]);
+    expect(link.kind === "worker" && link.args.languageLink).toBe(true);
+  });
+
+  it("refuses a worker without stdio or with a word it does not know", () => {
+    expect(parseWorkerArguments([]).kind).toBe("error");
+    expect(parseWorkerArguments(["--stdio", "--listen", "x"]).kind).toBe(
+      "error",
+    );
+    expect(parseWorkerArguments(["--stdio", "--state-dir"]).kind).toBe("error");
   });
 });

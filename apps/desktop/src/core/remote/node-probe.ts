@@ -85,9 +85,14 @@ export function readNodeProbe(
 export async function probeNode(
   dataDir: string,
   host: SshHost,
+  launcher?: string,
 ): Promise<NodeProbe> {
   const argv = nodeProbeArgv(dataDir, host);
-  const program = argv.shift() as string;
+  // The same substitution every other `ssh` of this domain takes: a person
+  // who reaches the host through a wrapper would otherwise be told it has no
+  // Node by a probe that never used the wrapper.
+  const program = launcher ?? (argv[0] as string);
+  argv.shift();
   const output = await runCommand(program, argv, {
     timeoutMs: PROBE_TIMEOUT_MS,
   });

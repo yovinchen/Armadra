@@ -1,0 +1,64 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { build } from "vite";
+
+/**
+ * 把 core 的真入口打成一个 CJS 包，用来在本机子进程里跑 `worker --stdio`。
+ *
+ * 打包而不是直接跑源码，是因为源码里有 Node 只剥类型时不认的语法（参数属性），
+ * 而远端真正执行的本来就是 `out/core/main.js` 这样一份包——测的正是它。输出放在
+ * 桌面包目录下，好让包里对 `node-pty` 这类外部依赖的 `require` 能解析到。
+ */
+
+const here = dirname(fileURLToPath(import.meta.url));
+const desktop = resolve(here, "../../..");
+
+let built: Promise<string> | undefined;
+let output: string | undefined;
+
+export function workerBundle(): Promise<string> {
+  built ??= (async () => {
+    const cache = join(desktop, "node_modules", ".cache");
+    mkdirSync(cache, { recursive: true });
+    const outDir = mkdtempSync(join(cache, "armadra-worker-"));
+    output = outDir;
+    await build({
+      configFile: false,
+      logLevel: "silent",
+      root: desktop,
+      build: {
+        outDir,
+        emptyOutDir: true,
+        target: "node22",
+        ssr: true,
+        minify: false,
+        rollupOptions: {
+          input: { main: resolve(desktop, "src/core/main.ts") },
+          external: ["electron", "node-pty"],
+          output: { format: "cjs", entryFileNames: "[name].js" },
+        },
+      },
+      ssr: { noExternal: true },
+    });
+    return join(outDir, "main.js");
+  })();
+  return built;
+}
+
+/** 起一个真 Worker 子进程；stdio 就是控制端与它之间的整条连接。 */
+export async function spawnWorker(): Promise<() => ChildProcess> {
+  const bundle = await workerBundle();
+  return () =>
+    spawn(process.execPath, [bundle, "worker", "--stdio"], {
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+}
+
+/** 删掉打出来的包；每个用到它的测试文件在 `afterAll` 里调。 */
+export function disposeWorkerBundle(): void {
+  if (output !== undefined) rmSync(output, { recursive: true, force: true });
+  output = undefined;
+  built = undefined;
+}

@@ -137,7 +137,9 @@ export async function validateExecutionHost(
       ...(probe.output === "" ? {} : { detail: probe.output }),
     };
   }
-  const node = await (deps.node ?? ((h) => probeNode(deps.dataDir, h)))(host);
+  const node = await (
+    deps.node ?? ((h) => probeNode(deps.dataDir, h, deps.launcher))
+  )(host);
   if (!node.usable) {
     return {
       executionHostId: hostId,

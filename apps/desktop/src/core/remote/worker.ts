@@ -26,6 +26,7 @@ import { workerArgv } from "../terminal/ssh/argv";
 import type { AskpassService } from "../terminal/ssh/askpass";
 import {
   FrameDecoder,
+  HELLO_ID,
   MAX_FRAME,
   type TransportFailure,
   type WorkerResponse,
@@ -37,7 +38,7 @@ import {
   parseHello,
   accept,
 } from "./handshake";
-import { probeNode, unsupportedMessage } from "./node-probe";
+import { type NodeProbe, probeNode, unsupportedMessage } from "./node-probe";
 import { Supervisor } from "./supervisor";
 
 /** How long a single proxied request may take end to end. */
@@ -46,8 +47,7 @@ export const REQUEST_TIMEOUT_MS = 60_000;
 /** How long the handshake frame may take before the child is abandoned. */
 const HANDSHAKE_TIMEOUT_MS = 30_000;
 
-/** The request id a Worker's unprompted greeting carries. */
-export const HELLO_ID = "hello";
+export { HELLO_ID } from "./frames";
 
 /** Raised for everything a caller has to distinguish. */
 export class RemoteError extends Error {
@@ -119,6 +119,11 @@ export class Connection {
       resolve({ requestId: "", instanceId: "" });
     }
     this.waiting.clear();
+  }
+
+  /** Whether requests may still be written to this child. */
+  get alive(): boolean {
+    return !this.closed;
   }
 
   hasCapability(capability: string): boolean {
@@ -232,6 +237,13 @@ export interface RemoteWorkerOptions {
    * the very button meant to tell them whether it is.
    */
   readonly launcher?: string | undefined;
+  /**
+   * Starts the Worker child instead of `ssh`. For the tests, which run the
+   * real Worker as a local child over the same stdio frames without an sshd.
+   */
+  readonly spawn?: () => ChildProcess;
+  /** Answers the Node probe instead of asking the host; paired with `spawn`. */
+  readonly node?: () => Promise<NodeProbe>;
 }
 
 /** What a successful probe reports back to the settings page. */
@@ -264,7 +276,12 @@ export class RemoteWorker {
         `执行主机 ${this.options.host.name} 连续连接失败，正在冷却`,
       );
     }
-    const node = await probeNode(this.options.dataDir, this.options.host);
+    const node = await (this.options.node?.() ??
+      probeNode(
+        this.options.dataDir,
+        this.options.host,
+        this.options.launcher,
+      ));
     if (!node.usable) {
       throw unsupported(unsupportedMessage(this.options.host, node));
     }
@@ -283,6 +300,10 @@ export class RemoteWorker {
       );
       connection.instanceId = accepted.instanceId;
       connection.capabilities = accepted.capabilities;
+      // A probe while a connection is live replaces it; the old child would
+      // otherwise stay open with nothing left that could close it.
+      const previous = this.supervisor.connection;
+      if (previous !== undefined && previous !== connection) previous.close();
       this.supervisor.succeeded(connection, accepted.versionBadge);
       return {
         ...accepted,
@@ -298,6 +319,12 @@ export class RemoteWorker {
   }
 
   private async open(): Promise<Connection> {
+    if (this.options.spawn !== undefined) {
+      return new Connection(
+        this.options.spawn(),
+        this.options.onEvent ?? (() => {}),
+      );
+    }
     const argv = workerArgv(
       this.options.dataDir,
       this.options.host,
@@ -314,6 +341,100 @@ export class RemoteWorker {
       env: { ...process.env, ...Object.fromEntries(askpass) },
     });
     return new Connection(child, this.options.onEvent ?? (() => {}));
+  }
+
+  /**
+   * Run one operation on the execution host and return its result.
+   *
+   * The connection is opened on first use and reopened after it drops. What
+   * happens to a request whose transport failed follows the one rule the
+   * remote contract has:
+   *
+   *  * `write` — nothing reached the far side, so it is sent once more on a
+   *    fresh connection, whatever it is;
+   *  * `lost` — it was written and the answer never came. A read is replayed
+   *    once; a write is `unknown_outcome`, never re-sent, because it may well
+   *    have happened;
+   *  * `tooLarge` — refused before anything was written.
+   */
+  async request(
+    action: string,
+    payload: unknown,
+    replay: boolean,
+  ): Promise<unknown> {
+    for (let attempt = 0; ; attempt += 1) {
+      const connection = await this.connected();
+      const outcome = await connection.call(
+        this.options.host.id,
+        action,
+        payload,
+      );
+      if (outcome === "tooLarge") {
+        throw new RemoteError(
+          413,
+          "resource_exhausted",
+          `发给执行主机 ${this.options.host.name} 的请求超过单帧上限`,
+        );
+      }
+      if (outcome === "write" || outcome === "lost") {
+        this.drop(connection);
+        const again = outcome === "write" || replay;
+        if (again && attempt === 0) continue;
+        if (outcome === "lost" && !replay) {
+          throw unknownOutcome(
+            `执行主机 ${this.options.host.name} 在答复之前断开了；这次写入可能已经发生，请先查看结果再决定是否重做`,
+          );
+        }
+        throw new RemoteError(
+          503,
+          "unavailable",
+          `执行主机 ${this.options.host.name} 的 Worker 连接断开了`,
+        );
+      }
+      if (outcome.error !== undefined) {
+        throw new RemoteError(
+          outcome.status ?? 500,
+          outcome.error.code,
+          outcome.error.message,
+        );
+      }
+      return outcome.result;
+    }
+  }
+
+  /** Whether the live Worker advertised `capability`; `undefined` before any. */
+  capability(capability: string): boolean | undefined {
+    const live = this.supervisor.connection;
+    if (live === undefined || !live.alive) return undefined;
+    return live.hasCapability(capability);
+  }
+
+  private connecting: Promise<Connection> | undefined;
+
+  /** The live connection, or a new one — one handshake however many callers wait. */
+  private async connected(): Promise<Connection> {
+    const live = this.supervisor.connection;
+    if (live !== undefined && live.alive) return live;
+    if (this.connecting === undefined) {
+      this.connecting = (async () => {
+        const wait = this.supervisor.backoffMs();
+        if (wait !== undefined) {
+          await new Promise((resolve) => setTimeout(resolve, wait));
+        }
+        await this.probe();
+        return this.supervisor.connection as Connection;
+      })().finally(() => {
+        this.connecting = undefined;
+      });
+    }
+    return await this.connecting;
+  }
+
+  private drop(connection: Connection): void {
+    connection.close();
+    if (this.supervisor.connection === connection) {
+      this.supervisor.connection = undefined;
+    }
   }
 
   /** A user asked directly: forget the park and drop any live child. */
