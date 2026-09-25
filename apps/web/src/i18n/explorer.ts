@@ -20,6 +20,7 @@ export const explorer: MessageModule = {
     "explorer.status.D": "已删除",
     "explorer.status.R": "已重命名",
     "explorer.status.?": "未跟踪",
+    "projectSearch.stop": "停止",
 
     "scm.title": "源码控制",
     "scm.back": "返回",
@@ -78,6 +79,7 @@ export const explorer: MessageModule = {
     "explorer.status.D": "Deleted",
     "explorer.status.R": "Renamed",
     "explorer.status.?": "Untracked",
+    "projectSearch.stop": "Stop",
 
     "scm.title": "Source control",
     "scm.back": "Back",

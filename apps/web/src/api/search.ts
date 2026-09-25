@@ -18,11 +18,22 @@ export const searchApi = {
       }`,
       fileIndexSchema,
     ),
-  /** 项目搜索：Runtime 侧 grep，按文件分页（`offset` / `nextOffset`）。 */
-  searchFiles: (workspaceId: string, input: FileSearchRequest) =>
+  /**
+   * 项目搜索：Runtime 侧 grep，按文件分页（`offset` / `nextOffset`）。
+   * `signal` 一中止，连接随之断开，core 那边的扫描也就停了。
+   */
+  searchFiles: (
+    workspaceId: string,
+    input: FileSearchRequest,
+    signal?: AbortSignal,
+  ) =>
     request(
       `/api/workspaces/${workspaceId}/file-search`,
       fileSearchResultSchema,
-      { method: "POST", ...json(fileSearchRequestSchema.parse(input)) },
+      {
+        method: "POST",
+        ...json(fileSearchRequestSchema.parse(input)),
+        ...(signal ? { signal } : {}),
+      },
     ),
 };

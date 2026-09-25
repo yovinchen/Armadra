@@ -14,9 +14,9 @@ import { type Temporary, temporary } from "./workspace.fixture";
 
 const MAX_SEARCH_FILE_BYTES = 1_048_576;
 
-function refusal(run: () => unknown): DomainError {
+async function refusal(run: () => unknown): Promise<DomainError> {
   try {
-    run();
+    await run();
   } catch (error) {
     if (error instanceof DomainError) return error;
     throw error;
@@ -93,9 +93,9 @@ describe("the workspace index and search", () => {
     }
   });
 
-  it("finds literals with a line and a column", () => {
+  it("finds literals with a line and a column", async () => {
     const path = workspace();
-    const result = searchContent(path, request("needle"));
+    const result = await searchContent(path, request("needle"));
     expect(result.files.map((file) => file.path)).toEqual([
       "README.md",
       "src/main.rs",
@@ -108,23 +108,24 @@ describe("the workspace index and search", () => {
     expect(result.truncated).toBe(false);
   });
 
-  it("honours case, regex and globs", () => {
+  it("honours case, regex and globs", async () => {
     const path = workspace();
     expect(
-      searchContent(path, { ...request("NEEDLE"), caseSensitive: true }).files,
+      (await searchContent(path, { ...request("NEEDLE"), caseSensitive: true }))
+        .files,
     ).toEqual([]);
     expect(
-      searchContent(path, { query: "need\\w+", regex: true }).files,
+      (await searchContent(path, { query: "need\\w+", regex: true })).files,
     ).toHaveLength(2);
 
-    const onlyMarkdown = searchContent(path, {
+    const onlyMarkdown = await searchContent(path, {
       ...request("needle"),
       include: "*.md",
     });
     expect(onlyMarkdown.files).toHaveLength(1);
     expect(onlyMarkdown.files[0]?.path).toBe("README.md");
 
-    const withoutMarkdown = searchContent(path, {
+    const withoutMarkdown = await searchContent(path, {
       ...request("needle"),
       exclude: "**/*.md",
     });
@@ -132,14 +133,14 @@ describe("the workspace index and search", () => {
     expect(withoutMarkdown.files[0]?.path).toBe("src/main.rs");
   });
 
-  it("pages by file and reports the next offset", () => {
+  it("pages by file and reports the next offset", async () => {
     const path = workspace();
-    const page = searchContent(path, { ...request("needle"), limit: 1 });
+    const page = await searchContent(path, { ...request("needle"), limit: 1 });
     expect(page.files).toHaveLength(1);
     expect(page.truncated).toBe(true);
     expect(page.nextOffset).toBe(1);
 
-    const rest = searchContent(path, {
+    const rest = await searchContent(path, {
       ...request("needle"),
       limit: 1,
       offset: page.nextOffset,
@@ -149,7 +150,7 @@ describe("the workspace index and search", () => {
     expect(rest.nextOffset).toBeNull();
   });
 
-  it("caps matches per file and skips binary and large files", () => {
+  it("caps matches per file and skips binary and large files", async () => {
     writeFileSync(join(root.path, "many.txt"), "hit\n".repeat(50));
     writeFileSync(
       join(root.path, "binary.bin"),
@@ -159,7 +160,7 @@ describe("the workspace index and search", () => {
     oversized.write("hit", 0, "utf8");
     writeFileSync(join(root.path, "big.txt"), oversized);
 
-    const result = searchContent(root.path, {
+    const result = await searchContent(root.path, {
       ...request("hit"),
       maxMatchesPerFile: 5,
     });
@@ -169,23 +170,55 @@ describe("the workspace index and search", () => {
     expect(result.skipped).toBe(2);
   });
 
-  it("refuses an empty or invalid pattern", () => {
+  it("refuses an empty or invalid pattern", async () => {
     const path = workspace();
-    expect(refusal(() => searchContent(path, request(""))).status).toBe(400);
+    expect((await refusal(() => searchContent(path, request("")))).status).toBe(
+      400,
+    );
     expect(
-      refusal(() => searchContent(path, { query: "(unclosed", regex: true }))
-        .status,
+      (
+        await refusal(() =>
+          searchContent(path, { query: "(unclosed", regex: true }),
+        )
+      ).status,
     ).toBe(400);
   });
 
-  it("does not match a whole word inside an identifier", () => {
+  it("does not match a whole word inside an identifier", async () => {
     writeFileSync(join(root.path, "a.txt"), "needles\nneedle\n");
-    const result = searchContent(root.path, {
+    const result = await searchContent(root.path, {
       ...request("needle"),
       wholeWord: true,
     });
     expect(result.totalMatches).toBe(1);
     expect(result.files[0]?.matches[0]?.line).toBe(2);
+  });
+
+  it("stops a search whose caller aborted it", async () => {
+    const path = workspace();
+    const before = new AbortController();
+    before.abort();
+    await expect(
+      searchContent(path, request("needle"), before.signal),
+    ).rejects.toThrow();
+
+    // Enough files that the walk has to yield at least once; the abort lands
+    // while it is between two batches, not after it has finished.
+    for (let index = 0; index < 400; index += 1) {
+      writeFileSync(
+        join(path, `f${String(index).padStart(3, "0")}.txt`),
+        "x\n",
+      );
+    }
+    const during = new AbortController();
+    const running = searchContent(path, request("needle"), during.signal);
+    during.abort();
+    await expect(running).rejects.toThrow();
+
+    // Without an abort the same tree still answers in full.
+    const complete = await searchContent(path, request("needle"));
+    expect(complete.files).toHaveLength(2);
+    expect(complete.truncated).toBe(false);
   });
 
   it("translates globs into anchored expressions", () => {

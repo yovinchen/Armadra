@@ -1,11 +1,14 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { WorkspaceEvent } from "../bus";
+import type { CoreRequest } from "../http/router";
 import { type Fixture, fixture } from "../workspaces/fixture";
 import { install as installWorkspaces } from "../workspaces/routes";
-import { install } from "./routes";
+import { connectionSignal, install } from "./routes";
 import { releaseWorkspace } from "./watch";
 
 /**
@@ -305,5 +308,63 @@ describe("the file routes", () => {
       preview: "text",
       mimeType: "video/vnd.dlna.mpeg-tts",
     });
+  });
+});
+
+describe("the search connection signal", () => {
+  it("fires when the page drops the request, and not before", async () => {
+    let seen: AbortSignal | undefined;
+    let settle: (aborted: boolean) => void = () => {};
+    const outcome = new Promise<boolean>((resolve) => {
+      settle = resolve;
+    });
+    const server = createServer((raw, response) => {
+      raw.resume();
+      raw.on("end", () => {
+        const connection = connectionSignal({
+          raw,
+        } as unknown as CoreRequest);
+        seen = connection.signal;
+        // The handler is "still searching": it never answers on its own.
+        const timer = setTimeout(() => {
+          connection.release();
+          settle(false);
+          response.end();
+        }, 5_000);
+        connection.signal?.addEventListener("abort", () => {
+          clearTimeout(timer);
+          connection.release();
+          settle(true);
+        });
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    try {
+      const { port } = server.address() as AddressInfo;
+      const controller = new AbortController();
+      const request = fetch(`http://127.0.0.1:${port}/`, {
+        method: "POST",
+        body: "{}",
+        signal: controller.signal,
+      }).catch(() => undefined);
+      while (seen === undefined) await delay(10);
+      expect(seen.aborted).toBe(false);
+      controller.abort();
+      expect(await outcome).toBe(true);
+      await request;
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("is absent for an in-process call", () => {
+    const connection = connectionSignal({
+      raw: undefined,
+    } as unknown as CoreRequest);
+    expect(connection.signal).toBeUndefined();
+    connection.release();
   });
 });

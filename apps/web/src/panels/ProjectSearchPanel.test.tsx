@@ -82,12 +82,16 @@ describe("ProjectSearchPanel", () => {
   it("sends the toggles the user set and opens a match at its line", async () => {
     await search("needle");
     await waitFor(() =>
-      expect(searchFiles).toHaveBeenCalledWith(workspace.id, {
-        query: "needle",
-        regex: false,
-        caseSensitive: false,
-        wholeWord: false,
-      }),
+      expect(searchFiles).toHaveBeenCalledWith(
+        workspace.id,
+        {
+          query: "needle",
+          regex: false,
+          caseSensitive: false,
+          wholeWord: false,
+        },
+        expect.any(AbortSignal),
+      ),
     );
 
     fireEvent.click(
@@ -113,14 +117,18 @@ describe("ProjectSearchPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "搜索" }));
 
     await waitFor(() =>
-      expect(searchFiles).toHaveBeenCalledWith(workspace.id, {
-        query: "need\\w+",
-        regex: true,
-        caseSensitive: true,
-        wholeWord: true,
-        include: "*.ts",
-        exclude: "**/*.d.ts",
-      }),
+      expect(searchFiles).toHaveBeenCalledWith(
+        workspace.id,
+        {
+          query: "need\\w+",
+          regex: true,
+          caseSensitive: true,
+          wholeWord: true,
+          include: "*.ts",
+          exclude: "**/*.d.ts",
+        },
+        expect.any(AbortSignal),
+      ),
     );
   });
 
@@ -163,6 +171,7 @@ describe("ProjectSearchPanel", () => {
       expect(searchFiles).toHaveBeenLastCalledWith(
         workspace.id,
         expect.objectContaining({ offset: 1 }),
+        expect.any(AbortSignal),
       ),
     );
     // Both pages are on screen; the first was not thrown away.
@@ -174,5 +183,56 @@ describe("ProjectSearchPanel", () => {
     searchFiles.mockRejectedValue(new Error("Search pattern is invalid"));
     await search("(unclosed");
     expect(await screen.findByText("搜索失败")).toBeTruthy();
+  });
+
+  // 同一时刻只留一个请求：新查询、停止、离开这一页都要中止上一个。
+  describe("cancellation", () => {
+    function pending() {
+      const signals: AbortSignal[] = [];
+      searchFiles.mockImplementation(
+        (_id: string, _input: unknown, signal: AbortSignal) => {
+          signals.push(signal);
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          });
+        },
+      );
+      return signals;
+    }
+
+    it("aborts the running search when a new query is submitted", async () => {
+      const signals = pending();
+      await search("first");
+      await waitFor(() => expect(signals).toHaveLength(1));
+      fireEvent.change(screen.getByLabelText("在项目中查找"), {
+        target: { value: "second" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+      await waitFor(() => expect(signals).toHaveLength(2));
+      expect(signals[0]?.aborted).toBe(true);
+      expect(signals[1]?.aborted).toBe(false);
+    });
+
+    it("stops on 停止 without reporting a failure", async () => {
+      const signals = pending();
+      await search("needle");
+      fireEvent.click(await screen.findByRole("button", { name: "停止" }));
+      expect(signals[0]?.aborted).toBe(true);
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "停止" })).toBeNull(),
+      );
+      expect(screen.queryByText("正在搜索…")).toBeNull();
+      expect(screen.queryByText("搜索失败")).toBeNull();
+    });
+
+    it("aborts when the panel goes away", async () => {
+      const signals = pending();
+      await search("needle");
+      await waitFor(() => expect(signals).toHaveLength(1));
+      cleanup();
+      expect(signals[0]?.aborted).toBe(true);
+    });
   });
 });

@@ -3,6 +3,7 @@ import type { WorkspaceEvent } from "../bus";
 import type { CoreContext } from "../main";
 import type { CoreRequest } from "../http/router";
 import { fileInfo } from "../imports/batch";
+import { answeredAsync } from "../language/routes";
 import { answered, workspaceId } from "../workspaces/routes";
 import {
   DomainError,
@@ -234,13 +235,26 @@ export function install(context: CoreContext): void {
   server.router.handle(
     "POST",
     "/api/workspaces/{workspaceId}/file-search",
-    answered((match, request) => ({
-      status: 200,
-      body: searchContent(
-        readable(database, workspaceId(match)).rootPath,
-        searchRequest(request),
-      ),
-    })),
+    answeredAsync(async (match, request) => {
+      const root = readable(database, workspaceId(match)).rootPath;
+      const parsed = searchRequest(request);
+      // 页面换了查询、关了面板或点了「停止」就会掐断这次请求；连接一断就别再
+      // 替它把整棵树读完。
+      const connection = connectionSignal(request);
+      try {
+        return {
+          status: 200,
+          body: await searchContent(root, parsed, connection.signal),
+        };
+      } catch (error) {
+        if (connection.signal?.aborted === true) {
+          throw new DomainError(499, "cancelled", "The search was cancelled");
+        }
+        throw error;
+      } finally {
+        connection.release();
+      }
+    }),
   );
 
   /* ------------------------------ file watching ---------------------------- */
@@ -406,4 +420,37 @@ function remoteIsR5(workspace: Workspace): void {
   if ((workspace.executionHostId ?? "") !== "") {
     throw new DomainError(501, "unsupported", "执行主机上的文件操作（R5）");
   }
+}
+
+/**
+ * An abort signal that fires when the client behind `request` goes away.
+ *
+ * The request's own `close` is no use here: the body has already been read,
+ * and a fully read `IncomingMessage` closes right then. What outlives the
+ * handler is the socket — a page that aborts its `fetch` drops it. The
+ * listeners come off again once the handler is done, since a keep-alive socket
+ * carries many requests. In-process calls (tests) have no socket and get no
+ * signal.
+ */
+export function connectionSignal(request: CoreRequest): {
+  readonly signal: AbortSignal | undefined;
+  release(): void;
+} {
+  const raw = request.raw as CoreRequest["raw"] | undefined;
+  const socket = raw?.socket;
+  if (raw === undefined || socket === undefined || socket === null) {
+    return { signal: undefined, release: () => {} };
+  }
+  const controller = new AbortController();
+  const abort = (): void => controller.abort();
+  if (socket.destroyed) abort();
+  socket.once("close", abort);
+  raw.once("aborted", abort);
+  return {
+    signal: controller.signal,
+    release: () => {
+      socket.off("close", abort);
+      raw.off("aborted", abort);
+    },
+  };
 }

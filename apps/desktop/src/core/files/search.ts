@@ -14,7 +14,8 @@ import { symlinkMetadata } from "./stat";
  *     with build folders skipped and a hard ceiling on how much of the tree is
  *     walked. The answer says when it was cut short.
  *   * `searchContent` backs 项目搜索 — literal or regular-expression grep with
- *     include/exclude globs, a per-file match ceiling and a wall-clock budget.
+ *     include/exclude globs, a per-file match ceiling, a wall-clock budget
+ *     and an abort signal the page pulls when it no longer wants the answer.
  *     Files above the read limit and files that look binary are counted as
  *     skipped, never read into memory.
  *
@@ -153,13 +154,13 @@ export function indexFiles(
     throw badRequest("Search query is too long");
   }
   const ranked: { score: number; entry: IndexEntry }[] = [];
-  const report = walk(base, (relative, name, size) => {
+  const report: WalkReport = { scanned: 0, truncated: false };
+  for (const { relative, name, size } of walk(base, report)) {
     const score = rank(relative, name, needle);
     if (score !== undefined) {
       ranked.push({ score, entry: { path: relative, name, size } });
     }
-    return true;
-  });
+  }
   // Sort by score, then by path so equal scores keep a stable order between
   // requests rather than following `readdir`'s.
   ranked.sort((left, right) =>
@@ -187,6 +188,12 @@ const BINARY_SNIFF_BYTES = 8_192;
  * complete.
  */
 const SEARCH_BUDGET_MS = 5_000;
+/**
+ * How many files the search looks at between two turns of the event loop.
+ * The walk is synchronous filesystem work; without a yield the `close` of a
+ * dropped connection could never be seen until the whole budget was spent.
+ */
+const YIELD_EVERY_FILES = 64;
 const DEFAULT_FILE_LIMIT = 40;
 const MAX_FILE_LIMIT = 200;
 const DEFAULT_MATCHES_PER_FILE = 20;
@@ -324,11 +331,21 @@ function compileQuery(request: SearchRequest): RegExp {
   }
 }
 
-/** Project-wide grep. See the module docs for the guarantees. */
-export function searchContent(
+/**
+ * Project-wide grep. See the module docs for the guarantees.
+ *
+ * `signal` is the caller's way to stop early — the route aborts it when the
+ * page drops the request (a newer query, the panel closed, 「停止」). The walk
+ * yields to the event loop every few dozen files so an abort is seen while
+ * the search is still running, not after it; an aborted search rejects with
+ * the signal's reason instead of answering, since nobody is left to read it.
+ */
+export async function searchContent(
   root: string,
   request: SearchRequest,
-): SearchResult {
+  signal?: AbortSignal,
+): Promise<SearchResult> {
+  signal?.throwIfAborted();
   const base = canonicalDirectory(root);
   const matcher = compileQuery(request);
   const include = globSet(request.include);
@@ -348,41 +365,47 @@ export function searchContent(
   let seen = 0;
   let more = false;
   let timedOut = false;
+  let visited = 0;
 
-  const report = walk(base, (relative, _name, size) => {
+  const report: WalkReport = { scanned: 0, truncated: false };
+  for (const { relative, size } of walk(base, report)) {
+    visited += 1;
+    if (visited % YIELD_EVERY_FILES === 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    signal?.throwIfAborted();
     if (Date.now() - started > SEARCH_BUDGET_MS) {
       timedOut = true;
-      return false;
+      break;
     }
     if (
       (include !== undefined && !include.test(relative)) ||
       (exclude !== undefined && exclude.test(relative))
     ) {
-      return true;
+      continue;
     }
     if (size > MAX_SEARCH_FILE_BYTES) {
       skipped += 1;
-      return true;
+      continue;
     }
     const text = readSearchable(join(base, relative.split("/").join(SEP)));
     if (text === undefined) {
       skipped += 1;
-      return true;
+      continue;
     }
     const found = matchesIn(text, matcher, perFile);
-    if (found.matches.length === 0) return true;
+    if (found.matches.length === 0) continue;
     seen += 1;
-    if (seen <= offset) return true;
+    if (seen <= offset) continue;
     if (files.length === limit) {
       // One more matching file than the page holds is all we need to know;
       // stopping here keeps the walk from reading the rest.
       more = true;
-      return false;
+      break;
     }
     totalMatches += found.matches.length;
     files.push({ path: relative, ...found });
-    return true;
-  });
+  }
 
   return {
     nextOffset: more ? offset + files.length : null,
@@ -465,28 +488,29 @@ function readSearchable(path: string): string | undefined {
 const SEP = process.platform === "win32" ? "\\" : "/";
 
 interface WalkReport {
-  readonly scanned: number;
-  readonly truncated: boolean;
+  scanned: number;
+  truncated: boolean;
+}
+
+interface WalkedFile {
+  readonly relative: string;
+  readonly name: string;
+  readonly size: number;
 }
 
 /**
  * Breadth-first walk of the regular files under `root`, sorted within each
- * directory, calling `visit(relativePath, fileName, size)`. A `visit` that
- * answers `false` stops the walk.
+ * directory. The caller stops the walk by leaving its loop; `report` carries
+ * how many entries were looked at and whether the scan ceiling cut it short.
  *
  * Symbolic links are neither reported nor followed: `lstat` is what decides,
  * so a link pointing outside the workspace is simply not part of the tree.
  * Ignored directory names are skipped whole.
  */
-function walk(
-  root: string,
-  visit: (relative: string, name: string, size: number) => boolean,
-): WalkReport {
+function* walk(root: string, report: WalkReport): Generator<WalkedFile> {
   const queue: { directory: string; depth: number }[] = [
     { directory: root, depth: 0 },
   ];
-  let scanned = 0;
-  let truncated = false;
   while (queue.length > 0) {
     const { directory, depth } = queue.shift() as {
       directory: string;
@@ -501,10 +525,11 @@ function walk(
     const children = names.map((name) => join(directory, name));
     children.sort(byteOrder);
     for (const path of children) {
-      if (scanned >= MAX_SCANNED_ENTRIES) {
-        return { scanned, truncated: true };
+      if (report.scanned >= MAX_SCANNED_ENTRIES) {
+        report.truncated = true;
+        return;
       }
-      scanned += 1;
+      report.scanned += 1;
       const name = path.slice(path.lastIndexOf(SEP) + 1);
       const info = symlinkMetadata(path);
       if (info === undefined || info.isSymbolicLink()) continue;
@@ -522,12 +547,9 @@ function walk(
       } catch {
         continue;
       }
-      if (!visit(relative, name, info.size)) {
-        return { scanned, truncated };
-      }
+      yield { relative, name, size: info.size };
     }
   }
-  return { scanned, truncated };
 }
 
 /** `PathBuf`/`String` ordering: byte by byte, not by locale. */

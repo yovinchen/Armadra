@@ -8,6 +8,9 @@
  *
  * 分页按文件走：`nextOffset` 有值就还有下一页，「加载更多」把新的一页接在
  * 后面，不重发前面的。
+ *
+ * 同一时刻只留一个请求：新查询、离开这一页、点「停止」都会中止上一个，
+ * 连接一断 core 就停止扫描，不会在后台替一个没人要的答案把整棵树读完。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FileSearchFile, FileSearchResult } from "@armadra/shared";
@@ -54,32 +57,69 @@ export function ProjectSearchPanel({
   const [failed, setFailed] = useState(false);
   /** 只有最后一次请求的结果才允许落地，翻页时的旧响应直接丢掉。 */
   const requestRef = useRef(0);
+  /** 正在跑的那一次；中止它，core 那边的扫描随连接一起停下。 */
+  const inFlightRef = useRef<{
+    controller: AbortController;
+    offset: number;
+  } | null>(null);
 
   useEffect(() => {
     if (autoFocusToken !== undefined) inputRef.current?.focus();
   }, [autoFocusToken]);
 
+  // 关掉面板（这一页卸载）时，还在跑的搜索不再有人看。
+  useEffect(
+    () => () => {
+      inFlightRef.current?.controller.abort();
+      inFlightRef.current = null;
+    },
+    [],
+  );
+
+  const stop = useCallback(() => {
+    const running = inFlightRef.current;
+    if (!running) return;
+    inFlightRef.current = null;
+    // 让被中止的那次请求的回调认不出自己，结果与失败都不落地。
+    requestRef.current += 1;
+    running.controller.abort();
+    setBusy(false);
+    // 停掉的是新查询的第一页时，屏幕上还是上一个查询的结果，留着会被当成
+    // 这一次的答案；停掉的是「加载更多」则保留已经到手的几页。
+    if (running.offset === 0) {
+      setFiles([]);
+      setResult(null);
+    }
+  }, []);
+
   const run = useCallback(
     async (offset: number) => {
       const text = query.trim();
       if (!workspaceId || !text) return;
+      inFlightRef.current?.controller.abort();
+      const controller = new AbortController();
+      inFlightRef.current = { controller, offset };
       const token = ++requestRef.current;
       setBusy(true);
       setFailed(false);
       try {
-        const page = await runtimeApi.searchFiles(workspaceId, {
-          query: text,
-          regex: options.regex,
-          caseSensitive: options.caseSensitive,
-          wholeWord: options.wholeWord,
-          ...(options.include.trim()
-            ? { include: options.include.trim() }
-            : {}),
-          ...(options.exclude.trim()
-            ? { exclude: options.exclude.trim() }
-            : {}),
-          ...(offset > 0 ? { offset } : {}),
-        });
+        const page = await runtimeApi.searchFiles(
+          workspaceId,
+          {
+            query: text,
+            regex: options.regex,
+            caseSensitive: options.caseSensitive,
+            wholeWord: options.wholeWord,
+            ...(options.include.trim()
+              ? { include: options.include.trim() }
+              : {}),
+            ...(options.exclude.trim()
+              ? { exclude: options.exclude.trim() }
+              : {}),
+            ...(offset > 0 ? { offset } : {}),
+          },
+          controller.signal,
+        );
         if (requestRef.current !== token) return;
         setResult(page);
         setFiles((current) =>
@@ -91,7 +131,10 @@ export function ProjectSearchPanel({
         setResult(null);
         if (offset === 0) setFiles([]);
       } finally {
-        if (requestRef.current === token) setBusy(false);
+        if (requestRef.current === token) {
+          setBusy(false);
+          inFlightRef.current = null;
+        }
       }
     },
     [options, query, workspaceId],
@@ -153,11 +196,23 @@ export function ProjectSearchPanel({
           >
             .*
           </Toggle>
+          {busy && (
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              className="ml-auto"
+              onClick={stop}
+            >
+              {t("projectSearch.stop")}
+            </Button>
+          )}
+          {/* 搜索中也能再提交：新查询会先中止正在跑的那一次。 */}
           <Button
             type="submit"
             size="xs"
-            className="ml-auto"
-            disabled={!query.trim() || busy}
+            className={busy ? undefined : "ml-auto"}
+            disabled={!query.trim()}
           >
             {t("projectSearch.run")}
           </Button>
