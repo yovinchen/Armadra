@@ -134,6 +134,9 @@ export const resources: MessageModule = {
     "resources.power.policyLabel": "防休眠策略",
     "resources.power.policyHint":
       "只阻止系统空闲睡眠；租约全部释放或 Runtime 退出时立即解除。",
+    "resources.power.whileWorkingLabel": "工作时保持唤醒",
+    "resources.power.whileWorkingHint":
+      "有 Agent 在一轮里或自动化在运行时自动申请，全部结束后释放。",
     "resources.intervalLabel": "采样间隔",
     "resources.intervalHint": "面板打开时才采样；关闭后 Runtime 自动停止。",
     "resources.interval.value": "{value} 秒",
@@ -270,6 +273,9 @@ export const resources: MessageModule = {
     "resources.power.policyLabel": "Keep-awake policy",
     "resources.power.policyHint":
       "Only idle system sleep is held off, and it is released the moment the last lease goes away or the runtime exits.",
+    "resources.power.whileWorkingLabel": "Stay awake while working",
+    "resources.power.whileWorkingHint":
+      "Requested while an agent is in a turn or an automation runs, released once all of them finish.",
     "resources.intervalLabel": "Sampling interval",
     "resources.intervalHint":
       "Sampling only runs while the panel is open; the runtime stops on its own once it closes.",

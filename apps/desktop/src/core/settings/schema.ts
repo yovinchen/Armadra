@@ -72,6 +72,12 @@ export const POWER_POLICIES = [
   "manual",
 ] as const;
 const DEFAULT_POWER_POLICY = "manual";
+/**
+ * `power.keepAwakeWhileWorking`——有 Agent 在一轮里、或有自动化运行在进行时，
+ * core 自己申请一把防休眠租约（终端宿主设计 §9）。默认开：它仍受
+ * `power.policy` 约束，策略不放行的来源照样不生效。
+ */
+const DEFAULT_KEEP_AWAKE_WHILE_WORKING = true;
 
 /**
  * 对话索引扫多大一片。
@@ -257,6 +263,8 @@ function normalizePower(document: JsonObject): void {
   // The safest reading of a broken value is the conservative default, not a
   // machine that refuses to sleep.
   power.policy = choice(power.policy, POWER_POLICIES, DEFAULT_POWER_POLICY);
+  power.keepAwakeWhileWorking =
+    asBool(power.keepAwakeWhileWorking) ?? DEFAULT_KEEP_AWAKE_WHILE_WORKING;
   document.power = power;
 }
 

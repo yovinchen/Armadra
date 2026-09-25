@@ -147,7 +147,13 @@ export const runtimeSettingsSchema = z.looseObject({
     })
     .optional(),
   /** 防休眠策略（T02，终端宿主设计 §9）；哪些来源的租约可以生效。 */
-  power: z.looseObject({ policy: powerPolicySchema.optional() }).optional(),
+  power: z
+    .looseObject({
+      policy: powerPolicySchema.optional(),
+      /** 有 Agent 在干活或自动化在运行时，core 自己申请一把租约；默认开。 */
+      keepAwakeWhileWorking: z.boolean().optional(),
+    })
+    .optional(),
   /** 命令面板的会话索引扫多大一片。 */
   conversations: z
     .looseObject({ scope: conversationScopeSchema.optional() })
@@ -217,7 +223,7 @@ export interface RuntimeSettingsPatch {
     >;
   };
   /** 防休眠策略（T02）。 */
-  power?: { policy?: PowerPolicy };
+  power?: { policy?: PowerPolicy; keepAwakeWhileWorking?: boolean };
   /** 会话索引的范围。 */
   conversations?: { scope?: ConversationScope };
   /** 资源面板采样间隔；Runtime 侧会夹回 500ms–60s。 */

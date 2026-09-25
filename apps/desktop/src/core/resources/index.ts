@@ -19,6 +19,7 @@ import type { ErrorResponse } from "../http/errors";
 import type { HandlerResult } from "../http/router";
 import type { CoreContext } from "../main";
 import { settingsDomain } from "../settings";
+import { scheduleDomain } from "../schedule";
 import { workspaceExists } from "../events/workspaces";
 import {
   LeaseNotFound,
@@ -26,6 +27,7 @@ import {
   type PowerLeaseRequest,
   type PowerLeaseSource,
 } from "./power";
+import { KeepAwake } from "./keep-awake";
 import { ResourceService, type SubscribeRequest } from "./service";
 import { OrphanError, adoptOrphan, orphanTarget, panePids } from "./sessions";
 
@@ -69,6 +71,28 @@ export function install(context: CoreContext): ResourceDomain {
     },
     log: (message, fields) => context.log.info(message, fields ?? {}),
   });
+  // 工作时自动持有的那两把（T02）：订阅 `agent.status` 与终端退出，定时复查
+  // 自动化运行。它只决定申不申请；生不生效仍由上面那条策略说了算。
+  const keepAwake = new KeepAwake({
+    power,
+    enabled: () =>
+      settingsDomain()?.settings.get("power.keepAwakeWhileWorking") !== false,
+    automationActive: () => scheduleDomain()?.engine.hasActiveRuns() === true,
+  });
+  const unsubscribe = context.bus.on("workspace.event", ({ event }) => {
+    if (event.type === "agent.status") {
+      const status = event.status as { nodeId?: unknown; state?: unknown };
+      keepAwake.noteStatus(
+        typeof status.nodeId === "string" ? status.nodeId : "",
+        typeof status.state === "string" ? status.state : undefined,
+      );
+      return;
+    }
+    if (event.type === "terminal.exit" && event.nodeId !== undefined) {
+      keepAwake.noteExit(event.nodeId);
+    }
+  });
+  keepAwake.start();
   const service = new ResourceService({
     database: context.db.database,
     settings: settingsDomain()?.settings,
@@ -242,6 +266,8 @@ export function install(context: CoreContext): ResourceDomain {
     service,
     power,
     stop: () => {
+      unsubscribe();
+      keepAwake.stop();
       service.stop();
       power.stop();
     },

@@ -77,6 +77,7 @@ describe("GET /api/settings", () => {
       "terminal.backend",
       "browser.executablePath",
       "power.policy",
+      "power.keepAwakeWhileWorking",
       "agents.probes",
       "language.probes",
       "language.servers",

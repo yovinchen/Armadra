@@ -206,6 +206,21 @@ export function TerminalPage() {
         </SettingsRow>
 
         <SettingsRow
+          label={t("resources.power.whileWorkingLabel")}
+          footnote={t("resources.power.whileWorkingHint")}
+        >
+          <LocalSourceBadge path="power.keepAwakeWhileWorking" />
+          <Switch
+            checked={settings.data?.power?.keepAwakeWhileWorking ?? true}
+            disabled={!settings.data}
+            aria-label={t("resources.power.whileWorkingLabel")}
+            onCheckedChange={(checked) =>
+              save.mutate({ power: { keepAwakeWhileWorking: checked } })
+            }
+          />
+        </SettingsRow>
+
+        <SettingsRow
           label={t("resources.intervalLabel")}
           footnote={t("resources.intervalHint")}
         >

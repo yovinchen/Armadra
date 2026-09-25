@@ -455,6 +455,21 @@ export class ScheduleStore {
 
   /* ---------------------------------- 闸门 --------------------------------- */
 
+  /**
+   * 有几道目标门正被一次运行占着——「自动化运行在进行」的那个数。
+   *
+   * 门从认领占到结束（等目标、在投、已投未结都算），还没到时隙的计划不占门，
+   * 所以「等明天的计划」不在这个数里。
+   */
+  activeRunCount(): number {
+    const row = this.database
+      .prepare(
+        "SELECT count(*) AS total FROM automation_gates WHERE active_run_id <> ''",
+      )
+      .get() as { total?: unknown } | undefined;
+    return Number(row?.total ?? 0);
+  }
+
   gate(target: AutomationTarget): Snapshot<AutomationTargetGate> {
     const id = gateId(target);
     const identity = gateIdentity(target);

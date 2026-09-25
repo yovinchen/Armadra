@@ -119,7 +119,7 @@ describe("the local split", () => {
     // follow them; only the probe cache underneath it is local.
     expect(isLocal("agents.custom")).toBe(false);
     expect(localPaths()).toContain("agents.probes");
-    expect(localPaths()).toHaveLength(6);
+    expect(localPaths()).toHaveLength(7);
   });
 
   it("recognises a document written before the split", () => {

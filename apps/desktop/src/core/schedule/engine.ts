@@ -139,6 +139,11 @@ export class ScheduleEngine {
     this.timer = undefined;
   }
 
+  /** 此刻有没有运行占着目标门（防休眠租约读它，终端宿主设计 §9）。 */
+  hasActiveRuns(): boolean {
+    return this.store.activeRunCount() > 0;
+  }
+
   private now(): number {
     const value = this.clock();
     if (!validTime(value)) throw invalid("系统时钟不在合法范围内");

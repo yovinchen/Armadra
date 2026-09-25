@@ -183,6 +183,20 @@ describe("normalize", () => {
     expect(at(normalize({ power: { policy: "never" } }), "power.policy")).toBe(
       "never",
     );
+    // 工作时防休眠默认开；只认布尔值，别的写法回到默认。
+    expect(at(normalize({}), "power.keepAwakeWhileWorking")).toBe(true);
+    expect(
+      at(
+        normalize({ power: { keepAwakeWhileWorking: false } }),
+        "power.keepAwakeWhileWorking",
+      ),
+    ).toBe(false);
+    expect(
+      at(
+        normalize({ power: { keepAwakeWhileWorking: "no" } }),
+        "power.keepAwakeWhileWorking",
+      ),
+    ).toBe(true);
   });
 
   it("stores a browser path as written and defaults the two switches", () => {

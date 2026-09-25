@@ -45,6 +45,7 @@ export type JsonObject = { [key: string]: JsonValue };
  * | `terminal.backend`       | tmux exists on one machine and not the other; `sessionHost` is Windows only    |
  * | `browser.executablePath` | An absolute path to a binary on one filesystem                                 |
  * | `power.policy`           | Whether *this* machine may be held awake; a laptop and a server disagree       |
+ * | `power.keepAwakeWhileWorking` | Same question, asked of the automatic lease while agents work             |
  * | `agents.probes`          | The CLI version cache — what was found on this box's PATH                      |
  * | `language.probes`        | Same, for language servers                                                     |
  * | `language.servers`       | Per-server executable path and argument overrides, resolved on this filesystem |
@@ -57,6 +58,7 @@ export const LOCAL_PATHS: readonly (readonly string[])[] = [
   ["terminal", "backend"],
   ["browser", "executablePath"],
   ["power", "policy"],
+  ["power", "keepAwakeWhileWorking"],
   ["agents", "probes"],
   ["language", "probes"],
   ["language", "servers"],
