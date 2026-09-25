@@ -1452,6 +1452,14 @@ releaseDrive(sessionId, actor): Lease;
 
 `pnpm libs:build` 之后 `@armadra/desktop` 测试、`@armadra/web` typecheck、`pnpm -r typecheck`、`pnpm check`、`pnpm format:check` 全绿。新增用例：`collab/silent-start.test.ts` 八条（放行一条，不放行五条：没标旗、半截输入、刚出过输出、会话太新、已上报 busy；探测两条：只挑该挑的目标、清扫那把定时器就是触发源）、`agent/target-state.test.ts` 七条纯函数用例、`collab/first-task.test.ts` 一条端到端形状。
 
+### 31.7 真机上仍然一条都投不出去：终端应答被当成了半截输入（2026-09-25）
+
+打包版（09-22 构建）真机复现：Claude 用 `send` 给两个新建的 Codex 0.155.1 节点各发一条任务，`agent_send_queue` 两行一直是 `queued / TARGET_STARTING`、`attempts = 0`，直到 5 分钟 TTL 过期。会话 `running / live`、建立远超 6 秒，卡住的是「没有半截没提交的行」这一条。
+
+原因在 `terminal/input.ts` 的 `InputSafety`。Codex 启动时向终端发这些查询（在 PTY 里起 `codex` 抓前 8 秒输出得到）：`ESC[6n`、`ESC[c`、`ESC[?u`、`ESC[>7u`、`ESC]10;?ESC\`、`ESC]11;?ESC\`。xterm 6.0.0 的应答经页面的输入通道写回 PTY，而旧的识别只放过终止符为 `c` / `R` / `n` 的 CSI 应答：`ESC[?0u` 按终止符 `u` 算作按键，`ESC]11;rgb:…` 的 `ESC ]` 在第二个字节就被判成「不是 CSI 的 ESC x」。`pending` 从此一直是真，只有人按一次回车才会清掉。
+
+修法：OSC / DCS / APC / PM 串（`ESC ]`、`ESC P`、`ESC _`、`ESC ^`，读到 BEL 或 `ESC \`）一律当应答，超过 4096 字节不终止就按输入算；CSI 应答多认两种：`?…u`（键盘协议标志）和 `?…$y`（模式报告）。都要求带 `?` 前缀，因为键盘协议下的 `CSI 97 u` 是真按键。`input.test.ts` 新增三条用例：应答不计为输入（含跨帧切开）、键盘协议按键仍计为输入、不终止的串按输入算。
+
 ## 32. Dock 白板工具组收纳与画框工具下线（2026-09-21）
 
 用户实测提的三件事：抓手也弹样式面板、十个按钮里一半是成对的、画框工具看不出用处。

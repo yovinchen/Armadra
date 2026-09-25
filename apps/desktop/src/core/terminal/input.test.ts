@@ -119,6 +119,41 @@ describe("the half-typed-line detector", () => {
     expect(safety.pending).toBe(false);
   });
 
+  /**
+   * Codex asks for the colours and the keyboard flags when it starts. Counting
+   * the answers as a half-typed line kept its first task queued until expiry.
+   */
+  it("does not count colour, keyboard-flag or mode replies as typing", () => {
+    const safety = new InputSafety();
+    safety.consume(
+      bytes(
+        "\x1b]10;rgb:d4d4/d4d4/d4d4\x1b\\\x1b]11;rgb:1e1e/1e1e/1e1e\x07" +
+          "\x1b[?0u\x1b[?2026;2$y\x1bP1$r0m\x1b\\",
+      ),
+    );
+    expect(safety.pending).toBe(false);
+    // Split across writes, the way a WebSocket frame boundary can fall.
+    safety.consume(bytes("\x1b]11;rgb:1e1e/"));
+    safety.consume(bytes("1e1e/1e1e\x1b"));
+    safety.consume(bytes("\\"));
+    expect(safety.pending).toBe(false);
+    // Typing after a reply still counts.
+    safety.consume(bytes("a"));
+    expect(safety.pending).toBe(true);
+  });
+
+  it("still counts a keyboard-protocol key press as typing", () => {
+    const safety = new InputSafety();
+    safety.consume(bytes("\x1b[97u"));
+    expect(safety.pending).toBe(true);
+  });
+
+  it("gives up on a reply string that never terminates", () => {
+    const safety = new InputSafety();
+    safety.consume(bytes(`\x1b]11;${"x".repeat(5000)}`));
+    expect(safety.pending).toBe(true);
+  });
+
   it("counts a real escape sequence the user sent as typing", () => {
     const safety = new InputSafety();
     // Arrow up: a history recall, which really does put a line in the buffer.

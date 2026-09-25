@@ -92,8 +92,14 @@ export class InputLedger {
  *     are data rather than submissions.
  *   * A CSI sequence that is a terminal **response** (`c`, `R`, `n` with a
  *     numeric/`;?>` body — a device attributes or cursor-position reply the
- *     CLI asked for) is not the user typing, and must not count as pending.
+ *     CLI asked for; `?…u`, the keyboard-protocol flags reply; `?…$y`, a mode
+ *     report) is not the user typing, and must not count as pending.
  *     Everything else that looks like an escape does.
+ *   * An OSC / DCS / APC / PM string (`ESC ]`, `ESC P`, `ESC _`, `ESC ^`,
+ *     through BEL or `ESC \`) is always a reply: a keyboard cannot produce
+ *     one. Codex asks for the foreground and background colours and the
+ *     keyboard flags at startup, and counting those answers as a half-typed
+ *     line kept its first delivery queued until it expired.
  *   * `\r` or `\n` outside a paste submits: the line is gone and the machine
  *     is clean again.
  */
@@ -102,6 +108,10 @@ export class InputSafety {
   pending = false;
   private inPaste = false;
   private escape: number[] = [];
+  /** Inside an OSC / DCS / APC / PM string; the bytes are discarded. */
+  private inString = false;
+  private stringLength = 0;
+  private stringEscape = false;
 
   /**
    * Feeds bytes through. Returns whether anything changed (`edited`, which
@@ -114,6 +124,24 @@ export class InputSafety {
     let edited = false;
     let submitted = false;
     for (const byte of data) {
+      if (this.inString) {
+        if (byte === 0x07 || (this.stringEscape && byte === 0x5c)) {
+          this.inString = false;
+          this.stringEscape = false;
+          continue;
+        }
+        this.stringEscape = byte === 0x1b;
+        this.stringLength += 1;
+        // A string that never terminates is not a reply we are waiting out:
+        // after this much it is treated as typing, like an unterminated CSI.
+        if (this.stringLength > MAX_REPLY_STRING) {
+          this.inString = false;
+          this.stringEscape = false;
+          this.pending = true;
+          edited = true;
+        }
+        continue;
+      }
       if (this.escape.length > 0) {
         this.escape.push(byte);
         if (this.matches(PASTE_START_BYTES)) {
@@ -134,6 +162,13 @@ export class InputSafety {
         ) {
           continue;
         }
+        if (this.escape.length === 2 && STRING_INTRODUCERS.includes(byte)) {
+          this.inString = true;
+          this.stringLength = 0;
+          this.stringEscape = false;
+          this.escape = [];
+          continue;
+        }
         if (
           this.escape.length >= 3 &&
           this.escape[1] === 0x5b /* [ */ &&
@@ -141,16 +176,7 @@ export class InputSafety {
           byte <= 0x7e
         ) {
           const body = this.escape.slice(2, this.escape.length - 1);
-          const response =
-            (byte === 0x63 || byte === 0x52 || byte === 0x6e) &&
-            body.every(
-              (value) =>
-                (value >= 0x30 && value <= 0x39) ||
-                value === 0x3b ||
-                value === 0x3f ||
-                value === 0x3e,
-            );
-          if (!response) {
+          if (!isTerminalReply(body, byte)) {
             this.pending = true;
             edited = true;
           }
@@ -190,6 +216,44 @@ export class InputSafety {
       this.escape.length === wanted.length &&
       this.escape.every((byte, index) => byte === wanted[index])
     );
+  }
+}
+
+/** `]` OSC, `P` DCS, `_` APC, `^` PM: string sequences only a terminal sends. */
+const STRING_INTRODUCERS: readonly number[] = [0x5d, 0x50, 0x5f, 0x5e];
+
+/** Longest reply string waited out before it counts as typing. */
+const MAX_REPLY_STRING = 4096;
+
+/**
+ * Whether a CSI sequence (parameter bytes, final byte) is a terminal's answer
+ * to a query rather than a key.
+ *
+ * `u` and `y` need the `?` prefix: without it `CSI 97 u` is a key press under
+ * the keyboard protocol, and only the flags reply (`CSI ? 1 u`) and the mode
+ * report (`CSI ? 2026 ; 2 $ y`) are answers.
+ */
+function isTerminalReply(body: readonly number[], final: number): boolean {
+  const numeric = (value: number) =>
+    (value >= 0x30 && value <= 0x39) ||
+    value === 0x3b ||
+    value === 0x3f ||
+    value === 0x3e;
+  switch (final) {
+    case 0x63: // c — device attributes
+    case 0x52: // R — cursor position
+    case 0x6e: // n — device status
+      return body.every(numeric);
+    case 0x75: // u — keyboard protocol flags
+      return body[0] === 0x3f && body.every(numeric);
+    case 0x79: // y — mode report, `$` is its intermediate byte
+      return (
+        body[0] === 0x3f &&
+        body[body.length - 1] === 0x24 &&
+        body.slice(0, -1).every(numeric)
+      );
+    default:
+      return false;
   }
 }
 
