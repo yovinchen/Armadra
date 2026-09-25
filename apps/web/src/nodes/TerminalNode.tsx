@@ -43,6 +43,7 @@ import { autoNameNode } from "@/meta/annotations";
 import { HandoffBadge } from "@/agent/handoff/HandoffBadge";
 import { ContextReadsBadge } from "./ContextReadsBadge";
 import { DeliveryQueueBadge } from "./DeliveryQueueBadge";
+import { DependencyWaitBadge } from "./DependencyWaitBadge";
 import { DriveBadge } from "./DriveBadge";
 import { MemoryBadge } from "@/panels/resources/MemoryBadge";
 import { openHandoff } from "@/agent/handoff/handoff-targets";
@@ -214,6 +215,13 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
       )}
       {agent && <AccountBindingBadge agent={agent} />}
       {agent && <HandoffBadge nodeId={id} />}
+      {/*
+        启动前在等谁（Agent 自动化设计 §6）。等待与启动都归 core，这里读的是
+        依赖表，不是节点数据里的 `pendingLaunch`；没有等待就不画。
+      */}
+      {agent && (
+        <DependencyWaitBadge nodeId={id} workspaceId={workspaceId ?? null} />
+      )}
       {/*
         谁在驱动（`agent-delivery.md` §6）。只有真的有人或有 Agent 在驱动时
         才出现：空闲是常态，画出来只是噪音。

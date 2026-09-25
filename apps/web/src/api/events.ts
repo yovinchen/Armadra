@@ -23,6 +23,7 @@ import { workspaceEventSchema, type WorkspaceEvent } from "@armadra/shared";
 import { workspaceEventsUrl } from "./client";
 import { useAgentStatusStore } from "../agent/status-store";
 import { useDeliveryStore } from "../agent/delivery-store";
+import { useDependencyStore } from "../agent/dependency-store";
 import { useDriveStore } from "../agent/drive-store";
 import { useLanguageStatusStore } from "../editor/language/status-store";
 
@@ -69,6 +70,8 @@ export function dispatchWorkspaceEvent(event: WorkspaceEvent): void {
   useDeliveryStore.getState().handleEvent(event);
   // 谁在驱动哪个终端，同一档：节点头的徽标与命令面板读同一个答案。
   useDriveStore.getState().handleEvent(event);
+  // 依赖等待：帧里没有等待本身，只有「该重读了」（Agent 自动化设计 §6）。
+  useDependencyStore.getState().handleEvent(event);
   for (const handler of handlers.get(event.type) ?? []) handler(event);
 }
 

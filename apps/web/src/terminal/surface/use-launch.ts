@@ -1,5 +1,10 @@
 import * as React from "react";
 
+import {
+  launchHold,
+  migrateLegacyLaunch,
+  whenDependenciesKnown,
+} from "@/agent/dependency-store";
 import { buildAgentLaunch } from "@/agent/launch";
 import { armPendingLaunch } from "@/agent/pending-launch";
 import { useCanvasStore } from "@/store/canvas-store";
@@ -33,30 +38,14 @@ export function useLaunchSequence(
     refs.promptTimerRef.current = null;
   }, [refs]);
 
-  const fireLaunch = React.useCallback(() => {
-    refs.launchTimerRef.current = null;
-    if (refs.launchPhaseRef.current !== "armed") return;
+  /** 页面自己敲启动行。节点数据现读：等依赖那一下之后它可能已经变了。 */
+  const typeLaunch = React.useCallback(() => {
     const store = useCanvasStore.getState();
     const node = store.document?.nodes.find((item) => item.id === nodeId);
     const nodeData =
       node && node.data.kind === "terminal" ? node.data : refs.dataRef.current;
     const agent = nodeData.agent;
-    if (!agent) {
-      refs.launchPhaseRef.current = "sent";
-      return;
-    }
-    refs.launchPhaseRef.current = "sent";
-    // `--after` 造出来的节点不在这里启动：把启动行交给 `pending-launch`，
-    // 由它等依赖都 `done` 之后再敲（§5.8）。提示符已经安静下来了，
-    // 所以之后任何时刻发出去都不会被写到半截的提示符里。
-    if (agent.pendingLaunch) {
-      const pending = agent.pendingLaunch;
-      armPendingLaunch(nodeId, pending, (command) => {
-        refs.transportRef.current?.input(`${command}\r`);
-        refs.freshSessionRef.current = false;
-      });
-      return;
-    }
+    if (!agent) return;
     try {
       // 启动行永远在这里重拼，节点上那个 `initialCommand` 从来不是一条指令：
       // 它是「这次连接敲了什么」的记账，和会话 id 同一类（`use-session.ts`）。
@@ -77,6 +66,49 @@ export function useLaunchSequence(
       });
     }
   }, [refs, nodeId, patch]);
+
+  const fireLaunch = React.useCallback(() => {
+    refs.launchTimerRef.current = null;
+    if (refs.launchPhaseRef.current !== "armed") return;
+    const store = useCanvasStore.getState();
+    const node = store.document?.nodes.find((item) => item.id === nodeId);
+    const nodeData =
+      node && node.data.kind === "terminal" ? node.data : refs.dataRef.current;
+    const agent = nodeData.agent;
+    refs.launchPhaseRef.current = "sent";
+    if (!agent) return;
+    const workspaceId = store.workspace?.id;
+    const send = (command: string) => {
+      refs.transportRef.current?.input(`${command}\r`);
+      refs.freshSessionRef.current = false;
+    };
+    if (agent.pendingLaunch) {
+      const pending = agent.pendingLaunch;
+      // 旧数据：带依赖的 `pendingLaunch` 迁进 core 的依赖表，之后由 core 启动
+      // （Agent 自动化设计 §6）。迁不进去（旧 core）才退回页面自己等。
+      if (pending.after.length > 0 && workspaceId !== undefined) {
+        void migrateLegacyLaunch(workspaceId, nodeId, pending).then((moved) => {
+          if (!moved) armPendingLaunch(nodeId, pending, send);
+        });
+        return;
+      }
+      // 不带依赖的那种是「敲这一行」（命令面板的恢复会话）：提示符已经安静
+      // 下来了，交给 `pending-launch` 敲并等回执。
+      armPendingLaunch(nodeId, pending, send);
+      return;
+    }
+    // 还在等依赖的节点由 core 启动：页面只起 shell，不敲启动行。还不知道有没
+    // 有等待时先读一次再决定。
+    const hold = launchHold(workspaceId, nodeId);
+    if (hold === "held") return;
+    if (hold === "free") {
+      typeLaunch();
+      return;
+    }
+    void whenDependenciesKnown(workspaceId).then(() => {
+      if (launchHold(workspaceId, nodeId) !== "held") typeLaunch();
+    });
+  }, [refs, nodeId, typeLaunch]);
 
   const armLaunch = React.useCallback(() => {
     if (refs.launchPhaseRef.current !== "idle") return;

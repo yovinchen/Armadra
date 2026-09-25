@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { CanvasNode } from "@armadra/shared";
 
+import { useDependencyStore } from "@/agent/dependency-store";
 import { useLaunchedAfter } from "@/agent/pending-launch";
 import {
   subagentNodeId,
@@ -15,9 +16,10 @@ import { useCanvasStore } from "@/store/canvas-store";
  * 两种：
  *
  *  - **rope**：`open-agent --after A,B` 造出来的等待关系（A → 新节点）。
- *    等待中虚线流动 + `⏳`，启动之后变实线。启动之后 `pendingLaunch` 就被
- *    清掉了，所以「谁开出了谁」由 `pending-launch` 的会话内记忆提供——
- *    刷新页面后绳子消失是可以接受的：它描述的是这次运行里的因果，不是数据。
+ *    等待中虚线流动 + `⏳`。等待由 core 的依赖表派生（Agent 自动化设计
+ *    §6，`agent/dependency-store.ts`）；还没迁走的旧节点数据里的
+ *    `pendingLaunch` 照读。启动之后绳子就不画了——页面自己敲出去的那些
+ *    （命令面板那条）由 `pending-launch` 的会话内记忆提供实线。
  *  - **subagent**：父 Agent → 它的临时子代理卡片。
  *
  * 它们不是画布上的对象：`overlays/CanvasOverlays.tsx` 在
@@ -45,6 +47,8 @@ export interface DeriveEdgesInput {
   launchedAfter: Readonly<Record<string, readonly string[]>>;
   /** 父节点 id → 子代理卡片。 */
   cards: Readonly<Record<string, readonly SubagentCardModel[]>>;
+  /** core 依赖表里还在等的：下游节点 id → 它还等着的上游。 */
+  waitingOn?: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Dependency edges use the same neutral appearance for every provider. */
@@ -85,8 +89,10 @@ export function deriveEdges(input: DeriveEdgesInput): DerivedEdge[] {
       node.data.kind === "terminal"
         ? node.data.agent?.pendingLaunch
         : undefined;
-    // 等待中的依赖来自节点数据；已启动的来自会话内记忆。两者不会同时存在。
-    const dependencies = pending?.after ?? input.launchedAfter[node.id] ?? [];
+    // 等待中的依赖来自 core（旧数据还没迁走时来自节点数据）；已启动的来自会
+    // 话内记忆。两者不会同时存在。
+    const waitingFor = pending?.after ?? input.waitingOn?.[node.id];
+    const dependencies = waitingFor ?? input.launchedAfter[node.id] ?? [];
     for (const dependencyId of dependencies) {
       // 依赖被删掉了就不画：一条指向空气的绳子比没有绳子更难懂。
       const dependency = byId.get(dependencyId);
@@ -95,7 +101,7 @@ export function deriveEdges(input: DeriveEdgesInput): DerivedEdge[] {
         ropeEdge(
           dependencyId,
           node.id,
-          Boolean(pending),
+          waitingFor !== undefined,
           ropeColor(dependency),
           "rope",
         ),
@@ -143,9 +149,21 @@ export function useDerivedEdges(): DerivedEdge[] {
   const nodes = useCanvasStore((state) => state.document?.nodes);
   const launchedAfter = useLaunchedAfter();
   const cards = useAllSubagentCards();
+  const launches = useDependencyStore((state) => state.launches);
+  const waitingOn = React.useMemo(() => {
+    const out: Record<string, string[]> = {};
+    for (const launch of Object.values(launches)) {
+      if (launch.state !== "waiting") continue;
+      const upstreams = launch.dependencies
+        .filter((edge) => edge.state !== "cancelled")
+        .map((edge) => edge.upstreamNodeId);
+      if (upstreams.length > 0) out[launch.nodeId] = upstreams;
+    }
+    return out;
+  }, [launches]);
 
   return React.useMemo(
-    () => deriveEdges({ nodes: nodes ?? [], launchedAfter, cards }),
-    [cards, launchedAfter, nodes],
+    () => deriveEdges({ nodes: nodes ?? [], launchedAfter, cards, waitingOn }),
+    [cards, launchedAfter, nodes, waitingOn],
   );
 }

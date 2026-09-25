@@ -11,6 +11,10 @@ import {
   deliveriesResponseSchema,
   deliveryCancelResponseSchema,
   deliveryQueueResponseSchema,
+  dependenciesResponseSchema,
+  dependencyCancelResponseSchema,
+  legacyDependencyRequestSchema,
+  legacyDependencyResponseSchema,
   exportPngRequestSchema,
   exportPngResponseSchema,
   importAssetRequestSchema,
@@ -63,6 +67,37 @@ export const agentsApi = {
       `/api/workspaces/${query(workspaceId)}/deliveries/${query(deliveryId)}`,
       deliveryCancelResponseSchema,
       { method: "DELETE" },
+    ),
+  /**
+   * 还没了结的依赖等待，按下游分组（Agent 自动化设计 §6）。等待关系由 core
+   * 持有，节点头的「等待 X」与 rope 边都从这里读。
+   */
+  dependencies: (workspaceId: string, signal?: AbortSignal) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/dependencies`,
+      dependenciesResponseSchema,
+      { signal },
+    ),
+  /** 不等这条边了；其余的边都已满足时，core 当场启动下游。 */
+  cancelDependency: (workspaceId: string, dependencyId: string) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/dependencies/${query(dependencyId)}`,
+      dependencyCancelResponseSchema,
+      { method: "DELETE" },
+    ),
+  /** 旧节点数据里带依赖的 `pendingLaunch` 迁进依赖表。重复调用不重复建。 */
+  importLegacyDependencies: (
+    workspaceId: string,
+    nodeId: string,
+    after: readonly string[],
+  ) =>
+    request(
+      `/api/workspaces/${query(workspaceId)}/dependencies`,
+      legacyDependencyResponseSchema,
+      {
+        method: "POST",
+        ...json(legacyDependencyRequestSchema.parse({ nodeId, after })),
+      },
     ),
   /** 关闭确认的人工答复（§5.8）。`accepted:false` = 那边已经等超时了。 */
   confirmControl: (requestId: string, approve: boolean) =>
