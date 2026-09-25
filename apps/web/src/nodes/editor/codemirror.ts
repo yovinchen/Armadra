@@ -173,15 +173,25 @@ export function searchPhrases(
 }
 
 /**
- * 把光标放到第 `line` 行（1 起）并滚过去。
+ * 把光标放到第 `line` 行（1 起）、第 `column` 列（1 起，缺省行首）并滚过去。
  *
- * 行号来自 Runtime 的搜索结果，文件可能在那之后被改短，所以先夹到实际
- * 行数——越界的行号只该落在文件末尾，不该抛异常。
+ * 行号来自 Runtime 的搜索结果或手敲的 `:行:列`，文件可能在那之后被改短，
+ * 所以两个都先夹到实际范围——越界的行号只该落在文件末尾，越界的列落在
+ * 行尾，都不该抛异常。
  */
-export function revealLine(view: EditorView, line: number): void {
+export function revealLine(
+  view: EditorView,
+  line: number,
+  column?: number,
+): void {
   const target = Math.min(Math.max(line, 1), view.state.doc.lines);
-  const { from } = view.state.doc.line(target);
-  view.dispatch({ selection: { anchor: from }, scrollIntoView: true });
+  const { from, length } = view.state.doc.line(target);
+  const offset =
+    column === undefined ? 0 : Math.min(Math.max(column - 1, 0), length);
+  view.dispatch({
+    selection: { anchor: from + offset },
+    scrollIntoView: true,
+  });
   view.focus();
 }
 

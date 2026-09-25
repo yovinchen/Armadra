@@ -551,6 +551,16 @@ export const COMMANDS = [
     allowWhileTyping: true,
     when: "editorFocus",
   },
+  // ⌃G 两个平台都一样：macOS 上 ⌘G 是「查找下一个」，不能抢。
+  {
+    id: "editor.goToLine",
+    labelKey: "cmd.editor.goToLine",
+    scope: "editor",
+    defaultKeys: both("Ctrl+G"),
+    allowInTerminal: false,
+    allowWhileTyping: true,
+    when: "editorFocus",
+  },
 
   // ── browser：浏览器节点内部（B01） ──────────────────────────────
   //

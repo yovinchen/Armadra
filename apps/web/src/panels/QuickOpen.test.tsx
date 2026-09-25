@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -12,7 +13,9 @@ import type { Workspace } from "@armadra/shared";
 
 import { installDomPolyfills } from "../app/test-harness";
 import { useCanvasStore } from "../store/canvas-store";
+import { rememberRecentFile } from "../files/recent-files";
 import { QuickOpen } from "./QuickOpen";
+import { openQuickOpen } from "./quick-open-seed";
 
 installDomPolyfills();
 
@@ -62,7 +65,10 @@ function renderQuickOpen() {
   return render(<QuickOpen />, { wrapper });
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 beforeEach(() => {
   vi.useRealTimers();
@@ -190,5 +196,66 @@ describe("QuickOpen", () => {
     expect(
       await screen.findByText("没有符号；语言服务没在跑时这里是空的"),
     ).toBeTruthy();
+  });
+
+  it("lists the recently opened files of this workspace before anything is typed", async () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    });
+    rememberRecentFile(workspace.id, "docs/old.md");
+    rememberRecentFile(workspace.id, "src/new.ts");
+    rememberRecentFile("another-workspace", "elsewhere.txt");
+    renderQuickOpen();
+
+    const group = await screen.findByText("最近打开");
+    const rows = group.parentElement?.textContent ?? "";
+    // 最近的在前，别的工作空间的不混进来。
+    expect(rows.indexOf("src/new.ts")).toBeLessThan(
+      rows.indexOf("docs/old.md"),
+    );
+    expect(rows).not.toContain("elsewhere.txt");
+
+    fireEvent.click(screen.getByText("new.ts"));
+    expect(openFileInEditor).toHaveBeenCalledWith("src/new.ts");
+  });
+
+  it("opens a file at `path:line:column`", async () => {
+    renderQuickOpen();
+    fireEvent.change(screen.getByPlaceholderText("按文件名查找"), {
+      target: { value: "client:12:4" },
+    });
+    // 位置后缀不进文件名查询。
+    await waitFor(() =>
+      expect(fileIndex).toHaveBeenCalledWith(workspace.id, "client"),
+    );
+    fireEvent.click(await screen.findByText("client.ts"));
+    expect(openFileInEditor).toHaveBeenCalledWith("src/api/client.ts", {
+      line: 12,
+      column: 4,
+    });
+  });
+
+  it("jumps within the editor the go-to-line command came from", async () => {
+    cleanup();
+    useCanvasStore.getState().setPanel("quickOpen", false);
+    openEditorNode("src/other.ts");
+    renderQuickOpen();
+    act(() => openQuickOpen({ query: ":", path: "src/seeded.ts" }));
+
+    const input = await screen.findByPlaceholderText("按文件名查找");
+    expect((input as HTMLInputElement).value).toBe(":");
+    expect(await screen.findByText(/输入行号/)).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: ":30" } });
+    fireEvent.click(await screen.findByText("第 30 行"));
+    expect(openFileInEditor).toHaveBeenCalledWith("src/seeded.ts", {
+      line: 30,
+      column: undefined,
+    });
+    // 只跳行的输入不去扫文件索引。
+    expect(fileIndex).not.toHaveBeenCalledWith(workspace.id, ":30");
   });
 });

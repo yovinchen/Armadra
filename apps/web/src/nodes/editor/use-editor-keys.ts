@@ -23,12 +23,15 @@ export interface EditorKeysOptions {
   /** 当前的 CodeMirror 视图；还没建好时语言命令什么也不做。 */
   view: EditorView | null;
   save: () => void;
+  /** 「跳转到行」：带着 `:` 打开快速打开，当前文档就是这个编辑器。 */
+  goToLine: () => void;
 }
 
 export function useEditorKeybindings({
   root,
   view,
   save,
+  goToLine,
 }: EditorKeysOptions): void {
   const viewRef = React.useRef(view);
   viewRef.current = view;
@@ -42,13 +45,14 @@ export function useEditorKeybindings({
     };
     return {
       "editor.save": save,
+      "editor.goToLine": goToLine,
       "editor.rename": run("editor.rename"),
       "editor.format": run("editor.format"),
       "editor.goToDefinition": run("editor.goToDefinition"),
       "editor.findReferences": run("editor.findReferences"),
       "editor.codeActions": run("editor.codeActions"),
     };
-  }, [save]);
+  }, [goToLine, save]);
 
   useKeybindings(handlers, { scopes: ["editor"], target: root });
 }

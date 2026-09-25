@@ -15,13 +15,15 @@ import { basename } from "./file-operations";
 export interface OpenFileOptions {
   /** 1 起的行号；给了就滚过去。 */
   line?: number;
+  /** 1 起的列号；只在给了行号时有意义。 */
+  column?: number;
   readonly?: boolean;
 }
 
 /** 返回被打开（或复用）的节点 id；没有工作区时返回 `null`。 */
 export function openFileInEditor(
   path: string,
-  { line, readonly }: OpenFileOptions = {},
+  { line, column, readonly }: OpenFileOptions = {},
 ): string | null {
   const store = useCanvasStore.getState();
   if (!store.workspace) return null;
@@ -39,6 +41,6 @@ export function openFileInEditor(
     store.selectNodes([existing.id]);
     requestCenterOnNode(existing.id);
   }
-  if (line !== undefined) revealInEditor(path, line);
+  if (line !== undefined) revealInEditor(path, line, column);
   return id;
 }

@@ -61,6 +61,7 @@ export const commands: MessageModule = {
     "cmd.editor.goToDefinition": "跳转到定义",
     "cmd.editor.findReferences": "查找引用",
     "cmd.editor.codeActions": "代码操作",
+    "cmd.editor.goToLine": "跳转到行",
 
     "cmd.browser.reload": "重新加载页面",
     "cmd.browser.back": "后退",
@@ -127,6 +128,7 @@ export const commands: MessageModule = {
     "cmd.editor.goToDefinition": "Go to definition",
     "cmd.editor.findReferences": "Find references",
     "cmd.editor.codeActions": "Code actions",
+    "cmd.editor.goToLine": "Go to line",
 
     "cmd.browser.reload": "Reload page",
     "cmd.browser.back": "Back",

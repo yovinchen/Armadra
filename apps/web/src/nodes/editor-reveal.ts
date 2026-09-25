@@ -11,21 +11,31 @@
  * 其妙跳回上一次搜索的位置。
  */
 
-const pending = new Map<string, number>();
+/** 1 起的行号与列号；列号缺省就是行首。 */
+export interface RevealTarget {
+  line: number;
+  column?: number;
+}
+
+const pending = new Map<string, RevealTarget>();
 type Listener = (path: string, line: number) => void;
 const listeners = new Set<Listener>();
 
-/** 请求把 `path` 滚动到第 `line` 行（1 起）。 */
-export function revealInEditor(path: string, line: number): void {
-  pending.set(path, line);
+/** 请求把 `path` 滚动到第 `line` 行（1 起），给了 `column` 就落到那一列。 */
+export function revealInEditor(
+  path: string,
+  line: number,
+  column?: number,
+): void {
+  pending.set(path, column === undefined ? { line } : { line, column });
   for (const listener of [...listeners]) listener(path, line);
 }
 
-/** 取走并清除 `path` 的待处理行号。 */
-export function takePendingReveal(path: string): number | undefined {
-  const line = pending.get(path);
+/** 取走并清除 `path` 的待处理位置。 */
+export function takePendingReveal(path: string): RevealTarget | undefined {
+  const target = pending.get(path);
   pending.delete(path);
-  return line;
+  return target;
 }
 
 export function onEditorReveal(listener: Listener): () => void {

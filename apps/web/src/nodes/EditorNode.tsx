@@ -46,6 +46,8 @@ import type { ExternalChange, LoadState, ViewMode } from "./editor/types";
 import { useExternalChanges } from "./editor/use-external-changes";
 import { useEditorKeybindings } from "./editor/use-editor-keys";
 import { useFileSave } from "./editor/use-save";
+import { rememberRecentFile } from "@/files/recent-files";
+import { openQuickOpen } from "@/panels/quick-open-seed";
 import { useLanguageService } from "@/editor/language/use-language";
 import { languageIdFor } from "@/editor/language/language-ids";
 import { hasConflictMarkers, openMergeView } from "@/editor/merge/conflict";
@@ -117,6 +119,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     void (async () => {
       const info = await runtimeApi.fileInfo(workspaceId, path);
       if (cancelled) return;
+      rememberRecentFile(workspaceId, path);
       if (
         info.preview === "image" ||
         info.preview === "video" ||
@@ -209,8 +212,8 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
       setDirty(false);
       setViewGeneration((generation) => generation + 1);
       // 搜索面板开着这个文件时排队的「打开到行」，挂载后自己来取。
-      const line = takePendingReveal(path);
-      if (line !== undefined) revealLine(view, line);
+      const reveal = takePendingReveal(path);
+      if (reveal) revealLine(view, reveal.line, reveal.column);
 
       // 语言包异步到货后热替换语法；编辑器本身不重建，光标和撤销栈都不受影响。
       void loadLanguage(path).then((extensions) => {
@@ -240,8 +243,8 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
       if (revealedPath !== path) return;
       const view = refs.viewRef.current;
       if (!view || refs.viewIdentityRef.current !== identity) return;
-      const line = takePendingReveal(path);
-      if (line !== undefined) revealLine(view, line);
+      const reveal = takePendingReveal(path);
+      if (reveal) revealLine(view, reveal.line, reveal.column);
     });
   }, [identity, path]);
 
@@ -332,6 +335,7 @@ export function EditorNode({ id, node, selected }: NodeBodyProps) {
     root: keyboardRoot,
     view: refs.viewRef.current,
     save: () => void save(),
+    goToLine: () => openQuickOpen({ query: ":", path }),
   });
 
   /* --------------------------------- 渲染 --------------------------------- */

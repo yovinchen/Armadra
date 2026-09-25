@@ -7,6 +7,7 @@ import { COMMAND_BY_ID, type CommandId } from "../keybindings";
 import { usePreferencesStore, useT } from "./preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { useEnabledAgents } from "./use-agents";
+import { openQuickOpen } from "../panels/quick-open-seed";
 
 /** Git 工具窗口的提交页监听它来触发提交（⌘⏎，§13.5）。 */
 export const SCM_COMMIT_EVENT = "armadra:scm-commit";
@@ -117,6 +118,12 @@ export function useCommandDispatch(): CommandDispatch {
           prefs.setWhiteboardPreference(key, !prefs.whiteboard[key]);
           return;
         }
+        // 命令面板里点「跳转到行」：没有键盘所在的编辑器，`:行` 落在选中的
+        // 编辑器节点上（快速打开自己的规则）。编辑器里按键走的是节点自己
+        // 的监听器，带着那个节点的路径。
+        case "editor.goToLine":
+          openQuickOpen({ query: ":" });
+          return;
         case "scm.commit":
           // 窗口先开到底部，事件再发：提交页要先挂上才听得到这一次。
           setPanel("scm", "bottom");
