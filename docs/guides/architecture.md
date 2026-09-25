@@ -105,8 +105,14 @@ Git 的路由做完权限与参数解析后，按工作空间的 `executionHostI
 里查 `core/remote/operations.ts` 的操作表，要么把同一个操作名经 `ssh` 发给那
 台主机上的 Worker——Worker 就是同一份 core 包以 `worker --stdio` 启动，不开
 数据库、不监听端口，只读写 stdio 帧（`core/remote/server.ts`）。两边跑同一段
-代码，远端工作空间绝不回退到控制端的磁盘。远端文件监听是控制端按 2 秒轮询；
-语言服务、仓库操作队列与交接在远端工作空间上明确答 501。
+代码，远端工作空间绝不回退到控制端的磁盘。Worker 也能主动推帧（`requestId`
+为空），各域经 `listenRemote` 订阅：Git 长操作在 Worker 的仓库队列里排，进度
+与结局推回控制端的镜像（`core/remote/git-operations.ts`）；文件监听由 Worker
+的平台 watcher 推变化，连接断开或 Worker 太旧时退回控制端 2 秒轮询；资源面板
+每拍对每台远端主机做一轮 `resources.read`（`core/resources/remote.ts`）。语言
+服务走同一台主机上的第二个 Worker（`worker --stdio --language-link`，
+`core/remote/language.ts`），语言服务器是它的子进程。交接在远端工作空间上仍
+明确答 501。
 
 画布引擎是 React Flow 12（`@xyflow/react`，MIT），白板层自写。
 **`canvas-store` 是画布在内存里的唯一真相**，React Flow 只是受控视图：

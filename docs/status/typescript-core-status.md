@@ -1878,3 +1878,38 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/web test`：2711/2714，失败的三条（`AutomationDrawer.test.tsx` 一条、`KeybindingsPage.test.tsx` 两条）是整套跑时超时，单独重跑全过；新增 `session/gateway.test.ts`，`TerminalSurface.render.test.tsx` 补「读到休眠不新建、点唤醒后原样重连」，`render-state.test.ts`、`metrics.test.ts` 各补一条。`pnpm --filter @armadra/web typecheck` 通过。
 - `pnpm --filter @armadra/server test` 68/68；`pnpm check` 与 `pnpm format:check` 通过。
 - 没有在打包应用里实测 tmux 后端下的真实 Claude / Codex 续接。
+
+## 44. 远端执行主机补齐：Git 长操作、语言连接、资源读取与推送监听（2026-09-26）
+
+§34 之后远端工作空间还剩四块：Git 的操作队列 / 集成状态 / 工作树绑定 / AI 提交信息答 501，语言服务答 `unsupported_remote`，资源面板对 SSH 会话只标 `remote`，文件监听靠控制端 2 秒轮询。这一节把它们接到 Worker 上。
+
+### 44.1 做了什么
+
+- **推送通道**：Worker 会话（`core/remote/session.ts`）持有跨请求的状态，随 stdin 关闭统一收尾；`requestId` 为空的答复帧就是推送。控制端 `RemoteWorker` 新增 `onEvent / onConnected / onDisconnected`，远端域把它们接到 `remote/execute.ts` 的 `listenRemote`，各域按 `channel`（`control` / `language`）订阅，互不知道对方。
+- **Git 长操作**：`git.operationStart` 在 Worker 自己的仓库队列里排（同一段 `startOperation`），Worker 每 200 ms 看一眼快照、变了才推一帧 `git.operation`（`remote/git-worker.ts`）。控制端 `remote/git-operations.ts` 记归属与镜像，`GET …/operations/{id}` 直接答镜像，取消经 `git.operationCancel`（幂等，可重放）。连接断开时镜像里排队的记为 `cancelled`、在跑的记为 `unknownOutcome`，晚到的帧不能把终态改回去；Worker 退出前 `RepositoryService.shutdown` 取消在途操作。集成状态（`git.integration`）与工作树绑定（`git.worktreeBinding`）在执行主机上读，归属对照仍在控制端。
+- **AI 提交信息**：`message.ts` 拆出 `generateFrom(reads, …)`。远端工作空间的采集、敏感文件筛除、脱敏与复核在 Worker 上（`git.messageCapture` / `git.messageSource`），模型 CLI 与凭据只在控制端。
+- **远端语言服务**：选了**第二个 Worker 进程**（`worker --stdio --language-link`，ssh 启动行早就按「只差这个旗标」写好），而不是在控制连接里多路复用。取舍写在 `remote/language.ts` 头注释：一根有序 stdio 管道上，几百 KB 的补全 / 诊断会堵住文件保存与 Git 状态；语言服务器是编译器级子进程，崩了不该拖着控制连接；连接一断 Worker 调 `Manager.shutdown`，服务器随之停，不留孤儿；帧、握手、能力、重连退避、读重放 / 写不重放全部沿用。代价是同一主机多一个 ssh 连接与一次认证（配了 `ControlMaster` 的复用同一条 TCP）。Worker 那头跑的就是本机的 `Manager`（发现、会话、影子文档、白名单、`WorkspaceEdit` 落盘）；控制端 `language/remote.ts` 只授权与搬运——浏览器的一条文本是一次 `language.send`，服务器发往会话的消息是 `language.message` 推送。设置随请求带去，去掉按主机记的探测缓存；Worker 开会话前先在自己机器上探测。语言连接断开时，该主机上每个会话收到 `disconnected / link_lost` 并关 socket，编辑器按原有退避重连。主机不可达时服务列表每种语言一行 `disconnected / link_lost`；Worker 太旧（不带 `remote.language.v1`）仍是 `unsupported_remote`。
+- **多执行主机资源**：Worker 新增 `resources.read`（`remote/resources-worker.ts`），一轮答主机总览加若干会话进程树，CPU 基线存在 Worker 会话里（第一轮 `null`，第二轮起有数）。会话与远端进程树靠 SSH 连接对上（`resources/sockets.ts`）：控制端找到窗格里的 `ssh` 客户端和它连出去的本地端口，Worker 找本用户里握着对端端口正是它的连接的进程——`sshd` 的会话进程，shell 及其下都是它的后代。读取优先 `lsof`，Linux 上没有时读 `/proc`。控制端 `resources/remote.ts` 是按主机的缓存：采样仍是同步一拍，读缓存里上一轮的数并登记下一轮，一台主机一拍最多一个请求；读不到、对不上、超过 30 s 的缓存一律如实为 `null`（原因 `remote`）。`sessions.ts` 从终端节点的 `ssh.hostId`（退回工作空间执行主机）认出主机；`sample.ts` 的会话行带 `executionHostId`；`resources/hosts.ts` 以子类覆盖 `snapshot`，快照多一个 `executionHosts`（工作空间绑定的主机与 SSH 终端连到的主机，读不到的主机照样列出、各项为 `null`）。`service.ts` 没有改动。面板：主机筛选提到抽屉里，总览与会话表跟同一个筛选；筛选项包括没有会话的远端主机，显示设置里的主机名。
+- **远端文件监听**：改成 Worker 侧 `fs.watch` 推送（`remote/watch-worker.ts`）：按工作空间整组登记（`files.watch`），看父目录（原子改名不丢），事件合并后按内容哈希判断再推 `files.changed`；看不了的目录 Worker 自己复查。注册答 `mode: events`。控制端保留轮询作退路：Worker 不认 `files.watch` 时一直轮询；连接断开先退回轮询，轮询的请求把连接拉起来，握手后整组重登并比对一次版本补上断线期间的变化，再停轮询。
+- 新增能力 `remote.git.operations.v1`、`remote.watch.v1`、`remote.resources.v1`、`remote.language.v1`；缺哪组，控制端对那组答 501 并写明能力名。`remote/execute.ts` 的 `localOnly` 已无人用，删除。
+
+### 44.2 没做 / 取舍
+
+- **会话与远端进程树的对应**依赖连接端口两端一致：经 NAT 改写源端口、`ProxyJump`、`ControlMaster` 复用连接时对不上，如实为 `null`；不改 `ssh` 命令行（例如塞环境变量标记），因为那要改终端域的启动行且远端 `sshd` 默认不收 `SetEnv`。Windows 两侧都没有这条读法。
+- **语言连接不做空闲关闭**：Worker 里的服务器按原有空闲策略停，连接本身留着到 core 关停或主机设置变更；长时间无会话时多一条闲置 ssh。
+- Worker 重启（连接断开）后远端操作历史只剩控制端镜像里的那些；列表以 Worker 当次会话为准。
+- 远端 `language.processes` 已在 Worker 上提供，但资源面板的平台组件行还没有接远端语言服务器（它们不在本机进程表里）。
+- 设计文档 `terminal-host-design.md` §8.1 是追溯段落，未改写。
+
+### 44.3 验证
+
+- 新增 `remote/worker-push.test.ts`（本机子进程跑真 Worker，控制连接与 `--language-link` 各一个）：路由发起 `createBranch` 并跟随推送进度到 `succeeded`、列表与跨工作空间 404、终态取消、集成状态与工作树绑定、远端采集 + 本机假 CLI 的 AI 提交信息、镜像在断线时的 `cancelled / unknownOutcome` 与终态不回退、推送监听与断线退回轮询再升回推送、替身 `sshd` 的一轮资源读取（端口对上、树的 RSS 与子进程、第一轮 CPU 为 `null`、对不上的为 `remote`）、主机总览缓存、语言连接上开会话收发 JSON-RPC（诊断回到 socket、远端绝对路径不出主机）、断线告知 `link_lost` 并关 socket、主机不可达时的服务行。
+- `execution.test.ts` 两处期望随行为更新（监听登记为 `events`、远端操作列表 200）；`resources/sockets.test.ts`、`sample.test.ts`、web `ResourceDrawer.test.tsx`（主机筛选联动总览）、`metrics.test.ts` 补用例。
+- 命令与结果见 44.4。
+
+### 44.4 命令
+
+- `pnpm --filter @armadra/desktop test`：254 文件通过、2 跳过（2928 条通过；worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
+- `pnpm --filter @armadra/web test`：全量跑时 `AutomationDrawer.test.tsx` 与 `KeybindingsPage.test.tsx` 在机器高负载下超时，单独重跑两文件 38 条全过；`typecheck` 通过。
+- `pnpm --filter @armadra/server test`：9 文件 68 条通过；`pnpm --filter @armadra/shared test`：155 条通过。
+- `pnpm check`（含 `format:check`）通过。
