@@ -1692,3 +1692,41 @@ H02 的控制端（帧、握手、重连）早就在，远端那一侧从没写�
 
 - `remote/execution.test.ts`：把 core 真入口用 vite 打成 CJS 包，本机子进程跑 `worker --stdio`，控制端经同一套帧与握手说话，不需要 sshd。覆盖握手与能力、按会话拒绝、读重放 / 写不重放（第一个子进程握手后在首个请求上断开）、远端文件路由全套、远端轮询监听、上传与拖入导入、Git 读写与提交、操作队列 501、建远端工作空间（不存在的根不落库）、切换的一致 / 不一致 / 强制 / 终端阻塞 / 迁移文件拒绝，以及没装配远端执行时不回退本机。
 - `pnpm --filter @armadra/desktop test`、`pnpm --filter @armadra/web test`（`i18n.test.ts` 里 `integration.legacy.list` 未引用是基线 b1811c85 带来的，与本节无关）、`pnpm --filter @armadra/web typecheck`、`pnpm --filter @armadra/server test`、`pnpm check`、`pnpm format:check`。
+
+## 37. 编辑器节点：最近文件、跳转行列、Git 行边标记、媒体预览与草稿保护（2026-09-26）
+
+设计见[编辑器与浏览器设计](../design/editor-browser-design.md) §2 与 §3，这一节把两处「尚未实现」里除「搜索结果的取消按钮」「重新定位」之外的项都落了。
+
+### 37.1 最近文件与跳转到行列
+
+- 最近文件按工作空间记在本机 localStorage（`files/recent-files.ts`，二十条，最近的在前），编辑器节点每打开一个文件记一次；快速打开输入为空时先列这一组。不进 core：这是「这台设备上刚看过什么」，换台设备本来就该是另一份。
+- 输入 `路径:行[:列]` 时只拿路径去查文件索引，选中后打开到那个位置；`:行[:列]` 不查文件，直接跳当前编辑器。`editor-reveal` 与 `revealLine` 加了列号，越界的行、列都夹到实际范围。
+- 命令表加 `editor.goToLine`（⌃G，两个平台一样——macOS 上 ⌘G 是查找下一个）。编辑器里按下时带着那个节点的路径打开快速打开（`panels/quick-open-seed.ts`，单独一个模块，免得编辑器把快速打开连同符号查询一起拖进包里）；从命令面板执行时落在选中的编辑器上。
+
+### 37.2 Git 行边标记
+
+core 没有「取 HEAD 里这个文件」的接口，也不需要新加：`git/diff` 的 `worktree` 与 `staged` 两个作用域已经给出这个文件的两段 patch，拿磁盘正文依次倒着打回去就是 HEAD 的行（`nodes/editor/git-gutter.ts`）。倒打时逐行核对上下文与新增行，对不上（取 diff 与读正文之间磁盘又变了）就不画——错位的标记比没有标记更误导。未跟踪或刚 `git add` 的新文件整份算新增。
+
+HEAD 的行交给 CodeMirror 的一个 StateField，按键后 250ms 用 `lib/line-diff` 的同一套对齐重算，所以标记跟着草稿走而不是等保存。重取时机：视图重建、保存 / 重载 / 草稿合并之后、窗口回焦，以及 Git 面板做完写操作（它会让 `git-status` 查询失效，这里订阅 QueryCache 的那一下；拿不到 QueryClient 时——比如单测——只是少这一条触发）。不在仓库、没有执行权限、旧 Runtime：没有标记，不报错。
+
+### 37.3 媒体预览
+
+`file-info` 的 `preview` 加了 `video` / `audio` / `pdf`（`shared/api/files.ts`）。判定在 core 的 `files/mime.ts`（`mediaPreviewOf`），`imports/batch.ts` 的 `fileInfo` 调它：只收页面引擎能播的容器（`.avi` / `.mkv` 仍是下载，免得打开一个永远在转圈的黑框），而且不超过下载路由的 16 MiB——页面是整份取回再包成 blob 的。
+
+没有加路由：`file-download` 为了不让上传的 HTML 在 core 的来源里执行，永远回 `application/octet-stream` 附件，所以和图片一样由页面按 Runtime 报的 MIME 包成 blob 再交给原生 `<video>` / `<audio>` / `<iframe>`。为此 CSP 加了 `media-src 'self' blob:`、`frame-src` 加了 `blob:`（服务器壳的策略逐字继承），Electron 窗口开 `plugins: true`，内置 PDF 查看器才会启动。PDF 的框不加 `sandbox`：带沙箱时引擎直接拒绝启动查看器，而那个 blob 是页面自己按 PDF 类型包的，不会被当成 HTML 解析。
+
+图片：适应 / 1:1 两档加滚轮缩放（节点体本来就是 `nowheel`，画布不会跟着缩；从「适应」开始滚以当前实际显示比例为起点），透明区域铺两种表面色的棋盘格，放大到 4 倍以上改成像素化采样。引擎解不开的媒体仍退回下载卡片。
+
+### 37.4 草稿保护
+
+- 未保存的正文去抖 400ms 写进 localStorage（`nodes/editor/drafts.ts`，工作空间 + 路径一条，记着改起时的内容版本与那一版正文）；关页面、切走标签页、节点卸载时立刻写掉排着队的那一截。用 localStorage 而不是 IndexedDB 是因为最后那次写必须同步——`pagehide` 里等不到一个异步事务提交。
+- 重开时：磁盘还是那一版就原样放回，提示「已恢复」并可一键丢弃；磁盘变了就放回草稿，但保存凭据退回旧版本（直接保存会 409，不会悄悄盖掉别人的修改），提示条出现「合并」。
+- 合并复用 `editor/merge/`：`merge-store` 加了 `draft` 模式与 `beginDraft`，对话框在这个模式下换成「打开时的版本 / 草稿 / 磁盘上的版本」的叫法，只有一个「应用到草稿」——结果放回编辑器，磁盘那一版成为新的保存凭据，写不写盘仍由保存决定。会话中途磁盘变了、有草稿时，提示条同样给出「合并」，base 是上一次读到或保存的正文。
+- 打开时文件读不到而本机有草稿：先问 `file-version`，确认是文件没了（不是断线）才把草稿当正文打开，按新建保存。文件被删或移走时提示条多一个「另存为」：按新建写到新路径（已有文件就是 409，对话框里说出来），然后节点改指过去、标题原本是旧文件名时跟着改。
+- 监听注册的回答可能比恢复后的那次渲染先到，恢复时同步写 `dirtyRef`，免得它把刚放回的草稿当成干净编辑器自动重载掉。
+
+### 37.5 验证
+
+`pnpm libs:build` 之后：`pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test` 2658/2660，失败的两条是 `i18n.test.ts` 的 `integration.legacy.list`（基线 `77b62763` 就在，不是这里引入的）和 `AutomationDrawer.test.tsx` 的一条（整套跑时超时，单独重跑 18/18 通过）；`pnpm --filter @armadra/desktop test` 2835 通过 13 跳过；`pnpm --filter @armadra/server test` 68/68；`pnpm check` 与 `pnpm format:check` 通过。新增用例：`nodes/editor/git-gutter.test.ts`（倒打 patch、核对失败、只删的 hunk、三种标记、新文件、CRLF）、`files/recent-files.test.ts`、`nodes/EditorNode.drafts.test.tsx`（草稿落本机与放回、保存后清掉、磁盘变了走合并再按新版本保存、文件没了另存为、行边标记随编辑变化），`QuickOpen.test.tsx` 补最近文件 / `路径:行:列` / 跳转到行，`EditorNode.test.tsx` 补音视频 / PDF / 图片缩放，`imports/batch.test.ts` 补媒体判定与下载上限。
+
+没做：在打包应用里实测 PDF 查看器与视频解码（只在单测里验证了 DOM 与 CSP 串）；「重新定位」——把草稿接到一个已存在的文件上；标题的「未同步」状态。
