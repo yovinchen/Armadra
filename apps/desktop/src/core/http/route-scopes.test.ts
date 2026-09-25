@@ -60,6 +60,10 @@ describe("路由要求的 scope", () => {
     expect(routeScope("POST", "/api/approvals/p1/answer")?.permission).toBe(
       "approval:answer",
     );
+    // 「在访达中显示」会拉起一个程序，和开终端同一档，不是读文件那一档。
+    expect(
+      routeScope("POST", "/api/workspaces/{workspaceId}/reveal")?.permission,
+    ).toBe("terminal:create");
   });
 
   it("健康检查不要求任何权限", () => {

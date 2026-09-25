@@ -343,6 +343,12 @@ export const ROUTES: readonly RouteEntry[] = [
     implemented: true,
   },
   {
+    path: "/api/workspaces/{workspaceId}/reveal",
+    methods: ["POST"],
+    surface: "runtime",
+    implemented: true,
+  },
+  {
     path: "/api/workspaces/{workspaceId}/language-service",
     methods: ["GET"],
     surface: "runtime",

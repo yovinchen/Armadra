@@ -35,10 +35,28 @@ export function joinPath(parent: string, name: string): string {
   return `${base}${name}`;
 }
 
+/**
+ * 工作区根目录 + 工作区内路径 → 执行主机上的绝对路径。
+ *
+ * 分隔符跟着根目录走：Windows 的根是 `C:\…`，接上去的也得是反斜杠，
+ * 复制出去的路径才能直接贴进那边的终端或资源管理器。
+ */
+export function absolutePath(root: string, relative: string): string {
+  const windows = /^[A-Za-z]:[\\/]|^\\\\/.test(root) && !root.startsWith("/");
+  const separator = windows ? "\\" : "/";
+  const base = root.replace(/[\\/]+$/, "");
+  if (relative === "." || relative === "") return base || separator;
+  return `${base}${separator}${relative.split("/").join(separator)}`;
+}
+
 export interface FileActions {
   createEntry: (parent: string, name: string, kind: FileEntryKind) => void;
   renameEntry: (from: string, to: string) => void;
   trashEntry: (path: string, name: string) => void;
+  /** 复制文本到剪贴板，成败各一条提示。 */
+  copyPath: (text: string) => void;
+  /** 在系统文件管理器里定位工作区内的一项（只在桌面壳、本机工作区里提供）。 */
+  revealEntry: (path: string) => void;
 }
 
 export function useFileActions(workspaceId: string | undefined): FileActions {
@@ -102,5 +120,29 @@ export function useFileActions(workspaceId: string | undefined): FileActions {
     [fail, refresh, workspaceId],
   );
 
-  return { createEntry, renameEntry, trashEntry };
+  const copyPath = useCallback((text: string) => {
+    void navigator.clipboard.writeText(text).then(
+      () => toast.success(t("explorer.copied"), { description: text }),
+      () => toast.error(t("explorer.copyFailed"), { description: text }),
+    );
+  }, []);
+
+  // 不走 `revealPath`：壳的那条通道只认数据目录与下载目录，工作区里的文件
+  // 过不了它的白名单。core 知道工作区根目录，越界判定和拉起文件管理器都在那边。
+  const revealEntry = useCallback(
+    (path: string) => {
+      if (!workspaceId) return;
+      void runtimeApi.revealFileEntry(workspaceId, path).then(
+        () => {},
+        // 点了没反应最像「坏了」：失败也说一声。
+        (error: unknown) =>
+          toast.error(t("explorer.revealFailed"), {
+            description: error instanceof Error ? error.message : path,
+          }),
+      );
+    },
+    [workspaceId],
+  );
+
+  return { createEntry, renameEntry, trashEntry, copyPath, revealEntry };
 }

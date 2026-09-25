@@ -8,15 +8,21 @@
  * 文件操作（E01/M4）：右键菜单里新建 / 重命名 / 移动 / 删除到回收站，
  * 把文件拖到目录行上也是移动。全部受工作区 write 权限约束——没有写权限时
  * 这些项直接不出现，而不是点了才报错。删除永远只到工作区回收站。
+ *
+ * 复制路径 / 复制相对路径不受权限约束；「在访达中显示」只在桌面壳且工作区
+ * 在本机时出现——服务器壳上 core 不在用户眼前，远端工作区的文件在另一台
+ * 机器上，两种情况下打开这台机器的文件管理器都没有意义。
  */
 import { useMemo, useState, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
+  Copy,
   File as FileIcon,
   FilePlus,
   Folder,
+  FolderOpen,
   FolderPlus,
   Image as ImageIcon,
   Pencil,
@@ -56,7 +62,10 @@ import { IconButton } from "../ui/icon-button";
 import { nodeDropPosition } from "@/canvas/placement";
 import { FileEntryDialog } from "./FileEntryDialog";
 import { useWorkspaceFileDrag } from "../files/use-workspace-file-drag";
+import { isMacPlatform } from "../keybindings/chords";
+import { isDesktop } from "../platform";
 import {
+  absolutePath,
   joinPath,
   parentOf,
   useFileActions,
@@ -97,6 +106,7 @@ export function FileTree() {
   const workspace = useCanvasStore((state) => state.workspace);
   const writable = workspace?.permissions.write === true;
   const actions = useFileActions(workspace?.id);
+  const canReveal = isDesktop() && (workspace?.executionHostId ?? "") === "";
   const [pending, setPending] = useState<PendingAction | null>(null);
   // 文件树的角标读的是工作空间根那个仓库，和抽屉走同一条归属判定。
   const gitStatusTarget = gitTarget(
@@ -148,6 +158,8 @@ export function FileTree() {
           depth={0}
           badges={badges}
           writable={writable}
+          rootPath={workspace.rootPath}
+          canReveal={canReveal}
           actions={actions}
           onAction={setPending}
         />
@@ -239,6 +251,9 @@ interface TreeProps {
   depth: number;
   badges: BadgeMap;
   writable: boolean;
+  /** 执行主机上的工作区根目录，复制绝对路径时接在前面。 */
+  rootPath: string;
+  canReveal: boolean;
   actions: FileActions;
   onAction: (action: PendingAction) => void;
 }
@@ -249,6 +264,8 @@ function Directory({
   depth,
   badges,
   writable,
+  rootPath,
+  canReveal,
   actions,
   onAction,
 }: TreeProps) {
@@ -308,6 +325,8 @@ function Directory({
           depth={depth}
           badges={badges}
           writable={writable}
+          rootPath={rootPath}
+          canReveal={canReveal}
           actions={actions}
           onAction={onAction}
         />
@@ -331,6 +350,8 @@ function Row({
   depth,
   badges,
   writable,
+  rootPath,
+  canReveal,
   actions,
   onAction,
 }: Omit<TreeProps, "path"> & { entry: FileEntry }) {
@@ -460,6 +481,25 @@ function Row({
               {t("explorer.newFilesNode")}
             </ContextMenuItem>
           )}
+          {directory && <ContextMenuSeparator />}
+          <ContextMenuItem
+            onSelect={() =>
+              actions.copyPath(absolutePath(rootPath, entry.path))
+            }
+          >
+            <Copy />
+            {t("explorer.copyPath")}
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => actions.copyPath(entry.path)}>
+            <Copy />
+            {t("explorer.copyRelativePath")}
+          </ContextMenuItem>
+          {canReveal && (
+            <ContextMenuItem onSelect={() => actions.revealEntry(entry.path)}>
+              <FolderOpen />
+              {revealLabel(t)}
+            </ContextMenuItem>
+          )}
           {writable && directory && (
             <>
               <ContextMenuSeparator />
@@ -520,12 +560,24 @@ function Row({
           depth={depth + 1}
           badges={badges}
           writable={writable}
+          rootPath={rootPath}
+          canReveal={canReveal}
           actions={actions}
           onAction={onAction}
         />
       )}
     </>
   );
+}
+
+/** 按系统叫法：访达、资源管理器，其余统称文件管理器。 */
+function revealLabel(t: ReturnType<typeof useT>): string {
+  if (isMacPlatform()) return t("explorer.revealFinder");
+  const platform =
+    typeof navigator === "undefined" ? "" : navigator.userAgent || "";
+  return /Windows/i.test(platform)
+    ? t("explorer.revealExplorer")
+    : t("explorer.revealFileManager");
 }
 
 /** 每层 12px，叠在行自身的 8px 内边距上。 */

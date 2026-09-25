@@ -20,6 +20,7 @@ import {
 import { install as installEvents } from "./events";
 import { NO_HOOK_SERVICE } from "./http/health";
 import { install as installFiles } from "./files/routes";
+import { installReveal } from "./files/reveal";
 import { install as installImports } from "./imports/routes";
 import { install as installGithub } from "./github";
 import { CoreServer } from "./http/server";
@@ -131,6 +132,8 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   // Files and imports sit beside the canvas domains: both start from a
   // workspace row, and `imports` mints one of its own.
   installFiles,
+  // 「在访达中显示」：越界判定要知道工作区根目录，所以在 core 里而不在壳里。
+  (context) => installReveal(context),
   installImports,
   installSettings,
   installUsage,

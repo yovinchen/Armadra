@@ -68,6 +68,13 @@ export const ROUTE_SCOPE_RULES: readonly RouteScopeRule[] = [
   },
   { pattern: /^\/api\/git\/clone/, read: "git:read", write: "git:write" },
 
+  // 「在访达中显示」会在 core 所在的机器上拉起一个程序，和开终端同一档，
+  // 而不是读文件那一档。
+  {
+    pattern: new RegExp(`^${WORKSPACE}/reveal$`),
+    read: "terminal:create",
+    write: "terminal:create",
+  },
   {
     pattern: new RegExp(`^${WORKSPACE}/(files?|file-|imports)`),
     read: "files:read",

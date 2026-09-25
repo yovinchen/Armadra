@@ -15,6 +15,7 @@ import {
   writeFileResponseSchema,
   type FileEntryKind,
 } from "@armadra/shared";
+import { z } from "zod";
 import { RUNTIME_URL, json, noContentSchema, query, request } from "./request";
 
 export const filesApi = {
@@ -125,6 +126,16 @@ export const filesApi = {
       `/api/workspaces/${workspaceId}/file-entries/restore`,
       fileEntryResultSchema,
       { method: "POST", ...json({ id }) },
+    ),
+  /**
+   * 在 core 所在机器的文件管理器里定位工作区内的一项（`.` 是根目录）。
+   * 越界判定在 core：壳的白名单不收工作区根目录。
+   */
+  revealFileEntry: (workspaceId: string, path: string) =>
+    request(
+      `/api/workspaces/${workspaceId}/reveal`,
+      z.object({ ok: z.boolean() }),
+      { method: "POST", ...json({ path }) },
     ),
   /**
    * 声明某个编辑器节点正打开这个文件（E01/M4）。

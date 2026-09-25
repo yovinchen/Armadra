@@ -19,6 +19,7 @@ const createFileEntry = vi.fn();
 const renameFileEntry = vi.fn();
 const trashFileEntry = vi.fn();
 const restoreTrash = vi.fn();
+const revealFileEntry = vi.fn();
 
 vi.mock("../api/client", () => ({
   RUNTIME_URL: "http://runtime",
@@ -29,6 +30,7 @@ vi.mock("../api/client", () => ({
     renameFileEntry: (...args: unknown[]) => renameFileEntry(...args),
     trashFileEntry: (...args: unknown[]) => trashFileEntry(...args),
     restoreTrash: (...args: unknown[]) => restoreTrash(...args),
+    revealFileEntry: (...args: unknown[]) => revealFileEntry(...args),
   },
 }));
 import { WORKSPACE_FILES_MIME } from "../files/workspace-drag";
@@ -274,5 +276,76 @@ describe("FileTree", () => {
     expect(screen.queryByText("重命名")).toBeNull();
     expect(screen.queryByText("删除到回收站")).toBeNull();
     expect(screen.queryByLabelText("新建文件")).toBeNull();
+  });
+
+  describe("path items", () => {
+    const writeText = vi.fn();
+    beforeEach(() => {
+      writeText.mockReset().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText },
+      });
+      revealFileEntry.mockReset().mockResolvedValue({ ok: true });
+    });
+    afterEach(() => {
+      delete (window as { armadra?: unknown }).armadra;
+    });
+
+    it("copies the absolute and the workspace-relative path", async () => {
+      renderTree();
+      fireEvent.click(await screen.findByRole("treeitem", { name: /src/ }));
+      const file = await screen.findByRole("treeitem", { name: /login.ts/ });
+      fireEvent.contextMenu(file);
+      fireEvent.click(await screen.findByText("复制路径"));
+      await waitFor(() =>
+        expect(writeText).toHaveBeenCalledWith("/repo/src/login.ts"),
+      );
+      fireEvent.contextMenu(file);
+      fireEvent.click(await screen.findByText("复制相对路径"));
+      await waitFor(() =>
+        expect(writeText).toHaveBeenLastCalledWith("src/login.ts"),
+      );
+    });
+
+    it("offers copying even in a read-only workspace, but not reveal on the web", async () => {
+      useCanvasStore.setState({
+        workspace: {
+          ...workspace,
+          permissions: { read: true, write: false, execute: false },
+        },
+      });
+      renderTree();
+      fireEvent.contextMenu(
+        await screen.findByRole("treeitem", { name: /logo.png/ }),
+      );
+      expect(await screen.findByText("复制路径")).toBeTruthy();
+      expect(screen.queryByText(/中显示$/)).toBeNull();
+    });
+
+    it("reveals through the core on the desktop shell", async () => {
+      (window as { armadra?: unknown }).armadra = {};
+      renderTree();
+      fireEvent.contextMenu(
+        await screen.findByRole("treeitem", { name: /logo.png/ }),
+      );
+      fireEvent.click(await screen.findByText(/中显示$/));
+      await waitFor(() =>
+        expect(revealFileEntry).toHaveBeenCalledWith(workspace.id, "logo.png"),
+      );
+    });
+
+    it("does not offer reveal for a workspace on another machine", async () => {
+      (window as { armadra?: unknown }).armadra = {};
+      useCanvasStore.setState({
+        workspace: { ...workspace, executionHostId: "host-1" },
+      });
+      renderTree();
+      fireEvent.contextMenu(
+        await screen.findByRole("treeitem", { name: /logo.png/ }),
+      );
+      expect(await screen.findByText("复制路径")).toBeTruthy();
+      expect(screen.queryByText(/中显示$/)).toBeNull();
+    });
   });
 });
