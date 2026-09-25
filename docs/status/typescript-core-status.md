@@ -1608,3 +1608,33 @@ shared 的 `agentDeliverySchema` 加 `targetState`（缺省空串）。投递队
 - `pnpm --filter @armadra/desktop test`：243 文件 / 2848 条通过（新增 `schedule/dispatch.test.ts` 冷启动 6 条、`collab/send.test.ts` 半截输入 1 条、`resources/keep-awake.test.ts` 7 条、settings 默认值断言）。
 - `pnpm --filter @armadra/server test`：通过。
 - `pnpm --filter @armadra/web typecheck` 通过；`test` 只剩 `i18n.test.ts` 一条失败，是基线 b1811c85 留下的 `integration.legacy.list` 未被引用，与本节无关。
+
+## 38. 搜索取消、文件树路径项、语言服务随授权停、Projects 全量翻页（2026-09-26）
+
+### 38.1 项目搜索可以取消
+
+- `core/files/search.ts`：`searchContent(root, request, signal?)` 改成异步；walk 拆成生成器，`indexFiles` 同步用，搜索每 64 个文件 `setImmediate` 让一次事件循环、每个文件前 `signal.throwIfAborted()`。不让出事件循环，socket 的 `close` 要等整个 5s 预算花完才会被看到，取消等于没有。5s 总时长上限照旧。
+- `core/files/routes.ts` 只动了搜索那条路由：`connectionSignal(request)` 挂在 **socket** 的 `close` 与请求的 `aborted` 上——请求体读完 `IncomingMessage` 就 close 了，只有 socket 活到处理结束；处理完摘掉监听（keep-alive 的 socket 会承载很多请求）。中止后答 499 `cancelled`，没人收。
+- `ProjectSearchPanel`：同一时刻只留一个请求。新查询、卸载（关掉面板或切走搜索页）、点「停止」都中止上一个；停掉的是新查询的第一页就清掉屏幕上旧查询的结果，停掉的是「加载更多」则保留已有页。搜索中「搜索」按钮仍可提交。
+
+### 38.2 文件树右键：复制路径、复制相对路径、在访达 / 资源管理器中显示
+
+- 复制两项不受写权限约束；绝对路径按根目录的分隔符拼（Windows 根接反斜杠）。
+- **取舍：「显示」不走壳的 `revealPath`。** 壳的 `shell:show-item-in-folder` 白名单只认数据目录和下载目录，并且是故意不收工作区根目录的（`shell-core/reveal-path.ts`：壳不知道哪些目录是工作区）。所以白名单不动，改在 core 新增 `POST /api/workspaces/{id}/reveal`（`core/files/reveal.ts`）：`resolveInRoot`（内部是 `contains`，跟随符号链接后再证明一次）确认在根目录内，越界 403 `forbidden`；远端工作区 501 `unsupported`；由 core 用 `execFile`（不经 shell）拉起 macOS `open -R`、Windows `explorer.exe /select,<path>`、Linux `xdg-open <父目录>`，平台与启动器都可注入。路由 scope 与开终端同一档（`terminal:create`）；handler 只要求工作区可读，不看工作区的 `execute` 开关——打开文件管理器不执行工作区里的东西，而那个开关默认关，看了这一项几乎永远不出现。
+- 页面只在 `isDesktop()` 且工作区在本机时显示「显示」这一项：服务器壳上 core 不在用户眼前。文案按平台叫「访达 / 资源管理器 / 文件管理器」，放在 `i18n/explorer.ts`。
+
+### 38.3 语言服务失去 execute 授权立即停
+
+- `bus.ts` 新增 core 内部事件 `workspace.grants`（不下发客户端）；`workspaces/routes.ts` 在 PATCH 带了 `permissions` 与 DELETE 时发它。
+- `language/policy.ts` 的 `grantChange`：工作区没了 → `stop` + `workspace_closed`；丢 `execute` → `stop` + `execution_not_granted`；只丢 `write` → `readOnly`。`Manager.applyGrants` 执行它：停止时先把 hub 移出表（关停宽限期内新开的会话会起新 hub 并在那里被拒），**先停进程再清会话**——`stopProcess` 会给每个还挂着的会话发 `language.session { state: "stopped", reason }`，先清会话就没人听得到；`readOnly` 把已开会话的 `allowWrite` 收回。
+- 执行主机切换目前仍是 `unsupported`（R5），那条路由接上时也应发 `workspace.grants`。
+
+### 38.4 Projects v2 状态映射翻完所有页
+
+`projectStatuses` 按 cursor 一直翻到 `hasNextPage` 为假，50 页（5000 条）作保险上界；到上界、下一页没给 cursor、或 cursor 重复时返回 `partial: true`。`list-issues` 响应新增 `statusGroupsPartial`（`types.ts`、`schema.ts`、页面 zod、契约 §5.2 末段）。页面暂未展示这个标记。
+
+### 38.5 验证
+
+- `pnpm --filter @armadra/desktop test`：244 个文件通过、2 个跳过（2849 通过 / 13 跳过）。新用例：`files/search.test.ts`（预先中止与扫描中途中止）、`files/routes.test.ts`（真 HTTP 服务器上 fetch 中止 → 信号触发）、`files/reveal.test.ts`（三平台 argv、越界 / 符号链接逃逸、远端、不可读）、`http/route-scopes.test.ts`、`language/policy.test.ts`、`language/routes.integration.test.ts`（PATCH 去掉 execute → 会话收到 `stopped` + `execution_not_granted`、hub 清空、进程退出、再开会话 403）、`github/endpoints.test.ts`（GraphQL fixture：7 页翻完、50 页上界标 partial、cursor 原地打转、缺 cursor）。
+- `pnpm --filter @armadra/web test`：2644 通过、1 失败——`i18n.test.ts` 报 `integration.legacy.list` 未被引用，这个键来自基线 b1811c85，不是本节改动；本节新增的键都被引用。新用例：`ProjectSearchPanel.test.tsx`（新查询 / 停止 / 卸载三种中止）、`FileTree.test.tsx`（两种复制、只读工作区也有复制、网页不显示「显示」、桌面调 core、远端工作区不显示）、`files/use-file-actions.test.ts`。
+- `pnpm --filter @armadra/server test`：68 通过。`pnpm check`（含 `format:check`、typecheck、repo:check）通过。
