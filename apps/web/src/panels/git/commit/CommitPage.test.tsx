@@ -304,6 +304,37 @@ describe("checkbox to index mapping", () => {
   });
 });
 
+describe("layout in the docked window", () => {
+  beforeEach(() => {
+    vi.spyOn(gitGateway, "repositories").mockResolvedValue(repositories(["."]));
+    vi.spyOn(gitGateway, "integration").mockResolvedValue(idle("."));
+    vi.spyOn(gitGateway, "statusBatch").mockResolvedValue(
+      livingBatch([
+        {
+          path: ".",
+          files: [
+            { path: "src/a.ts", status: "M", staged: true, unstaged: false },
+          ],
+        },
+      ]).read(),
+    );
+  });
+
+  it("scrolls as a whole when it does not fit, so the commit button stays reachable", async () => {
+    // 窗口停在底部时默认只有 40vh：1440×900 下是 360px。工具条、变更树的
+    // 128px 下限与消息区加起来超过它，而这一页原来不滚动，「提交」按钮落在
+    // 视口下沿之外，点不到（远端探针实测，按钮顶边在 914px）。jsdom 量不出
+    // 布局，这里守住的是「这一页自己是滚动容器」。
+    const { container } = view();
+    await ready();
+    const page = container.firstElementChild as HTMLElement;
+    expect(page.className).toContain("overflow-y-auto");
+    expect(page.contains(screen.getByRole("button", { name: "Commit" }))).toBe(
+      true,
+    );
+  });
+});
+
 describe("cross-repository commit", () => {
   beforeEach(() => {
     vi.spyOn(gitGateway, "repositories").mockResolvedValue(
