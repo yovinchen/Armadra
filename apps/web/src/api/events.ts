@@ -42,6 +42,22 @@ export function onWorkspaceConnection(handler: ConnectionHandler): () => void {
   };
 }
 
+/**
+ * core 关事件流用的码：这个人对这块工作空间的读授权没了（服务器壳上撤销
+ * 共享、停用账号，契约 §10）。
+ */
+export const ACCESS_REVOKED_CLOSE = 4403;
+const accessLostHandlers = new Set<(workspaceId: string) => void>();
+/** 事件流因为授权被收回而关闭（{@link ACCESS_REVOKED_CLOSE}）。 */
+export function onWorkspaceAccessLost(
+  handler: (workspaceId: string) => void,
+): () => void {
+  accessLostHandlers.add(handler);
+  return () => {
+    accessLostHandlers.delete(handler);
+  };
+}
+
 /** 订阅一种事件；返回退订函数。 */
 export function onWorkspaceEvent<T extends EventType>(
   type: T,
@@ -188,7 +204,7 @@ function open(connection: Connection): void {
     if (connection.cursor === null || cursor.cursor > connection.cursor)
       connection.cursor = cursor.cursor;
   };
-  socket.onclose = () => {
+  socket.onclose = (event?: CloseEvent) => {
     if (connection.socket !== socket || connection.stopped) return;
     // 没打开过就关了 = core 在升级之前拒绝了这个游标。放弃续订，回到实时。
     if (!connection.opened && connection.resuming) {
@@ -198,6 +214,16 @@ function open(connection: Connection): void {
     for (const handler of connectionHandlers)
       handler(connection.workspaceId, false);
     connection.socket = null;
+    // 授权被收回：重连的升级只会再被 403 拒。不再重连，告诉页面重取工作空间
+    // 列表——这块画布会从列表里消失，而不是停在一份再也存不进去的旧文档上。
+    if (event?.code === ACCESS_REVOKED_CLOSE) {
+      connection.stopped = true;
+      // 下一次订阅同一块工作空间（重新共享之后）要开一条新的，而不是复用这条。
+      if (current === connection) current = null;
+      for (const handler of [...accessLostHandlers])
+        handler(connection.workspaceId);
+      return;
+    }
     schedule(connection);
   };
   // `onerror` 之后浏览器一定会再发 `onclose`，重连只挂在 close 上，避免排两次。
@@ -269,6 +295,7 @@ export function resetWorkspaceEvents(): void {
   if (current) teardown(current);
   handlers.clear();
   connectionHandlers.clear();
+  accessLostHandlers.clear();
 }
 
 /* --------------------------------- Hook ---------------------------------- */
@@ -303,10 +330,15 @@ export function useWorkspaceEvents(workspaceId: string | null): void {
       void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       invalidate();
     });
+    const offLost = onWorkspaceAccessLost((lost) => {
+      if (lost !== workspaceId) return;
+      void queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+    });
     return () => {
       offExit();
       offBoard();
       offUpdated();
+      offLost();
       release();
     };
   }, [workspaceId, queryClient]);

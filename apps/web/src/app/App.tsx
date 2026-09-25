@@ -28,6 +28,7 @@ import { useAgentNotifications } from "./notifications";
 import { syncDocumentPreferences } from "./preferences-store";
 import { useAppKeybindings } from "./use-app-keybindings";
 import { useBoardSync } from "./use-board-sync";
+import { useWorkspaceAccessLost } from "./use-access-lost";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 
 function createQueryClient() {
@@ -83,6 +84,7 @@ function AppShell() {
   useEffect(syncDocumentPreferences, []);
   useCanvasPreferences();
   useWorkspaceEvents(workspace?.id ?? null);
+  useWorkspaceAccessLost();
   // 节点徽标属于画布，不属于侧栏：镜像在这里补齐，与面板开合无关。
   useAgentStatusHydration(workspace?.id ?? null);
   useAgentNotifications();

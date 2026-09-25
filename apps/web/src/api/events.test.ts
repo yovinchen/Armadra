@@ -5,6 +5,7 @@ import {
   connectWorkspaceEvents,
   nextReconnectDelay,
   onWorkspaceEvent,
+  onWorkspaceAccessLost,
   onWorkspaceConnection,
   resetWorkspaceEvents,
 } from "./events";
@@ -16,7 +17,7 @@ class FakeSocket {
   static instances: FakeSocket[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((event?: { code: number }) => void) | null = null;
   onerror: (() => void) | null = null;
   closed = false;
 
@@ -32,8 +33,8 @@ class FakeSocket {
     this.onmessage?.({ data } as MessageEvent);
   }
 
-  drop() {
-    this.onclose?.();
+  drop(code = 1006) {
+    this.onclose?.({ code });
   }
 }
 
@@ -87,6 +88,20 @@ describe("workspace events", () => {
     off();
     release();
   });
+  it("4403（共享被撤销）告知订阅者，并且不再重连", () => {
+    const lost = vi.fn();
+    const off = onWorkspaceAccessLost(lost);
+    const release = connectWorkspaceEvents(WORKSPACE);
+    FakeSocket.instances[0]!.onopen?.();
+    FakeSocket.instances[0]!.drop(4403);
+    expect(lost).toHaveBeenCalledWith(WORKSPACE);
+    // 升级只会再被 403 拒：重连没有意义，等页面换工作空间或重新打开。
+    vi.advanceTimersByTime(30_000);
+    expect(FakeSocket.instances).toHaveLength(1);
+    off();
+    release();
+  });
+
   it("opens one socket per workspace and parses frames", () => {
     const seen = vi.fn();
     const off = onWorkspaceEvent("agent.status", seen);

@@ -60,6 +60,7 @@ export const sharing: MessageModule = {
     "sharing.redeem.title": "接受邀请",
     "sharing.redeem.join": "加入",
     "sharing.redeem.done": "已加入",
+    "sharing.revoked": "「{name}」已不再共享给你",
   },
   en: {
     "sharing.nav": "Accounts & sharing",
@@ -115,5 +116,6 @@ export const sharing: MessageModule = {
     "sharing.redeem.title": "Accept invitation",
     "sharing.redeem.join": "Join",
     "sharing.redeem.done": "Joined",
+    "sharing.revoked": "“{name}” is no longer shared with you",
   },
 };
