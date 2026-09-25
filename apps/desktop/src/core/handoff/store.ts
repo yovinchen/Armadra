@@ -11,6 +11,7 @@ import { locate, readTail, render } from "../collab/transcript";
 import { type CollabContext, nowDate, nowSeconds } from "../collab/service";
 import { type Fingerprinted, gitFingerprint } from "../git/fingerprint";
 import {
+  DomainError,
   badRequest,
   conflict,
   forbidden,
@@ -152,7 +153,7 @@ function workspace(
   context: CollabContext,
   id: string,
   execute: boolean,
-): { readonly rootPath: string } {
+): { readonly rootPath: string; readonly executionHostId: string } {
   const row = getWorkspace(context.database, id);
   const permissions = row.permissions;
   if (
@@ -163,7 +164,7 @@ function workspace(
       "Workspace read, write and execute permissions are required for handoff delivery",
     );
   }
-  return { rootPath: row.rootPath };
+  return { rootPath: row.rootPath, executionHostId: row.executionHostId ?? "" };
 }
 
 function session(context: CollabContext, sessionId: string): SessionRow {
@@ -209,8 +210,15 @@ function identity(
   ) {
     throw conflict("Handoff session generation changed");
   }
+  // An Agent in an SSH terminal works in a directory on that host, and nothing
+  // maps an SSH terminal's host to a workspace execution host yet — so the
+  // working directory the bundle would name cannot be checked against anything.
   if (node.data.ssh !== undefined && node.data.ssh !== null) {
-    throw badRequest("Remote handoff needs a verified execution-host mapping");
+    throw new DomainError(
+      501,
+      "unsupported",
+      "跨执行主机交接不可用：SSH 终端里的 Agent 所在的主机与工作空间的执行主机之间还没有经过核验的对应关系",
+    );
   }
   if (!hasCapability(context.settings, agent, "contextLink")) {
     throw forbidden("Context links are disabled for this Agent");
@@ -237,6 +245,17 @@ export function prepare(
   request: PrepareRequest,
 ): HandoffView {
   const space = workspace(context, workspaceId, false);
+  // The bundle is built from the workspace's files and repository, read
+  // synchronously here. On a remote workspace those are on another machine,
+  // and reading this machine's disk at the same path would hand the target
+  // Agent material about the wrong files — refused by name instead.
+  if (space.executionHostId !== "") {
+    throw new DomainError(
+      501,
+      "unsupported",
+      "跨执行主机交接不可用：交接材料要从工作空间的文件与仓库里采集，而这个工作空间在远端执行主机上",
+    );
+  }
   if (request.sourceNodeId === request.targetNodeId) {
     throw badRequest("Choose a different target Agent");
   }
