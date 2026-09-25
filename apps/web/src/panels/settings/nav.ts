@@ -16,9 +16,11 @@ import {
   Globe,
   Webhook,
   LayoutGrid,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
+import { RUNTIME_VIA_SERVER_SHELL } from "@/api/request";
 import { isDesktop } from "@/platform";
 
 /**
@@ -47,6 +49,13 @@ export interface SettingsSection {
    * 出浏览器节点，也就没有可配的东西，列一页永远无效的设置比不列更糟。
    */
   desktopOnly?: boolean;
+  /**
+   * 只在服务器壳托管的页面上出现。
+   *
+   * 账号与共享只对「一台服务器、好几个人」有意义；桌面单机只有一个 owner，
+   * 列一页没有人可管的设置比不列更糟。
+   */
+  serverOnly?: boolean;
 }
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
@@ -110,6 +119,13 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     icon: ServerCog,
   },
   {
+    id: "accounts",
+    groupKey: "settings.group.connection",
+    labelKey: "sharing.nav",
+    icon: Users,
+    serverOnly: true,
+  },
+  {
     id: "github",
     groupKey: "settings.group.connection",
     labelKey: "github.nav",
@@ -165,9 +181,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
 export const DEFAULT_SETTINGS_SECTION = SETTINGS_SECTIONS[0]!.id;
 
 /** 这台机器上真正能进的分区。壳不在时少几行，而不是几行点不动的。 */
-export function visibleSettingsSections(): SettingsSection[] {
+export function visibleSettingsSections(
+  server: boolean = RUNTIME_VIA_SERVER_SHELL,
+): SettingsSection[] {
   const desktop = isDesktop();
-  return SETTINGS_SECTIONS.filter((section) => desktop || !section.desktopOnly);
+  return SETTINGS_SECTIONS.filter(
+    (section) =>
+      (desktop || !section.desktopOnly) && (server || !section.serverOnly),
+  );
 }
 
 export function isSettingsSectionId(value: unknown): value is string {

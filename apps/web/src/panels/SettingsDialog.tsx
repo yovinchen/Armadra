@@ -3,7 +3,10 @@ import { ChevronLeft, X } from "lucide-react";
 
 import { usePreferencesStore, useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
+import { hasInvitationFragment } from "../api/accounts";
+import { RUNTIME_VIA_SERVER_SHELL } from "../api/request";
 import { AboutPage } from "./settings/pages/AboutPage";
+import { AccountsSharingPage } from "./settings/pages/AccountsSharingPage";
 import { AccountPage } from "./settings/pages/AccountPage";
 import { AgentPage } from "./settings/pages/AgentPage";
 import { BrowserPage } from "./settings/pages/BrowserPage";
@@ -40,6 +43,7 @@ const SECTION_PAGES: Record<string, () => React.ReactElement> = {
   agent: AgentPage,
   integration: IntegrationPage,
   host: HostPage,
+  accounts: AccountsSharingPage,
   github: GithubPage,
   terminal: TerminalPage,
   browser: BrowserPage,
@@ -66,6 +70,14 @@ export function SettingsDialog() {
   const open = useCanvasStore((state) => state.panels.settings);
   const setPanel = useCanvasStore((state) => state.setPanel);
   const closeSubpage = usePreferencesStore((state) => state.setSettingsSubpage);
+
+  // 邀请链接（服务器壳，`…/#invite=<令牌>`）：打开到「账号与共享」，兑换对话框
+  // 在那一页里取走令牌。只看一次，片段由那一页抹掉。
+  React.useEffect(() => {
+    if (!RUNTIME_VIA_SERVER_SHELL || !hasInvitationFragment()) return;
+    usePreferencesStore.getState().setLastSettingsSection("accounts");
+    setPanel("settings", true);
+  }, [setPanel]);
 
   return (
     <Dialog

@@ -22,6 +22,7 @@ import { host } from "./host";
 import { integration } from "./integration";
 import { hostIdentity } from "./host-identity";
 import { hostNative } from "./host-native";
+import { sharing } from "./sharing";
 import { agentCapabilities } from "./agent-capabilities";
 import { desktop } from "./desktop";
 import { gitHunks } from "./git-hunks";
@@ -78,6 +79,7 @@ export const MESSAGE_MODULES = {
   "execution-hosts": executionHosts,
   host,
   "host-identity": hostIdentity,
+  sharing,
   "host-native": hostNative,
   integration,
   "agent-capabilities": agentCapabilities,
