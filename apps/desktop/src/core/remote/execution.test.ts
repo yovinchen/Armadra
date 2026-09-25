@@ -28,6 +28,8 @@ import {
 } from "vitest";
 import { temporary, type Temporary } from "../files/workspace.fixture";
 import { install as installFiles } from "../files/routes";
+import { install as installGit } from "../git";
+import { cleanupFixtures, repositoryAt } from "../git/fixture";
 import type { SshHost } from "../settings/ssh-hosts";
 import { type Fixture, fixture } from "../workspaces/fixture";
 import { install as installWorkspaces } from "../workspaces/routes";
@@ -364,6 +366,97 @@ describe("file routes on a remote workspace", () => {
     expect(read.status).toBe(501);
     expect(realpathSync(far.path)).toBe(far.path);
   });
+});
+
+describe("repository routes on a remote workspace", () => {
+  let core: Fixture;
+  let remote: RemoteWorker;
+  let far: Temporary;
+  let id: string;
+
+  beforeEach(() => {
+    core = fixture([installWorkspaces, installGit]);
+    far = temporary("armadra-far-repo-");
+    remote = worker(start);
+    setRemoteCaller(async (_hostId, operation, payload, replay) =>
+      remote.request(operation, payload, replay),
+    );
+    id = createRemoteWorkspace(core.database, {
+      name: "far-repo",
+      executionHostId: HOST.id,
+      rootPath: far.path,
+      permissions: { read: true, write: true, execute: true },
+    }).id;
+  });
+  afterEach(() => {
+    setRemoteCaller(undefined);
+    remote.close();
+    far.remove();
+    core.close();
+    cleanupFixtures();
+  });
+
+  it("reads, stages and commits in the repository on the execution host", async () => {
+    const repo = repositoryAt(far.path);
+    repo.write("code.txt", "one\n");
+
+    const status = await core.call(
+      "GET",
+      `/api/workspaces/${id}/git/status?path=.`,
+    );
+    expect(status.status).toBe(200);
+    expect(JSON.stringify(status.body)).toContain("code.txt");
+
+    const staged = await core.call("POST", `/api/workspaces/${id}/git/stage`, {
+      path: ".",
+      paths: ["code.txt"],
+    });
+    expect(staged.status).toBe(200);
+    expect(staged.body).toEqual({ staged: ["code.txt"] });
+
+    const diff = await core.call(
+      "GET",
+      `/api/workspaces/${id}/git/diff?path=.&scope=staged`,
+    );
+    expect(diff.status).toBe(200);
+    expect(JSON.stringify(diff.body)).toContain("code.txt");
+
+    const committed = await core.call(
+      "POST",
+      `/api/workspaces/${id}/git/commit`,
+      { path: ".", message: "add code remotely" },
+    );
+    expect(committed.status).toBe(200);
+    expect(repo.git("log", "-1", "--format=%s").trim()).toBe(
+      "add code remotely",
+    );
+
+    const history = await core.call(
+      "GET",
+      `/api/workspaces/${id}/git/repository/history?path=.&limit=5`,
+    );
+    expect(history.status).toBe(200);
+    expect(JSON.stringify(history.body)).toContain("add code remotely");
+
+    const listed = await core.call(
+      "GET",
+      `/api/workspaces/${id}/git/repositories`,
+    );
+    expect(listed.status).toBe(200);
+
+    // 操作队列在远端还不存在：列表为空，发起一个就明确 501。
+    const operations = await core.call(
+      "GET",
+      `/api/workspaces/${id}/git/repository/operations?path=.`,
+    );
+    expect(operations.body).toEqual([]);
+    const started = await core.call(
+      "POST",
+      `/api/workspaces/${id}/git/repository/operations`,
+      { path: ".", action: { kind: "fetch" } },
+    );
+    expect(started.status).toBe(501);
+  }, 60_000);
 });
 
 afterAll(() => {

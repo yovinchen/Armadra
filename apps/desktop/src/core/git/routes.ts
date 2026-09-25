@@ -15,43 +15,23 @@ import {
   listWorkspaces,
   validWorkspaceName,
 } from "../workspaces/table";
+import { executeOn, isRemote, localOnly } from "../remote/execute";
 import { cancelClone, cloneStatus, startClone } from "./clone";
-import { commit, headCommit, initRepository } from "./commit";
-import { type DiffScope, readDiff } from "./diff";
-import { invalidate, repositories } from "./discovery";
-import { applyHunk, readHunks, type GitHunkScope } from "./hunks";
-import {
-  type GitMessageLanguage,
-  generate,
-  providers,
-  source,
-} from "./message";
-import { branches, identity, remoteRecords, tags } from "./repository/branches";
-import { cherryPickPreview } from "./repository/cherrypick";
-import { commitDetail, commitFileDiff } from "./repository/commits";
-import { history, reflog } from "./repository/history";
+import type { DiffScope } from "./diff";
+import { invalidate } from "./discovery";
+import type { GitHunkScope } from "./hunks";
+import { type GitMessageLanguage, generate, providers } from "./message";
 import { integrationStatus } from "./repository/integration";
-import { log } from "./repository/log";
 import { startOperation } from "./repository/queue";
-import { rebaseTodoPreview } from "./repository/rebase";
 import { RepositoryService } from "./repository/service";
-import { stashDetail, stashes } from "./repository/stash";
-import { refsSnapshot } from "./repository/tree";
 import type {
   ExpectedState,
   LogRefKind,
   LogRequest,
   RepositoryAction,
 } from "./repository/types";
-import { verifyWorktreeBinding, worktrees } from "./repository/worktrees";
-import { readStatusAt, readStatusBatch } from "./status";
-import {
-  markResolved,
-  revertPaths,
-  stagePaths,
-  unstagePaths,
-  type RestoreSource,
-} from "./stage";
+import { verifyWorktreeBinding } from "./repository/worktrees";
+import type { RestoreSource } from "./stage";
 import { badRequest, commaPaths, forbidden, requireExecution } from "./support";
 
 /**
@@ -66,6 +46,14 @@ import { badRequest, commaPaths, forbidden, requireExecution } from "./support";
  * Reads are deliberately not gated on write. A core that cannot write still
  * answers `status`, `diff` and `history`, because the panel has to keep showing
  * the repository it is not writing to.
+ *
+ * Where a command runs is the workspace's execution host. The reads and the
+ * index / commit writes go through `remote/execute`, so a remote workspace's
+ * repository is read and written by the Worker on that machine with the same
+ * code. What still needs this core's own queue or ownership table — repository
+ * operations, integration state, worktree binding, AI message generation —
+ * answers a named 501 on a remote workspace rather than running Git against a
+ * path on the wrong machine.
  */
 
 export interface GitRouteDeps {
@@ -97,10 +85,9 @@ export function installRoutes(deps: GitRouteDeps): void {
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
       requireExecution(workspace.permissions.execute, "Git worktree status");
-      return {
-        status: 200,
-        body: await readStatusAt(workspace.rootPath, pathOf(request)),
-      };
+      return ok(
+        await on(deps, workspace, "git.status", { path: pathOf(request) }),
+      );
     },
   );
 
@@ -109,19 +96,15 @@ export function installRoutes(deps: GitRouteDeps): void {
     "/api/workspaces/{workspaceId}/git/diff",
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
-      return {
-        status: 200,
-        body: await readDiff(
-          workspace.rootPath,
-          pathOf(request),
-          {
-            scope: scopeOf(request),
-            paths: commaPaths(request.query.get("paths")),
-            ignoreWhitespace: request.query.get("ignoreWhitespace") === "true",
-          },
-          workspace.permissions.execute,
-        ),
-      };
+      return ok(
+        await on(deps, workspace, "git.diff", {
+          path: pathOf(request),
+          scope: scopeOf(request),
+          paths: commaPaths(request.query.get("paths")),
+          ignoreWhitespace: request.query.get("ignoreWhitespace") === "true",
+          execute: workspace.permissions.execute,
+        }),
+      );
     },
   );
 
@@ -131,10 +114,9 @@ export function installRoutes(deps: GitRouteDeps): void {
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
       requireExecution(workspace.permissions.execute, "Git commit inspection");
-      return {
-        status: 200,
-        body: await headCommit(workspace.rootPath, pathOf(request)),
-      };
+      return ok(
+        await on(deps, workspace, "git.headCommit", { path: pathOf(request) }),
+      );
     },
   );
 
@@ -151,7 +133,7 @@ export function installRoutes(deps: GitRouteDeps): void {
       workspace.permissions.execute,
       "Git repository initialization",
     );
-    return { status: 200, body: await initRepository(workspace.rootPath) };
+    return ok(await on(deps, workspace, "git.init"));
   });
 
   handle(
@@ -159,16 +141,10 @@ export function installRoutes(deps: GitRouteDeps): void {
     "/api/workspaces/{workspaceId}/git/stage",
     async (match, request) => {
       const { workspace, body } = writeRequest(deps, match, request);
-      return deps.service.withGuard(
-        workspace.rootPath,
-        pathField(body),
-        async () => ({
-          status: 200,
-          body: await stagePaths(
-            workspace.rootPath,
-            pathField(body),
-            pathsField(body),
-          ),
+      return ok(
+        await on(deps, workspace, "git.stage", {
+          path: pathField(body),
+          paths: pathsField(body),
         }),
       );
     },
@@ -179,16 +155,10 @@ export function installRoutes(deps: GitRouteDeps): void {
     "/api/workspaces/{workspaceId}/git/unstage",
     async (match, request) => {
       const { workspace, body } = writeRequest(deps, match, request);
-      return deps.service.withGuard(
-        workspace.rootPath,
-        pathField(body),
-        async () => ({
-          status: 200,
-          body: await unstagePaths(
-            workspace.rootPath,
-            pathField(body),
-            pathsField(body),
-          ),
+      return ok(
+        await on(deps, workspace, "git.unstage", {
+          path: pathField(body),
+          paths: pathsField(body),
         }),
       );
     },
@@ -199,16 +169,10 @@ export function installRoutes(deps: GitRouteDeps): void {
     "/api/workspaces/{workspaceId}/git/resolve",
     async (match, request) => {
       const { workspace, body } = writeRequest(deps, match, request);
-      return deps.service.withGuard(
-        workspace.rootPath,
-        pathField(body),
-        async () => ({
-          status: 200,
-          body: await markResolved(
-            workspace.rootPath,
-            pathField(body),
-            pathsField(body),
-          ),
+      return ok(
+        await on(deps, workspace, "git.resolve", {
+          path: pathField(body),
+          paths: pathsField(body),
         }),
       );
     },
@@ -223,17 +187,11 @@ export function installRoutes(deps: GitRouteDeps): void {
       if (source !== "index" && source !== "head") {
         throw badRequest("Restore source must be `index` or `head`");
       }
-      return deps.service.withGuard(
-        workspace.rootPath,
-        pathField(body),
-        async () => ({
-          status: 200,
-          body: await revertPaths(
-            workspace.rootPath,
-            pathField(body),
-            pathsField(body),
-            source as RestoreSource,
-          ),
+      return ok(
+        await on(deps, workspace, "git.revert", {
+          path: pathField(body),
+          paths: pathsField(body),
+          source: source as RestoreSource,
         }),
       );
     },
@@ -253,18 +211,12 @@ export function installRoutes(deps: GitRouteDeps): void {
           ? undefined
           : pathsField(body);
       const amend = amendOf(body);
-      return deps.service.withGuard(
-        workspace.rootPath,
-        pathField(body),
-        async () => ({
-          status: 200,
-          body: await commit(
-            workspace.rootPath,
-            pathField(body),
-            message,
-            paths,
-            amend,
-          ),
+      return ok(
+        await on(deps, workspace, "git.commit", {
+          path: pathField(body),
+          message,
+          ...(paths === undefined ? {} : { paths }),
+          ...(amend === undefined ? {} : { amend }),
         }),
       );
     },
@@ -291,13 +243,11 @@ export function installRoutes(deps: GitRouteDeps): void {
         workspace.permissions.execute,
         "AI staged-source inspection",
       );
-      return {
-        status: 200,
-        body: await source(
-          deps.service.withExecution(workspace.permissions.execute),
-          workspace.rootPath,
-        ),
-      };
+      return ok(
+        await on(deps, workspace, "git.messageSource", {
+          execute: workspace.permissions.execute,
+        }),
+      );
     },
   );
 
@@ -307,6 +257,9 @@ export function installRoutes(deps: GitRouteDeps): void {
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
       requireExecution(workspace.permissions.execute, "AI generation");
+      // 生成要在两台机器上各跑一半（采集在仓库那边，模型在凭据这边），这一步
+      // 还没有拆开；在远端仓库上就说清楚，而不是拿控制端的磁盘去采集。
+      localOnly(workspace, "AI 提交信息生成");
       const body = jsonObject(request.body);
       const language = body.language ?? "en";
       if (language !== "en" && language !== "zh") {
@@ -342,16 +295,14 @@ export function installRoutes(deps: GitRouteDeps): void {
       );
       const file = request.query.get("file");
       if (file === null) throw badRequest("A hunk read names no file");
-      return {
-        status: 200,
-        body: await readHunks(
-          deps.service.withExecution(workspace.permissions.execute),
-          workspace.rootPath,
-          pathOf(request),
+      return ok(
+        await on(deps, workspace, "git.hunks", {
+          path: pathOf(request),
           file,
-          hunkScopeOf(request.query.get("scope")),
-        ),
-      };
+          scope: hunkScopeOf(request.query.get("scope")),
+          execute: workspace.permissions.execute,
+        }),
+      );
     },
   );
 
@@ -369,12 +320,10 @@ export function installRoutes(deps: GitRouteDeps): void {
       if (action !== "stage" && action !== "unstage" && action !== "revert") {
         throw badRequest("Hunk action, scope or identity is invalid");
       }
-      return {
-        status: 200,
-        body: await applyHunk(
-          deps.service.withExecution(workspace.permissions.execute),
-          workspace.rootPath,
-          {
+      return ok(
+        await on(deps, workspace, "git.applyHunk", {
+          execute: workspace.permissions.execute,
+          mutation: {
             path: optionalString(body, "path") ?? ".",
             file: requiredString(body, "file"),
             scope: hunkScopeOf(optionalString(body, "scope") ?? null),
@@ -382,8 +331,8 @@ export function installRoutes(deps: GitRouteDeps): void {
             hunkId: requiredString(body, "hunkId"),
             action,
           },
-        ),
-      };
+        }),
+      );
     },
   );
 
@@ -397,15 +346,13 @@ export function installRoutes(deps: GitRouteDeps): void {
       const workspaceId = param(match, "workspaceId");
       if (request.query.get("refresh") === "true") invalidate(workspaceId);
       const depth = request.query.get("maxDepth");
-      return {
-        status: 200,
-        body: await repositories(
+      return ok(
+        await on(deps, workspace, "git.repositories", {
           workspaceId,
-          workspace.rootPath,
-          depth === null ? undefined : positive(depth, "maxDepth"),
-          workspace.permissions.execute,
-        ),
-      };
+          ...(depth === null ? {} : { maxDepth: positive(depth, "maxDepth") }),
+          execute: workspace.permissions.execute,
+        }),
+      );
     },
   );
 
@@ -414,37 +361,31 @@ export function installRoutes(deps: GitRouteDeps): void {
     "/api/workspaces/{workspaceId}/git/log",
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
-      return {
-        status: 200,
-        body: await log(
-          deps.service.withExecution(workspace.permissions.execute),
-          workspace.rootPath,
-          param(match, "workspaceId"),
-          logRequest(jsonObject(request.body)),
-        ),
-      };
+      return ok(
+        await on(deps, workspace, "git.log", {
+          workspaceId: param(match, "workspaceId"),
+          request: logRequest(jsonObject(request.body)),
+          execute: workspace.permissions.execute,
+        }),
+      );
     },
   );
 
   handle("GET", "/api/workspaces/{workspaceId}/git/refs", async (match) => {
     const workspace = readWorkspace(deps, match);
-    return {
-      status: 200,
-      body: await refsSnapshot(
-        deps.service.withExecution(workspace.permissions.execute),
-        workspace.rootPath,
-        param(match, "workspaceId"),
-      ),
-    };
+    return ok(
+      await on(deps, workspace, "git.refs", {
+        workspaceId: param(match, "workspaceId"),
+        execute: workspace.permissions.execute,
+      }),
+    );
   });
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/identity",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        identity(service, workspace.rootPath, pathOf(request)),
-      ),
+      remoteRead(deps, match, "git.identity", { path: pathOf(request) }),
   );
 
   /* ---------------------------- repository reads -------------------------- */
@@ -453,147 +394,122 @@ export function installRoutes(deps: GitRouteDeps): void {
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/branches",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        branches(service, workspace.rootPath, pathOf(request)),
-      ),
+      remoteRead(deps, match, "git.branches", { path: pathOf(request) }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/tags",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        tags(service, workspace.rootPath, pathOf(request)),
-      ),
+      remoteRead(deps, match, "git.tags", { path: pathOf(request) }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/remotes",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        remoteRecords(service, workspace.rootPath, pathOf(request)),
-      ),
+      remoteRead(deps, match, "git.remotes", { path: pathOf(request) }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/worktrees",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        worktrees(service, workspace.rootPath, pathOf(request)),
-      ),
+      remoteRead(deps, match, "git.worktrees", { path: pathOf(request) }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/stashes",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        stashes(service, workspace.rootPath, pathOf(request)),
-      ),
+      remoteRead(deps, match, "git.stashes", { path: pathOf(request) }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/stash-detail",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        stashDetail(
-          service,
-          workspace.rootPath,
-          pathOf(request),
-          required(request, "oid"),
-        ),
-      ),
+      remoteRead(deps, match, "git.stashDetail", {
+        path: pathOf(request),
+        oid: required(request, "oid"),
+      }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/history",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        history(service, workspace.rootPath, pathOf(request), {
+      remoteRead(deps, match, "git.history", {
+        path: pathOf(request),
+        request: {
           reference: request.query.get("reference") ?? "HEAD",
           limit: limitOf(request),
           cursor: request.query.get("cursor"),
           paths: commaPaths(request.query.get("paths")),
-        }),
-      ),
+        },
+      }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/reflog",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        reflog(service, workspace.rootPath, pathOf(request), {
+      remoteRead(deps, match, "git.reflog", {
+        path: pathOf(request),
+        request: {
           reference: request.query.get("reference") ?? "HEAD",
           limit: limitOf(request),
           cursor: request.query.get("cursor"),
-        }),
-      ),
+        },
+      }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/commit",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        commitDetail(
-          service,
-          workspace.rootPath,
-          pathOf(request),
-          required(request, "oid"),
-          request.query.get("base") ?? undefined,
-        ),
-      ),
+      remoteRead(deps, match, "git.commitDetail", {
+        path: pathOf(request),
+        oid: required(request, "oid"),
+        ...optionalQuery(request, "base"),
+      }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/commit-file",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        commitFileDiff(
-          service,
-          workspace.rootPath,
-          pathOf(request),
-          required(request, "oid"),
-          request.query.get("base") ?? undefined,
-          required(request, "file"),
-        ),
-      ),
+      remoteRead(deps, match, "git.commitFile", {
+        path: pathOf(request),
+        oid: required(request, "oid"),
+        ...optionalQuery(request, "base"),
+        file: required(request, "file"),
+      }),
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/cherry-pick-preview",
-    async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) => {
-        const mainline = request.query.get("mainline");
-        return cherryPickPreview(
-          service,
-          workspace.rootPath,
-          pathOf(request),
-          required(request, "oid"),
-          mainline === null ? undefined : positive(mainline, "mainline"),
-        );
-      }),
+    async (match, request) => {
+      const mainline = request.query.get("mainline");
+      return remoteRead(deps, match, "git.cherryPickPreview", {
+        path: pathOf(request),
+        oid: required(request, "oid"),
+        ...(mainline === null
+          ? {}
+          : { mainline: positive(mainline, "mainline") }),
+      });
+    },
   );
 
   handle(
     "GET",
     "/api/workspaces/{workspaceId}/git/repository/rebase-todo",
     async (match, request) =>
-      repositoryRead(deps, match, (service, workspace) =>
-        rebaseTodoPreview(
-          service,
-          workspace.rootPath,
-          pathOf(request),
-          required(request, "onto"),
-        ),
-      ),
+      remoteRead(deps, match, "git.rebaseTodo", {
+        path: pathOf(request),
+        onto: required(request, "onto"),
+      }),
   );
 
   handle(
@@ -603,14 +519,13 @@ export function installRoutes(deps: GitRouteDeps): void {
       const workspace = readWorkspace(deps, match);
       requireExecution(workspace.permissions.execute, "Git worktree status");
       const body = jsonObject(request.body);
-      return {
-        status: 200,
-        body: await readStatusBatch(workspace.rootPath, {
+      return ok(
+        await on(deps, workspace, "git.statusBatch", {
           paths: stringList(body, "paths"),
           pathspecs:
             body.pathspecs === undefined ? [] : stringList(body, "pathspecs"),
         }),
-      };
+      );
     },
   );
 
@@ -619,6 +534,7 @@ export function installRoutes(deps: GitRouteDeps): void {
     "/api/workspaces/{workspaceId}/git/repository/worktree-binding",
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
+      localOnly(workspace, "工作树绑定核验");
       const body = jsonObject(request.body);
       return {
         status: 200,
@@ -643,6 +559,8 @@ export function installRoutes(deps: GitRouteDeps): void {
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
       const workspaceId = param(match, "workspaceId");
+      // 集成状态要和控制端的操作归属表对照，而操作队列在远端还不存在。
+      localOnly(workspace, "仓库集成状态");
       const result = await integrationStatus(
         deps.service.withExecution(workspace.permissions.execute),
         workspace.rootPath,
@@ -674,6 +592,8 @@ export function installRoutes(deps: GitRouteDeps): void {
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
       const workspaceId = param(match, "workspaceId");
+      // 远端没有操作队列：答空列表而不是 501，面板照常显示其余部分。
+      if (isRemote(workspace)) return ok([]);
       const all = await deps.service
         .withExecution(workspace.permissions.execute)
         .listOperations(workspace.rootPath, pathOf(request));
@@ -698,6 +618,7 @@ export function installRoutes(deps: GitRouteDeps): void {
         workspace.permissions.execute,
         "Git repository writes and synchronization",
       );
+      localOnly(workspace, "分支、同步、储藏与工作树这类仓库操作");
       const workspaceId = param(match, "workspaceId");
       const body = jsonObject(request.body);
       const action = body.action as RepositoryAction | undefined;
@@ -897,19 +818,48 @@ function writeRequest(
   return { workspace, body: jsonObject(request.body) };
 }
 
-async function repositoryRead(
+function ok(body: unknown): HandlerResult {
+  return { status: 200, body };
+}
+
+/**
+ * 在工作空间所在的机器上执行一个 Git 操作：本机用这个 core 的仓库服务（它的
+ * 队列就是本机写入的串行点），远端交给那台主机上 Worker 自己的服务。
+ */
+async function on(
+  deps: GitRouteDeps,
+  workspace: Workspace,
+  operation: string,
+  args: Record<string, unknown> = {},
+): Promise<unknown> {
+  return await executeOn(workspace, operation, args, {
+    service: deps.service,
+    freshDiscovery: true,
+  });
+}
+
+/** 只读的仓库查询：读权限之后，执行授权随请求一起交给执行的那一侧。 */
+async function remoteRead(
   deps: GitRouteDeps,
   match: RouteMatch,
-  read: (service: RepositoryService, workspace: Workspace) => Promise<unknown>,
+  operation: string,
+  args: Record<string, unknown>,
 ): Promise<HandlerResult> {
   const workspace = readWorkspace(deps, match);
-  return {
-    status: 200,
-    body: await read(
-      deps.service.withExecution(workspace.permissions.execute),
-      workspace,
-    ),
-  };
+  return ok(
+    await on(deps, workspace, operation, {
+      ...args,
+      execute: workspace.permissions.execute,
+    }),
+  );
+}
+
+function optionalQuery(
+  request: CoreRequest,
+  name: string,
+): Record<string, string> {
+  const value = request.query.get(name);
+  return value === null ? {} : { [name]: value };
 }
 
 /** An operation this workspace started, having proved that it did. */
