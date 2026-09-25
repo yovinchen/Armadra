@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { hardenDirectory, hardenFile } from "../../paths";
+import { agentPath } from "../environment";
 
 /**
  * Detecting a usable tmux and rendering the configuration it is started with.
@@ -104,14 +105,25 @@ export interface TmuxDetection {
 /**
  * `tmux -V`. Never throws and never blocks for long: a missing binary is the
  * normal case on a machine that has not installed tmux.
+ *
+ * Looked up on the same PATH the backend runs tmux with (`agentPath`). An app
+ * launched from Finder inherits launchd's PATH, which has no Homebrew on it;
+ * probing with that one reported "not found" for a tmux every later command
+ * would have found, and the packaged app quietly fell back to `direct`.
  */
-export function detect(platform: string = process.platform): TmuxDetection {
+export function detect(
+  platform: string = process.platform,
+  ambient: NodeJS.ProcessEnv = process.env,
+): TmuxDetection {
   if (platform === "win32") {
     return { usable: false, reason: "tmux is not supported on Windows" };
   }
   let banner: string;
   try {
-    banner = execFileSync("tmux", ["-V"], { encoding: "utf8" }).trim();
+    banner = execFileSync("tmux", ["-V"], {
+      encoding: "utf8",
+      env: { ...ambient, PATH: agentPath(ambient) },
+    }).trim();
   } catch {
     return { usable: false, reason: "tmux was not found on PATH" };
   }
