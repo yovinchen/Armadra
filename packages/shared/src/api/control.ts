@@ -11,6 +11,11 @@ export const agentDeliverySchema = z.object({
   sourceNodeId: z.string(),
   targetNodeId: z.string(),
   outcome: z.string(),
+  /**
+   * 凭什么放行 / 拦下（迁移 0026）：五态之一，或者 `observed-quiet`——没有上报、
+   * 看着它安静了就投的那一类。空串是 0026 之前的行，它们没记过这件事。
+   */
+  targetState: z.string().default(""),
   receipt: z.string().nullish(),
   bodyChars: z.number().int().nonnegative().default(0),
   createdAt: z.string(),

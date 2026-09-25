@@ -23,12 +23,14 @@ import { DeliveryQueueBadge } from "./DeliveryQueueBadge";
 
 const queue = vi.hoisted(() => ({
   items: [] as Record<string, unknown>[],
+  records: [] as Record<string, unknown>[],
   reads: 0,
   cancelled: [] as string[],
 }));
 
 vi.mock("@/api/client", () => ({
   runtimeApi: {
+    deliveries: () => Promise.resolve(queue.records),
     deliveryQueue: () => {
       queue.reads += 1;
       return Promise.resolve(queue.items);
@@ -69,6 +71,7 @@ function renderBadge() {
 
 beforeEach(() => {
   queue.items = [];
+  queue.records = [];
   queue.reads = 0;
   queue.cancelled = [];
   useDeliveryStore.getState().reset();
@@ -121,5 +124,37 @@ describe("DeliveryQueueBadge", () => {
       } as WorkspaceEvent);
     });
     expect(await screen.findByTestId("delivery-queue-node-b")).toBeTruthy();
+  });
+
+  it("最近投进来的几条分得出「有上报」与「按观察放行」", async () => {
+    queue.items = [item("q-1")];
+    const record = (traceId: string, patch: Record<string, unknown>) => ({
+      traceId,
+      workspaceId: "workspace-1",
+      sourceNodeId: "node-a",
+      targetNodeId: "node-b",
+      outcome: "delivered",
+      bodyChars: 8,
+      createdAt: new Date().toISOString(),
+      ...patch,
+    });
+    queue.records = [
+      record("t-1", { targetState: "idle" }),
+      record("t-2", { targetState: "observed-quiet" }),
+      // 0026 之前的行没记过这件事，不标。
+      record("t-3", { targetState: "" }),
+      // 别的节点、没投进去的，都不列。
+      record("t-4", { targetNodeId: "node-c", targetState: "idle" }),
+      record("t-5", { outcome: "queued", targetState: "busy" }),
+    ];
+    renderBadge();
+    fireEvent.click(await screen.findByTestId("delivery-queue-node-b"));
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll('[data-slot="delivery-record"]'),
+      ).toHaveLength(3),
+    );
+    expect(screen.getAllByText("有上报")).toHaveLength(1);
+    expect(screen.getAllByText("按观察放行")).toHaveLength(1);
   });
 });

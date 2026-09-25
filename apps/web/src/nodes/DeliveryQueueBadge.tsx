@@ -7,6 +7,10 @@
  * **数字不由页面自己加减。** `agent.delivery` 只说「这个节点的队伍动了」，
  * 真正的计数从 core 重读——队列会因为出队、取消、过期三种原因变短，页面按
  * 事件推算迟早会与那张表说两个数。空队列不画任何东西：没有人排队是常态。
+ *
+ * 浮层里另列最近几条投进来的，并标出**凭什么**放行的（迁移 0026 的
+ * `targetState`）：目标自己报了空闲是「有上报」，没有上报、看着它安静了就投的
+ * 是「按观察放行」。两种都以「已投递」收尾，可信度却不同，事后要分得出来。
  */
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -65,6 +69,24 @@ export function DeliveryQueueBadge({
     if (version === 0) return;
     void client.invalidateQueries({ queryKey: key });
   }, [client, key, version]);
+
+  // 投递记录只在浮层打开时读：它是整个工作空间的表，徽标常驻时不该跟着拉。
+  const historyKey = React.useMemo(
+    () => ["deliveries", workspaceId, version],
+    [workspaceId, version],
+  );
+  const history = useQuery({
+    queryKey: historyKey,
+    queryFn: () => runtimeApi.deliveries(workspaceId as string, 50),
+    enabled: open && workspaceId !== null,
+    retry: false,
+  });
+  const recent = (history.data ?? [])
+    .filter(
+      (record) =>
+        record.targetNodeId === nodeId && record.outcome === "delivered",
+    )
+    .slice(0, RECENT_LIMIT);
 
   const items = queue.data ?? [];
   // 队空就不画——除非有人**问起**（命令面板那条）：那时空队列本身就是答案。
@@ -129,7 +151,51 @@ export function DeliveryQueueBadge({
             </li>
           ))}
         </ul>
+        {recent.length > 0 ? (
+          <>
+            <h3 className="mt-2 font-medium">{t("delivery.recent.title")}</h3>
+            <ul className="m-0 flex list-none flex-col gap-1 p-0">
+              {recent.map((record) => {
+                const basis = basisOf(record.targetState);
+                return (
+                  <li
+                    key={record.traceId}
+                    className="flex items-center gap-2"
+                    data-slot="delivery-record"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {t("delivery.recent.item", {
+                        time: formatRelativeTime(Date.parse(record.createdAt)),
+                        chars: record.bodyChars,
+                      })}
+                    </span>
+                    {basis === undefined ? null : (
+                      <Badge
+                        variant={basis === "observed" ? "outline" : "secondary"}
+                        className="h-[18px] px-1.5 text-[length:var(--text-caption)]"
+                      >
+                        {t(`delivery.basis.${basis}`)}
+                      </Badge>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        ) : null}
       </PopoverContent>
     </Popover>
   );
+}
+
+/** 浮层里最多列几条最近的投递。 */
+const RECENT_LIMIT = 3;
+
+/**
+ * 回执里的 `targetState` → 凭什么放行的。`observed-quiet` 是没有上报、看着它
+ * 安静了就投的那一类（core 的 `OBSERVED_QUIET`）；空串是 0026 之前的行，不标。
+ */
+function basisOf(targetState: string): "reported" | "observed" | undefined {
+  if (targetState === "") return undefined;
+  return targetState === "observed-quiet" ? "observed" : "reported";
 }
