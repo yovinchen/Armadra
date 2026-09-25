@@ -73,7 +73,10 @@ export function useAppKeybindings(dispatch: CommandDispatch): void {
       // focus (`WebviewSurface` binds them on its subtree). Registering them
       // here too meant this capture-phase listener won first, called a
       // dispatcher that knows nothing of them, and swallowed the keystroke.
-      if (command.scope === "browser") continue;
+      // 编辑器节点同理（`nodes/editor/use-editor-keys.ts` 装在节点根元素上）：
+      // 这里接了 ⌘S，派发器不认识 editor.save，文件从来没被保存。命令面板
+      // 里的「跳转到行」不走键位，直接调派发器，不受影响。
+      if (command.scope === "browser" || command.scope === "editor") continue;
       map[command.id] = () => dispatch.run(command.id);
     }
     return map;

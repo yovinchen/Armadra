@@ -115,6 +115,27 @@ describe("useAppKeybindings", () => {
     expect(runCanvasCommand).not.toHaveBeenCalledWith("browser.reload");
   });
 
+  it("编辑器节点自己的命令也不在这里接：焦点在编辑器里时 ⌘S 留给那个节点", () => {
+    // 窗口上的捕获监听先于节点根元素上的那个：这里接了 editor.save，派发器
+    // 又不认识它，于是键被吞掉、文件从来没有保存（远端探针实测）。
+    const editor = document.createElement("div");
+    editor.setAttribute("data-keybinding-scope", "editor");
+    const content = document.createElement("div");
+    content.setAttribute("contenteditable", "true");
+    editor.append(content);
+    document.body.append(editor);
+    const event = new KeyboardEvent("keydown", {
+      key: "s",
+      code: "KeyS",
+      ...(isMacPlatform() ? { metaKey: true } : { ctrlKey: true }),
+      bubbles: true,
+      cancelable: true,
+    });
+    content.dispatchEvent(event);
+    editor.remove();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it("画布类命令转发给 runCanvasCommand", () => {
     press("z");
     expect(runCanvasCommand).toHaveBeenCalledWith("canvas.undo");
