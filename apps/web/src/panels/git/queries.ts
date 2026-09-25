@@ -32,6 +32,10 @@ export function invalidateGitQueries(
     "git-repository-tags",
     "git-repository-remotes",
     "git-repository-rebase-todo",
+    // 日志页的历史表与分支树：提交页里提交、暂存页里 Stash 之后切过去，
+    // 不重读就停在写之前。
+    "git-log",
+    "git-refs",
   ])
     void client.invalidateQueries({ queryKey: [name, workspaceId] });
 }
