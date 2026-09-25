@@ -111,6 +111,8 @@ export interface ListMeta {
 
 export interface IssuePage extends ListMeta {
   issues: GithubIssue[];
+  /** Projects v2 的状态字段没读全（任一页这么说就算），分组可能漏归。 */
+  statusGroupsPartial: boolean;
 }
 
 export interface PullPage extends ListMeta {
@@ -126,6 +128,7 @@ export async function allIssues(
   let cursor = "";
   let last: Awaited<ReturnType<GithubApi["listIssues"]>> | null = null;
   let truncated = false;
+  let statusGroupsPartial = false;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await client.listIssues({
       repository,
@@ -135,6 +138,7 @@ export async function allIssues(
     });
     last = result;
     issues.push(...result.issues);
+    if (result.statusGroupsPartial === true) statusGroupsPartial = true;
     if (!result.hasMore) break;
     cursor = result.nextCursor;
     truncated = page === MAX_PAGES - 1;
@@ -146,6 +150,7 @@ export async function allIssues(
     pollIntervalMs: last?.pollIntervalMs ?? 0n,
     rateLimit: last?.rateLimit,
     truncated,
+    statusGroupsPartial,
   };
 }
 

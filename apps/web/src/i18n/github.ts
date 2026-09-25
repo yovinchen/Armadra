@@ -68,6 +68,8 @@ const zh = {
 
   /* Issues */
   "github.issues.empty": "没有符合条件的 Issue",
+  "github.issues.partial": "分组不完整",
+  "github.issues.partialNote": "项目状态没有读全，部分 Issue 可能归错组",
   "github.issue.unmapped": "未映射",
   "github.issue.conflict": "状态冲突",
   "github.issue.conflictNote": "命中多个映射，先在仓库里理清标签或字段",
@@ -438,6 +440,9 @@ const en: Record<keyof typeof zh, string> = {
   "github.filter.apply": "Apply filters",
 
   "github.issues.empty": "No matching issues",
+  "github.issues.partial": "Groups incomplete",
+  "github.issues.partialNote":
+    "Project statuses were only partly read; some issues may be misgrouped",
   "github.issue.unmapped": "Unmapped",
   "github.issue.conflict": "Status conflict",
   "github.issue.conflictNote":

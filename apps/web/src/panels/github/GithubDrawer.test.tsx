@@ -353,6 +353,30 @@ describe("issue actions", () => {
     await resolveRepository();
     expect(await screen.findByText("Broken import")).toBeTruthy();
     expect(screen.getByText("Todo")).toBeTruthy();
+    expect(
+      document.querySelector('[data-slot="github-status-partial"]'),
+    ).toBeNull();
+  });
+
+  it("marks the grouping as incomplete when Projects statuses were partly read", async () => {
+    const api = client({
+      listIssues: vi.fn(async () => ({
+        issues: [issue],
+        nextCursor: "",
+        hasMore: false,
+        fromCache: false,
+        observedAtUnixMs: 1_788_557_900_000n,
+        pollIntervalMs: 60_000n,
+        statusGroupsPartial: true,
+      })),
+    });
+    ready(api);
+    renderDrawer();
+    await resolveRepository();
+    expect(await screen.findByText("Broken import")).toBeTruthy();
+    expect(
+      document.querySelector('[data-slot="github-status-partial"]'),
+    ).not.toBeNull();
   });
 
   it("moves against the updatedAt and mapping revision it displayed", async () => {

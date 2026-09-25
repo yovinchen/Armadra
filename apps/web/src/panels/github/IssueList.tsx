@@ -66,6 +66,15 @@ export function IssueList({
           {t("github.issues.empty")}
         </p>
       )}
+      {page.statusGroupsPartial && page.issues.length > 0 && (
+        <Badge
+          variant="outline"
+          data-slot="github-status-partial"
+          title={t("github.issues.partialNote")}
+        >
+          {t("github.issues.partial")}
+        </Badge>
+      )}
       {groups.map((bucket) =>
         bucket.issues.length === 0 ? null : (
           <section key={bucket.id || "unmapped"} className="min-w-0 space-y-2">
