@@ -232,7 +232,15 @@ export class ImportBatch {
       Math.max(resolved.lastIndexOf("/"), resolved.lastIndexOf("\\")) + 1,
     );
     if (name === "") throw badRequest("Invalid file name");
-    this.write(this.availableCopyName(name), readFileSync(resolved));
+    this.writeCopy(name, readFileSync(resolved));
+  }
+
+  /**
+   * Write bytes that were read somewhere else under the first free variant of
+   * `name` — a local drop's copy, landing on whichever machine holds the root.
+   */
+  writeCopy(name: string, bytes: Buffer): void {
+    this.write(this.availableCopyName(name), bytes);
   }
 
   /**

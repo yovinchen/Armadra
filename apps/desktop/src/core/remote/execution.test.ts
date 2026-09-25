@@ -28,6 +28,7 @@ import {
 } from "vitest";
 import { temporary, type Temporary } from "../files/workspace.fixture";
 import { install as installFiles } from "../files/routes";
+import { install as installImports } from "../imports/routes";
 import { install as installGit } from "../git";
 import { cleanupFixtures, repositoryAt } from "../git/fixture";
 import type { SshHost } from "../settings/ssh-hosts";
@@ -246,7 +247,7 @@ describe("file routes on a remote workspace", () => {
   let id: string;
 
   beforeEach(() => {
-    core = fixture([installWorkspaces, installFiles]);
+    core = fixture([installWorkspaces, installFiles, installImports]);
     far = temporary("armadra-far-");
     remote = worker(start);
     setRemoteCaller(async (_hostId, operation, payload, replay) =>
@@ -353,6 +354,54 @@ describe("file routes on a remote workspace", () => {
         kind: "modified",
       }),
     );
+  }, 60_000);
+
+  it("publishes an upload and a desktop drop on the execution host", async () => {
+    const boundary = "remote-boundary";
+    const body = Buffer.concat([
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="manifest"\r\n\r\n` +
+          `{"paths":["report.bin"]}\r\n` +
+          `--${boundary}\r\nContent-Disposition: form-data; name="0"; filename="x"\r\n\r\n`,
+        "utf8",
+      ),
+      Buffer.from([0, 1, 2, 255]),
+      Buffer.from(`\r\n--${boundary}--\r\n`, "utf8"),
+    ]);
+    const uploaded = await core.call(
+      "POST",
+      `/api/workspaces/${id}/imports`,
+      body,
+      { "content-type": `multipart/form-data; boundary=${boundary}` },
+    );
+    expect(uploaded.status).toBe(200);
+    const path = (uploaded.body as { files: { path: string }[] }).files[0]
+      ?.path as string;
+    expect(readFileSync(join(far.path, path))).toEqual(
+      Buffer.from([0, 1, 2, 255]),
+    );
+
+    // 拖进来的文件在控制端，根在执行主机：这边读，那边落地。
+    const dropped = join(core.directory, "dropped.txt");
+    writeFileSync(dropped, "from the desktop");
+    const copied = await core.call(
+      "POST",
+      `/api/workspaces/${id}/imports/local`,
+      { paths: [dropped] },
+    );
+    expect(copied.status).toBe(200);
+    const copy = (copied.body as { files: { path: string }[] }).files[0]
+      ?.path as string;
+    expect(copy.endsWith("dropped.txt")).toBe(true);
+    expect(readFileSync(join(far.path, copy), "utf8")).toBe("from the desktop");
+
+    // 相对路径指的是工作空间里的文件，而工作空间在另一台机器上。
+    const relative = await core.call(
+      "POST",
+      `/api/workspaces/${id}/imports/local`,
+      { paths: ["dropped.txt"] },
+    );
+    expect(relative.status).toBe(400);
   }, 60_000);
 
   it("never answers a remote workspace from this machine's disk", async () => {

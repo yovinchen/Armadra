@@ -44,7 +44,7 @@ import {
   unstagePaths,
 } from "../git/stage";
 import { readStatusAt, readStatusBatch } from "../git/status";
-import { fileInfo } from "../imports/batch";
+import { ImportBatch, fileInfo } from "../imports/batch";
 import {
   createEntry,
   listTrash,
@@ -133,6 +133,28 @@ function texts(args: OperationArgs, name: string): string[] {
 function count(args: OperationArgs, name: string): number | undefined {
   const value = args[name];
   return typeof value === "number" ? value : undefined;
+}
+
+/** `[{ path, base64 }]`：随请求带过来的文件内容。 */
+function blobs(
+  args: OperationArgs,
+  name: string,
+): { path: string; base64: string }[] {
+  const value = args[name];
+  if (value === undefined || value === null) return [];
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (item) =>
+        typeof item !== "object" ||
+        item === null ||
+        typeof (item as { path?: unknown }).path !== "string" ||
+        typeof (item as { base64?: unknown }).base64 !== "string",
+    )
+  ) {
+    throw badRequest(`${name} must be a list of files`);
+  }
+  return value as { path: string; base64: string }[];
 }
 
 function path(args: OperationArgs): string {
@@ -249,6 +271,30 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
   "files.search": read((_c, root, args) =>
     searchContent(root, args.request as SearchRequest),
   ),
+
+  /**
+   * 一批导入：浏览器上传或本机拖入的文件，字节由控制端带过来，在持有根的这台
+   * 机器上走与本机相同的暂存 → 原子发布。`copies` 里的按拖入时的文件名落地，
+   * 同名就取下一个可用名字。
+   */
+  "imports.write": write((_c, root, args) => {
+    const batch = ImportBatch.into(root);
+    try {
+      for (const directory of texts(args, "directories")) {
+        batch.directory(directory);
+      }
+      for (const file of blobs(args, "files")) {
+        batch.write(file.path, Buffer.from(file.base64, "base64"));
+      }
+      for (const file of blobs(args, "copies")) {
+        batch.writeCopy(file.path, Buffer.from(file.base64, "base64"));
+      }
+      return batch.commit(root);
+    } catch (failure) {
+      batch.discard();
+      throw failure;
+    }
+  }),
 
   /* ------------------------------- git ------------------------------- */
   "git.status": read(
@@ -479,7 +525,9 @@ export const GIT_CAPABILITY = "remote.git.v1";
 
 /** 一个操作属于哪个能力组。 */
 export function capabilityOf(operation: string): string | undefined {
-  if (operation.startsWith("files.")) return FILES_CAPABILITY;
+  if (operation.startsWith("files.") || operation.startsWith("imports.")) {
+    return FILES_CAPABILITY;
+  }
   if (operation.startsWith("git.")) return GIT_CAPABILITY;
   return undefined;
 }
