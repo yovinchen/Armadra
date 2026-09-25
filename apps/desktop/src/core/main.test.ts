@@ -224,6 +224,8 @@ describe("what the core answers", () => {
         process.platform === "win32"
           ? { ok: true }
           : { ok: true, sock: join(core.dataDir, "hook.sock") },
+      // 这台机器上有没有 Chromium 决定真假；键必须在，页面靠它给浏览器入口。
+      capabilities: { headlessBrowser: expect.any(Boolean) as boolean },
     });
   });
 

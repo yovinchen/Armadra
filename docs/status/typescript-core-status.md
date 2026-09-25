@@ -1638,3 +1638,31 @@ shared 的 `agentDeliverySchema` 加 `targetState`（缺省空串）。投递队
 - `pnpm --filter @armadra/desktop test`：244 个文件通过、2 个跳过（2849 通过 / 13 跳过）。新用例：`files/search.test.ts`（预先中止与扫描中途中止）、`files/routes.test.ts`（真 HTTP 服务器上 fetch 中止 → 信号触发）、`files/reveal.test.ts`（三平台 argv、越界 / 符号链接逃逸、远端、不可读）、`http/route-scopes.test.ts`、`language/policy.test.ts`、`language/routes.integration.test.ts`（PATCH 去掉 execute → 会话收到 `stopped` + `execution_not_granted`、hub 清空、进程退出、再开会话 403）、`github/endpoints.test.ts`（GraphQL fixture：7 页翻完、50 页上界标 partial、cursor 原地打转、缺 cursor）。
 - `pnpm --filter @armadra/web test`：2644 通过、1 失败——`i18n.test.ts` 报 `integration.legacy.list` 未被引用，这个键来自基线 b1811c85，不是本节改动；本节新增的键都被引用。新用例：`ProjectSearchPanel.test.tsx`（新查询 / 停止 / 卸载三种中止）、`FileTree.test.tsx`（两种复制、只读工作区也有复制、网页不显示「显示」、桌面调 core、远端工作区不显示）、`files/use-file-actions.test.ts`。
 - `pnpm --filter @armadra/server test`：68 通过。`pnpm check`（含 `format:check`、typecheck、repo:check）通过。
+
+## 39. 浏览器节点入口、浏览数据、状态页徽标与壳进程计量（2026-09-26）
+
+### 39.1 服务器壳也能新建浏览器节点
+
+`/health` 与 `/api/health` 的文档末尾追加 `capabilities`（`Record<string, boolean>`），由各域经 `CoreServer.capability(name, probe)` 自己登记、每次现问；浏览器域登记 `headlessBrowser`，只有选中 headless 后端**且找到了 Chromium** 才为真。页面侧 `nodes/browser/availability.ts` 只问一次（问不到按「没有」处理，下次挂载再问）：新建菜单在「桌面壳或 `headlessBrowser`」时给出浏览器项，手机焦点页与节点菜单的「整屏打开」在 `headlessBrowser` 时接受浏览器节点。取舍：放进 health 而不是新开路由，因为页面启动本来就问它；字段追加在末尾，壳按字段名解析，旧页面忽略不认的键。
+
+### 39.2 清理浏览数据、项目内历史、起始页
+
+- 新 IPC `browser:clear-data`（只追加）：主进程 `main/browser/clear-data.ts` 对 `persist:armadra-browser-*` 这一族 partition 调 `clearStorageData()` 与 `clearCache()`。清哪些取并集：`<userData>/Partitions` 下扫到的目录（删掉的工作空间的登录也在这里）+ 页面报上来的工作空间 id（本次启动新建、还没落盘的）；只认这一族前缀和 `[A-Za-z0-9_-]` 的 id。
+- 地址栏右侧的历史下拉：按工作空间存本地偏好（`armadra.browser.history.<id>`，上限 50，去重、最近在前，只记 http(s)），在节点把活动标签的地址写回画布时记录。不写进节点数据：那样每次导航都是一次画布保存，节点删了历史也跟着没。清理浏览数据时连历史一起清。
+- 设置 → 浏览器新增一张卡：「新节点起始页」（按地址栏同一套规则补全，空 = 内置默认页）与「清理浏览数据」（二次确认）。浏览器设置页仍只在桌面壳出现，所以服务器壳上的 headless 配置文件不在这次清理范围内。
+
+### 39.3 Provider 状态页 / 事故徽标
+
+`core/usage/status.ts`：并发读 Anthropic、OpenAI、GitHub 的 `/api/v2/status.json`，每家 5 秒超时，结果缓存 5 分钟，同一时刻只有一趟在路上；非 200、JSON 不对、指示值不认识、离线、超时一律 `unknown`，从不回退成正常。`GET /api/usage/status` 回 `{ enabled, providers }`；设置 `usage.statusPage`（默认开，账号与用量页可关）关掉时不联网、回 `enabled: false`。用量卡按 Claude→Anthropic、Codex→OpenAI、Copilot→GitHub 对应，只在 `minor / major / critical / maintenance` 时显示徽标，第三方原文只放在悬停提示里。测试对着 127.0.0.1 上的 HTTP fixture 跑（含挂起不回话、503、坏 JSON、没人监听），不碰真网络。
+
+### 39.4 壳自身进程与 headless 浏览器计入平台组件
+
+- 桌面壳每 5 秒用 `app.getAppMetrics()` 采一次，按 `webContents.getAllWebContents()` 里 `getType() === "webview"` 的 `getOSProcessId()` 区分浏览器节点的页面，经已有的 drive 通道发 `shellMetrics` 事件（不属于任何节点，`nodeId` 为空串）。core 在浏览器域收到后交给资源域，逐行校验、30 秒没有新报告即视为过期。平台组件新增 `shellMain / shellRenderer / shellGpu / shellUtility / browserGuest` 五种，都按单个进程算（主进程的子进程里有 core 本身，按树算会把会话再数一遍）；数字优先用 core 自己进程表里那一行，对不上才用壳报的。
+- `service.ts` 里硬编码的 `browsers: []` 换成 headless 后端登记的来源：每个活着的节点的 Chromium 主进程（pid + 启动时间），按树计入渲染进程。
+- 资源面板照旧按 `kind` 出行名；「只算这个进程；它启动的会话在上面」这句现在只给 Runtime，其余单进程行写「单个进程」。
+
+### 39.5 验证
+
+- `pnpm --filter @armadra/web test`：2651 条里 3 条在满载时超时（`AutomationDrawer` 两条、`CommitPage` 一条），单独重跑 27/27 通过；另 1 条是基线上已有的失败，与本节无关：`i18n.test.ts` 报 `integration.legacy.list` 没有引用（来自 b1811c85）。
+- `pnpm --filter @armadra/desktop test`：`main.test.ts` 的 health 文档断言补上 `capabilities` 后全绿（vitest 2850 通过，live 1/1，脚本 38/38）。
+- `pnpm --filter @armadra/server test` 通过；`pnpm check`（含 `format:check`、两边 `typecheck`、`repo:check`）通过。
