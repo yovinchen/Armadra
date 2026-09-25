@@ -18,6 +18,8 @@
 
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
+
+import { agentPath } from "../terminal/environment";
 import type { DatabaseSync } from "node:sqlite";
 
 import { remoteResources } from "./remote";
@@ -93,8 +95,23 @@ export function tmuxServerArgs(dataDir: string | undefined): string[] {
   return ["-S", join(dataDir, "tmux.sock"), "-f", join(dataDir, "tmux.conf")];
 }
 
+/**
+ * 问 tmux 用的环境：PATH 与终端域执行 tmux 时补的是同一条（`agentPath`）。
+ *
+ * 从访达启动的打包版只继承 launchd 的 PATH，上面没有 Homebrew；用它去找
+ * tmux 必然落空，采样表是空的，资源面板里每个活着的会话都报 `no-pid`。
+ */
+export function tmuxEnvironment(
+  ambient: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return { ...ambient, PATH: agentPath(ambient) };
+}
+
 /** tmux 会话名 → pane pid。tmux 不在就是空表。 */
-export function panePids(dataDir?: string): Map<string, number> {
+export function panePids(
+  dataDir?: string,
+  ambient: NodeJS.ProcessEnv = process.env,
+): Map<string, number> {
   const pids = new Map<string, number>();
   if (process.platform === "win32") return pids;
   let output: string;
@@ -112,6 +129,7 @@ export function panePids(dataDir?: string): Map<string, number> {
         encoding: "utf8",
         maxBuffer: 4 * 1024 * 1024,
         stdio: ["ignore", "pipe", "ignore"],
+        env: tmuxEnvironment(ambient),
       },
     );
   } catch {

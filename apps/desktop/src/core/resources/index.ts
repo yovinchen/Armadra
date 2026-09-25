@@ -30,7 +30,13 @@ import {
 import { KeepAwake } from "./keep-awake";
 import { HostAwareResourceService } from "./hosts";
 import type { ResourceService, SubscribeRequest } from "./service";
-import { OrphanError, adoptOrphan, orphanTarget, panePids } from "./sessions";
+import {
+  OrphanError,
+  adoptOrphan,
+  orphanTarget,
+  panePids,
+  tmuxEnvironment,
+} from "./sessions";
 
 export { ResourceService } from "./service";
 export { PowerService } from "./power";
@@ -350,6 +356,7 @@ async function terminateBackend(
         "-t",
         reference,
       ],
+      { env: tmuxEnvironment() },
       () => done(),
     );
   });
