@@ -1993,3 +1993,47 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 
 - `pnpm --filter @armadra/desktop test`：261 文件通过、1 跳过（3023 条通过、6 跳过），scripts 的 node:test 38 条全过。
 - 探针：上表六项 + 打包版 `core-terminal-packaged.mjs` 退出码 0。
+
+## 49. 本轮界面功能的实浏览器端到端验证（2026-09-26）
+
+新探针 `tools/probes/ui-features-e2e.mjs`（场景在 `tools/probes/ui-features/`，怎么跑、验什么、没验什么见 `tools/probes/README.md` 末节）。真 core（`out/core/main.js`）+ 真 Vite 页面 + 新 profile 的无头 Chrome，经浏览器级 CDP 连接驱动；数据目录、HOME、`CLAUDE_CONFIG_DIR` / `CODEX_HOME`、替身脚本与 profile 都是 `mktemp` 的，跑完删除并停掉 tmux 服务器，跑完后 `$TMPDIR` 下没有 `armadra-ui-*` 残留、没有遗留的 Worker 或 tmux 进程。每个场景截图目视检查并收集控制台，error 级别算失败。整套 7 个场景 78 项检查全过，产物在 `target/ui-features-e2e/`。
+
+### 49.1 场景与实测
+
+| 场景                            | 结果       | 实测                                                                                                                                                                                                                                                                                                                                           | 截图                                                           |
+| ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 多设备画布（§41）               | 已修后通过 | 两个 browser context（UA 分别报 Windows / macOS）；单页面无设备条且拖得动（x 360→472，已落盘）；第二台显示「Windows · Chrome 正在编辑」、拖不动；第一台一笔被 CDP 拦下保存的改动（y 469）在接管后回到远端的 320；关掉持有者后设备条消失、第一台重新可写                                                                                        | `presence-1…6`、`mobile-presence`                              |
+| 编辑器（§37）                   | 通过       | PNG 棋盘格两色各占 0.51 / 0.49，滚轮 100%→146%；PDF 查看器区域 39 种颜色、亮像素 0.71（不是空白）；MP4 320 宽 1.77 s、MP3 4.17 s，都有原生控件；刷新后草稿放回并提示「已恢复」；磁盘改同一行出现三方合并（1 处冲突），取草稿后两边改动都在；`src/app.ts` 第 3 行出现修改标记；快速打开列出 6 个最近文件，`src/app.ts:3:12` 落在第 3 行第 12 列 | `editor-1…7`、`mobile-editor`                                  |
+| 文件树（§38）                   | 通过       | 复制路径读回 `/private/var/…/src/lib/util.ts`，相对路径 `src/lib/util.ts`，目录 `src/lib`；菜单里没有「在访达中显示」                                                                                                                                                                                                                          | `tree-1`、`mobile-tree`                                        |
+| 项目搜索取消（§38）             | 通过       | 36 038 个文件整轮扫描约 1.5 s；中途换关键词时 core 停在第 10 624 个，点「停止」时停在第 6 976 个；不打断的那次没有取消记录                                                                                                                                                                                                                     | `search-1…3`、`mobile-search`                                  |
+| 快捷键（§40）                   | 通过       | 「资源管理器」设为无后 ⇧⌘E 不再开抽屉；「源码控制」追加 ⌃⇧Y 后两组都能开关；`platform ==` 报语法错、`canvasFocus && nosuchkey` 报未知键，两者都不能保存；`platform == windows` 时 ⇧⌘L 不收侧栏，改成 `platform == mac` 后生效；全部重置恢复                                                                                                    | `keys-1…3`、`mobile-keybindings`                               |
+| 集成页（b1811c85）              | 通过       | 临时 HOME 里 11 个 Hook 事件各挂同一条旧命令；Claude 行高 46 px、名字在行内；弹层 z-index 55、在对话框之上、整块在视口内，同一命令一行 ×11；「修复」后只剩用户自己的 `echo mine`，留一份备份                                                                                                                                                   | `integration-1…3`、`mobile-integration`                        |
+| 资源面板与用量页（§39 §43 §44） | 已修后通过 | 「构建机」经替身 ssh 跑本仓库的 Worker，总览由 `resources.read` 真读出；筛选为 全部主机 / 本机 / 构建机，选构建机时会话表为空、只剩那台的总览；休眠节点头「休眠中」、体上「唤醒」，面板里「已休眠，不占内存」；用量卡 Claude「部分中断」、Codex 无徽标、Copilot「维护中」，fixture 收到三家请求                                                | `resources-1…2`、`usage-1`、`mobile-resources`、`mobile-usage` |
+
+### 49.2 发现并修掉的问题（各带单测，单独提交）
+
+- **被接管的那台没有丢掉本地改动**（`app/use-board-sync.ts`）。远端这段时间没人改过时，丢租约后重取的文档与缓存逐字相同，React Query 的结构共享还回旧引用，「同一份响应只合一次」的闸门把它挡掉，只读的那台一直显示自己那笔作废的改动。丢租约改为自己取一份直接合并。`use-board-sync.test.tsx` 加一条。
+- **绑定执行主机的工作空间里，本机会话被算到远端主机**（`panels/resources/metrics.ts`）。普通终端节点起的是本机 shell，core 在采样里明说 `local`，页面只信远端主机 id，本机的一律按工作空间改判成那台，筛「构建机」时列出本机的 pid 与内存。`metrics.test.ts` 加一条，旧的「跟随工作空间」用例改为「更旧的 core 不给 id」。
+- **打开画布时休眠的终端显示成「已退出」**（`terminal/surface/use-transport.ts`）。挂载时按节点数据抢先连上的 socket 收到 core 的「没在跑」，这一帧落在读到休眠之后、连接收掉之前时把表面改回已退出，节点只剩「重新运行」——点下去就另起会话，休眠那段接不回来。在探针里稳定复现；`TerminalSurface.render.test.tsx` 加一条。
+
+为了让探针看得见，core 加了两个观测点：文件搜索被取消时按 debug 记「文件搜索随连接断开中止」与 `visited`（`searchContent` 带一个进度对象，`search.test.ts` 断言中止时 visited < 400）；`ARMADRA_STATUS_PAGE_BASE` 把三家状态页改到同一个根地址下（与 `ARMADRA_GITHUB_API_BASE` 同一种做法，登记在开发指南的环境变量表，`status.test.ts` 加两条）。
+
+### 49.3 看到但没改的
+
+- **手机上右侧抽屉留一条缝**：资源管理器 / 资源这类抽屉按 `min(100vw, 360px)` 开，390 宽时左边留 30 px，工具簇被按抽屉宽度推到屏外只露出半截图标，底部导航也被抽屉盖住（`mobile-search.png`、`mobile-resources.png`）。能用，但像没做完；是改成窄屏铺满还是保留缝隙属于设计决定。
+- **桌面上右侧抽屉盖住底部 Dock 的右端**：1440 宽开资源管理器时 Dock 的缩放百分比只露出「10」（`tree-1-context-menu.png`）。
+- **顶部提示条压在节点标题栏上**：「Claude Code 的配置里有旧版接入残留」这类提示居中浮在画布顶端，正好盖住视口顶部节点的标题栏中段，按在上面拖不动节点（探针改为从标题栏左端起拖）。
+- 设置对话框右上角关闭按钮的读屏文字是英文 `Close`（生成组件自带的 sr-only），界面上看不见。
+- 终端节点在 ≤440 px 宽时按设计隐藏标题栏徽标，「休眠中」也跟着看不见，只剩体上的「唤醒」。
+
+### 49.4 没验证
+
+休眠的判据与接回（休眠状态是经 API 结束会话后把结束原因置成 `hibernate`，与 `Manager.hibernate` 写下的同形）；真实 SSH 与另一台机器；打包应用里的 PDF 查看器与视频解码；触屏手势。
+
+### 49.5 验证
+
+- `node tools/probes/ui-features-e2e.mjs`：7/7 场景通过（整套约 4 分钟）。
+- `pnpm --filter @armadra/web typecheck` 通过；`pnpm --filter @armadra/web test`：279 文件 2744 条全过。
+- `pnpm --filter @armadra/desktop test`：261 文件通过、1 跳过（3024 过、6 跳过），脚本用例全过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
+- `pnpm --filter @armadra/server test`：10 文件 79 条通过。
+- `pnpm check`（含 `format:check`、两边 typecheck、`repo:check`）通过。
