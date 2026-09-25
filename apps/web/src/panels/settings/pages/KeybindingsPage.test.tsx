@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 
 const fetchSettings = vi.fn();
@@ -54,7 +55,9 @@ function documentWith(keymap: Record<string, unknown>) {
 
 /** 命令面板那一行的键位按钮。 */
 function paletteChip() {
-  return screen.getByRole("button", { name: zh("cmd.app.commandPalette") });
+  return screen.getByLabelText(zh("cmd.app.commandPalette"), {
+    selector: "button",
+  });
 }
 
 /** 命令面板那一行的重置按钮名（含它会落到的键位）。 */
@@ -64,6 +67,15 @@ function resetLabel() {
       .replace("{command}", zh("cmd.app.commandPalette"))
       .replace("{keys}", ".*"),
   );
+}
+
+/**
+ * 打开的对话框。整页有上百个按钮，按角色查询要给每个元素算可访问名与可见性，
+ * 整套并行跑时单条用例就能吃掉数秒；先用 aria-label（便宜的属性匹配）找到
+ * 对话框里的一个控件，之后的角色查询只在对话框里做。
+ */
+function dialogOf(control: HTMLElement) {
+  return within(control.closest<HTMLElement>('[role="dialog"]')!);
 }
 
 /** 那一行里显示的来源（默认 / 全局 / 本设备）。 */
@@ -87,7 +99,10 @@ function view() {
 
 const mod = () => (isMacPlatform() ? { metaKey: true } : { ctrlKey: true });
 
-describe("KeybindingsPage", () => {
+// 每条用例都挂整页：上百条命令、每行一个下拉菜单，React 开发模式下单是挂载
+// 与重渲染就占了大半时间，查询已经尽量走属性匹配（见 dialogOf）。单独跑一条
+// 两三百毫秒，整套并行、机器负载很高时会被拉长好几倍，给这一组放宽预算。
+describe("KeybindingsPage", { timeout: 15_000 }, () => {
   beforeEach(() => {
     runPalette.mockReset();
     useDeviceKeymapStore.setState({ keymap: emptyKeymap() });
@@ -102,7 +117,9 @@ describe("KeybindingsPage", () => {
   it("录制只写当前平台那一格，另一个平台保持原样", async () => {
     view();
     fireEvent.click(
-      await screen.findByRole("button", { name: zh("cmd.app.commandPalette") }),
+      await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+        selector: "button",
+      }),
     );
     expect(screen.getByText(zh("settings.shortcut.recording"))).toBeTruthy();
 
@@ -128,7 +145,9 @@ describe("KeybindingsPage", () => {
 
   it("选「本设备」后录制只落在本机，不写 Runtime 设置", async () => {
     view();
-    await screen.findByRole("button", { name: zh("cmd.app.commandPalette") });
+    await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+      selector: "button",
+    });
     fireEvent.click(screen.getByText(zh("settings.shortcut.source.global")));
     fireEvent.click(
       await screen.findByRole("option", {
@@ -167,9 +186,7 @@ describe("KeybindingsPage", () => {
       expect(paletteSource()).toContain(zh("settings.shortcut.source.device")),
     );
     const reset = () =>
-      screen.getByRole("button", {
-        name: resetLabel(),
-      });
+      screen.getByLabelText(resetLabel(), { selector: "button" });
 
     fireEvent.click(reset());
     await waitFor(() =>
@@ -188,7 +205,9 @@ describe("KeybindingsPage", () => {
   it("Backspace 重置当前层，Esc 什么都不写", async () => {
     view();
     fireEvent.click(
-      await screen.findByRole("button", { name: zh("cmd.app.commandPalette") }),
+      await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+        selector: "button",
+      }),
     );
     fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
     expect(screen.queryByText(zh("settings.shortcut.recording"))).toBeNull();
@@ -234,16 +253,16 @@ describe("KeybindingsPage", () => {
     // 录制与重置在预览下都不可用：抓到的是本机的物理键。
     expect((paletteChip() as HTMLButtonElement).disabled).toBe(true);
     expect(
-      screen.queryByRole("button", {
-        name: resetLabel(),
-      }),
+      screen.queryByLabelText(resetLabel(), { selector: "button" }),
     ).toBeNull();
   });
 
   it("录制现有命令组合时不先运行该命令，结束后恢复快捷键", async () => {
     view();
     fireEvent.click(
-      await screen.findByRole("button", { name: zh("cmd.app.commandPalette") }),
+      await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+        selector: "button",
+      }),
     );
     fireEvent.keyDown(window, { key: "k", code: "KeyK", ...mod() });
     expect(runPalette).not.toHaveBeenCalled();
@@ -259,7 +278,9 @@ describe("KeybindingsPage", () => {
   it("录制不拦截关闭窗口且不写入窗口快捷键", async () => {
     view();
     fireEvent.click(
-      await screen.findByRole("button", { name: zh("cmd.app.commandPalette") }),
+      await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+        selector: "button",
+      }),
     );
     const event = new KeyboardEvent("keydown", {
       key: "w",
@@ -326,8 +347,8 @@ describe("KeybindingsPage", () => {
       expect(paletteSource()).toContain(zh("settings.shortcut.source.global")),
     );
     fireEvent.click(screen.getByText(zh("settings.shortcut.transfer")));
-    const area = screen.getByRole("textbox", {
-      name: zh("settings.shortcut.transfer"),
+    const area = screen.getByLabelText(zh("settings.shortcut.transfer"), {
+      selector: "textarea",
     }) as HTMLTextAreaElement;
     const exported = JSON.parse(area.value);
     expect(exported.global[here]["app.commandPalette"]).toBe("Mod+Shift+P");
@@ -344,7 +365,7 @@ describe("KeybindingsPage", () => {
       },
     });
     fireEvent.click(
-      screen.getByRole("button", {
+      dialogOf(area).getByRole("button", {
         name: zh("settings.shortcut.import.apply"),
       }),
     );
@@ -378,7 +399,7 @@ describe("KeybindingsPage", () => {
     );
     // 默认档里改的那条在这个档里不生效。
     const tidy = screen
-      .getByRole("button", { name: zh("cmd.canvas.tidy") })
+      .getByLabelText(zh("cmd.canvas.tidy"), { selector: "button" })
       .closest(".settings-row")!.textContent;
     expect(tidy).toContain(zh("settings.shortcut.source.default"));
   });
@@ -389,14 +410,18 @@ describe("KeybindingsPage", () => {
     await waitFor(() =>
       expect(paletteSource()).toContain(zh("settings.shortcut.source.profile")),
     );
-    expect(screen.queryByRole("button", { name: resetLabel() })).toBeNull();
+    expect(
+      screen.queryByLabelText(resetLabel(), { selector: "button" }),
+    ).toBeNull();
   });
 
   it("写入落在当前档里，不落在一张全局表上", async () => {
     fetchSettings.mockResolvedValue(documentWith({ profile: "vscode" }));
     view();
     fireEvent.click(
-      await screen.findByRole("button", { name: zh("cmd.canvas.tidy") }),
+      await screen.findByLabelText(zh("cmd.canvas.tidy"), {
+        selector: "button",
+      }),
     );
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -427,14 +452,18 @@ describe("KeybindingsPage", () => {
     // 比不显示更糟。
     expect(screen.queryByText(zh("settings.scope.global"))).toBeNull();
     expect(
-      screen.queryByRole("button", { name: zh("cmd.global.toggleWindow") }),
+      screen.queryByLabelText(zh("cmd.global.toggleWindow"), {
+        selector: "button",
+      }),
     ).toBeNull();
   });
 
   it("录制期间的按键不会顺带触发默认行为", async () => {
     view();
     fireEvent.click(
-      await screen.findByRole("button", { name: zh("cmd.app.commandPalette") }),
+      await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+        selector: "button",
+      }),
     );
     const event = new KeyboardEvent("keydown", {
       key: "j",
@@ -452,7 +481,9 @@ describe("KeybindingsPage", () => {
 
   it("设为无写一条空串覆盖，与没覆盖分得开，重置能退回默认", async () => {
     view();
-    await screen.findByRole("button", { name: zh("cmd.app.commandPalette") });
+    await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+      selector: "button",
+    });
     await pick(zh("settings.shortcut.clear"));
     await waitFor(() =>
       expect(patchSettings).toHaveBeenCalledWith({
@@ -466,7 +497,9 @@ describe("KeybindingsPage", () => {
     expect(paletteChip().textContent).toContain(
       zh("settings.shortcut.unbound"),
     );
-    fireEvent.click(screen.getByRole("button", { name: resetLabel() }));
+    fireEvent.click(
+      screen.getByLabelText(resetLabel(), { selector: "button" }),
+    );
     await waitFor(() =>
       expect(patchSettings).toHaveBeenLastCalledWith({
         keymap: { [here]: { "app.commandPalette": null } },
@@ -476,7 +509,9 @@ describe("KeybindingsPage", () => {
 
   it("再录一组替代键加在末尾，不替换原来那组", async () => {
     view();
-    await screen.findByRole("button", { name: zh("cmd.app.commandPalette") });
+    await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+      selector: "button",
+    });
     await pick(zh("settings.shortcut.add"));
     expect(screen.getByText(zh("settings.shortcut.recording"))).toBeTruthy();
     fireEvent.keyDown(window, {
@@ -521,28 +556,31 @@ describe("KeybindingsPage", () => {
 
   it("条件按已有语法校验，写错时说明原因且不能保存", async () => {
     view();
-    await screen.findByRole("button", { name: zh("cmd.app.commandPalette") });
-    await pick(zh("settings.shortcut.when.edit"));
-    const input = await screen.findByRole("textbox", {
-      name: zh("settings.shortcut.when"),
+    await screen.findByLabelText(zh("cmd.app.commandPalette"), {
+      selector: "button",
     });
+    await pick(zh("settings.shortcut.when.edit"));
+    const input = await screen.findByLabelText(zh("settings.shortcut.when"), {
+      selector: "input",
+    });
+    const dialog = dialogOf(input);
     const save = () =>
-      screen.getByRole("button", {
+      dialog.getByRole("button", {
         name: zh("settings.shortcut.when.save"),
       }) as HTMLButtonElement;
 
     fireEvent.change(input, { target: { value: "editorFocus &&" } });
-    expect(screen.getByRole("alert").textContent).toBe(
+    expect(dialog.getByRole("alert").textContent).toBe(
       zh("settings.shortcut.when.syntax"),
     );
     expect(save().disabled).toBe(true);
 
     fireEvent.change(input, { target: { value: "editorFocuss" } });
-    expect(screen.getByRole("alert").textContent).toContain("editorFocuss");
+    expect(dialog.getByRole("alert").textContent).toContain("editorFocuss");
     expect(save().disabled).toBe(true);
 
     fireEvent.change(input, { target: { value: " editorFocus " } });
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(dialog.queryByRole("alert")).toBeNull();
     fireEvent.click(save());
     await waitFor(() =>
       expect(patchSettings).toHaveBeenCalledWith({
@@ -560,8 +598,11 @@ describe("KeybindingsPage", () => {
     view();
     await waitFor(() => expect(paletteSource()).toContain("editorFocus"));
     await pick(zh("settings.shortcut.when.edit"));
+    const input = await screen.findByLabelText(zh("settings.shortcut.when"), {
+      selector: "input",
+    });
     fireEvent.click(
-      await screen.findByRole("button", {
+      dialogOf(input).getByRole("button", {
         name: zh("settings.shortcut.when.reset"),
       }),
     );
@@ -575,15 +616,19 @@ describe("KeybindingsPage", () => {
 
 /** 打开命令面板那一行的「更多」菜单，点其中一项。 */
 async function pick(item: string) {
-  const trigger = screen.getByRole("button", {
-    name: zh("settings.shortcut.more").replace(
+  const trigger = screen.getByLabelText(
+    zh("settings.shortcut.more").replace(
       "{command}",
       zh("cmd.app.commandPalette"),
     ),
-  });
+    { selector: "button" },
+  );
   fireEvent.pointerDown(
     trigger,
     new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
   );
-  fireEvent.click(await screen.findByRole("menuitem", { name: item }));
+  // 菜单项按文字找再确认角色：整页的角色查询太贵（见 dialogOf）。
+  fireEvent.click(
+    await screen.findByText(item, { selector: '[role="menuitem"]' }),
+  );
 }

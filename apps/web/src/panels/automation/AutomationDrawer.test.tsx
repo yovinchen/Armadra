@@ -53,6 +53,14 @@ vi.mock("@/canvas/placement", () => ({
   nodeDropPosition: () => ({ x: 0, y: 0 }),
 }));
 
+// 时区下拉在关着时也会把全部选项渲染进一个片段（给 SelectValue 取文字），
+// 真实列表四百多项，编辑表单每渲染一次都要走一遍——整套并行跑时这几条用例
+// 因此超过默认预算。这里只关心计划原有的时区被原样带回，留几项就够。
+vi.mock("./model", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./model")>()),
+  timezoneOptions: () => ["UTC", "Asia/Shanghai", "America/New_York"],
+}));
+
 import { AutomationDrawer, failureKey } from "./AutomationDrawer";
 import { useAutomationFocus } from "./open";
 
