@@ -9,9 +9,11 @@ import {
   OBSERVED_QUIET,
   type TargetState,
   observedQuiet,
+  sessionStartIdle,
   silentStartIdle,
   stateSourceIsReported,
 } from "../../agent/target-state";
+import { getAgentStatus } from "../../agent/status";
 import { getContextLinks } from "../../canvas/context-links";
 import {
   LEASE_GENERATION,
@@ -498,6 +500,18 @@ export async function attempt(
     }
   }
 
+  // 有状态通道、但只报过一条开场的目标（Claude 起来之后的样子）：那条开场把
+  // 状态清成空，`targetState()` 答 `starting`，而下一条事件要等有人提交一次输
+  // 入——与上面 Codex 那一例同一个死锁，判据在 `sessionStartIdle`。
+  if (
+    state === "starting" &&
+    stateSourceIsReported(live.stateSource) &&
+    sessionStart(context, live, nowMs)
+  ) {
+    state = "idle";
+    targetStateLabel = state;
+  }
+
   // `--interrupt`：只对真的在一轮里的目标有意义。空闲提示符上的 `ESC` 是空
   // 操作，而权限提示上的 `ESC` 的意思是「拒绝这次工具调用」——那是替人做决定。
   if (options.interrupt === true && state === "awaiting-approval") {
@@ -972,6 +986,27 @@ function silentStart(
         ? undefined
         : nowMs - session.createdAtMs,
     nowMs,
+  });
+}
+
+/**
+ * 「只报过开场」的目标的首投放行：事实取给 `sessionStartIdle`，与上面
+ * {@link silentStart} 并排。状态行现读——`LiveTarget` 只带五态，而这条门要的
+ * 是五态背后那一行的 `sessionPhase` 与 `restored`。
+ */
+function sessionStart(
+  context: CollabContext,
+  live: LiveTarget,
+  nowMs: number,
+): boolean {
+  const session = live.session;
+  return sessionStartIdle({
+    status: getAgentStatus(context.database, live.target.id),
+    observed: context.terminals?.observed?.(session.sessionId),
+    sessionAgeMs:
+      session.createdAtMs === undefined
+        ? undefined
+        : nowMs - session.createdAtMs,
   });
 }
 

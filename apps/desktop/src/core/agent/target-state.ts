@@ -203,3 +203,49 @@ export function silentStartIdle(gate: SilentStartGate): boolean {
   if (gate.observed === undefined) return false;
   return !gate.observed.pending;
 }
+
+/* ------------------ 报过开场、还没有过一轮：第一次投递 ------------------- */
+
+export interface SessionStartGate {
+  /** 这个节点那一行 `agent_status`；没有行就是 `undefined`。 */
+  readonly status:
+    | Pick<AgentStatus, "state" | "stateSource" | "sessionPhase" | "restored">
+    | undefined;
+  /** 终端域对这个会话的观测；`undefined` 表示它不认识这个会话。 */
+  readonly observed: ObservedActivity | undefined;
+  /** 会话建立到现在多久；`undefined` 表示不知道。 */
+  readonly sessionAgeMs: number | undefined;
+}
+
+/**
+ * 「只报过一条开场、还没开过一轮」的节点，此刻可以当作 `idle`——§4.3 首投放
+ * 行门的另一半。
+ *
+ * 实测（Claude Code 2.1.260，真机，页面挂着）：起来之后 hook 报一条
+ * `SessionStart`，归约按规则 4 把状态清空（`hook/reduce.ts`），此后一直停在输入
+ * 框上，下一条事件要等人提交一次输入才来。`targetState()` 对空状态答
+ * `starting`，于是 `send` 与 `open-agent --agent claude --task` 的第一条任务一
+ * 直停在 `queued / TARGET_STARTING` 直到过期——与 Codex 那一次（§31）是同一个
+ * 形状，只是它多报了一条开场。
+ *
+ * 五态不动（它说的仍是「还没有一条状态上报」），条件与 `silentStartIdle` 同一套：
+ *
+ *   1. 行上是一条**真上报的开场**：来源是 hook / extension，`sessionPhase` 是
+ *      `start`，状态为空。开过一轮的节点此后永远有状态，按事件驱动。
+ *   2. **不是 `restored`**：重启后从库里读回来的行说的是上一个进程。
+ *   3. **没有半截没提交的行**，理由同上。
+ *   4. **会话不新**：{@link SILENT_START_MIN_AGE_MS}。开场事件在界面铺开之前
+ *      就会到。
+ */
+export function sessionStartIdle(gate: SessionStartGate): boolean {
+  const status = gate.status;
+  if (status === undefined) return false;
+  if (!stateSourceIsReported(status.stateSource)) return false;
+  if (status.state !== undefined && status.state !== "") return false;
+  if (status.sessionPhase !== "start") return false;
+  if (status.restored) return false;
+  if (gate.sessionAgeMs === undefined) return false;
+  if (gate.sessionAgeMs < SILENT_START_MIN_AGE_MS) return false;
+  if (gate.observed === undefined) return false;
+  return !gate.observed.pending;
+}

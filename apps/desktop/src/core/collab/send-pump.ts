@@ -2,7 +2,7 @@ import { baseAgent, startsSilently } from "../agent/registry";
 import { getAgentStatus } from "../agent/status";
 import { stateSourceIsReported } from "../agent/target-state";
 import { attempt } from "./control/send";
-import { loadNode } from "./nodes";
+import { loadNode, loadSession } from "./nodes";
 import { sendLimits } from "./send-limits";
 import { expireQueue, pendingFor, targetsWithPending } from "./send-queue";
 import { type CollabContext, nowSeconds } from "./service";
@@ -185,13 +185,28 @@ export class SendPump {
     this.probeTimer.unref?.();
   }
 
-  /** 这个目标是不是「标了旗、且从未上报过」。 */
+  /**
+   * 这个目标的第一次空闲会不会以事件的形式到来。两种不会：
+   *
+   *   * 标了 `startsSilently`、且从未上报过（Codex）；
+   *   * 只报过一条开场、还没开过一轮（Claude：`SessionStart` 把状态清空，下一
+   *     条事件要等人提交输入）。`restored` 的行不算——它等的是新进程的上报。
+   */
   private silentStarter(context: CollabContext, nodeId: string): boolean {
     const node = loadNode(context.database, nodeId);
     if (node?.agentId == null) return false;
+    const status = getAgentStatus(context.database, nodeId);
+    if (
+      status !== undefined &&
+      stateSourceIsReported(status.stateSource) &&
+      (status.state === undefined || status.state === "") &&
+      status.sessionPhase === "start" &&
+      !status.restored
+    ) {
+      return loadSession(context.database, nodeId) !== undefined;
+    }
     if (!startsSilently(baseAgent(context.settings, node.agentId)))
       return false;
-    const status = getAgentStatus(context.database, nodeId);
     return !stateSourceIsReported(status?.stateSource);
   }
 
