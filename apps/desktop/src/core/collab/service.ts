@@ -74,6 +74,21 @@ export interface TerminalBridge {
   ): Promise<void>;
   /** 没有状态适配的会话，终端域对它知道的全部（§4.3 的启发式要的三样）。 */
   observed?(sessionId: string): ObservedActivity | undefined;
+  /**
+   * 替一个 Agent 节点起一个终端（一个 shell），与页面挂载时 `POST /api/terminals`
+   * 起的是同一种：同样的地址变量、同样的节点令牌。
+   *
+   * 只有依赖编排用它（Agent 自动化设计 §6）：页面没开时，等待满足之后得有人
+   * 替节点起终端。启动行仍然是之后一次 `write`，这里只起 shell。
+   */
+  spawnForNode?(request: {
+    readonly workspaceId: string;
+    readonly nodeId: string;
+    readonly agentId: string;
+    readonly cwd: string;
+    readonly shell?: string | undefined;
+    readonly sshHostId?: string | undefined;
+  }): Promise<{ readonly sessionId: string; readonly generation: number }>;
 }
 
 /**

@@ -208,3 +208,60 @@ R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消�
 - `verb` 是四个值之一：`summary` / `transcript` / `terminal` / `content`（内容类节点）。
 - `readerHandle` 与 `readerTitle` 在读者节点已被删除时缺席；`readerNodeId` 永远在。
 - 从没被读过的节点回 `{"total":0,"bytes":0,"reads":[]}`，不是 404：「没有人读过」是一个答案。
+
+## 8. 依赖编排：`/api/workspaces/{workspaceId}/dependencies`
+
+`canvas open-agent --after` 建的等待关系（设计 `design/agent-automation-design.md` §6）。等待与启动都归 core：条件满足时由 core 起终端、敲启动行、把第一条任务排进投递队列，页面开不开都一样。表在迁移 0027（`agent_dependency_launches` 一个下游一行，`agent_dependencies` 一条边一行）。权限与画布同一档（`canvas:read` / `canvas:write`）。
+
+| 方法与路径                             | 说明                                                                                               |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `GET …/dependencies`                   | 还没了结的下游（`state != launched`），按下游分组；`?nodeId=` 只看一个，`?all=true` 连已启动的也给 |
+| `POST …/dependencies`                  | 旧节点数据里带依赖的 `pendingLaunch` 迁入：`{ "nodeId", "after": [id…] }`，重复调用不重复建        |
+| `DELETE …/dependencies/{dependencyId}` | 取消一条边；这个下游其余的边都已满足时 core 当场启动它                                             |
+
+`GET` 回：
+
+```json
+{
+  "launches": [
+    {
+      "nodeId": "node-b",
+      "workspaceId": "ws",
+      "boardId": "board",
+      "state": "waiting",
+      "reason": null,
+      "attempts": 0,
+      "hasTask": true,
+      "sessionId": null,
+      "createdAt": "2026-09-25T08:00:00.000Z",
+      "launchedAt": null,
+      "dependencies": [
+        {
+          "id": "0192…",
+          "workspaceId": "ws",
+          "downstreamNodeId": "node-b",
+          "upstreamNodeId": "node-a",
+          "upstreamTitle": "Builder",
+          "condition": "current",
+          "state": "waiting",
+          "reason": null,
+          "baseline": {
+            "state": "working",
+            "eventAt": "2026-09-25T07:59:58.000Z"
+          },
+          "createdAt": "2026-09-25T08:00:00.000Z",
+          "updatedAt": "2026-09-25T08:00:00.000Z",
+          "expiresAt": "2026-09-26T08:00:00.000Z",
+          "resolvedAt": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+- 下游 `state`：`waiting` / `launched` / `failed`（重试用完或启动行拼不出来）。
+- 边的 `condition`：`current` 等上游手上这一轮，`next` 等上游下一次成功结束。创建时记下 `baseline`，之后只认基准之后的结束，旧 done 不会被重放成放行。
+- 边的 `state`：`waiting` / `satisfied` / `failed` / `missing` / `expired` / `cancelled`。失败、中断、退出（`reason` 为 `upstreamFailed` / `upstreamInterrupted` / `upstreamExited`）、上游被删（`missing`）、过期（`expired`，`reason: "ttl"`）都不放行，由人取消那条边。`reason` 是稳定码，不翻译。
+- 下游只在每条边都是 `satisfied` 或 `cancelled` 时启动。
+- `DELETE` 回 `{ "dependency": {…} }`；别的工作空间的 id、不存在的 id 都是 404 `{ "code": "not_found", "message" }`。

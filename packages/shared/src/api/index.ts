@@ -17,6 +17,7 @@ export * from "./terminals.js";
 export * from "./conversations.js";
 export * from "./agents.js";
 export * from "./control.js";
+export * from "./dependencies.js";
 export * from "./context-reads.js";
 export * from "./exports.js";
 export * from "./assets.js";

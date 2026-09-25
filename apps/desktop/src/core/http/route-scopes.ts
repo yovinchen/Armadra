@@ -108,7 +108,7 @@ export const ROUTE_SCOPE_RULES: readonly RouteScopeRule[] = [
   // 画布本体：看板、文档、连线、节点，以及工作空间自己。
   {
     pattern: new RegExp(
-      `^${WORKSPACE}/(boards|context-links|nodes|deliveries|handoffs|open)`,
+      `^${WORKSPACE}/(boards|context-links|nodes|deliveries|handoffs|dependencies|open)`,
     ),
     read: "canvas:read",
     write: "canvas:write",

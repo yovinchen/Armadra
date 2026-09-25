@@ -16,7 +16,17 @@ import { MAX_HOPS, sendLimits } from "../send-limits";
 import { enqueue } from "../send-queue";
 import { type CollabContext, nowDate, nowSeconds } from "../service";
 import { INBOX_WAKE_MODES } from "../wake";
-import { cleanTitle, load, newNode, placement, save } from "./board";
+import {
+  createDependencies,
+  validateUpstreams,
+} from "../../dependencies/create";
+import { dependencyService } from "../../dependencies/registry";
+import {
+  DEPENDENCY_CONDITIONS,
+  type DependencyCondition,
+  MAX_TTL_MINUTES,
+} from "../../dependencies/store";
+import { asRefusal, cleanTitle, load, newNode, placement, save } from "./board";
 import { addLink } from "./edits";
 import { type Outcome, result } from "./outcome";
 import { checkBody, refuse as sendRefusal } from "./send";
@@ -24,12 +34,13 @@ import { checkBody, refuse as sendRefusal } from "./send";
 /**
  * `list`, and the three verbs that add a node to the board.
  *
- * Ported from the pre-merge implementation. `open-agent` is the
- * one that matters most and the one that does the least: the core never starts
- * an agent process. It writes a node whose data carries the launch line, and
- * the terminal node creates its own PTY when the canvas mounts it. `after` is
- * what makes it wait — a node with dependencies stores a `pendingLaunch`
- * instead of an `initialCommand`.
+ * Ported from the pre-merge implementation. `open-agent` without `--after`
+ * writes a node and nothing else: the terminal node creates its own PTY and
+ * types the launch line when the canvas mounts it. With `--after` the core is
+ * the one that starts it — the dependencies go into the dependency tables
+ * (`core/dependencies`, Agent 自动化设计 §6) and the service launches the node
+ * when they are met, whether or not a page is open. The node data carries no
+ * `pendingLaunch` any more; an old one is only read, and migrated by the page.
  */
 
 export function list(context: CollabContext, caller: Caller): Outcome {
@@ -173,25 +184,47 @@ export function openAgent(
   const model = readModel(args);
   const inboxWake = readInboxWake(args);
   const after = args.list("after");
+  const condition = readCondition(args);
+  const ttlMinutes = readTtl(args);
   const document = load(context, caller);
   for (const id of after) {
     if (!document.nodes.some((node) => node.id === id)) {
       throw Refusal.badRequest(`--after 里的 \`${id}\` 不是这块画布上的节点。`);
     }
   }
+  // 建节点之前就把不成立的依赖拒掉（普通终端、环、别的画布），带任务时连来
+  // 源链一起查：否则画布上会多出一个没有任何边在等、页面一挂载就自己启动的
+  // 节点。
+  const delayedTrail =
+    after.length > 0 && task !== undefined
+      ? firstTaskTrail(context, caller)
+      : [];
+  if (after.length > 0) {
+    try {
+      validateUpstreams(
+        context.database,
+        {
+          workspaceId: caller.node.workspaceId,
+          boardId: caller.node.boardId,
+        },
+        after,
+      );
+    } catch (error) {
+      throw asRefusal(error);
+    }
+  }
   // 启动行只负责把 CLI 起起来，从此不带提示词（§8.3）。自定义 Agent 的程序名
   // 与提示词形状由 `settings` 解析，不再从原样的 `custom:foo` 猜（§8.2 E1）。
   const command = launchCommand(context.settings, agentId);
 
-  // The core never starts the process. The terminal node creates its PTY when
-  // the canvas mounts it; `pendingLaunch` is what makes it wait first.
+  // 没有依赖时 core 不起进程：页面挂载节点时自己起 PTY、敲启动行。有依赖时
+  // 由依赖服务在条件满足后起——节点数据里不再写 `pendingLaunch`。
   const agent: Record<string, unknown> = { id: agentId };
   // 权限模式与模型此前一个都没写：页面用 `agent` 字段重拼启动行，字段不在，
   // 拼出来的就是一条什么都没带的裸线（§8.2 E3 的后半段）。
   if (permissionMode !== undefined) agent.permissionMode = permissionMode;
   if (model !== undefined) agent.model = model;
   if (inboxWake !== undefined) agent.inboxWake = inboxWake;
-  if (after.length > 0) agent.pendingLaunch = { command, after };
   const data = { kind: "terminal", agent };
 
   if (args.flag("dry-run")) {
@@ -204,6 +237,7 @@ export function openAgent(
         title,
         command,
         after,
+        ...(after.length === 0 ? {} : { afterTurn: condition }),
         task: task ?? null,
       },
     );
@@ -260,8 +294,21 @@ export function openAgent(
     "main",
   );
 
+  // 有依赖时第一条任务**不**现在排：队列项五分钟过期，而依赖可能等上几个小
+  // 时。它跟着启动记录一起落库，由依赖服务在启动之后排进同一条队列。来源链
+  // 现在就算好，第四跳照样当场拒绝。
+  const waits =
+    after.length === 0
+      ? undefined
+      : createWaits(context, caller, node, {
+          after,
+          condition,
+          ttlMinutes,
+          task,
+          trail: delayedTrail,
+        });
   const queued =
-    task === undefined
+    task === undefined || waits !== undefined
       ? undefined
       : queueFirstTask(context, caller, node, task);
 
@@ -269,12 +316,14 @@ export function openAgent(
   parts.push(
     after.length === 0
       ? "它会自己启动。"
-      : `它会等 ${after.length} 个依赖完成后启动。`,
+      : `它会等 ${after.length} 个依赖${condition === "next" ? "下一次成功结束" : "完成手上这一轮"}后由 core 启动，页面开不开都一样。`,
   );
   if (queued !== undefined) {
     parts.push(
       "第一条任务已经排上，等它报出第一条空闲（起来之后不报状态的 CLI 则等终端安静下来）就投进去；投不成会出现在 canvas outbox 里。",
     );
+  } else if (waits !== undefined && task !== undefined) {
+    parts.push("第一条任务会在它启动之后排进投递队列。");
   }
   return result(parts.join(""), {
     id: node.id,
@@ -282,6 +331,16 @@ export function openAgent(
     title,
     command,
     after,
+    ...(waits === undefined
+      ? {}
+      : {
+          afterTurn: condition,
+          dependencies: waits.map((dependency) => ({
+            id: dependency.id,
+            upstreamNodeId: dependency.upstreamNodeId,
+            state: dependency.state,
+          })),
+        }),
     linked: true,
     ...(queued === undefined || task === undefined
       ? {}
@@ -292,18 +351,59 @@ export function openAgent(
   });
 }
 
-/** `--task` 的排队项。第一条任务与第二条任务是同一条路（§8.1）。 */
-function queueFirstTask(
+/**
+ * `--after` 的依赖行（Agent 自动化设计 §6）。节点已经存好了才写：写在前面，
+ * 一次撞上并发保存的 `save` 会留下一组等着一个不存在的节点的边。
+ */
+function createWaits(
   context: CollabContext,
   caller: Caller,
   node: { readonly id: string },
-  body: string,
-): string {
+  wait: {
+    readonly after: readonly string[];
+    readonly condition: DependencyCondition;
+    readonly ttlMinutes: number | undefined;
+    readonly task: string | undefined;
+    readonly trail: readonly string[];
+  },
+): { id: string; upstreamNodeId: string; state: string }[] {
+  const { after, condition, ttlMinutes, task, trail } = wait;
+  let created;
+  try {
+    created = createDependencies(context.database, {
+      workspaceId: caller.node.workspaceId,
+      boardId: caller.node.boardId,
+      downstreamNodeId: node.id,
+      after,
+      condition,
+      ...(ttlMinutes === undefined ? {} : { ttlSeconds: ttlMinutes * 60 }),
+      ...(task === undefined
+        ? {}
+        : {
+            task: {
+              body: task,
+              sourceNodeId: caller.node.id,
+              hops: trail.length,
+              trail,
+            },
+          }),
+      now: nowSeconds(context),
+    });
+  } catch (error) {
+    throw asRefusal(error);
+  }
+  // `current` 且上游早已干净地结束的，现在就能启动；不等下一轮扫描。
+  void dependencyService()?.created(node.id);
+  return created.dependencies;
+}
+
+/**
+ * 来源链跟着消息走：一个被别人指使来建节点的 Agent，它建出来的那个节点收到
+ * 的第一条任务仍然在同一条链上，所以第四跳照样会被拦下（§7）。
+ */
+function firstTaskTrail(context: CollabContext, caller: Caller): string[] {
   const nowMs = nowDate(context).getTime();
-  const limits = sendLimits();
-  // 来源链跟着消息走：一个被别人指使来建节点的 Agent，它建出来的那个节点收到
-  // 的第一条任务仍然在同一条链上，所以第四跳照样会被拦下（§7）。
-  const trail = limits.trailFor(caller.node.id, nowMs);
+  const trail = sendLimits().trailFor(caller.node.id, nowMs);
   if (trail.length > MAX_HOPS) {
     throw sendRefusal(
       "LOOP_DETECTED",
@@ -311,6 +411,17 @@ function queueFirstTask(
       { hops: trail.length },
     );
   }
+  return [...trail];
+}
+
+/** `--task` 的排队项。第一条任务与第二条任务是同一条路（§8.1）。 */
+function queueFirstTask(
+  context: CollabContext,
+  caller: Caller,
+  node: { readonly id: string },
+  body: string,
+): string {
+  const trail = firstTaskTrail(context, caller);
   const inserted = enqueue(context.database, {
     id: uuidV7(),
     workspaceId: caller.node.workspaceId,
@@ -332,6 +443,30 @@ function queueFirstTask(
   // 推一下泵：目标若是「启动不上报」的那一类，它的第一条空闲只能靠探（§4.3）。
   context.nudge?.(node.id);
   return inserted.item.id;
+}
+
+/** `--after-turn`：等上游手上这一轮（缺省），还是它下一次成功结束。 */
+function readCondition(args: Args): DependencyCondition {
+  const wanted = args.text("after-turn") ?? args.text("afterTurn");
+  if (wanted === undefined) return "current";
+  if (!(DEPENDENCY_CONDITIONS as readonly string[]).includes(wanted)) {
+    throw Refusal.badRequest(
+      `--after-turn 只能是 ${DEPENDENCY_CONDITIONS.join(" / ")}。`,
+    );
+  }
+  return wanted as DependencyCondition;
+}
+
+/** `--ttl`：最多等多少分钟，缺省一天。 */
+function readTtl(args: Args): number | undefined {
+  // 命令行上来的是字符串，JSON 调用可能直接给数字。
+  const raw = args.text("ttl");
+  const minutes = raw === undefined ? args.count(["ttl"]) : Number(raw);
+  if (minutes === undefined) return undefined;
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_TTL_MINUTES) {
+    throw Refusal.badRequest(`--ttl 是 1–${MAX_TTL_MINUTES} 之间的整数分钟。`);
+  }
+  return minutes;
 }
 
 /** `--permission-mode`：这个 CLI 真的有对应参数的那几个，别的当场拒绝。 */

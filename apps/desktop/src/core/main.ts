@@ -45,6 +45,7 @@ import { install as installAgents } from "./agent";
 import { install as installModels } from "./models";
 import { install as installBrowser } from "./browser";
 import { install as installSchedule } from "./schedule";
+import { install as installDependencies } from "./dependencies";
 import { install as installGit } from "./git";
 
 /**
@@ -160,6 +161,9 @@ export const DOMAINS: readonly ((context: CoreContext) => void)[] = [
   installTerminals,
   // 调度在终端之后：一次投递要往 pane 里写，而那个桥是终端域装好之后才有的。
   installSchedule,
+  // 依赖编排在终端之后：条件满足时要借终端桥替节点起终端、敲启动行（Agent
+  // 自动化设计 §6）。桥每次现取，这里只决定第一次恢复扫描时它在不在。
+  installDependencies,
   // Resources after terminals: a sample reads the session rows the terminal
   // domain writes, and it publishes through the event stream installed first.
   installResources,

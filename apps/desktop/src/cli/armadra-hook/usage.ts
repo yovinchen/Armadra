@@ -85,7 +85,9 @@ CANVAS:
   inbox --limit 10 --after 0           read your pending messages without acknowledgement
   ack --id ID                         acknowledge one received message
   open-agent --agent ID [--task TEXT] [--title T] [--permission-mode M]
-                                      [--model M] [--after ID] open an agent
+                                      [--model M] [--after ID]
+                                      [--after-turn current|next] [--ttl MIN]
+                                      open an agent
                                       node, link it, and give it a first task
                                       once it reports idle
   rename --node ID --handle NAME       set this node's name on the board

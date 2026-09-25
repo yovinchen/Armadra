@@ -12,7 +12,7 @@ import { remoteDomain } from "../remote";
 import { DirectBackend } from "./direct";
 import { nodeRole } from "../canvas/context-links";
 import { handleForNode } from "../canvas/handles";
-import { agentEnvironment, setHookClient } from "./environment";
+import { type EnvPairs, agentEnvironment, setHookClient } from "./environment";
 import { launcherClientBinary } from "../hook/install/shared";
 import { setTerminalBridge } from "../agent";
 import { setAgentLauncher } from "../schedule/cold-start";
@@ -501,7 +501,28 @@ export function install(
   // `canvas interrupt`, `canvas close`, the title suggestion, and every
   // scheduled delivery — refuses with "the terminal domain is not assembled",
   // on a canvas whose panes are running.
-  setTerminalBridge(terminalBridge(manager, context.db.database));
+  setTerminalBridge({
+    ...terminalBridge(manager, context.db.database),
+    // 依赖编排在页面没开时替节点起终端（Agent 自动化设计 §6）。与
+    // `POST /api/terminals` 同一套环境与令牌，只是请求来自 core 自己。
+    spawnForNode: async (request) => {
+      await ready;
+      const session = await manager.spawn({
+        workspaceId: request.workspaceId,
+        cwd: resolve(request.cwd),
+        ...(request.shell === undefined ? {} : { shell: request.shell }),
+        args: [],
+        kind: "terminal",
+        ownerNodeId: request.nodeId,
+        agentId: request.agentId,
+        ...(request.sshHostId === undefined
+          ? {}
+          : { sshHostId: request.sshHostId }),
+        env: ownedEnvironment(request.nodeId, request.agentId),
+      });
+      return { sessionId: session.id, generation: session.generation };
+    },
+  });
   // 定时任务的冷启动（自动化设计 §4.2）：同一条建会话的路，外加敲一行启动行。
   setAgentLauncher(async (request) => {
     const session = await manager.spawn({

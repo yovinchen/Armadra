@@ -552,6 +552,20 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     implemented: true,
   },
+  // 依赖编排（Agent 自动化设计 §6）：列出还没了结的等待、迁入旧
+  // `pendingLaunch`、取消一条边。
+  {
+    path: "/api/workspaces/{workspaceId}/dependencies",
+    methods: ["GET", "POST"],
+    surface: "runtime",
+    implemented: true,
+  },
+  {
+    path: "/api/workspaces/{workspaceId}/dependencies/{dependencyId}",
+    methods: ["DELETE"],
+    surface: "runtime",
+    implemented: true,
+  },
   {
     path: "/api/workspaces/{workspaceId}/context-links/{nodeId}",
     methods: ["PUT"],

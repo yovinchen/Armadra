@@ -3,6 +3,7 @@ import { type AgentFixture, agentFixture, callerFor } from "../agent/fixture";
 import { loadBoard } from "../canvas/documents";
 import { getContextLinks } from "../canvas/context-links";
 import { handleForNode } from "../canvas/handles";
+import { dependenciesOf } from "../dependencies/store";
 import {
   type AuditEvent,
   installAuditSink,
@@ -265,11 +266,25 @@ describe("the verbs that add a node", () => {
     const data = document.nodes.find((entry) => entry.id === created)?.data as {
       agent: Record<string, unknown>;
     };
-    expect(data.agent.pendingLaunch).toEqual({
-      command: "claude",
-      after: [first],
-    });
+    // 等待关系落在依赖表里，节点数据里不再有 `pendingLaunch`（Agent 自动化
+    // 设计 §6）。
+    expect(data.agent.pendingLaunch).toBeUndefined();
     expect(data.agent.initialCommand).toBeUndefined();
+    expect(
+      dependenciesOf(fixture.database, created).map((row) => [
+        row.upstreamNodeId,
+        row.state,
+      ]),
+    ).toEqual([[first, "waiting"]]);
+  });
+
+  it("refuses to wait on a plain terminal, which never reports a state", async () => {
+    const plain = fixture.agentNode("Shell", null);
+    const refused = refusal(
+      await run(me, "open-agent", { agent: "claude", after: plain }),
+    );
+    expect(refused.status).toBe(400);
+    expect(refused.message).toContain("没有状态来源");
   });
 
   it("refuses an unknown agent and an --after that is not on the board", async () => {
