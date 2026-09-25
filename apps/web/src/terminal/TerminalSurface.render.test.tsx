@@ -384,4 +384,44 @@ describe("节能休眠", () => {
     expect(fixture.createTerminal).not.toHaveBeenCalled();
     expect(changed.mock.calls.at(-1)?.[0].hibernation ?? null).toBeNull();
   });
+
+  /**
+   * 挂载时按节点数据里的会话 id 抢先连上的那条 socket，core 会答「没在跑」。
+   * 这一帧要是落在「读到休眠」之后、那条连接收掉之前，以前会把表面改成
+   * 「已退出」，节点上只剩「重新运行」——点下去就另起一个会话，休眠的那段
+   * 再也接不回来（实浏览器探针里打开带休眠节点的画布时稳定复现）。
+   */
+  it("抢先连上的那条 socket 晚到的「已退出」不盖掉休眠", async () => {
+    fixture.data = { kind: "terminal", sessionId: row.id };
+    let answer: (value: unknown) => void = () => {};
+    fixture.getTerminal.mockImplementation(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const changed = vi.fn<(status: TerminalSurfaceStatus) => void>();
+    render(
+      <TerminalSurface
+        nodeId="node"
+        data={fixture.data}
+        collapsed={false}
+        onStatusChange={changed}
+      />,
+    );
+    await waitFor(() => expect(fixture.handlers).not.toBeNull());
+    const early = fixture.handlers!;
+    await act(async () => {
+      answer({
+        ...row,
+        status: "terminated",
+        generation: 1,
+        hibernation: "hibernated",
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      early.onHello!({ ...hello, sessionId: row.id, alive: false });
+      early.onStatus!("exited", null);
+    });
+    expect(changed.mock.calls.at(-1)?.[0].render).toBe("hibernated");
+    expect(screen.getByRole("button", { name: "唤醒" })).toBeTruthy();
+    expect(fixture.createTerminal).not.toHaveBeenCalled();
+  });
 });

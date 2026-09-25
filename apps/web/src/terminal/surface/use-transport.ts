@@ -82,6 +82,15 @@ export function useTerminalTransport(
       {
         onHello: (hello) => {
           if (disposed) return;
+          // 挂载时按节点数据抢先连上的那一条，碰上的可能是一个休眠的会话：
+          // core 答「没在跑」时 `use-session` 已经把表面记成休眠了，这一帧
+          // 晚到也不能把它改回「已退出」——那样节点上只剩「重新运行」。
+          if (
+            !hello.alive &&
+            refs.statusRef.current.connection === "hibernated"
+          ) {
+            return;
+          }
           refs.backendRef.current = hello.backend;
           refs.sessionIdRef.current = hello.sessionId;
           refs.reconnectDelayRef.current = 1000;
@@ -132,6 +141,8 @@ export function useTerminalTransport(
             patch({ connection: "live", exitCode: null });
             return;
           }
+          // 同上：休眠着的会话本来就不在跑，这不是一次退出。
+          if (refs.statusRef.current.connection === "hibernated") return;
           patch({
             connection: state === "failed" ? "failed" : "exited",
             exitCode,
