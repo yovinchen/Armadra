@@ -1,13 +1,15 @@
 /**
  * 第一批之后补上的远端能力：Git 长操作与它推回来的进度、集成状态与工作树绑定、
- * 两台机器各跑一半的 AI 提交信息、Worker 侧推送的文件监听与一轮读取的远端资源。
+ * 两台机器各跑一半的 AI 提交信息、Worker 侧推送的文件监听、一轮读取的远端资源，
+ * 以及承载语言服务的第二条连接。
  *
  * 与 `execution.test.ts` 同一个办法：core 的真入口打成包，本机子进程跑
- * `worker --stdio`，控制端经同一套帧、握手与推送
+ * `worker --stdio`（语言连接加 `--language-link`），控制端经同一套帧、握手与推送
  * 和它说话，不需要 sshd。推送帧经 `remotePushed` 进各域，与远端域装配时一样。
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { chmodSync, writeFileSync } from "node:fs";
 import { type Socket, connect } from "node:net";
 import { join } from "node:path";
@@ -20,6 +22,7 @@ import {
   expect,
   it,
 } from "vitest";
+import type { WebSocket } from "ws";
 import { temporary, type Temporary } from "../files/workspace.fixture";
 import { install as installFiles } from "../files/routes";
 import { install as installGit } from "../git";
@@ -34,20 +37,24 @@ import {
   type GitMessageSource,
 } from "../git/message";
 import type { OperationSnapshot } from "../git/repository/types";
+import { MOCK_LSP } from "../language/fixture";
+import { RemoteLanguage } from "../language/remote";
 import { RemoteResources } from "../resources/remote";
 import type { SshHost } from "../settings/ssh-hosts";
 import { type Fixture, fixture } from "../workspaces/fixture";
 import { install as installWorkspaces } from "../workspaces/routes";
-import { createRemoteWorkspace } from "../workspaces/table";
+import { type Workspace, createRemoteWorkspace } from "../workspaces/table";
 import {
   type RemoteChannel,
   executeOn,
   remoteConnected,
   remoteDisconnected,
   remotePushed,
+  setLanguageCaller,
   setRemoteCaller,
 } from "./execute";
 import { RemoteGitOperations } from "./git-operations";
+import { LANGUAGE_CAPABILITY } from "./language";
 import type { RemoteResourceRead } from "./resources-worker";
 import { remoteWatches } from "./watch";
 import { RemoteWorker } from "./worker";
@@ -101,13 +108,16 @@ async function until<T>(
 }
 
 let start: () => ChildProcess;
+let startLanguage: () => ChildProcess;
 
 beforeAll(async () => {
   start = await spawnWorker();
+  startLanguage = await spawnWorker(["--language-link"]);
 }, 120_000);
 
 afterAll(() => {
   setRemoteCaller(undefined);
+  setLanguageCaller(undefined);
   disposeWorkerBundle();
   cleanupFixtures();
 });
@@ -506,4 +516,151 @@ describe("remote resources", () => {
     now += 5_000;
     expect(later.host(HOST.id)).toBeUndefined();
   }, 60_000);
+});
+
+/** 只用到 `send` / `close` / 事件的替身 socket。 */
+class FakeSocket extends EventEmitter {
+  readonly sent: string[] = [];
+  closed: number | undefined;
+  send(body: string): void {
+    this.sent.push(body);
+  }
+  close(code?: number): void {
+    this.closed = code ?? 1000;
+  }
+}
+
+describe("the language link", () => {
+  let link: RemoteWorker;
+  let language: RemoteLanguage;
+  let root: Temporary;
+  const published: Record<string, unknown>[] = [];
+
+  beforeEach(() => {
+    root = temporary("armadra-far-language-");
+    link = worker(startLanguage, "language");
+    setLanguageCaller(async (_hostId, action, payload, replay) =>
+      link.request(action, payload, replay),
+    );
+    language = new RemoteLanguage();
+    language.attachSink({
+      publish: (_workspaceId, event) => published.push(event),
+      fileChanged: () => {},
+    });
+    published.length = 0;
+  });
+  afterEach(() => {
+    language.dispose();
+    setLanguageCaller(undefined);
+    link.close();
+    root.remove();
+  });
+
+  it("runs the server on the execution host and carries its messages both ways", async () => {
+    writeFileSync(join(root.path, "notes.md"), "line\nTODO here\n");
+    const workspace = {
+      id: "ws-far",
+      name: "far",
+      rootPath: root.path,
+      color: "#000",
+      permissions: { read: true, write: true, execute: true },
+      executionHostId: HOST.id,
+      lastOpenedAt: "",
+      createdAt: "",
+      updatedAt: "",
+    } as Workspace;
+    const settings = {
+      servers: { marksman: { path: process.execPath, args: [MOCK_LSP] } },
+    };
+
+    const probe = await link.probe();
+    expect(probe.capabilities.has(LANGUAGE_CAPABILITY)).toBe(true);
+
+    const listed = await language.service(workspace, HOST.id, settings, false);
+    expect(listed.executionHostId).toBe(HOST.id);
+    expect(
+      listed.servers.find((row) => row.serverId === "marksman")?.state,
+    ).toBe("available");
+
+    const opened = await language.open(
+      workspace,
+      HOST.id,
+      settings,
+      "markdown",
+      "node-1",
+    );
+    expect(opened.state).toBe("running");
+    expect(language.awaitingSocket(opened.sessionId)).toBe(true);
+
+    const socket = new FakeSocket();
+    expect(
+      language.attach(
+        workspace.id,
+        opened.sessionId,
+        socket as unknown as WebSocket,
+      ),
+    ).toBe(true);
+    socket.emit(
+      "message",
+      Buffer.from(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          method: "textDocument/didOpen",
+          params: {
+            textDocument: {
+              uri: "armadra:///notes.md",
+              languageId: "markdown",
+              version: 1,
+              text: "line\nTODO here\n",
+            },
+          },
+        }),
+      ),
+      false,
+    );
+    const diagnostics = await until(() =>
+      socket.sent.find((body) => body.includes("publishDiagnostics")),
+    );
+    expect(diagnostics).toContain("armadra:///notes.md");
+    // 远端的绝对路径不出执行主机。
+    expect(diagnostics).not.toContain(root.path);
+
+    // 语言连接断了：会话被告知 `link_lost`，socket 关掉让编辑器重连。
+    link.resume();
+    await until(() => (socket.closed === undefined ? undefined : true));
+    expect(socket.closed).toBe(1011);
+    expect(published).toContainEqual(
+      expect.objectContaining({
+        type: "language.session",
+        sessionId: opened.sessionId,
+        state: "disconnected",
+        reason: "link_lost",
+      }),
+    );
+    expect(language.has(workspace.id, opened.sessionId)).toBe(false);
+  }, 60_000);
+
+  it("says the link is lost, per language, when the host cannot be reached", async () => {
+    setLanguageCaller(async () => {
+      throw Object.assign(new Error("unreachable"), {
+        status: 503,
+        code: "unavailable",
+      });
+    });
+    const status = await language.service(
+      {
+        id: "ws-x",
+        rootPath: root.path,
+        permissions: { read: true, write: true, execute: true },
+      } as Workspace,
+      HOST.id,
+      {},
+      false,
+    );
+    expect(status.status).toBe("unavailable");
+    expect(status.reason).toBe("link_lost");
+    expect(status.servers.every((row) => row.state === "disconnected")).toBe(
+      true,
+    );
+  });
 });

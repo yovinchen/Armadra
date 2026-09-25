@@ -62,8 +62,10 @@ import {
   remoteConnected,
   remoteDisconnected,
   remotePushed,
+  setLanguageCaller,
   setRemoteCaller,
 } from "./execute";
+import { LANGUAGE_CAPABILITY } from "./language";
 import { remoteResources } from "../resources/remote";
 import { missingCapability } from "./handshake";
 import { capabilityOf } from "./operations";
@@ -81,6 +83,8 @@ export const LAUNCHER_OVERRIDE = "ARMADRA_REMOTE_WORKER_LAUNCHER";
 export interface RemoteDomain {
   readonly askpass: AskpassService;
   readonly workers: RemoteWorkers;
+  /** 每台主机的语言连接（`worker --stdio --language-link`），按需建立。 */
+  readonly languageLinks: RemoteWorkers;
   /** The registry read fresh, so a settings edit is visible immediately. */
   readonly host: (hostId: string) => SshHost | undefined;
   stop(): Promise<void>;
@@ -133,7 +137,8 @@ export function install(context: CoreContext): RemoteDomain {
     );
   };
 
-  // 控制连接的推送与起落交给同一个事件口，各域按需订阅。
+  // 每台主机两条连接：控制连接（文件、Git、资源、监听）与语言连接。两者的推送
+  // 与起落都交给同一个事件口，各域按 `channel` 取自己的那部分。
   const make =
     (channel: RemoteChannel) =>
     (entry: SshHost, worker: SshWorker): RemoteWorker =>
@@ -150,6 +155,7 @@ export function install(context: CoreContext): RemoteDomain {
         onDisconnected: () => remoteDisconnected(entry.id, channel),
       });
   const workers = new RemoteWorkers(make("control"));
+  const languageLinks = new RemoteWorkers(make("language"));
 
   const deps: SshRouteDeps = {
     dataDir: context.dataDir,
@@ -274,14 +280,36 @@ export function install(context: CoreContext): RemoteDomain {
   // SSH 会话与远端进程树按连接端口对上；设置里写了端口就按它筛。
   remoteResources.setHostPort((hostId) => host(hostId)?.port);
 
+  const callLanguage: Parameters<typeof setLanguageCaller>[0] = async (
+    hostId,
+    action,
+    payload,
+    replay,
+  ) => {
+    const entry = host(hostId);
+    const link = languageLinks.get(entry, hostId);
+    await askpass.start();
+    if (link.capability(LANGUAGE_CAPABILITY) === false) {
+      throw unsupported(
+        missingCapability(entry?.name ?? hostId, LANGUAGE_CAPABILITY),
+      );
+    }
+    return await link.request(action, payload, replay);
+  };
+  setLanguageCaller(callLanguage);
+
   const domain: RemoteDomain = {
     askpass,
     workers,
+    languageLinks,
     host,
     stop: async () => {
       if (assembled === domain) assembled = undefined;
       const current = setRemoteCaller(undefined);
       if (current !== call) setRemoteCaller(current);
+      const currentLanguage = setLanguageCaller(undefined);
+      if (currentLanguage !== callLanguage) setLanguageCaller(currentLanguage);
+      languageLinks.closeAll();
       workers.closeAll();
       await askpass.stop();
     },

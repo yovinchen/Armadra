@@ -39,6 +39,7 @@ import {
   REMOTE_CAPABILITY,
   type WorkerHello,
 } from "./handshake";
+import { LANGUAGE_CAPABILITY, LANGUAGE_OPERATIONS } from "./language";
 import {
   FILES_CAPABILITY,
   GIT_CAPABILITY,
@@ -61,6 +62,12 @@ export const WORKER_CAPABILITIES: readonly string[] = [
   RESOURCES_CAPABILITY,
 ];
 
+/** 语言连接（`--language-link`）声明的能力。 */
+export const LANGUAGE_LINK_CAPABILITIES: readonly string[] = [
+  REMOTE_CAPABILITY,
+  LANGUAGE_CAPABILITY,
+];
+
 /** 远端的协议次版本；主版本见 {@link PROTOCOL_MAJOR}。 */
 export const PROTOCOL_MINOR = 0;
 
@@ -76,7 +83,10 @@ export interface WorkerServerOptions {
   /** 测试用；缺省每个进程一个随机值。 */
   readonly instanceId?: string;
   readonly version?: string;
-  /** 这条连接执行哪张表、声明哪些能力。缺省是控制连接。 */
+  /**
+   * 这条连接执行哪张表、声明哪些能力。缺省是控制连接；`--language-link` 换成
+   * 语言那一张（{@link ./language}）。
+   */
   readonly operations?: Readonly<Record<string, Operation>>;
   readonly capabilities?: readonly string[];
 }
@@ -269,19 +279,13 @@ export interface WorkerArguments {
 /**
  * 进程入口：`main` 看到 `worker` 子命令时调这里，而不是起 core。
  *
- * 语言服务连接（`--language-link`）明确拒绝：远端语言服务要一条承载 LSP 流的
- * 第二连接，这个构建还没有；说「不支持」比握手成功后什么都不转发要诚实。
+ * `--language-link` 起的是同一台主机上的第二个 Worker：同一套帧与握手，执行的是
+ * 语言那张表，语言服务器就是它的子进程——连接一断，stdin 关闭，它们随之停掉。
  */
 export async function runWorker(args: WorkerArguments): Promise<number> {
   if (!args.stdio) {
     process.stderr.write("armadra worker: only --stdio is supported\n");
     return 2;
-  }
-  if (args.languageLink) {
-    process.stderr.write(
-      "armadra worker: remote language servers are not supported by this build\n",
-    );
-    return 3;
   }
   if (args.stateDir !== undefined) {
     try {
@@ -295,6 +299,15 @@ export async function runWorker(args: WorkerArguments): Promise<number> {
       return 2;
     }
   }
-  await serveWorker({ input: process.stdin, output: process.stdout });
+  await serveWorker({
+    input: process.stdin,
+    output: process.stdout,
+    ...(args.languageLink
+      ? {
+          operations: LANGUAGE_OPERATIONS,
+          capabilities: LANGUAGE_LINK_CAPABILITIES,
+        }
+      : {}),
+  });
   return 0;
 }

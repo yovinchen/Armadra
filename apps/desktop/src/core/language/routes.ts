@@ -37,13 +37,13 @@ import {
 } from "./edits";
 import type { JsonObject, JsonValue } from "./jsonrpc";
 import { reason } from "./limits";
-import type { Manager } from "./lifecycle";
+import type { Manager, OpenedSession } from "./lifecycle";
+import { remoteLanguage } from "./remote";
 import { handleSessionMessage } from "./session";
-import {
-  languages,
-  type Control,
-  type LanguageServiceStatus,
-  type ServerDescriptor,
+import type {
+  Control,
+  LanguageServiceStatus,
+  ServerDescriptor,
 } from "./registry";
 
 export interface LanguageRouteDeps {
@@ -64,14 +64,6 @@ export interface LanguageRouteDeps {
  */
 function isRemote(workspace: Workspace): boolean {
   return (workspace.executionHostId ?? "") !== "";
-}
-
-/**
- * The answer for a language request on a remote workspace: 501 with the stable
- * reason key, so the editor degrades to plain editing and says why.
- */
-function unsupportedRemote(): DomainError {
-  return new DomainError(501, "unsupported", reason.UNSUPPORTED_REMOTE);
 }
 
 function readable(deps: LanguageRouteDeps, workspaceId: string): Workspace {
@@ -109,14 +101,13 @@ export async function languageService(
   const workspace = readable(deps, workspaceId);
   const allowExecute = workspace.permissions.execute;
   if (isRemote(workspace)) {
-    // Every row, and every row unsupported: see `remoteRows` for what is
-    // missing before this can be a real answer.
-    return {
-      status: "unavailable",
-      reason: reason.UNSUPPORTED_REMOTE,
-      executionHostId: executionHostId(workspace),
-      servers: remoteRows(),
-    };
+    // 那台机器上的服务器由它自己的语言连接回答（`remote.ts`）。
+    return await remoteLanguage.service(
+      workspace,
+      executionHostId(workspace),
+      languageSection(deps.settings),
+      refresh,
+    );
   }
   const servers = await discover(
     deps.settings,
@@ -125,29 +116,51 @@ export async function languageService(
     refresh,
     true,
   );
-  // A server that is actually running says so, over whatever the probe cached:
-  // the probe answers "could this start", the hub answers "is it".
-  const live = new Map(
-    deps.manager
-      .hubsFor(workspaceId)
-      .map((hub) => [hub.serverId, hub.descriptor()]),
-  );
-  const rows = servers.map((row) => {
-    const running = live.get(row.serverId);
-    if (running === undefined) return row;
+  return {
+    ...serviceStatus(
+      mergeLive(
+        servers,
+        deps.manager.hubsFor(workspaceId).map((hub) => hub.descriptor()),
+      ),
+      allowExecute,
+    ),
+    executionHostId: executionHostId(workspace),
+  };
+}
+
+/**
+ * A server that is actually running says so, over whatever the probe cached:
+ * the probe answers "could this start", the hub answers "is it". Shared with
+ * the remote Worker, which answers the same rows for its own machine.
+ */
+export function mergeLive(
+  servers: readonly ServerDescriptor[],
+  running: readonly ServerDescriptor[],
+): ServerDescriptor[] {
+  const live = new Map(running.map((row) => [row.serverId, row]));
+  return servers.map((row) => {
+    const current = live.get(row.serverId);
+    if (current === undefined) return row;
     const merged: ServerDescriptor = {
       ...row,
-      state: running.state,
-      restartCount: running.restartCount,
-      pid: running.pid,
-      startTimeUnixMs: running.startTimeUnixMs,
-      openDocuments: running.openDocuments,
-      ...(running.features.length > 0 ? { features: running.features } : {}),
+      state: current.state,
+      restartCount: current.restartCount,
+      pid: current.pid,
+      startTimeUnixMs: current.startTimeUnixMs,
+      openDocuments: current.openDocuments,
+      ...(current.features.length > 0 ? { features: current.features } : {}),
     };
-    return running.reason === undefined
+    return current.reason === undefined
       ? withoutReason(merged)
-      : { ...merged, reason: running.reason };
+      : { ...merged, reason: current.reason };
   });
+}
+
+/** The overall line over a set of rows. */
+export function serviceStatus(
+  rows: ServerDescriptor[],
+  allowExecute: boolean,
+): Omit<LanguageServiceStatus, "executionHostId"> {
   const usable = rows.some((row) => row.state !== "unsupported");
   return {
     status: usable ? "available" : "unavailable",
@@ -158,7 +171,6 @@ export async function languageService(
             ? reason.SERVER_NOT_FOUND
             : reason.EXECUTION_NOT_GRANTED,
         }),
-    executionHostId: executionHostId(workspace),
     servers: rows,
   };
 }
@@ -169,42 +181,21 @@ function withoutReason(descriptor: ServerDescriptor): ServerDescriptor {
 }
 
 /**
- * One `unsupported` row per language for a workspace whose files are on
- * another machine.
- *
- * The remote language link is meant to be a second `ssh` connection carrying
- * JSON-RPC frames to a Worker that runs the servers there
- * (`worker --stdio --language-link`). The Worker's control connection now
- * executes files and Git on the execution host, but it refuses the language
- * link outright: carrying a server's stream needs its own framing, lifetime
- * and restart rules, and none of them exist yet. So every row says
- * `unsupported_remote` — a stable key the settings page translates — rather
- * than `link_lost`, which would promise that reconnecting could help.
- * Answering rows rather than an error is deliberate: the settings page still
- * lists every language and says, per language, that it is unavailable here.
+ * The `language` section as the remote Worker needs it: the user's overrides
+ * and ceilings. The probe cache is per execution host and stays behind — a
+ * path this machine found means nothing on another.
  */
-function remoteRows(): ServerDescriptor[] {
-  const rows: ServerDescriptor[] = [];
-  for (const entry of languages()) {
-    const candidate = entry.candidates[0];
-    if (candidate === undefined) continue;
-    rows.push({
-      serverId: candidate.serverId,
-      languageId: entry.languageId,
-      fileExtensions: [...entry.extensions],
-      executable: "",
-      version: "",
-      state: "unsupported",
-      reason: reason.UNSUPPORTED_REMOTE,
-      features: [...candidate.features],
-      restartCount: 0,
-      pid: null,
-      startTimeUnixMs: null,
-      openDocuments: 0,
-      probedAtUnixMs: 0,
-    });
+function languageSection(settings: SettingsStore): JsonValue {
+  const section = settings.snapshot().language;
+  if (
+    typeof section !== "object" ||
+    section === null ||
+    Array.isArray(section)
+  ) {
+    return {};
   }
-  return rows;
+  const { probes: _probes, ...rest } = section as Record<string, JsonValue>;
+  return rest;
 }
 
 /* -------------------------------- sessions -------------------------------- */
@@ -315,7 +306,17 @@ export async function openSession(
   const languageId = requiredString(body, "languageId");
   const clientId = optionalString(body, "clientId") ?? "";
   if (isRemote(workspace)) {
-    throw unsupportedRemote();
+    if (!workspace.permissions.execute) {
+      throw forbidden(reason.EXECUTION_NOT_GRANTED);
+    }
+    const opened = await remoteLanguage.open(
+      workspace,
+      executionHostId(workspace),
+      languageSection(deps.settings),
+      languageId,
+      clientId,
+    );
+    return openedResponse(opened);
   }
   const { outbox, attach } = sockets.park(workspaceId);
   const opened = await deps.manager.openSession({
@@ -328,6 +329,10 @@ export async function openSession(
     outbox,
   });
   attach(opened.sessionId);
+  return openedResponse(opened);
+}
+
+function openedResponse(opened: OpenedSession): OpenSessionResponse {
   return {
     sessionId: opened.sessionId,
     generation: opened.generation,
@@ -348,6 +353,9 @@ export async function closeSession(
   sessionId: string,
 ): Promise<{ closed: boolean }> {
   readable(deps, workspaceId);
+  if (remoteLanguage.has(workspaceId, sessionId)) {
+    return { closed: await remoteLanguage.close(workspaceId, sessionId) };
+  }
   const closed = await deps.manager.closeSession(workspaceId, sessionId);
   sockets.release(sessionId);
   return { closed };
@@ -356,20 +364,28 @@ export async function closeSession(
 /* ---------------------------------- edits --------------------------------- */
 
 /** `POST /api/workspaces/{id}/language/sessions/{sessionId}/edits` */
-export function applyEdit(
+export async function applyEdit(
   deps: LanguageRouteDeps,
   workspaceId: string,
   sessionId: string,
   request: CoreRequest,
-): ApplyResult {
+): Promise<ApplyResult> {
   const workspace = deps.workspace(workspaceId);
   if (!workspace.permissions.write) {
     throw forbidden("This workspace is opened read-only");
   }
-  if (isRemote(workspace)) throw notFound("No such language session");
   const body = jsonObject(request.body);
   const edit = body["edit"] as JsonValue | undefined;
   const expected = expectedVersions(body["expectedSha256"]);
+  if (isRemote(workspace)) {
+    // 文件在那台机器上，未保存草稿的判断也在那台机器的影子文档上做。
+    return await remoteLanguage.edit(
+      workspace,
+      sessionId,
+      edit ?? null,
+      expected,
+    );
+  }
   const hub = deps.manager.hubOfSession(workspaceId, sessionId);
   if (hub === undefined) throw notFound("No such language session");
   const files = parseEdit(edit ?? null, hub.rewriter);
@@ -419,7 +435,15 @@ export async function controlServer(
   if (action === "restart" && !workspace.permissions.execute) {
     throw forbidden(reason.EXECUTION_NOT_GRANTED);
   }
-  if (isRemote(workspace)) throw unsupportedRemote();
+  if (isRemote(workspace)) {
+    return await remoteLanguage.control(
+      workspace,
+      executionHostId(workspace),
+      serverId,
+      action,
+      languageSection(deps.settings),
+    );
+  }
   if (action === "stop") {
     await deps.manager.stop(workspaceId, serverId);
   } else {
@@ -451,6 +475,12 @@ export function attachSessionSocket(
   workspaceId: string,
   sessionId: string,
 ): void {
+  if (remoteLanguage.has(workspaceId, sessionId)) {
+    if (!remoteLanguage.attach(workspaceId, sessionId, socket)) {
+      socket.close(1008, "This language session already has a socket");
+    }
+    return;
+  }
   if (!sockets.connect(sessionId, socket)) {
     socket.close(1008, "This language session already has a socket");
     return;
@@ -490,6 +520,11 @@ export function sessionGuard(
   } catch (error) {
     const status = error instanceof DomainError ? error.status : 404;
     return { status, reason: status === 403 ? "Forbidden" : "Not Found" };
+  }
+  if (remoteLanguage.has(workspaceId, sessionId)) {
+    return remoteLanguage.awaitingSocket(sessionId)
+      ? undefined
+      : { status: 409, reason: "Conflict" };
   }
   if (deps.manager.hubOfSession(workspaceId, sessionId) === undefined) {
     return { status: 404, reason: "Not Found" };

@@ -47,11 +47,16 @@ export function workerBundle(): Promise<string> {
   return built;
 }
 
-/** 起一个真 Worker 子进程；stdio 就是控制端与它之间的整条连接。 */
-export async function spawnWorker(): Promise<() => ChildProcess> {
+/**
+ * 起一个真 Worker 子进程；stdio 就是控制端与它之间的整条连接。`extra` 追加在
+ * `worker --stdio` 之后，例如语言连接的 `--language-link`。
+ */
+export async function spawnWorker(
+  extra: readonly string[] = [],
+): Promise<() => ChildProcess> {
   const bundle = await workerBundle();
   return () =>
-    spawn(process.execPath, [bundle, "worker", "--stdio"], {
+    spawn(process.execPath, [bundle, "worker", "--stdio", ...extra], {
       stdio: ["pipe", "pipe", "inherit"],
     });
 }

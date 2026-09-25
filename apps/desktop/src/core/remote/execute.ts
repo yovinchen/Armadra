@@ -168,3 +168,43 @@ export function remoteDisconnected(
 ): void {
   each((listener) => listener.disconnected?.(hostId, channel));
 }
+
+/* ------------------------------ 语言服务那条连接 ------------------------------ */
+
+/**
+ * 发给某台执行主机上语言连接的请求。与 {@link RemoteCaller} 同形，但走的是另一
+ * 个 Worker 进程：语言服务器的消息量与生命周期都和文件、Git 不同，挤在一条连接
+ * 上会让一次大的补全答复堵在文件保存前面（取舍见状态文档 §44）。
+ */
+export type LanguageCaller = RemoteCaller;
+
+let languageCaller: LanguageCaller | undefined;
+
+export function setLanguageCaller(
+  next: LanguageCaller | undefined,
+): LanguageCaller | undefined {
+  const previous = languageCaller;
+  languageCaller = next;
+  return previous;
+}
+
+/** 在执行主机的语言连接上执行一个动作。没装配就是 501，不回退到本机。 */
+export async function executeLanguage(
+  hostId: string,
+  action: string,
+  root: string,
+  args: Record<string, unknown> = {},
+  replay = false,
+): Promise<unknown> {
+  if (languageCaller === undefined) {
+    throw new DomainError(501, "unsupported", "这个 core 没有装配远端语言连接");
+  }
+  try {
+    return await languageCaller(hostId, action, { root, args }, replay);
+  } catch (failure) {
+    if (failure instanceof RemoteError) {
+      throw new DomainError(failure.status, failure.code, failure.message);
+    }
+    throw failure;
+  }
+}

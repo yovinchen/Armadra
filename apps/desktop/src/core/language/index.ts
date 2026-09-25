@@ -11,43 +11,31 @@
  * unchanged — it speaks the same seven routes and the same raw JSON-RPC text
  * frames it always did.
  *
- * ## What is not here, and why
+ * ## A remote workspace
  *
- * **A remote workspace answers `unsupported`, per language, with a reason.**
- * The Rust Runtime reaches a remote language server over a *second* `ssh`
- * connection to `armadra-runtime worker`, carrying protobuf `LanguageFrame`s
- * with a credit window and a link epoch (the pre-merge implementation).
- * The core's Worker (`core/remote/server.ts`) serves files, repositories and
- * root registration over the control connection, but that connection is a
- * serial request/response queue, and `worker --language-link` is refused
- * outright. Three things are missing before the remote path can be written:
- *
- *   1. a framed, full-duplex channel on top of `core/remote`'s stdio frames
- *      that is not the serial request/response queue the control connection
- *      is;
- *   2. the Worker side of `language.link.v1` — the capability the second
- *      connection must advertise before a frame is written;
- *   3. the link epoch and credit window, so a connection that dies marks its
- *      sessions `disconnected` instead of delivering an in-flight answer to
- *      the session that replaced them.
- *
- * Until then `language-service` lists every language as `unsupported` with
- * `unsupported_remote`, and `POST …/language/sessions` refuses with the same
- * reason — not `link_lost`, which would promise that reconnecting helps. A
- * workspace that moves to another host mid-session hears it through
- * `workspace.grants` and stops its local servers with that reason.
+ * Its servers run on the execution host, under a second Worker reached over
+ * its own `ssh` connection (`worker --stdio --language-link`, see
+ * `remote/language.ts` for why a second connection rather than multiplexing
+ * the control one). The routes here authorise exactly as they do locally and
+ * then hand the same request to that link (`remote.ts`); the session socket
+ * carries text both ways as before. When the link drops, every session on that
+ * host is told `disconnected / link_lost` and its socket is closed, so the
+ * editor's transport reconnects and the next session brings the link back.
+ * A workspace that moves to another host mid-session hears it through
+ * `workspace.grants` and stops the servers on its old root.
  */
 
 import type { WorkspaceEvent } from "../bus";
 import type { CoreContext } from "../main";
 import { VERSION } from "../instance";
 import { settingsDomain } from "../settings";
-import { answered, workspaceId } from "../workspaces/routes";
+import { workspaceId } from "../workspaces/routes";
 import { internalError } from "../workspaces/support";
 import { getWorkspace } from "../workspaces/table";
 import type { AppliedFile } from "./edits";
 import type { HubEvents } from "./mux";
 import { Manager } from "./lifecycle";
+import { remoteLanguage } from "./remote";
 import {
   SessionSockets,
   answeredAsync,
@@ -155,6 +143,8 @@ export function install(context: CoreContext): LanguageDomain {
   };
 
   const manager = new Manager({ settings, events, version: VERSION });
+  // 远端工作空间的服务器状态由那台机器推来，经同一条事件流发出去。
+  remoteLanguage.attachSink({ publish, fileChanged });
   const sockets = new SessionSockets(manager);
   const deps: LanguageRouteDeps = {
     manager,
@@ -207,9 +197,9 @@ export function install(context: CoreContext): LanguageDomain {
   router.handle(
     "POST",
     SESSION_EDITS_PATH,
-    answered((match, request) => ({
+    answeredAsync(async (match, request) => ({
       status: 200,
-      body: applyEdit(
+      body: await applyEdit(
         deps,
         workspaceId(match),
         match.params.sessionId ?? "",
@@ -265,24 +255,26 @@ export function install(context: CoreContext): LanguageDomain {
   // 失去 execute（或工作区被删）就立刻停掉它的语言服务器（设计 §1.3）：进程是
   // 按旧授权起的，等空闲清扫就等于在撤销之后还让它跑上好几分钟。
   const offGrants = context.bus.on("workspace.grants", (change) => {
-    void manager
-      .applyGrants(
+    void Promise.all([
+      manager.applyGrants(
         change.workspaceId,
         change.permissions,
         change.executionHostId,
-      )
-      .catch((error: unknown) =>
-        context.log.warn("could not apply language grants", {
-          workspaceId: change.workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
+      ),
+      remoteLanguage.grants(change.workspaceId, change.permissions),
+    ]).catch((error: unknown) =>
+      context.log.warn("could not apply language grants", {
+        workspaceId: change.workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
   });
 
   assembled = {
     manager,
     stop: () => {
       offGrants();
+      remoteLanguage.attachSink(undefined);
       return manager.shutdown();
     },
   };
