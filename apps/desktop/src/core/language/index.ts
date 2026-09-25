@@ -261,9 +261,25 @@ export function install(context: CoreContext): LanguageDomain {
     (params) => sessionGuard(deps, sockets, params),
   );
 
+  // 失去 execute（或工作区被删）就立刻停掉它的语言服务器（设计 §1.3）：进程是
+  // 按旧授权起的，等空闲清扫就等于在撤销之后还让它跑上好几分钟。
+  const offGrants = context.bus.on("workspace.grants", (change) => {
+    void manager
+      .applyGrants(change.workspaceId, change.permissions)
+      .catch((error: unknown) =>
+        context.log.warn("could not apply language grants", {
+          workspaceId: change.workspaceId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+  });
+
   assembled = {
     manager,
-    stop: () => manager.shutdown(),
+    stop: () => {
+      offGrants();
+      return manager.shutdown();
+    },
   };
   return assembled;
 }

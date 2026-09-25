@@ -156,14 +156,21 @@ export function install(context: CoreContext): void {
     "/api/workspaces/{workspaceId}",
     answered((match, request) => {
       const body = jsonObject(request.body);
-      return {
-        status: 200,
-        body: updateWorkspace(database, workspaceId(match), {
-          name: optionalString(body, "name"),
-          color: optionalString(body, "color"),
-          permissions: permissionsOf(body),
-        }),
-      };
+      const permissions = permissionsOf(body);
+      const updated = updateWorkspace(database, workspaceId(match), {
+        name: optionalString(body, "name"),
+        color: optionalString(body, "color"),
+        permissions,
+      });
+      // 授权一变就说一声：语言服务器这类按旧授权起的进程得立刻停，而不是等
+      // 下一次空闲清扫。
+      if (permissions !== undefined) {
+        context.bus.emit("workspace.grants", {
+          workspaceId: updated.id,
+          permissions: updated.permissions,
+        });
+      }
+      return { status: 200, body: updated };
     }),
   );
 
@@ -177,6 +184,10 @@ export function install(context: CoreContext): void {
       // lands it goes here, before the row and its cascades go.
       getWorkspace(database, id);
       deleteWorkspace(database, id);
+      context.bus.emit("workspace.grants", {
+        workspaceId: id,
+        permissions: null,
+      });
       return { status: 204, body: undefined };
     }),
   );

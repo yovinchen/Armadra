@@ -22,6 +22,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { type RunningCore, run } from "../main";
 import { settingsDomain } from "../settings";
 import { MOCK_LSP } from "./fixture";
+import { languageDomain } from "./index";
 import type { JsonObject } from "./jsonrpc";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -276,6 +277,65 @@ describe("language routes", () => {
     expect(body["message"]).toBe("execution_not_granted");
   }, 60_000);
 
+  it("revoking execute stops the running server at once and says why", async () => {
+    const { core, root } = await start();
+    createWorkspace(core, "ws-1", root, {
+      read: true,
+      write: true,
+      execute: true,
+    });
+    plantMockServer();
+    const frames: JsonObject[] = [];
+    core.bus.on("workspace.event", ({ workspaceId, event }) => {
+      if (workspaceId === "ws-1") frames.push(event as unknown as JsonObject);
+    });
+    const opened = await post(core, "/api/workspaces/ws-1/language/sessions", {
+      languageId: "markdown",
+      clientId: "node-1",
+    });
+    expect(opened.status).toBe(200);
+    const sessionId = ((await opened.json()) as JsonObject)[
+      "sessionId"
+    ] as string;
+    const manager = languageDomain()?.manager;
+    const pid = manager?.hub("ws-1", "marksman")?.process?.pid;
+    expect(pid).toBeTypeOf("number");
+
+    const patched = await fetch(`${origin(core)}/api/workspaces/ws-1`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        permissions: { read: true, write: true, execute: false },
+      }),
+    });
+    expect(patched.status).toBe(200);
+
+    // The open editor is told, by session, with the reason it can show.
+    const told = await waitFor(
+      frames,
+      (frame) =>
+        frame["type"] === "language.session" &&
+        frame["sessionId"] === sessionId &&
+        frame["state"] === "stopped",
+    );
+    expect(told["reason"]).toBe("execution_not_granted");
+    expect(manager?.hubsFor("ws-1")).toEqual([]);
+    const deadline = Date.now() + 10_000;
+    while (processAlive(pid as number) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(processAlive(pid as number), "the server process is gone").toBe(
+      false,
+    );
+
+    // And it stays refused: a new session is not quietly let back in.
+    const again = await post(core, "/api/workspaces/ws-1/language/sessions", {
+      languageId: "markdown",
+      clientId: "node-1",
+    });
+    expect(again.status).toBe(403);
+  }, 60_000);
+
   it("restart needs the execute grant and stop answers a descriptor", async () => {
     const { core, root } = await start();
     createWorkspace(core, "ws-1", root, {
@@ -338,6 +398,15 @@ describe("language routes", () => {
     expect(descriptor["executable"]).toBe(process.execPath);
   }, 60_000);
 });
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function waitFor(
   frames: readonly JsonObject[],

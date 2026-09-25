@@ -10,6 +10,7 @@
  */
 
 import { METHOD_NOT_FOUND, type JsonValue } from "./jsonrpc";
+import { reason } from "./limits";
 
 /** What a method needs before it may reach the server. */
 export type Requirement =
@@ -145,4 +146,35 @@ export function codeActionIsOffered(action: JsonValue): boolean {
  */
 export function serverEditAllowed(allowWrite: boolean): Denial | undefined {
   return check("textDocument/rename", allowWrite);
+}
+
+/** A workspace's grants as the language service reads them. */
+export interface WorkspaceGrants {
+  readonly write: boolean;
+  readonly execute: boolean;
+}
+
+/**
+ * What a change of grants means for the servers already running (design
+ * §1.3).
+ *
+ *  * `stop` — the workspace is gone or lost `execute`. A running server is a
+ *    process started under a grant that no longer exists; it is stopped now,
+ *    with the reason the page shows, not left to the idle sweep.
+ *  * `readOnly` — `execute` stays but `write` went. The server may keep
+ *    answering questions; the sessions lose the edit methods.
+ *  * `keep` — nothing the language service depends on changed for the worse.
+ */
+export type GrantChange =
+  | { readonly kind: "stop"; readonly reason: string }
+  | { readonly kind: "readOnly" }
+  | { readonly kind: "keep" };
+
+export function grantChange(grants: WorkspaceGrants | null): GrantChange {
+  if (grants === null) return { kind: "stop", reason: reason.WORKSPACE_CLOSED };
+  if (!grants.execute) {
+    return { kind: "stop", reason: reason.EXECUTION_NOT_GRANTED };
+  }
+  if (!grants.write) return { kind: "readOnly" };
+  return { kind: "keep" };
 }

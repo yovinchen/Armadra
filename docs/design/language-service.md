@@ -394,7 +394,7 @@ message LanguageApplyEditResult { repeated LanguageAppliedFile applied = 1; repe
 
 实施状态 · 批次 C（2026-09-06）：`@codemirror/lsp-client` 6.2.5 已引入（体积判定见 §2.4）；`apps/web/src/editor/language/` 下 `client / transport / documents / diagnostics / extensions / commands / edit-preview / language-ids / uri / sanitize / settings / status-store / diagnostics-store / open-files / use-language` 与 `LanguageStatus.tsx`、`EditPreviewDialog.tsx` 可用，`EditorNode` 用新的 `service` Compartment 热插它们；`panels/problems/ProblemsPanel.tsx`（按文件分组、点击定位）、编辑器状态栏语言服务格（状态 + reason + 重启/停止 + 诊断计数）、设置页语言服务表（每语言一行、开关、路径覆盖、重新探测、`formatOnSave`）与 `i18n/language-service.ts` 已落。补全 / hover / 签名帮助 / 定义 / 引用用官方实现；重命名换成「先预览再由执行主机按 sha256 逐文件写」，格式化另写一个可等待的版本供 `formatOnSave` 用（3 s 预算，超时跳过）。同一文件多节点按 §2.5：只有拥有者视图发 `didChange`，拥有者关闭时所有权转给最早的跟随者并补一次全文。
 
-未做：失去 execute 授权时正在运行的 server 不会立即关停（§1.3），要等空闲或手动停止。
+未做（2026-09-26 已补）：失去 execute 授权时正在运行的 server 不会立即关停（§1.3），要等空闲或手动停止。现在 `PATCH /api/workspaces/{id}` 改了授权、或工作空间被删，core 内部发 `workspace.grants`，`Manager.applyGrants` 立即停掉该工作空间的全部 server，每个会话先收到 `language.session`（`state: stopped`、`reason: execution_not_granted` / `workspace_closed`）；只丢 write 时 server 保留，已开会话的编辑类方法随之收回。
 
 实施状态 · 批次 E（2026-09-07，收尾）：批次 B 与 C 的四个未做项已补齐。
 

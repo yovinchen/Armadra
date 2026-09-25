@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { check, codeActionIsOffered, requirement } from "./policy";
+import { check, codeActionIsOffered, grantChange, requirement } from "./policy";
 import {
   candidate,
   featuresFromCapabilities,
@@ -194,5 +194,24 @@ describe("language/settings", () => {
         "path"
       ],
     ).toBe("/x");
+  });
+});
+
+describe("language/policy grant changes", () => {
+  it("stops on a lost execute grant or a deleted workspace, narrows on a lost write", () => {
+    expect(grantChange({ write: true, execute: false })).toEqual({
+      kind: "stop",
+      reason: "execution_not_granted",
+    });
+    expect(grantChange(null)).toEqual({
+      kind: "stop",
+      reason: "workspace_closed",
+    });
+    expect(grantChange({ write: false, execute: true })).toEqual({
+      kind: "readOnly",
+    });
+    expect(grantChange({ write: true, execute: true })).toEqual({
+      kind: "keep",
+    });
   });
 });

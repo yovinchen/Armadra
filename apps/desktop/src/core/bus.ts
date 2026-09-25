@@ -237,6 +237,20 @@ export interface CoreEvents {
     readonly workspaceId: string;
     readonly event: WorkspaceEvent;
   };
+  /**
+   * A workspace's grants changed, or the workspace is gone (`permissions:
+   * null`). Core-internal, never sent to a client: it is how a domain that
+   * started something under the old grants — a language server needs `execute`
+   * — hears that it has to stop now rather than at the next idle sweep.
+   */
+  "workspace.grants": {
+    readonly workspaceId: string;
+    readonly permissions: {
+      readonly read: boolean;
+      readonly write: boolean;
+      readonly execute: boolean;
+    } | null;
+  };
 }
 
 export type EventName = keyof CoreEvents;
