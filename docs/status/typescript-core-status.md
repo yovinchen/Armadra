@@ -2037,3 +2037,43 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：261 文件通过、1 跳过（3024 过、6 跳过），脚本用例全过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
 - `pnpm --filter @armadra/server test`：10 文件 79 条通过。
 - `pnpm check`（含 `format:check`、两边 typecheck、`repo:check`）通过。
+
+## 48. Agent 协作端到端：真 Claude Code 与真 Codex CLI（2026-09-26）
+
+新探针 `tools/probes/agent-e2e.mjs`（说明在 `tools/probes/README.md`「Agent 协作端到端」）。真 core、Vite 页面、新 profile 的无头 Chrome，Claude Code 2.1.260 与 Codex CLI 0.155.1，tmux 后端。每个 Agent 节点都由页面挂载、由页面敲启动行，CLI 的终端查询经 xterm 写回 PTY——§31.7 那一类问题只在这条路上出现。
+
+### 48.1 场景与结果（最后一次全量：245 秒，56 条断言全过，控制台错误 0，操作员配置与 CLI 版本未变）
+
+| 场景          | 结果       | 实测                                                                                                                                                                                                                                                       |
+| ------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Codex 首投  | 通过       | 源节点 `send` 给两个新 Codex：入队 `TARGET_STARTING`，约 6 秒后按首投放行门投出，`targetState = observed-quiet`，随后 hook 报 working → done；`open-agent --task` 建的第三个同样 `observed-quiet` 投出并跑完一轮                                           |
+| 2 Claude 投递 | 已修后通过 | 首投 `targetState = idle`（上报），信任对话框确认后约 8 秒投出；半行在输入框里、人的租约过期后 `send` 排队 `TARGET_INPUT_PENDING`，回车后投出并又跑一轮                                                                                                    |
+| 3 依赖与组队  | 通过       | `open-agent --after … --after-turn next`：上游这一轮结束前下游只有 shell，结束后由 core 敲启动行并投出任务；`team --chain`：第二棒（Claude）在第一棒（Codex）结束后启动并收到任务；关掉页面再来一次，core 经 `spawnForNode` 起会话并 `observed-quiet` 投出 |
+| 4 节能休眠    | 已修后通过 | 阈值 20 秒（测试注入）：关页面后约 22 秒 Claude 与 Codex 都进入 hibernated，CLI 进程确实退出；重开页面两者都显示「休眠中」，点节点后同一会话 id 起第 2 代、恢复行带同一个 provider 会话 id，经页面问「之前让你记的数加一」两者都答 418                     |
+
+截图在 `target/agent-e2e/`：`1-codex-idle.png`、`1-codex-delivered.png`、`1-codex-open-agent.png`、`2-claude-delivered.png`、`2-claude-input-pending.png`、`2-claude-after-enter.png`、`3-dependency-waiting.png`、`3-dependency-launched.png`、`3-team-chain.png`、`3-headless-launched.png`、`4-before-hibernate.png`、`4-hibernated.png`、`4-claude-resumed.png`、`4-codex-resumed.png`。
+
+### 48.2 修掉的两个 bug
+
+- **只报过开场的 Claude 永远收不到第一条任务。** Claude 起来报一条 `SessionStart`，归约按规则 4 把状态清空，此后停在输入框上不再发事件；`targetState()` 对空状态答 `starting`，`send` / `open-agent --agent claude --task` 的第一条一直停在 `queued / TARGET_STARTING`（实测两分钟 `attempts = 0`）。与 §31 的 Codex 同一个死锁，只是多报了一条开场。新增 `agent/target-state.ts::sessionStartIdle`：真上报的开场（hook / extension、`sessionPhase = start`、状态空、非 `restored`）+ 会话满 6 秒 + 没有半截的行，就当作 `idle`（回执照写 `idle`，那是一条上报）；`send.ts::attempt` 在五态之后调用它，出队泵的快探也把这类目标算进去（开场之后没有事件可听）。探针记下了信任对话框出现时 `agent_status` 还没有行——开场事件在信任之后才到，这条门不会把正文打进那个对话框。用例 `collab/session-start.test.ts`（修前两条失败）。
+- **页面重开时休眠的节点显示「已退出」。** 挂载时按节点数据里的会话 id 抢先连的 socket 收到 `hello { alive: false }`，与挂载那次读谁先到没有保证；读先到、状态已是休眠而 socket 还没收掉时，它把「休眠中」改写成「已退出」，节点头给出「重新运行」，点击也不再唤醒——点「重新运行」就是另起一个 CLI，休眠的对话接不回来。`use-transport.ts` 在状态为 `hibernated` 时不理会这条 socket 的 hello / status。`TerminalSurface.render.test.tsx` 两种先后各一条（修前「读先到」那条失败）。
+
+### 48.3 测试注入与取舍
+
+- 休眠阈值的设置下限是 5 分钟，巡检 60 秒一轮，没有注入点。加了环境变量 `ARMADRA_TEST_ECO_IDLE_SECONDS`（1–600 秒，`hibernate.ts::ecoTestOverride`，巡检同时缩到 2 秒），开关仍听设置。不放宽设置下限：那是给人的下限，几秒的休眠会杀掉刚停下来等人看结果的 CLI；环境变量只有启动 core 的进程能给，不进设置与界面。
+- 发送方是普通终端节点：普通终端的会话不带 `ARMADRA_NODE_ID`，探针以它的节点身份（`node-token/refresh` 签发的令牌）从探针进程跑 `armadra-hook canvas`，对 core 来说与在那个终端里敲是同一个请求。
+- 「记住 417 / 问加一」由人经页面打进去，不用 `send`：投递正文带来源信封，Claude 按「同级消息是资料」处理，会拒绝回答一个像是在套上下文的问题（实测如此）。
+- Codex：临时 CODEX_HOME 只复制 `auth.json`，关掉启动时的升级检查、预先信任工作目录，并先跑一次最小的 `codex exec` 让它完成自己的 sqlite 迁移（两个 Codex 同时第一次用全新 CODEX_HOME 会撞在迁移上直接退出；操作员自己的目录早已迁移过）。Claude：钥匙串登录在临时 `CLAUDE_CONFIG_DIR` 下认证不上，确认 `claude.ts` 是启动时注入（`--settings` 指向数据目录，不写 `~/.claude/settings.json`）后，只对 Claude 进程用真实配置目录；core 自己的 `CLAUDE_CONFIG_DIR` 仍指向临时目录。
+
+### 48.4 发现但没有修
+
+- **Codex 的升级提示会吃掉第一条任务。** 首跑时临时 CODEX_HOME 第一次启动记下了最新版本，第三个 Codex 起来就停在「Update now?」上；首投放行门按「没有半截的行、会话满 6 秒」放行，正文加回车选中了缺省的「升级」，Codex 执行了 `npm install -g @openai/codex`，把本机全局 CLI 从 0.155.1 升到了 0.157.0（已手动装回 0.155.1，探针此后关掉启动检查，并在跑后比对两个 CLI 的版本）。这是设计 §4.3 已记的「安静的提示」误判面的又一例，而且代价比目录信任大：它会改用户的机器。复现：新 CODEX_HOME 里起一次 Codex、退出，再用 `open-agent --agent codex --task …` 建一个节点。修法涉及要不要识别提示符（§12 第 3 条不做）或在启动行上替用户关掉升级检查（与「保留各 CLI 的策略」冲突），留给设计决定。
+- 没验证：direct / 会话宿主后端、Claude 的权限提示与审批、休眠后经 `send` 唤醒、打包版。
+
+### 48.5 验证
+
+- `node tools/probes/agent-e2e.mjs`：四个场景全过（245 秒）；单跑 `--only 2`、`--only 4` 也各过一次。
+- `pnpm --filter @armadra/desktop test`：262 文件通过、1 跳过（3027 条通过、6 跳过），scripts 的 node:test 全过；`typecheck` 通过。
+- `pnpm --filter @armadra/web test`：279 文件 2743 条通过；`typecheck` 通过。
+- `pnpm --filter @armadra/server test`：10 文件 79 条通过。
+- `pnpm check`、`pnpm format:check` 通过。
