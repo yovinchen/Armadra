@@ -11,6 +11,7 @@ import {
   browserSessionSchema,
   browserTabListSchema,
 } from "./browser.js";
+import { boardPresenceSchema } from "./boards.js";
 import { driveLeaseSchema } from "./drive.js";
 import { fileChangeKindSchema } from "./files.js";
 import {
@@ -73,6 +74,11 @@ export const workspaceEventSchema = z.discriminatedUnion("type", [
     boardId: z.string(),
     updatedAt: z.string(),
   }),
+  /**
+   * 谁在看这块画布、谁持有写租约（core JSON §9.4）。有人来、有人走、租约
+   * 换手时各一帧。
+   */
+  boardPresenceSchema.extend({ type: z.literal("canvas.presence") }),
   /**
    * A control verb added a node on behalf of `originNodeId` — the node whose
    * agent ran the verb.
@@ -214,6 +220,10 @@ export type LanguageServerWorkspaceEvent = Extract<
 export type ResourceSampleEvent = Extract<
   WorkspaceEvent,
   { type: "resource.sample" }
+>;
+export type CanvasPresenceEvent = Extract<
+  WorkspaceEvent,
+  { type: "canvas.presence" }
 >;
 export type TerminalLeaseEvent = Extract<
   WorkspaceEvent,

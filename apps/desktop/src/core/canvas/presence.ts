@@ -1,0 +1,405 @@
+import { DomainError, badRequest } from "../workspaces/support";
+
+/**
+ * 画布的在线设备（Presence）与编辑租约（H04 的前置，契约 §9）。
+ *
+ * 两件事都**只在内存里**：心跳、最后在线时间、谁持有写租约。core 重启之后
+ * 没有人在看任何画布，这正是内存里那张空表的意思——把它存进库，重启后读回来
+ * 的只会是一批已经不在的设备。
+ *
+ * 规则写在这里而不是页面里，因为「同一块画布同时只有一个写者」只有 core
+ * 说了才算数：
+ *
+ *  - **谁在看**：每个客户端（一个页面标签、一个窗口）按 `clientId` 心跳。
+ *    {@link PRESENCE_TTL_MS} 内没有心跳就算断开，从表里摘掉。
+ *  - **谁在写**：同一块画布至多一个租约持有者。租约空着时，**唯一**在看的
+ *    客户端的第一次心跳就拿到它——单设备、单窗口的人永远不会看到任何提示；
+ *    有别人在看时，要么这次心跳带着「刚操作过」，要么一次带 `clientId` 的
+ *    保存，谁先到归谁。
+ *  - **释放**：持有者断开（心跳过期或显式离开）立刻释放；持有者空闲超过
+ *    {@link LEASE_IDLE_MS} 且有别人在看时也释放——没人争的时候不释放，否则
+ *    一个人去倒杯水回来就得重新拿一次。
+ *  - **接管**：显式的 `takeover` 无条件转给请求者；确认是页面的事（二次
+ *    确认对话框），core 只负责让它一步到位。
+ *
+ * 与 revision CAS 的关系：租约先判，CAS 后判。租约拦下的是「别人正在写」，
+ * CAS 拦下的仍然是「你手里那份旧了」——前者 423，后者照旧 409，页面对两者
+ * 的反应完全不同（前者转只读，后者变基重放）。
+ */
+
+/** 页面的心跳间隔。core 不靠它，只是和 TTL 写在一处好对照。 */
+export const HEARTBEAT_INTERVAL_MS = 10_000;
+/** 三次心跳没到就算断开：一次丢包不该让人变成离线。 */
+export const PRESENCE_TTL_MS = 30_000;
+/** 持有者多久没操作算空闲；只在有别人在看时才据此释放。 */
+export const LEASE_IDLE_MS = 3 * 60_000;
+/** 过期扫描的节奏。比 TTL 细，断开的设备最多晚这么久从别人那里消失。 */
+export const PRESENCE_SWEEP_MS = 5_000;
+
+/** 租约被别人拿着时写入的拒绝码（契约 §9.3）。 */
+export const LEASE_HELD = "canvas_lease_held";
+
+const CLIENT_ID = /^[A-Za-z0-9_-]{8,128}$/;
+const MAX_DEVICE_NAME = 64;
+
+export interface PresenceClientView {
+  readonly clientId: string;
+  readonly deviceName: string;
+  readonly lastSeenAt: string;
+}
+
+export interface LeaseView {
+  readonly clientId: string;
+  readonly deviceName: string;
+  readonly acquiredAt: string;
+}
+
+/** 心跳的回答，也是 `canvas.presence` 事件除 `type` 以外的全部字段。 */
+export interface PresenceSnapshot {
+  readonly boardId: string;
+  readonly clients: readonly PresenceClientView[];
+  readonly lease: LeaseView | null;
+}
+
+export interface HeartbeatInput {
+  readonly clientId: string;
+  readonly deviceName: string;
+  /** 自上次心跳以来这个客户端有没有被人操作过（指针、键盘）。 */
+  readonly active: boolean;
+}
+
+interface Client {
+  clientId: string;
+  deviceName: string;
+  lastSeenAt: number;
+  lastActiveAt: number;
+}
+
+interface Lease {
+  clientId: string;
+  acquiredAt: number;
+}
+
+interface BoardEntry {
+  workspaceId: string;
+  clients: Map<string, Client>;
+  lease: Lease | null;
+}
+
+export interface CanvasPresenceOptions {
+  /** 状态变了（有人来、有人走、租约换手）时调用；普通的续期心跳不调。 */
+  readonly publish: (workspaceId: string, snapshot: PresenceSnapshot) => void;
+  readonly now?: () => number;
+  readonly ttlMs?: number;
+  readonly idleMs?: number;
+}
+
+export class CanvasPresence {
+  private readonly boards = new Map<string, BoardEntry>();
+  private readonly now: () => number;
+  private readonly ttlMs: number;
+  private readonly idleMs: number;
+  private timer: ReturnType<typeof setInterval> | undefined;
+
+  constructor(private readonly options: CanvasPresenceOptions) {
+    this.now = options.now ?? Date.now;
+    this.ttlMs = options.ttlMs ?? PRESENCE_TTL_MS;
+    this.idleMs = options.idleMs ?? LEASE_IDLE_MS;
+  }
+
+  /** 武装过期扫描。`unref`：没人在看画布时它不该拖住进程退出。 */
+  start(everyMs = PRESENCE_SWEEP_MS): void {
+    if (this.timer !== undefined) return;
+    this.timer = setInterval(() => this.sweep(), everyMs);
+    this.timer.unref?.();
+  }
+
+  stop(): void {
+    if (this.timer !== undefined) clearInterval(this.timer);
+    this.timer = undefined;
+  }
+
+  /** 一次心跳：登记或续期，必要时顺手把空着的租约给它。 */
+  heartbeat(
+    workspaceId: string,
+    boardId: string,
+    input: HeartbeatInput,
+  ): PresenceSnapshot {
+    const entry = this.entry(workspaceId, boardId);
+    let changed = this.expire(entry);
+    const at = this.now();
+    const existing = entry.clients.get(input.clientId);
+    if (existing === undefined) {
+      entry.clients.set(input.clientId, {
+        clientId: input.clientId,
+        deviceName: input.deviceName,
+        lastSeenAt: at,
+        lastActiveAt: at,
+      });
+      changed = true;
+    } else {
+      existing.lastSeenAt = at;
+      if (input.active) existing.lastActiveAt = at;
+      if (input.deviceName !== "" && existing.deviceName !== input.deviceName) {
+        existing.deviceName = input.deviceName;
+        changed = true;
+      }
+    }
+    // 先放空闲的，再分：一个动了手的人不该等下一次心跳才接到别人放下的租约。
+    if (this.releaseIdle(entry)) changed = true;
+    if (entry.lease === null) {
+      // 只有它一个在看，或者它刚被人操作过：拿走空着的租约。两个都在看、
+      // 谁都没动的时候不分——否则后到的那个会凭一次心跳把「正在编辑」的
+      // 标签从先到的那个人头上摘走。
+      if (entry.clients.size === 1 || input.active) {
+        entry.lease = { clientId: input.clientId, acquiredAt: at };
+        changed = true;
+      }
+    }
+    if (changed) this.publish(boardId, entry);
+    return this.view(boardId, entry);
+  }
+
+  /** 显式离开（切走画布、关掉页面）。持有者走了租约随之释放。 */
+  leave(
+    workspaceId: string,
+    boardId: string,
+    clientId: string,
+  ): PresenceSnapshot {
+    const entry = this.boards.get(boardId);
+    if (entry === undefined || entry.workspaceId !== workspaceId) {
+      return { boardId, clients: [], lease: null };
+    }
+    let changed = this.expire(entry);
+    if (entry.clients.delete(clientId)) changed = true;
+    if (entry.lease?.clientId === clientId) {
+      entry.lease = null;
+      changed = true;
+    }
+    if (this.handToSole(entry)) changed = true;
+    if (changed) this.publish(boardId, entry);
+    const snapshot = this.view(boardId, entry);
+    if (entry.clients.size === 0) this.boards.delete(boardId);
+    return snapshot;
+  }
+
+  /**
+   * 拿租约。空着或本来就是自己的直接给；别人拿着时只有 `takeover` 才转手，
+   * 否则 423。
+   */
+  acquire(
+    workspaceId: string,
+    boardId: string,
+    input: { clientId: string; deviceName: string; takeover: boolean },
+  ): PresenceSnapshot {
+    const entry = this.entry(workspaceId, boardId);
+    this.expire(entry);
+    const at = this.now();
+    const client = this.touch(entry, input.clientId, input.deviceName, at);
+    client.lastActiveAt = at;
+    const holder = entry.lease?.clientId;
+    if (holder !== undefined && holder !== input.clientId && !input.takeover) {
+      throw leaseHeld(this.deviceOf(entry, holder));
+    }
+    if (holder !== input.clientId) {
+      entry.lease = { clientId: input.clientId, acquiredAt: at };
+    }
+    this.publish(boardId, entry);
+    return this.view(boardId, entry);
+  }
+
+  /**
+   * 保存之前的那一道门。
+   *
+   * 别人持有租约时拒绝，不论这次写带没带 `clientId`。租约空着时，带
+   * `clientId` 的写顺手拿到它（第一次心跳还没回来就改了东西的那个人不该被
+   * 拒）；不带的——没有身份的旧写者——放行但不拿租约，它说不出自己是谁，
+   * 也就没法被别人看见「正在编辑」。
+   */
+  authorizeWrite(
+    workspaceId: string,
+    boardId: string,
+    clientId: string | undefined,
+  ): void {
+    const entry = this.boards.get(boardId);
+    if (entry === undefined || entry.workspaceId !== workspaceId) {
+      if (clientId === undefined) return;
+      const fresh = this.entry(workspaceId, boardId);
+      const at = this.now();
+      this.touch(fresh, clientId, "", at);
+      fresh.lease = { clientId, acquiredAt: at };
+      this.publish(boardId, fresh);
+      return;
+    }
+    let changed = this.expire(entry);
+    const holder = entry.lease?.clientId;
+    if (holder !== undefined && holder !== clientId) {
+      if (changed) this.publish(boardId, entry);
+      throw leaseHeld(this.deviceOf(entry, holder));
+    }
+    if (clientId !== undefined) {
+      const at = this.now();
+      const client = this.touch(entry, clientId, "", at);
+      client.lastActiveAt = at;
+      if (entry.lease === null) {
+        entry.lease = { clientId, acquiredAt: at };
+        changed = true;
+      }
+    }
+    if (changed) this.publish(boardId, entry);
+  }
+
+  snapshot(boardId: string): PresenceSnapshot {
+    const entry = this.boards.get(boardId);
+    if (entry === undefined) return { boardId, clients: [], lease: null };
+    return this.view(boardId, entry);
+  }
+
+  /** 摘掉断开的客户端、释放空闲的租约；变了的画布各发一帧。 */
+  sweep(): void {
+    for (const [boardId, entry] of this.boards) {
+      let changed = this.expire(entry);
+      if (this.releaseIdle(entry)) changed = true;
+      if (changed) this.publish(boardId, entry);
+      if (entry.clients.size === 0) this.boards.delete(boardId);
+    }
+  }
+
+  /* -------------------------------- 内部 --------------------------------- */
+
+  private entry(workspaceId: string, boardId: string): BoardEntry {
+    const found = this.boards.get(boardId);
+    if (found !== undefined && found.workspaceId === workspaceId) return found;
+    const created: BoardEntry = {
+      workspaceId,
+      clients: new Map(),
+      lease: null,
+    };
+    this.boards.set(boardId, created);
+    return created;
+  }
+
+  private touch(
+    entry: BoardEntry,
+    clientId: string,
+    deviceName: string,
+    at: number,
+  ): Client {
+    const existing = entry.clients.get(clientId);
+    if (existing !== undefined) {
+      existing.lastSeenAt = at;
+      if (deviceName !== "") existing.deviceName = deviceName;
+      return existing;
+    }
+    const created: Client = {
+      clientId,
+      deviceName,
+      lastSeenAt: at,
+      lastActiveAt: at,
+    };
+    entry.clients.set(clientId, created);
+    return created;
+  }
+
+  /** 过期的客户端摘掉；持有者在其中时租约一起释放。 */
+  private expire(entry: BoardEntry): boolean {
+    const cutoff = this.now() - this.ttlMs;
+    let changed = false;
+    for (const [id, client] of entry.clients) {
+      if (client.lastSeenAt >= cutoff) continue;
+      entry.clients.delete(id);
+      changed = true;
+      if (entry.lease?.clientId === id) entry.lease = null;
+    }
+    if (entry.lease !== null && !entry.clients.has(entry.lease.clientId)) {
+      entry.lease = null;
+      changed = true;
+    }
+    if (this.handToSole(entry)) changed = true;
+    return changed;
+  }
+
+  /** 持有者空闲、而且有别人在看：放手，让下一个动手的人拿。 */
+  private releaseIdle(entry: BoardEntry): boolean {
+    if (entry.lease === null || entry.clients.size < 2) return false;
+    const holder = entry.clients.get(entry.lease.clientId);
+    if (holder === undefined) return false;
+    if (this.now() - holder.lastActiveAt < this.idleMs) return false;
+    entry.lease = null;
+    return true;
+  }
+
+  /** 只剩一个人在看而租约空着：直接给它，别让它等下一次心跳才能编辑。 */
+  private handToSole(entry: BoardEntry): boolean {
+    if (entry.lease !== null || entry.clients.size !== 1) return false;
+    const [only] = entry.clients.values();
+    if (only === undefined) return false;
+    entry.lease = { clientId: only.clientId, acquiredAt: this.now() };
+    return true;
+  }
+
+  private deviceOf(entry: BoardEntry, clientId: string): string {
+    return entry.clients.get(clientId)?.deviceName ?? "";
+  }
+
+  private view(boardId: string, entry: BoardEntry): PresenceSnapshot {
+    const clients = [...entry.clients.values()]
+      .sort((a, b) => a.clientId.localeCompare(b.clientId))
+      .map((client) => ({
+        clientId: client.clientId,
+        deviceName: client.deviceName,
+        lastSeenAt: stamp(client.lastSeenAt),
+      }));
+    const lease =
+      entry.lease === null
+        ? null
+        : {
+            clientId: entry.lease.clientId,
+            deviceName: this.deviceOf(entry, entry.lease.clientId),
+            acquiredAt: stamp(entry.lease.acquiredAt),
+          };
+    return { boardId, clients, lease };
+  }
+
+  private publish(boardId: string, entry: BoardEntry): void {
+    this.options.publish(entry.workspaceId, this.view(boardId, entry));
+  }
+}
+
+/**
+ * 时间戳照 ISO 8601 写，但**不**走 `rfc3339()`：那个函数为了让修订号单调会
+ * 改写过去的时刻，而这里要的是那一刻本身。
+ */
+function stamp(at: number): string {
+  return new Date(at).toISOString();
+}
+
+/** 423：租约在别人手里。`message` 带上那台设备的名字，方便排查。 */
+export function leaseHeld(deviceName: string): DomainError {
+  return new DomainError(
+    423,
+    LEASE_HELD,
+    deviceName === ""
+      ? "Another client holds the edit lease for this board"
+      : `Another client (${deviceName}) holds the edit lease for this board`,
+  );
+}
+
+/** `clientId`：页面自己生成的随机串，一个标签页一个。 */
+export function parseClientId(value: unknown): string {
+  if (typeof value !== "string" || !CLIENT_ID.test(value)) {
+    throw badRequest("clientId is invalid");
+  }
+  return value;
+}
+
+/** 设备名只用于显示：去掉首尾空白、控制字符，截到 64 个字符。 */
+export function parseDeviceName(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string")
+    throw badRequest("deviceName must be a string");
+  // eslint-disable-next-line no-control-regex
+  return [...value.replace(/[\u0000-\u001f\u007f]/g, "").trim()]
+    .slice(0, MAX_DEVICE_NAME)
+    .join("");
+}

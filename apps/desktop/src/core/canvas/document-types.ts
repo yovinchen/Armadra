@@ -86,4 +86,9 @@ export interface SaveBoardRequest {
   readonly viewport: Viewport;
   /** Omitting the snapshot preserves the stored whiteboard. */
   readonly whiteboard?: string | undefined;
+  /**
+   * 写者的 `clientId`（契约 §9.3）。只有 HTTP 那条路会带：core 自己的写者
+   * （控制动词、调度、依赖编排）不经过编辑租约。
+   */
+  readonly clientId?: string | undefined;
 }

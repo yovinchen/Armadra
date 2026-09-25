@@ -30,7 +30,8 @@ export type OpaquePayload = Readonly<Record<string, unknown>>;
  * The workspace events, by their `type` string: the 21 contractual ones
  * (contract §5, last paragraph: "21 个 `WorkspaceEvent` 的 `type` 字符串逐字
  * 不变" — a rename is the break, an addition is not), plus `node.created`,
- * which a control verb publishes beside `board.changed` when it adds a node.
+ * which a control verb publishes beside `board.changed` when it adds a node,
+ * and `canvas.presence`, the in-memory who-is-watching frame (core JSON §9).
  *
  * The value of each entry is the event's **own fields**, not a wrapper. The
  * Rust enum is `#[serde(tag = "type")]` — internally tagged — so a frame on the
@@ -86,6 +87,23 @@ export interface WorkspaceEventPayloads {
     readonly lease: OpaquePayload;
   };
   "board.changed": { readonly boardId: string; readonly updatedAt: string };
+  /**
+   * 谁在看这块画布、谁持有写租约（契约 §9.4）。有人来、有人走、租约换手时
+   * 各一帧；普通的续期心跳不发。不进 outbox（`events/stream.ts`）。
+   */
+  "canvas.presence": {
+    readonly boardId: string;
+    readonly clients: readonly {
+      readonly clientId: string;
+      readonly deviceName: string;
+      readonly lastSeenAt: string;
+    }[];
+    readonly lease: {
+      readonly clientId: string;
+      readonly deviceName: string;
+      readonly acquiredAt: string;
+    } | null;
+  };
   /**
    * A control verb added a node to a board on behalf of `originNodeId`.
    *
@@ -199,6 +217,7 @@ export const WORKSPACE_EVENT_TYPES = [
   "terminal.exit",
   "terminal.lease",
   "board.changed",
+  "canvas.presence",
   "node.created",
   "ssh.prompt",
   "workspace.updated",

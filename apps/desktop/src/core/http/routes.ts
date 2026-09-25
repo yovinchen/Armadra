@@ -258,6 +258,25 @@ export const ROUTES: readonly RouteEntry[] = [
     surface: "runtime",
     implemented: true,
   },
+  // 在线设备与编辑租约（契约 §9）。
+  {
+    path: "/api/workspaces/{workspaceId}/boards/{boardId}/presence",
+    methods: ["POST"],
+    surface: "runtime",
+    implemented: true,
+  },
+  {
+    path: "/api/workspaces/{workspaceId}/boards/{boardId}/presence/{clientId}",
+    methods: ["DELETE"],
+    surface: "runtime",
+    implemented: true,
+  },
+  {
+    path: "/api/workspaces/{workspaceId}/boards/{boardId}/lease",
+    methods: ["POST"],
+    surface: "runtime",
+    implemented: true,
+  },
   {
     path: "/api/workspaces/{workspaceId}/files",
     methods: ["GET"],

@@ -13,6 +13,7 @@ import { getWorkspace } from "../workspaces/table";
 import {
   type Viewport,
   createBoard,
+  getBoard,
   deleteBoard,
   listBoards,
   updateBoard,
@@ -24,6 +25,12 @@ import type {
   SaveBoardRequest,
 } from "./document-types";
 import { loadBoard, saveBoard } from "./documents";
+import {
+  CanvasPresence,
+  type PresenceSnapshot,
+  parseClientId,
+  parseDeviceName,
+} from "./presence";
 
 /**
  * `/api/workspaces/{id}/boards` — board records, the document load/save pair,
@@ -35,9 +42,22 @@ import { loadBoard, saveBoard } from "./documents";
  * explicitly rather than have its data silently discarded.
  */
 
+let assembled: CanvasPresence | undefined;
+
+/** 运行中的 core 的在线表；测试与别的域用它看「谁在看这块画布」。 */
+export function canvasPresence(): CanvasPresence | undefined {
+  return assembled;
+}
+
 export function install(context: CoreContext): void {
   const database = context.db.database;
   const { server, bus } = context;
+  const presence = new CanvasPresence({
+    publish: (id, snapshot) => publishPresence(bus, id, snapshot),
+  });
+  presence.start();
+  assembled?.stop();
+  assembled = presence;
 
   server.router.handle(
     "GET",
@@ -113,11 +133,20 @@ export function install(context: CoreContext): void {
           "Task-board writes are retired; historical records are available as read-only archives",
         );
       }
+      const save = parseSaveRequest(body);
+      // 租约先于 CAS（契约 §9）：别人正在写是 423，手里那份旧了才是 409。
+      // 板子存不存在留给 `saveBoard` 判，它的 404 在租约之前也在之后都一样。
+      getBoardOrThrow(database, workspaceId(match), boardId(match));
+      presence.authorizeWrite(
+        workspaceId(match),
+        boardId(match),
+        save.clientId,
+      );
       const document = saveBoard(
         database,
         workspaceId(match),
         boardId(match),
-        parseSaveRequest(body),
+        save,
       );
       publishBoardChanged(
         bus,
@@ -126,6 +155,66 @@ export function install(context: CoreContext): void {
         document.board.updatedAt,
       );
       return { status: 200, body: document };
+    }),
+  );
+
+  // 在线设备的心跳（契约 §9.1）。只读的客户端也要心跳，所以它和读同一档
+  // 权限（`route-scopes.ts`）。
+  server.router.handle(
+    "POST",
+    "/api/workspaces/{workspaceId}/boards/{boardId}/presence",
+    answered((match, request) => {
+      const body = jsonObject(request.body);
+      const id = workspaceId(match);
+      const board = getBoardOrThrow(database, id, boardId(match));
+      if (body.active !== undefined && typeof body.active !== "boolean") {
+        throw badRequest("active must be a boolean");
+      }
+      return {
+        status: 200,
+        body: presence.heartbeat(id, board, {
+          clientId: parseClientId(body.clientId),
+          deviceName: parseDeviceName(body.deviceName),
+          active: body.active === true,
+        }),
+      };
+    }),
+  );
+
+  // 显式离开：切走画布、关掉页面时页面用 `keepalive` 发这一条。没登记过的
+  // 客户端离开不是错误——那正是「已经过期了」的样子。
+  server.router.handle(
+    "DELETE",
+    "/api/workspaces/{workspaceId}/boards/{boardId}/presence/{clientId}",
+    answered((match) => {
+      const id = workspaceId(match);
+      const board = getBoardOrThrow(database, id, boardId(match));
+      return {
+        status: 200,
+        body: presence.leave(id, board, parseClientId(match.params.clientId)),
+      };
+    }),
+  );
+
+  // 拿 / 接管写租约（契约 §9.2）。接管的二次确认在页面上。
+  server.router.handle(
+    "POST",
+    "/api/workspaces/{workspaceId}/boards/{boardId}/lease",
+    answered((match, request) => {
+      const body = jsonObject(request.body);
+      const id = workspaceId(match);
+      const board = getBoardOrThrow(database, id, boardId(match));
+      if (body.takeover !== undefined && typeof body.takeover !== "boolean") {
+        throw badRequest("takeover must be a boolean");
+      }
+      return {
+        status: 200,
+        body: presence.acquire(id, board, {
+          clientId: parseClientId(body.clientId),
+          deviceName: parseDeviceName(body.deviceName),
+          takeover: body.takeover === true,
+        }),
+      };
     }),
   );
 
@@ -162,6 +251,31 @@ function publishBoardChanged(
   });
 }
 
+/**
+ * `canvas.presence`：谁在看、谁在写（契约 §9.4）。不进 outbox——那是给断线
+ * 续订补发用的，而补发一帧过去的在线表只会让页面短暂地看见已经走了的设备；
+ * 重连后的第一次心跳自己就带回当前的那一份。
+ */
+function publishPresence(
+  bus: EventBus,
+  workspaceId: string,
+  snapshot: PresenceSnapshot,
+): void {
+  bus.emit("workspace.event", {
+    workspaceId,
+    event: { type: "canvas.presence", ...snapshot },
+  });
+}
+
+/** 板子在不在这个工作空间里；不在就是 404。回的是规范化后的板 id。 */
+function getBoardOrThrow(
+  database: CoreContext["db"]["database"],
+  workspace: string,
+  board: string,
+): string {
+  return getBoard(database, workspace, board).id;
+}
+
 function boardId(match: RouteMatch): string {
   const id = match.params.boardId;
   if (id === undefined) throw internalError("boardId is not in the path");
@@ -191,8 +305,14 @@ export function parseSaveRequest(
   ) {
     throw badRequest("whiteboard must be a string");
   }
+  const clientId = body.clientId;
   return {
     expectedUpdatedAt,
+    // 写者是谁（契约 §9.3）。缺席是没有身份的旧写者，在租约空着时放行。
+    clientId:
+      clientId === undefined || clientId === null
+        ? undefined
+        : parseClientId(clientId),
     nodes: array(body.nodes, "nodes").map(parseNode),
     edges: array(body.edges, "edges").map(parseEdge),
     viewport: parseViewport(body.viewport),

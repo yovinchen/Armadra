@@ -105,6 +105,14 @@ export const ROUTE_SCOPE_RULES: readonly RouteScopeRule[] = [
     write: "settings:write",
   },
 
+  // 在线设备的心跳与离开（契约 §9.1）：只读的客户端也要让别人看见自己在看，
+  // 所以写方法也只要求读权限。拿租约不在此列，它落进下面画布本体那一档。
+  {
+    pattern: new RegExp(`^${WORKSPACE}/boards/[^/]+/presence`),
+    read: "canvas:read",
+    write: "canvas:read",
+  },
+
   // 画布本体：看板、文档、连线、节点，以及工作空间自己。
   {
     pattern: new RegExp(

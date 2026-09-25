@@ -171,6 +171,30 @@ describe("断线续订", () => {
     expect(back.cursor).toBe(steady.cursor);
   });
 
+  it("在线表只扇出、不进 outbox", async () => {
+    const core = await start();
+    const live = await connect(core);
+    core.bus.emit("workspace.event", {
+      workspaceId: "ws",
+      event: {
+        type: "canvas.presence",
+        boardId: "board",
+        clients: [],
+        lease: null,
+      },
+    });
+    publish(core, "after");
+    await settle();
+    expect(live.frames.map((frame) => JSON.parse(frame).type)).toEqual([
+      "canvas.presence",
+      "board.changed",
+    ]);
+    const stored = core.db.database
+      .prepare("SELECT COUNT(*) AS count FROM events")
+      .get() as { count: number };
+    expect(Number(stored.count)).toBe(1);
+  });
+
   it("游标过旧是 SNAPSHOT_REQUIRED，比水位高是 CURSOR_AHEAD", async () => {
     const core = await start();
     publish(core, "one");

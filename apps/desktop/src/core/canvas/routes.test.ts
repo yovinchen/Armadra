@@ -241,4 +241,122 @@ describe("the board routes", () => {
     );
     expect(unknownWorkspace.status).toBe(404);
   });
+
+  describe("presence and the edit lease (contract §9)", () => {
+    const A = "tab-aaaaaaaaaaaa";
+    const B = "tab-bbbbbbbbbbbb";
+    let presenceUri: string;
+    let leaseUri: string;
+
+    beforeEach(() => {
+      presenceUri = `/api/workspaces/${workspaceId}/boards/${boardId}/presence`;
+      leaseUri = `/api/workspaces/${workspaceId}/boards/${boardId}/lease`;
+    });
+
+    async function save(clientId?: string) {
+      const loaded = await core.call("GET", documentUri);
+      const document = loaded.body as { board: { updatedAt: string } };
+      return core.call("PUT", documentUri, {
+        expectedUpdatedAt: document.board.updatedAt,
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        ...(clientId === undefined ? {} : { clientId }),
+      });
+    }
+
+    it("is invisible to a single client: its heartbeat takes the lease and its saves go through", async () => {
+      const frames: { event: WorkspaceEvent }[] = [];
+      core.bus.on("workspace.event", (frame) => frames.push(frame));
+      const beat = await core.call("POST", presenceUri, {
+        clientId: A,
+        deviceName: "MacBook",
+      });
+      expect(beat.status).toBe(200);
+      expect(beat.body).toMatchObject({
+        boardId,
+        lease: { clientId: A, deviceName: "MacBook" },
+        clients: [{ clientId: A, deviceName: "MacBook" }],
+      });
+      expect((await save(A)).status).toBe(200);
+      expect((await save(A)).status).toBe(200);
+      const presenceFrames = frames.filter(
+        (frame) => frame.event.type === "canvas.presence",
+      );
+      expect(presenceFrames).toHaveLength(1);
+    });
+
+    it("rejects a second client's save with 423 until it takes over", async () => {
+      await core.call("POST", presenceUri, { clientId: A, deviceName: "Mac" });
+      const second = await core.call("POST", presenceUri, {
+        clientId: B,
+        deviceName: "iPad",
+        active: true,
+      });
+      expect(second.body).toMatchObject({ lease: { clientId: A } });
+
+      const refused = await save(B);
+      expect(refused.status).toBe(423);
+      expect(refused.body).toMatchObject({ code: "canvas_lease_held" });
+      // 没有身份的写者也不能绕过别人手里的租约。
+      expect((await save()).status).toBe(423);
+
+      const asked = await core.call("POST", leaseUri, { clientId: B });
+      expect(asked.status).toBe(423);
+      const taken = await core.call("POST", leaseUri, {
+        clientId: B,
+        deviceName: "iPad",
+        takeover: true,
+      });
+      expect(taken.status).toBe(200);
+      expect(taken.body).toMatchObject({ lease: { clientId: B } });
+
+      expect((await save(B)).status).toBe(200);
+      expect((await save(A)).status).toBe(423);
+    });
+
+    it("still answers a stale revision with 409 for the lease holder", async () => {
+      await core.call("POST", presenceUri, { clientId: A });
+      const stale = await core.call("PUT", documentUri, {
+        expectedUpdatedAt: "2020-01-01T00:00:00+00:00",
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        clientId: A,
+      });
+      expect(stale.status).toBe(409);
+    });
+
+    it("releases the lease when its holder leaves", async () => {
+      await core.call("POST", presenceUri, { clientId: A });
+      await core.call("POST", presenceUri, { clientId: B });
+      const left = await core.call("DELETE", `${presenceUri}/${A}`);
+      expect(left.status).toBe(200);
+      expect(left.body).toMatchObject({ lease: { clientId: B } });
+      expect((await save(B)).status).toBe(200);
+    });
+
+    it("validates the client id and the board", async () => {
+      expect(
+        (await core.call("POST", presenceUri, { clientId: "x" })).status,
+      ).toBe(400);
+      expect(
+        (
+          await core.call(
+            "POST",
+            `/api/workspaces/${workspaceId}/boards/${uuidV7()}/presence`,
+            { clientId: A },
+          )
+        ).status,
+      ).toBe(404);
+      const bad = await core.call("PUT", documentUri, {
+        expectedUpdatedAt: "2020-01-01T00:00:00+00:00",
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+        clientId: 7,
+      });
+      expect(bad.status).toBe(400);
+    });
+  });
 });

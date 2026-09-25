@@ -265,3 +265,79 @@ R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消�
 - 边的 `state`：`waiting` / `satisfied` / `failed` / `missing` / `expired` / `cancelled`。失败、中断、退出（`reason` 为 `upstreamFailed` / `upstreamInterrupted` / `upstreamExited`）、上游被删（`missing`）、过期（`expired`，`reason: "ttl"`）都不放行，由人取消那条边。`reason` 是稳定码，不翻译。
 - 下游只在每条边都是 `satisfied` 或 `cancelled` 时启动。
 - `DELETE` 回 `{ "dependency": {…} }`；别的工作空间的 id、不存在的 id 都是 404 `{ "code": "not_found", "message" }`。
+
+## 9. 在线设备与编辑租约：`/api/workspaces/{workspaceId}/boards/{boardId}/presence|lease`
+
+多台设备（或同一台上的多个窗口）看同一块画布时，谁在看、谁能写（设计 `design/canvas-platform-design.md` H04 的前置）。**全部在内存里**：core 重启后没有人在看任何画布，没有迁移、没有表。实现在 `core/canvas/presence.ts`。
+
+一个客户端 = 一个页面标签或窗口，用自己生成的 `clientId`（`[A-Za-z0-9_-]{8,128}`）标识；`deviceName` 由客户端报上来，只用于显示（截到 64 个字符）。今天的域路由还不携带会话（`core/identity/gate.ts`），所以设备名还不是从身份域的设备表读出来的。
+
+### 9.1 心跳与离开
+
+| 方法与路径                     | 说明                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| `POST …/presence`              | 心跳：`{ "clientId", "deviceName"?, "active"? }`，登记或续期，回 §9.4 的快照 |
+| `DELETE …/presence/{clientId}` | 离开（切走画布、关页面）；没登记过的客户端离开也是 200                       |
+
+- 页面每 10 秒心跳一次；**30 秒**没有心跳算断开，从表里摘掉。
+- `active` 是「自上次心跳以来有没有被人操作过」，core 据此判断持有者是否空闲。
+- 权限：心跳与离开只要 `canvas:read`（只读的客户端也要让别人看见自己）。
+
+### 9.2 拿租约与接管
+
+`POST …/lease`：`{ "clientId", "deviceName"?, "takeover"? }`，回 §9.4 的快照。权限 `canvas:write`。
+
+- 租约空着或本来就是自己的：直接给。
+- 别人拿着且没带 `"takeover": true`：423 `canvas_lease_held`。
+- 带 `"takeover": true`：无条件转给请求者。二次确认是页面的事；原持有者此后的保存都会被 423 拒绝。
+
+租约的自动规则：
+
+1. **单客户端无感**：租约空着时，唯一在看的客户端的第一次心跳就拿到它；只剩一个客户端时租约自动归它。
+2. 有别人在看时，空着的租约归**带 `active: true` 的心跳**或**带 `clientId` 的保存**，谁先到归谁。
+3. 持有者断开（心跳过期或 `DELETE`）立刻释放；持有者空闲超过 **3 分钟**且有别人在看时释放。没人争时不因空闲释放。
+
+### 9.3 保存
+
+`PUT …/document` 的请求体多一个可选字段 `clientId`。租约判定在 revision CAS **之前**：
+
+| 情形                                             | 结果                                                |
+| ------------------------------------------------ | --------------------------------------------------- |
+| 租约在别的客户端手里（带不带 `clientId` 都一样） | 423 `{ "code": "canvas_lease_held", "message" }`    |
+| 租约空着、带 `clientId`                          | 放行，并把租约给这个客户端                          |
+| 租约空着、不带 `clientId`                        | 放行，不拿租约（没有身份的旧写者）                  |
+| 自己持有                                         | 放行；之后照旧走 CAS，修订号旧了仍是 409 `conflict` |
+
+`clientId` 格式不对是 400 `bad_request`。423 与 409 的处理完全不同：423 是「别人正在写」，页面转只读并按远端重载；409 是「手里那份旧了」，页面变基重放。core 自己的写者（控制动词、调度、依赖编排）直接调 `saveBoard`，不经过租约。
+
+### 9.4 快照与事件
+
+心跳、离开、拿租约都回同一个形状；事件流上的 `canvas.presence` 是同样的字段加上 `type`：
+
+```json
+{
+  "type": "canvas.presence",
+  "boardId": "0192…",
+  "clients": [
+    {
+      "clientId": "5b7c…",
+      "deviceName": "macOS",
+      "lastSeenAt": "2026-09-26T08:00:10.000Z"
+    },
+    {
+      "clientId": "9e21…",
+      "deviceName": "iPad · Safari",
+      "lastSeenAt": "2026-09-26T08:00:04.000Z"
+    }
+  ],
+  "lease": {
+    "clientId": "5b7c…",
+    "deviceName": "macOS",
+    "acquiredAt": "2026-09-26T07:58:00.000Z"
+  }
+}
+```
+
+- `lease` 为 `null` 表示没人持有。`clients` 按 `clientId` 排序。
+- 事件只在有人来、有人走、租约换手时发；普通的续期心跳不发，所以事件里的 `lastSeenAt` 可能落后，最新值以心跳的回答为准。
+- `canvas.presence` **不进 outbox**（`core/events/stream.ts` 的 `EPHEMERAL_EVENTS`）：带游标续订的客户端不会补到过去的在线表，它重连后的第一次心跳自己会拿到当前那一份。

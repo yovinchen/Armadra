@@ -36,6 +36,17 @@ import type { EventBus, WorkspaceEvent } from "../bus";
 import { appendEvent, catchUp, outboxReady, prune, watermark } from "./outbox";
 
 /**
+ * 只扇出、不进 outbox 的事件。
+ *
+ * `canvas.presence` 描述的是「此刻谁在看」，它的真相在内存里、随心跳过期
+ * （`canvas/presence.ts`）。补发一帧过去的在线表只会让一个续订的页面短暂地
+ * 看见已经走了的设备，而它重连后的第一次心跳本来就会带回当前的那一份。
+ */
+export const EPHEMERAL_EVENTS: ReadonlySet<string> = new Set([
+  "canvas.presence",
+]);
+
+/**
  * How far behind one connection may fall before it starts losing frames.
  *
  * 256, the capacity of the Rust `broadcast` channel, and for the same reason: a
@@ -156,7 +167,9 @@ export class WorkspaceEventStream {
     // 序列化在扇出之前，也在 outbox 之前：补发的必须是当初发出去的那一帧，
     // 从记录里重新拼一次就给了它一个走样的机会。
     const frame = JSON.stringify(event);
-    const seq = this.record(workspaceId, event, frame);
+    const seq = EPHEMERAL_EVENTS.has(event.type)
+      ? 0
+      : this.record(workspaceId, event, frame);
     const watchers = this.subscriptions.get(workspaceId);
     if (watchers === undefined || watchers.size === 0) return 0;
     for (const subscription of watchers) this.enqueue(subscription, frame, seq);
