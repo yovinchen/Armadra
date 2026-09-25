@@ -15,19 +15,30 @@ import {
   listWorkspaces,
   validWorkspaceName,
 } from "../workspaces/table";
-import { executeOn, isRemote, localOnly } from "../remote/execute";
+import { executeOn, isRemote } from "../remote/execute";
+import { remoteGitOperations } from "../remote/git-operations";
 import { cancelClone, cloneStatus, startClone } from "./clone";
 import type { DiffScope } from "./diff";
 import { invalidate } from "./discovery";
 import type { GitHunkScope } from "./hunks";
-import { type GitMessageLanguage, generate, providers } from "./message";
+import {
+  type Capture,
+  type GitMessageLanguage,
+  type GitMessageRequest,
+  type GitMessageSource,
+  generate,
+  generateFrom,
+  providers,
+} from "./message";
 import { integrationStatus } from "./repository/integration";
 import { startOperation } from "./repository/queue";
 import { RepositoryService } from "./repository/service";
 import type {
   ExpectedState,
+  IntegrationSnapshot,
   LogRefKind,
   LogRequest,
+  OperationSnapshot,
   RepositoryAction,
 } from "./repository/types";
 import { verifyWorktreeBinding } from "./repository/worktrees";
@@ -50,10 +61,11 @@ import { badRequest, commaPaths, forbidden, requireExecution } from "./support";
  * Where a command runs is the workspace's execution host. The reads and the
  * index / commit writes go through `remote/execute`, so a remote workspace's
  * repository is read and written by the Worker on that machine with the same
- * code. What still needs this core's own queue or ownership table — repository
- * operations, integration state, worktree binding, AI message generation —
- * answers a named 501 on a remote workspace rather than running Git against a
- * path on the wrong machine.
+ * code. Repository operations queue on the Worker too; the ownership table
+ * stays here, and the Worker pushes each operation's progress back
+ * (`remote/git-operations.ts`). An AI commit message is split across the two
+ * machines: the staged source is captured and redacted where the repository
+ * is, the model runs here where its credentials are.
  */
 
 export interface GitRouteDeps {
@@ -257,26 +269,44 @@ export function installRoutes(deps: GitRouteDeps): void {
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
       requireExecution(workspace.permissions.execute, "AI generation");
-      // 生成要在两台机器上各跑一半（采集在仓库那边，模型在凭据这边），这一步
-      // 还没有拆开；在远端仓库上就说清楚，而不是拿控制端的磁盘去采集。
-      localOnly(workspace, "AI 提交信息生成");
       const body = jsonObject(request.body);
       const language = body.language ?? "en";
       if (language !== "en" && language !== "zh") {
         throw badRequest("Unsupported message language");
+      }
+      const draft: GitMessageRequest = {
+        provider: requiredString(body, "provider"),
+        expectedHead: optionalString(body, "expectedHead") ?? null,
+        indexDigest: requiredString(body, "indexDigest"),
+        language: language as GitMessageLanguage,
+        conventional: body.conventional === true,
+      };
+      if (isRemote(workspace)) {
+        // 两台机器各跑一半：采集与复核在仓库那边（Worker），模型在凭据这边。
+        const execute = workspace.permissions.execute;
+        return {
+          status: 200,
+          body: await generateFrom(
+            {
+              capture: async () =>
+                (await on(deps, workspace, "git.messageCapture", {
+                  execute,
+                })) as Capture,
+              source: async () =>
+                (await on(deps, workspace, "git.messageSource", {
+                  execute,
+                })) as GitMessageSource,
+            },
+            draft,
+          ),
+        };
       }
       return {
         status: 200,
         body: await generate(
           deps.service.withExecution(workspace.permissions.execute),
           workspace.rootPath,
-          {
-            provider: requiredString(body, "provider"),
-            expectedHead: optionalString(body, "expectedHead") ?? null,
-            indexDigest: requiredString(body, "indexDigest"),
-            language: language as GitMessageLanguage,
-            conventional: body.conventional === true,
-          },
+          draft,
         ),
       };
     },
@@ -534,18 +564,26 @@ export function installRoutes(deps: GitRouteDeps): void {
     "/api/workspaces/{workspaceId}/git/repository/worktree-binding",
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
-      localOnly(workspace, "工作树绑定核验");
       const body = jsonObject(request.body);
+      const binding = {
+        worktreePath: requiredString(body, "worktreePath"),
+        branch: optionalString(body, "branch") ?? null,
+        repositoryId: optionalString(body, "repositoryId") ?? null,
+      };
+      if (isRemote(workspace)) {
+        return ok(
+          await on(deps, workspace, "git.worktreeBinding", {
+            request: binding,
+            execute: workspace.permissions.execute,
+          }),
+        );
+      }
       return {
         status: 200,
         body: await verifyWorktreeBinding(
           deps.service.withExecution(workspace.permissions.execute),
           workspace.rootPath,
-          {
-            worktreePath: requiredString(body, "worktreePath"),
-            branch: optionalString(body, "branch") ?? null,
-            repositoryId: optionalString(body, "repositoryId") ?? null,
-          },
+          binding,
         ),
       };
     },
@@ -559,13 +597,17 @@ export function installRoutes(deps: GitRouteDeps): void {
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
       const workspaceId = param(match, "workspaceId");
-      // 集成状态要和控制端的操作归属表对照，而操作队列在远端还不存在。
-      localOnly(workspace, "仓库集成状态");
-      const result = await integrationStatus(
-        deps.service.withExecution(workspace.permissions.execute),
-        workspace.rootPath,
-        pathOf(request),
-      );
+      // 集成状态在仓库那台机器上读；归属表是控制端的，在这里对照。
+      const result: IntegrationSnapshot = isRemote(workspace)
+        ? ((await on(deps, workspace, "git.integration", {
+            path: pathOf(request),
+            execute: workspace.permissions.execute,
+          })) as IntegrationSnapshot)
+        : await integrationStatus(
+            deps.service.withExecution(workspace.permissions.execute),
+            workspace.rootPath,
+            pathOf(request),
+          );
       // Decide ownership here: the map of which workspace started which session
       // is the controller's, so a session this workspace does not own is
       // redacted rather than offered as something it may continue.
@@ -592,8 +634,16 @@ export function installRoutes(deps: GitRouteDeps): void {
     async (match, request) => {
       const workspace = readWorkspace(deps, match);
       const workspaceId = param(match, "workspaceId");
-      // 远端没有操作队列：答空列表而不是 501，面板照常显示其余部分。
-      if (isRemote(workspace)) return ok([]);
+      if (isRemote(workspace)) {
+        return ok(
+          await remoteGitOperations.list(
+            workspace,
+            workspaceId,
+            pathOf(request),
+            workspace.permissions.execute,
+          ),
+        );
+      }
       const all = await deps.service
         .withExecution(workspace.permissions.execute)
         .listOperations(workspace.rootPath, pathOf(request));
@@ -618,7 +668,6 @@ export function installRoutes(deps: GitRouteDeps): void {
         workspace.permissions.execute,
         "Git repository writes and synchronization",
       );
-      localOnly(workspace, "分支、同步、储藏与工作树这类仓库操作");
       const workspaceId = param(match, "workspaceId");
       const body = jsonObject(request.body);
       const action = body.action as RepositoryAction | undefined;
@@ -631,6 +680,27 @@ export function installRoutes(deps: GitRouteDeps): void {
         action.kind === "skipIntegration"
       ) {
         scopedOperation(deps, workspaceId, action.sessionId);
+      }
+      if (isRemote(workspace)) {
+        // 在执行主机的队列里排；进度随推送帧回来（`remote/git-operations.ts`）。
+        const snapshot = await remoteGitOperations.start(
+          workspace,
+          workspaceId,
+          {
+            path: pathField(body),
+            action,
+            expected: expectedOf(body),
+            execute: workspace.permissions.execute,
+          },
+        );
+        deps.owners.set(snapshot.id, workspaceId);
+        if (
+          action.kind === "createWorktree" ||
+          action.kind === "removeWorktree"
+        ) {
+          invalidate(workspaceId);
+        }
+        return { status: 200, body: snapshot };
       }
       const snapshot = await startOperation(
         deps.service.withExecution(workspace.permissions.execute),
@@ -650,7 +720,11 @@ export function installRoutes(deps: GitRouteDeps): void {
       // Only local records can be checked for liveness; forgetting an owner
       // would make its operation unreachable rather than tidy.
       for (const [id, owner] of [...deps.owners]) {
-        if (owner === workspaceId && deps.service.entry(id) === undefined) {
+        if (
+          owner === workspaceId &&
+          deps.service.entry(id) === undefined &&
+          !remoteGitOperations.owns(workspaceId, id)
+        ) {
           deps.owners.delete(id);
         }
       }
@@ -693,7 +767,14 @@ export function installRoutes(deps: GitRouteDeps): void {
         throw forbidden("Workspace does not allow this Git operation");
       }
       const operationId = param(match, "operationId");
-      scopedOperation(deps, param(match, "workspaceId"), operationId);
+      const workspaceId = param(match, "workspaceId");
+      scopedOperation(deps, workspaceId, operationId);
+      if (remoteGitOperations.owns(workspaceId, operationId)) {
+        return {
+          status: 200,
+          body: await remoteGitOperations.cancel(workspaceId, operationId),
+        };
+      }
       return { status: 200, body: deps.service.cancel(operationId) };
     },
   );
@@ -867,9 +948,13 @@ function scopedOperation(
   deps: GitRouteDeps,
   workspaceId: string,
   operationId: string,
-) {
+): OperationSnapshot {
   if (deps.owners.get(operationId) !== workspaceId) {
     throw notFoundInWorkspace();
+  }
+  // 远端发起的操作答镜像：Worker 推来的最新一帧。
+  if (remoteGitOperations.owns(workspaceId, operationId)) {
+    return remoteGitOperations.snapshot(workspaceId, operationId);
   }
   const snapshot = deps.service.operationSnapshot(operationId);
   return snapshot;

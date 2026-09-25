@@ -104,16 +104,67 @@ export async function executeRemote(
   }
 }
 
+/* ------------------------------ 推送与连接事件 ------------------------------ */
+
 /**
- * 远端还做不了的动作：明确 501 并说出是哪一项，而不是在控制端的磁盘上
- * 跑一个指向别的机器路径的命令。
+ * 一台执行主机上的哪一条连接：`control` 是文件 / Git / 资源那条，`language` 是
+ * 承载语言服务的第二条（`worker --stdio --language-link`）。
  */
-export function localOnly(target: ExecutionTarget, feature: string): void {
-  if (isRemote(target)) {
-    throw new DomainError(
-      501,
-      "unsupported",
-      `${feature}还不能在远端执行主机上进行；切换回本机后可用`,
-    );
+export type RemoteChannel = "control" | "language";
+
+export interface RemotePushEvent {
+  readonly type: string;
+  readonly [field: string]: unknown;
+}
+
+/** Worker 推来的一帧，或连接的起落。各域按需订阅，互不知道对方。 */
+export interface RemoteListener {
+  event?(hostId: string, channel: RemoteChannel, event: RemotePushEvent): void;
+  /** 握手成功、连接可用。重连之后要重新登记的东西在这里重登。 */
+  connected?(hostId: string, channel: RemoteChannel): void;
+  /** 连接没了。那边的 Worker 随 stdin 关闭退出，它持有的状态一并消失。 */
+  disconnected?(hostId: string, channel: RemoteChannel): void;
+}
+
+const listeners = new Set<RemoteListener>();
+
+/** 订阅；返回退订。 */
+export function listenRemote(listener: RemoteListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function each(visit: (listener: RemoteListener) => void): void {
+  for (const listener of [...listeners]) {
+    try {
+      visit(listener);
+    } catch {
+      // 一个域处理失败不该让别的域收不到同一帧。
+    }
   }
+}
+
+/** 远端域（或测试）收到一帧推送时调。 */
+export function remotePushed(
+  hostId: string,
+  channel: RemoteChannel,
+  event: unknown,
+): void {
+  if (typeof event !== "object" || event === null) return;
+  const typed = event as RemotePushEvent;
+  if (typeof typed.type !== "string") return;
+  each((listener) => listener.event?.(hostId, channel, typed));
+}
+
+export function remoteConnected(hostId: string, channel: RemoteChannel): void {
+  each((listener) => listener.connected?.(hostId, channel));
+}
+
+export function remoteDisconnected(
+  hostId: string,
+  channel: RemoteChannel,
+): void {
+  each((listener) => listener.disconnected?.(hostId, channel));
 }

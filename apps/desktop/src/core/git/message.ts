@@ -79,7 +79,7 @@ export interface GitMessageDraft extends GitMessageSource {
   readonly conventional: boolean;
 }
 
-interface Capture {
+export interface Capture {
   readonly source: GitMessageSource;
   readonly prompt: string;
 }
@@ -220,8 +220,33 @@ export async function generate(
   request: GitMessageRequest,
   config: ProviderConfig = environmentProvider(),
 ): Promise<GitMessageDraft> {
+  return await generateFrom(
+    {
+      capture: async () => await captureStaged(service, root),
+      source: async () => await source(service, root),
+    },
+    request,
+    config,
+  );
+}
+
+/**
+ * 仓库在哪台机器上读。本机是上面的 `generate`；远端工作空间把两次读交给执行
+ * 主机上的 Worker，而模型仍在这台机器上跑——凭据与 CLI 都在控制端，不送到远端。
+ */
+export interface MessageReads {
+  capture(): Promise<Capture>;
+  source(): Promise<GitMessageSource>;
+}
+
+/** One draft: capture where the repository is, draft here, re-check there. */
+export async function generateFrom(
+  reads: MessageReads,
+  request: GitMessageRequest,
+  config: ProviderConfig = environmentProvider(),
+): Promise<GitMessageDraft> {
   checkRequest(request);
-  const captured = await captureStaged(service, root);
+  const captured = await reads.capture();
   if (
     captured.source.expectedHead !== request.expectedHead ||
     captured.source.indexDigest !== request.indexDigest
@@ -231,7 +256,7 @@ export async function generate(
   const message = await draftWith(captured, request, config);
   // Generation never holds the Git write queue. A fresh observation rejects a
   // draft if either HEAD or staged content changed while the model ran.
-  return finish(captured, request, message, await source(service, root));
+  return finish(captured, request, message, await reads.source());
 }
 
 /** Assemble the answer, refusing when the repository moved under the model. */

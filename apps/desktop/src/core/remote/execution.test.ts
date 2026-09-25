@@ -493,18 +493,13 @@ describe("repository routes on a remote workspace", () => {
     );
     expect(listed.status).toBe(200);
 
-    // 操作队列在远端还不存在：列表为空，发起一个就明确 501。
+    // 队列在执行主机上；还没有发起过操作时列表为空（发起见 `worker-push.test.ts`）。
     const operations = await core.call(
       "GET",
       `/api/workspaces/${id}/git/repository/operations?path=.`,
     );
+    expect(operations.status).toBe(200);
     expect(operations.body).toEqual([]);
-    const started = await core.call(
-      "POST",
-      `/api/workspaces/${id}/git/repository/operations`,
-      { path: ".", action: { kind: "fetch" } },
-    );
-    expect(started.status).toBe(501);
   }, 60_000);
 });
 

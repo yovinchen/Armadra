@@ -22,7 +22,7 @@
 import { randomUUID } from "node:crypto";
 import { type ChildProcess, spawn } from "node:child_process";
 import type { SshHost, SshWorker } from "../settings/ssh-hosts";
-import { workerArgv } from "../terminal/ssh/argv";
+import { languageLinkArgv, workerArgv } from "../terminal/ssh/argv";
 import type { AskpassService } from "../terminal/ssh/askpass";
 import {
   FrameDecoder,
@@ -86,6 +86,8 @@ export class Connection {
   constructor(
     private readonly child: ChildProcess,
     private readonly onEvent: (event: unknown) => void,
+    /** 连接不再可用时调一次；只有握手成功过的连接才算「断开」。 */
+    private readonly onClose: () => void = () => {},
   ) {
     child.stdout?.on("data", (chunk: Buffer) => this.read(chunk));
     // End of input. Every caller still waiting learns now rather than at its
@@ -114,7 +116,9 @@ export class Connection {
   }
 
   private drop(): void {
+    const wasOpen = !this.closed;
     this.closed = true;
+    if (wasOpen && this.instanceId !== "") this.onClose();
     for (const resolve of [...this.waiting.values()]) {
       resolve({ requestId: "", instanceId: "" });
     }
@@ -214,7 +218,6 @@ export class Connection {
 
   close(): void {
     if (this.closed) return;
-    this.closed = true;
     this.drop();
     // Closing stdin is the Worker's own shutdown signal; the kill is the
     // backstop for an `ssh` that ignored it.
@@ -244,6 +247,15 @@ export interface RemoteWorkerOptions {
   readonly spawn?: () => ChildProcess;
   /** Answers the Node probe instead of asking the host; paired with `spawn`. */
   readonly node?: () => Promise<NodeProbe>;
+  /**
+   * 起 `worker --stdio --language-link` 而不是控制连接：同一台主机的第二个
+   * Worker，只承载语言服务。
+   */
+  readonly languageLink?: boolean;
+  /** 握手成功、连接可用。 */
+  readonly onConnected?: () => void;
+  /** 一个握手成功过的连接断了。 */
+  readonly onDisconnected?: () => void;
 }
 
 /** What a successful probe reports back to the settings page. */
@@ -305,6 +317,7 @@ export class RemoteWorker {
       const previous = this.supervisor.connection;
       if (previous !== undefined && previous !== connection) previous.close();
       this.supervisor.succeeded(connection, accepted.versionBadge);
+      this.options.onConnected?.();
       return {
         ...accepted,
         platform: hello.platform,
@@ -319,17 +332,17 @@ export class RemoteWorker {
   }
 
   private async open(): Promise<Connection> {
+    const onClose = (): void => this.options.onDisconnected?.();
     if (this.options.spawn !== undefined) {
       return new Connection(
         this.options.spawn(),
         this.options.onEvent ?? (() => {}),
+        onClose,
       );
     }
-    const argv = workerArgv(
-      this.options.dataDir,
-      this.options.host,
-      this.options.worker,
-    );
+    const argv = (
+      this.options.languageLink === true ? languageLinkArgv : workerArgv
+    )(this.options.dataDir, this.options.host, this.options.worker);
     // argv[0] is always `ssh`; the launcher substitutes the program only, so
     // the options a real launch uses are the ones exercised.
     const program = this.options.launcher ?? (argv[0] as string);
@@ -340,7 +353,7 @@ export class RemoteWorker {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env, ...Object.fromEntries(askpass) },
     });
-    return new Connection(child, this.options.onEvent ?? (() => {}));
+    return new Connection(child, this.options.onEvent ?? (() => {}), onClose);
   }
 
   /**

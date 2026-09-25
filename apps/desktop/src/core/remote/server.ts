@@ -42,15 +42,19 @@ import {
 import {
   FILES_CAPABILITY,
   GIT_CAPABILITY,
+  GIT_OPERATIONS_CAPABILITY,
   OPERATIONS,
+  type Operation,
   type OperationContext,
 } from "./operations";
+import { WorkerSession } from "./session";
 
-/** 这个构建的 Worker 声明的能力。 */
+/** 这个构建的 Worker（控制连接）声明的能力。 */
 export const WORKER_CAPABILITIES: readonly string[] = [
   REMOTE_CAPABILITY,
   FILES_CAPABILITY,
   GIT_CAPABILITY,
+  GIT_OPERATIONS_CAPABILITY,
 ];
 
 /** 远端的协议次版本；主版本见 {@link PROTOCOL_MAJOR}。 */
@@ -68,15 +72,15 @@ export interface WorkerServerOptions {
   /** 测试用；缺省每个进程一个随机值。 */
   readonly instanceId?: string;
   readonly version?: string;
+  /** 这条连接执行哪张表、声明哪些能力。缺省是控制连接。 */
+  readonly operations?: Readonly<Record<string, Operation>>;
+  readonly capabilities?: readonly string[];
 }
 
 /** 起一个 Worker 会话；返回的 Promise 在输入结束、所有在途请求答完后兑现。 */
 export async function serveWorker(options: WorkerServerOptions): Promise<void> {
   const instanceId = options.instanceId ?? randomUUID().replace(/-/gu, "");
-  const context: OperationContext = {
-    service: new RepositoryService(),
-    freshDiscovery: false,
-  };
+  const table = options.operations ?? OPERATIONS;
   const decoder = new FrameDecoder();
   const inFlight = new Set<Promise<void>>();
 
@@ -97,19 +101,44 @@ export async function serveWorker(options: WorkerServerOptions): Promise<void> {
     options.output.write(frame);
   };
 
+  // 推送帧的 `requestId` 为空：控制端据此把它交给订阅方，而不是某个等答复的请求。
+  const session = new WorkerSession((event) => {
+    if (options.output.writableEnded || options.output.destroyed) return;
+    send({ requestId: "", instanceId, status: 200, result: event });
+  });
+  const service = new RepositoryService();
+  const context: OperationContext = {
+    service,
+    freshDiscovery: false,
+    session,
+  };
+  // 连接结束时还在排队或在跑的 Git 长操作一并取消：控制端已经听不到它们的结局，
+  // 让它们在没有人看的地方继续推送或改仓库，比取消更糟。
+  session.slot(
+    "git.shutdown",
+    () => service,
+    async (owned) => {
+      try {
+        await owned.shutdown(10_000);
+      } catch {
+        // 超时也要继续收尾别的东西。
+      }
+    },
+  );
+
   const hello: WorkerHello = {
     protocol: { major: PROTOCOL_MAJOR, minor: PROTOCOL_MINOR },
     instanceId,
     runtimeVersion: options.version ?? VERSION,
     serviceContractVersion: CONTRACT_VERSION,
-    capabilities: [...WORKER_CAPABILITIES],
+    capabilities: [...(options.capabilities ?? WORKER_CAPABILITIES)],
     platform: process.platform,
     architecture: process.arch,
   };
   send({ requestId: HELLO_ID, instanceId, status: 200, result: hello });
 
   const handle = async (request: WorkerRequest): Promise<void> => {
-    send(await answer(context, instanceId, request));
+    send(await answer(context, instanceId, request, table));
   };
 
   await new Promise<void>((resolve) => {
@@ -117,7 +146,9 @@ export async function serveWorker(options: WorkerServerOptions): Promise<void> {
     const finish = (): void => {
       if (ended) return;
       ended = true;
-      void Promise.allSettled([...inFlight]).then(() => resolve());
+      void Promise.allSettled([...inFlight])
+        .then(() => session.dispose())
+        .then(() => resolve());
     };
     options.input.on("data", (chunk: Buffer) => {
       for (const frame of decoder.push(chunk)) {
@@ -144,6 +175,7 @@ export async function answer(
   context: OperationContext,
   instanceId: string,
   request: WorkerRequest,
+  table: Readonly<Record<string, Operation>> = OPERATIONS,
 ): Promise<WorkerResponse> {
   const reply = (
     status: number,
@@ -175,7 +207,7 @@ export async function answer(
       error: { code: "deadline_exceeded", message: "The request expired" },
     });
   }
-  const operation = OPERATIONS[request.action];
+  const operation = table[request.action];
   if (operation === undefined) {
     return reply(501, {
       error: {

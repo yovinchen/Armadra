@@ -34,7 +34,11 @@ import { VERSION } from "../instance";
 import { coreError } from "../http/errors";
 import type { CoreContext } from "../main";
 import { settingsDomain } from "../settings";
-import { parseHosts, type SshHost } from "../settings/ssh-hosts";
+import {
+  parseHosts,
+  type SshHost,
+  type SshWorker,
+} from "../settings/ssh-hosts";
 import { AskpassService } from "../terminal/ssh/askpass";
 import {
   answerPrompt,
@@ -53,7 +57,13 @@ import {
   validateExecutionHost,
   ValidationRefused,
 } from "./validate";
-import { setRemoteCaller } from "./execute";
+import {
+  type RemoteChannel,
+  remoteConnected,
+  remoteDisconnected,
+  remotePushed,
+  setRemoteCaller,
+} from "./execute";
 import { missingCapability } from "./handshake";
 import { capabilityOf } from "./operations";
 import { RemoteWorker, RemoteWorkers, unsupported } from "./worker";
@@ -122,8 +132,10 @@ export function install(context: CoreContext): RemoteDomain {
     );
   };
 
-  const workers = new RemoteWorkers(
-    (entry, worker) =>
+  // 控制连接的推送与起落交给同一个事件口，各域按需订阅。
+  const make =
+    (channel: RemoteChannel) =>
+    (entry: SshHost, worker: SshWorker): RemoteWorker =>
       new RemoteWorker({
         dataDir: context.dataDir,
         host: entry,
@@ -131,8 +143,12 @@ export function install(context: CoreContext): RemoteDomain {
         askpass,
         version: VERSION,
         ...(launcher === undefined ? {} : { launcher }),
-      }),
-  );
+        languageLink: channel === "language",
+        onEvent: (event) => remotePushed(entry.id, channel, event),
+        onConnected: () => remoteConnected(entry.id, channel),
+        onDisconnected: () => remoteDisconnected(entry.id, channel),
+      });
+  const workers = new RemoteWorkers(make("control"));
 
   const deps: SshRouteDeps = {
     dataDir: context.dataDir,

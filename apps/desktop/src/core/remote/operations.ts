@@ -19,7 +19,11 @@ import { gitOutput } from "../git/context";
 import { type DiffScope, readDiff } from "../git/diff";
 import { invalidate, repositories } from "../git/discovery";
 import { type GitHunkScope, applyHunk, readHunks } from "../git/hunks";
-import { source } from "../git/message";
+import { captureStaged, source } from "../git/message";
+import { integrationStatus } from "../git/repository/integration";
+import { startOperation } from "../git/repository/queue";
+import type { ExpectedState, RepositoryAction } from "../git/repository/types";
+import { verifyWorktreeBinding } from "../git/repository/worktrees";
 import {
   branches,
   identity,
@@ -35,7 +39,7 @@ import type { RepositoryService } from "../git/repository/service";
 import { stashDetail, stashes } from "../git/repository/stash";
 import { refsSnapshot } from "../git/repository/tree";
 import type { LogRequest } from "../git/repository/types";
-import { worktrees } from "../git/repository/worktrees";
+import { worktrees as worktreeList } from "../git/repository/worktrees";
 import {
   type RestoreSource,
   markResolved,
@@ -58,7 +62,9 @@ import { fileVersion } from "../files/watch";
 import { writeTextFile } from "../files/write";
 import { canonicalDirectory } from "../workspaces/roots";
 import { badRequest } from "../workspaces/support";
+import type { WorkerSession } from "./session";
 import { type RootFingerprint, fingerprintOf } from "./switch";
+import { trackOperation } from "./git-worker";
 
 /** 操作执行时拿得到的东西：本机是控制端的 Git 服务，远端是 Worker 自己的。 */
 export interface OperationContext {
@@ -68,6 +74,11 @@ export interface OperationContext {
    * 那些帧，所以远端每次都重扫，而不是答一个可能过期的列表。
    */
   readonly freshDiscovery: boolean;
+  /**
+   * 只有 Worker 上才有：跨请求活着的状态（长操作、监听、采样基线）与推送通道。
+   * 控制端对本机工作空间直接调表时没有它，用到它的操作只在远端有意义。
+   */
+  readonly session?: WorkerSession;
 }
 
 export type OperationArgs = Record<string, unknown>;
@@ -159,6 +170,22 @@ function blobs(
 
 function path(args: OperationArgs): string {
   return maybeText(args, "path") ?? ".";
+}
+
+function record(args: OperationArgs, name: string): Record<string, unknown> {
+  const value = args[name];
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw badRequest(`${name} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+/** 需要跨请求状态的操作只在 Worker 上有会话；本机直接调到这里是装配错了。 */
+function session(context: OperationContext): WorkerSession {
+  if (context.session === undefined) {
+    throw badRequest("This operation only runs on a remote worker");
+  }
+  return context.session;
 }
 
 /** 执行授权随请求走：控制端已经判过一次，Worker 仍按它收窄自己能跑的命令。 */
@@ -444,7 +471,7 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
   ),
   "git.worktrees": read(
     async (context, root, args) =>
-      await worktrees(service(context, args), root, path(args)),
+      await worktreeList(service(context, args), root, path(args)),
   ),
   "git.stashes": read(
     async (context, root, args) =>
@@ -508,6 +535,52 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
         count(args, "mainline"),
       ),
   ),
+  /**
+   * 长操作（fetch / pull / push / rebase / 分支与储藏……）：在 Worker 自己的仓库
+   * 队列里排队，立刻答初始快照；此后进度与结局作为 `git.operation` 推送帧回到
+   * 控制端，控制端据此答 `GET …/operations/{id}`，不必每次问。
+   */
+  "git.operationStart": write(async (context, root, args) => {
+    const owner = session(context);
+    const snapshot = await startOperation(
+      service(context, args),
+      root,
+      path(args),
+      record(args, "action") as unknown as RepositoryAction,
+      record(args, "expected") as unknown as ExpectedState,
+    );
+    trackOperation(owner, context.service, snapshot.id);
+    return snapshot;
+  }),
+  "git.operationSnapshot": read((context, _root, args) =>
+    context.service.operationSnapshot(text(args, "id")),
+  ),
+  // 取消是幂等的：同一个 id 取消两次与一次结果相同，所以答复丢了可以重发。
+  "git.operationCancel": read((context, _root, args) =>
+    context.service.cancel(text(args, "id")),
+  ),
+  "git.operations": read(
+    async (context, root, args) =>
+      await context.service.listOperations(root, path(args)),
+  ),
+  "git.integration": read(
+    async (context, root, args) =>
+      await integrationStatus(service(context, args), root, path(args)),
+  ),
+  "git.worktreeBinding": read(async (context, root, args) => {
+    const request = record(args, "request");
+    return await verifyWorktreeBinding(service(context, args), root, {
+      worktreePath: text(request, "worktreePath"),
+      branch: maybeText(request, "branch") ?? null,
+      repositoryId: maybeText(request, "repositoryId") ?? null,
+    });
+  }),
+  /** AI 提交信息的采集：在仓库这边读、筛、脱敏，把提示文本交回控制端。 */
+  "git.messageCapture": read(
+    async (context, root, args) =>
+      await captureStaged(service(context, args), root),
+  ),
+
   "git.rebaseTodo": read(
     async (context, root, args) =>
       await rebaseTodoPreview(
@@ -522,12 +595,25 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
 /** 远端握手里声明的能力组；缺哪组，控制端对那组答 501 并写明能力名。 */
 export const FILES_CAPABILITY = "remote.files.v1";
 export const GIT_CAPABILITY = "remote.git.v1";
+/** 长操作队列、集成状态、工作树绑定与 AI 提交信息的采集。 */
+export const GIT_OPERATIONS_CAPABILITY = "remote.git.operations.v1";
+
+const GIT_OPERATION_NAMES = new Set([
+  "git.operationStart",
+  "git.operationSnapshot",
+  "git.operationCancel",
+  "git.operations",
+  "git.integration",
+  "git.worktreeBinding",
+  "git.messageCapture",
+]);
 
 /** 一个操作属于哪个能力组。 */
 export function capabilityOf(operation: string): string | undefined {
   if (operation.startsWith("files.") || operation.startsWith("imports.")) {
     return FILES_CAPABILITY;
   }
+  if (GIT_OPERATION_NAMES.has(operation)) return GIT_OPERATIONS_CAPABILITY;
   if (operation.startsWith("git.")) return GIT_CAPABILITY;
   return undefined;
 }
