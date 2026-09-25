@@ -780,14 +780,39 @@ async function main() {
 
   /* ----------------------- 便签里连续输入 100 字符 ------------------------ */
 
-  const sticky = await boxOf('[data-slot="sticky-node"]');
+  // 点的是便签正文那块（`role="button"`，点了才切成 textarea），不是节点
+  // 正中——正中可能落在底栏或者被平移、拖拽之后叠上来的终端上。
+  const sticky = await evaluate(`
+    const body = document.querySelector('[data-slot="sticky-node"] [role="button"]');
+    if (!body) return null;
+    body.scrollIntoView({ block: "center", inline: "center" });
+    const rect = body.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + Math.min(rect.height / 2, 12);
+    const top = document.elementFromPoint(x, y);
+    return { x, y, covered: !body.contains(top) };
+  `);
   if (!sticky) throw new Error("找不到便签节点");
-  await click(sticky.x, sticky.y);
+  if (sticky.covered) {
+    report.stickyCovered = true;
+    await evaluate(
+      `document.querySelector('[data-slot="sticky-node"] [role="button"]').click(); return 1;`,
+    );
+  } else {
+    await click(sticky.x, sticky.y);
+  }
   await sleep(600);
+  // 选择器必须限在便签里：每个终端的 xterm 都有一个隐藏的 helper textarea，
+  // 排在便签前面。不限的话字符打进的是第一个终端的 PTY（每一下还会续一次
+  // 驱动租约、广播一帧 `terminal.lease`），量到的根本不是便签。
   await evaluate(
-    `const area = document.querySelector("textarea"); if (area) area.focus(); return 1;`,
+    `const area = document.querySelector('[data-slot="sticky-node"] textarea'); if (area) area.focus(); return 1;`,
   );
-  if (!(await evaluate(`return document.querySelector("textarea") ? 1 : 0;`))) {
+  if (
+    !(await evaluate(
+      `return document.querySelector('[data-slot="sticky-node"] textarea') ? 1 : 0;`,
+    ))
+  ) {
     throw new Error("便签没有进入编辑态");
   }
 
@@ -818,7 +843,7 @@ async function main() {
   );
 
   const typed = await evaluate(
-    `const area = document.querySelector("textarea"); return area ? area.value.length : -1;`,
+    `const area = document.querySelector('[data-slot="sticky-node"] textarea'); return area ? area.value.length : -1;`,
   );
   report.typing = {
     chars: text.length,
@@ -831,7 +856,7 @@ async function main() {
   }
   // 失焦提交：整段输入应当只形成一条历史。
   await evaluate(
-    `const area = document.querySelector("textarea"); if (area) area.blur(); return 1;`,
+    `const area = document.querySelector('[data-slot="sticky-node"] textarea'); if (area) area.blur(); return 1;`,
   );
   await sleep(1500);
   step(

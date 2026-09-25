@@ -68,6 +68,8 @@ node tools/probes/canvas-stress.mjs [输出目录] [终端数]
 
 视口写死在 `zoom 0.35`，30 个终端全部在视口里、React Flow 不裁剪，与既有基线同一个最坏情况。产物默认在 `target/canvas-stress/`：`result.json` 与 `canvas.png` / `mounted.png`。
 
+便签那一段点的是便签正文，找 textarea 也限在 `[data-slot="sticky-node"]` 里：每个终端的 xterm 都挂着一个隐藏的 helper textarea，排在便签前面。2026-09-26 之前的脚本用的是不限范围的 `querySelector("textarea")`，字符其实打进了第一个终端的 PTY——那之前记下的「输入 100 字符」各项数字量的都不是便签。
+
 无头 Chrome 的 rAF 上限是 60 Hz（既有基线在有屏幕的 120 Hz 窗口里跑，所以那张表的 fps 不能和这张直接比）。fps 在这里很快撞顶，**真正有判别力的是重渲组件数与最慢帧**。撤销栈深度放在最后数——数法是一直点到按钮灰掉，那会真的把改动撤回去。
 
 ## core 的终端域
