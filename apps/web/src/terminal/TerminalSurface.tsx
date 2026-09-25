@@ -43,7 +43,7 @@ import { useSurfaceHandle } from "./surface/use-handle";
 import { useLaunchSequence } from "./surface/use-launch";
 import { useRefit } from "./surface/use-refit";
 import { useRenderBudget } from "./surface/use-render-budget";
-import { useTerminalSession } from "./surface/use-session";
+import { useAdoptedSession, useTerminalSession } from "./surface/use-session";
 import { useTerminalTransport } from "./surface/use-transport";
 import { useXtermInstance } from "./surface/use-xterm";
 import type { ConnectionStatus, TerminalSurfaceProps } from "./surface/types";
@@ -224,6 +224,14 @@ function TerminalSurfaceImpl({
   const ensureSession = useTerminalSession(refs, {
     nodeId,
     attempt,
+    patch,
+    setSessionId,
+  });
+
+  // core 替节点起的会话（冷启动、依赖编排）写进节点数据后，挂着的表面跟过去。
+  useAdoptedSession(refs, {
+    dataSessionId: data.sessionId,
+    sessionId,
     patch,
     setSessionId,
   });

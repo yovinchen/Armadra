@@ -101,3 +101,42 @@ export function useTerminalSession(
 
   return ensureSession;
 }
+
+/**
+ * 别人替这个节点起了会话：定时任务的冷启动（`LAUNCH_FROZEN`）、依赖满足后
+ * core 的 `spawnForNode`。core 把新 id 写进节点数据并发 `board.changed`，合并
+ * 进 store 之后这里的 `dataSessionId` 就变了——已经挂着的表面据此换过去，
+ * 不用重新挂载才看得见。
+ *
+ * 只看节点数据**变没变**，不看它和手里那个一不一致：挂载时 `find` 可能找到一个
+ * 比节点数据更新的会话，那时两者不同是正常的，不该被拽回旧的。自己新建的会话
+ * 同时写了节点数据和本地状态，两边一样，这里什么都不做。正在新建时不抢：那一
+ * 次写回会盖掉节点数据，抢过来只会在两个会话之间来回跳。
+ *
+ * 启动行已经由 core 敲过了，所以换过去的会话不算「本次挂载新建」，不再敲一遍。
+ */
+export function useAdoptedSession(
+  refs: SurfaceRefs,
+  options: {
+    dataSessionId: string | undefined;
+    sessionId: string | undefined;
+    patch: (next: Partial<ConnectionStatus>) => void;
+    setSessionId: (id: string) => void;
+  },
+): void {
+  const { dataSessionId, sessionId, patch, setSessionId } = options;
+  const seenRef = React.useRef(dataSessionId);
+  const sessionRef = React.useRef(sessionId);
+  sessionRef.current = sessionId;
+
+  React.useEffect(() => {
+    if (seenRef.current === dataSessionId) return;
+    seenRef.current = dataSessionId;
+    if (!dataSessionId || dataSessionId === sessionRef.current) return;
+    if (refs.creatingRef.current) return;
+    refs.freshSessionRef.current = false;
+    refs.launchPhaseRef.current = "idle";
+    patch({ connection: "connecting", exitCode: null, error: null });
+    setSessionId(dataSessionId);
+  }, [refs, dataSessionId, patch, setSessionId]);
+}

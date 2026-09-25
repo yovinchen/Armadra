@@ -21,6 +21,7 @@ const fixture = vi.hoisted(() => ({
   data: { kind: "terminal", sessionId: "session" } as TerminalNodeData,
   handlers: null as TerminalTransportHandlers | null,
   writes: [] as string[],
+  urls: [] as string[],
   close: vi.fn(),
   getTerminal: vi.fn(),
   createTerminal: vi.fn(),
@@ -41,7 +42,7 @@ vi.mock("@/store/canvas-store", () => ({
 }));
 vi.mock("@/api/client", () => ({
   RUNTIME_URL: "http://runtime",
-  terminalWebSocketUrl: () => "ws://runtime/session",
+  terminalWebSocketUrl: (sessionId: string) => `ws://runtime/${sessionId}`,
   runtimeApi: {
     getTerminal: (...args: unknown[]) => fixture.getTerminal(...args),
     createTerminal: (...args: unknown[]) => fixture.createTerminal(...args),
@@ -65,9 +66,10 @@ vi.mock("./platform", () => ({
 }));
 vi.mock("./transport", () => ({
   createTerminalTransport: (
-    _url: string,
+    url: string,
     handlers: TerminalTransportHandlers,
   ) => {
+    fixture.urls.push(url);
     fixture.handlers = handlers;
     return {
       state: "live",
@@ -156,6 +158,7 @@ beforeEach(() => {
   fixture.data = { kind: "terminal", sessionId: "session" };
   fixture.handlers = null;
   fixture.writes = [];
+  fixture.urls = [];
   fixture.getTerminal.mockImplementation(async () => ({
     id: "session",
     workspaceId: "workspace",
@@ -241,5 +244,78 @@ describe("后台过久后 detach", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("core 替节点起的会话", () => {
+  it("节点数据换了会话 id，挂着的表面跟过去，不新建也不重敲启动行", async () => {
+    const changed = vi.fn<(status: TerminalSurfaceStatus) => void>();
+    const view = render(
+      <TerminalSurface
+        nodeId="node"
+        data={fixture.data}
+        collapsed={false}
+        onStatusChange={changed}
+      />,
+    );
+    await waitFor(() => expect(fixture.urls).toEqual(["ws://runtime/session"]));
+    act(() => fixture.handlers!.onHello!(hello));
+    // 旧会话退出：表面停在「已退出」。
+    act(() => fixture.handlers!.onStatus!("exited", 0));
+    expect(changed.mock.calls.at(-1)?.[0].connection).toBe("exited");
+
+    // 冷启动写回节点数据，合并进 store 后作为新的 data 传进来。
+    const next = { kind: "terminal", sessionId: "cold" } as TerminalNodeData;
+    view.rerender(
+      <TerminalSurface
+        nodeId="node"
+        data={next}
+        collapsed={false}
+        onStatusChange={changed}
+      />,
+    );
+    await waitFor(() =>
+      expect(fixture.urls).toEqual([
+        "ws://runtime/session",
+        "ws://runtime/cold",
+      ]),
+    );
+    act(() =>
+      fixture.handlers!.onHello!({
+        ...hello,
+        sessionId: "cold",
+        generation: 1,
+      }),
+    );
+    expect(changed.mock.calls.at(-1)?.[0].connection).toBe("live");
+    expect(fixture.createTerminal).not.toHaveBeenCalled();
+  });
+
+  it("节点数据没变时不因手里的会话不同而被拽回去", async () => {
+    // 挂载时 `find` 找到的是比节点数据更新的那个会话。
+    fixture.getTerminal.mockImplementation(async () => ({
+      id: "newer",
+      workspaceId: "workspace",
+      shell: "/bin/sh",
+      generation: 1,
+      status: "running",
+      command: null,
+      agentId: null,
+    }));
+    const view = render(
+      <TerminalSurface nodeId="node" data={fixture.data} collapsed={false} />,
+    );
+    await waitFor(() => expect(fixture.urls.at(-1)).toBe("ws://runtime/newer"));
+    const seen = [...fixture.urls];
+    // 改标题之类的重渲：data 是新对象，但会话 id 没变。
+    view.rerender(
+      <TerminalSurface
+        nodeId="node"
+        data={{ ...fixture.data, title: "renamed" } as TerminalNodeData}
+        collapsed={false}
+      />,
+    );
+    await act(async () => {});
+    expect(fixture.urls).toEqual(seen);
   });
 });
