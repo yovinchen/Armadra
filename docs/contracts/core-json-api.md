@@ -341,3 +341,29 @@ R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消�
 - `lease` 为 `null` 表示没人持有。`clients` 按 `clientId` 排序。
 - 事件只在有人来、有人走、租约换手时发；普通的续期心跳不发，所以事件里的 `lastSeenAt` 可能落后，最新值以心跳的回答为准。
 - `canvas.presence` **不进 outbox**（`core/events/stream.ts` 的 `EPHEMERAL_EVENTS`）：带游标续订的客户端不会补到过去的在线表，它重连后的第一次心跳自己会拿到当前那一份。
+
+## 9. 账号、组、邀请与共享：`/api/identity/*` 的管理面
+
+规格是 [服务器账号与共享](../design/server-accounts-and-sharing.md) §3；实现在 `core/identity/accounts-http.ts`。和 §3 同一个前缀、同一套认证（Origin、写操作的 CSRF、会话凭据）；失败的 `code` 是身份域的 UPPER_SNAKE（`UNAUTHENTICATED` / `PERMISSION_DENIED` / `INVALID_ARGUMENT` / `NOT_FOUND` / `CONFLICT`），做不到的是 501 `NOT_IMPLEMENTED`。
+
+| 方法与路径                                                                                                                                         | 谁能调                                               | 答案                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET principals`                                                                                                                                   | `identity:read`（成员登录即有）                      | `{ principals: [{ principalId, kind, displayName, disabledAtMs, hasPassword, … }] }`                           |
+| `POST principals` `{ displayName }`                                                                                                                | `identity:manage`                                    | 201，新成员                                                                                                    |
+| `POST principals/{id}/disable`                                                                                                                     | `identity:manage`；owner 不能被停用                  | `{ disabled: true }`                                                                                           |
+| `POST credentials` `{ kind: "password", principalId, password }`                                                                                   | 本人或 `identity:manage`                             | 201 `{ credentialId }`                                                                                         |
+| `GET/POST invitations`，`DELETE invitations/{id}`                                                                                                  | `identity:manage` 或目标工作空间的 `workspace:share` | 签发只在这一次返回明文 `token`（`<invitationId>.<secret>`）；作废后兑换是 401                                  |
+| `POST invitations/{id}/accept` `{ token }`                                                                                                         | 已登录的任何人                                       | `{ role, groupId, workspaceId }`                                                                               |
+| `POST register` `{ token, displayName, password, deviceName? }`                                                                                    | 匿名                                                 | 201，与 `login` 同形的会话，外加 `invitation: { role, groupId, workspaceId }`；不带 `token` 是 501（开放注册） |
+| `POST login` `{ principalId, password, deviceName? }`                                                                                              | 匿名                                                 | 会话                                                                                                           |
+| `GET/POST groups`，`PATCH/DELETE groups/{id}`，`PUT/DELETE groups/{id}/members/{principalId}` `{ role: "admin" \| "member" }`                      | 列表 `identity:read`，其余 `identity:manage`         | 组带 `members` 数组                                                                                            |
+| `GET grants?workspaceId=`，`PUT grants` `{ workspaceId, subjectKind, subjectId, role }`，`DELETE grants` `{ workspaceId, subjectKind, subjectId }` | 该工作空间的 `workspace:share`（只有 owner 有）      | `GET` 带编译后的 `permissions` 与角色表 `roles`                                                                |
+| `GET audit?workspaceId=&principalId=&limit=`                                                                                                       | `identity:manage` 或 `workspace:share`               | `{ entries }`                                                                                                  |
+
+角色是 `viewer` ⊂ `editor` ⊂ `operator` ⊂ `driver`，编译表只在 `core/identity/roles.ts`。
+
+**判定在哪里生效**（R8）：
+
+- **成员会话的授权快照只有 `identity:read`**，共享得来的授权每次判定时现编（`Authorizer.permits` = 快照 ∪ 现编）。所以撤销一条共享之后的**下一个请求**就是 403，不用等会话过期。`GET session` 报的 `scopes` 是现编之后的那份。
+- **路由门**（`core/identity/route-access.ts`，挂在 `core/http/server.ts` 分发之前与升级之前）：路由表声明的 scope（`core/http/route-scopes.ts`）按这次请求的主体判，不够是 403 `{ "code": "forbidden", "message" }`。只在服务器壳上有请求主体；桌面壳里一律放行。成员在全局路由（设置、Agent 目录、执行主机……）上一律 403；`GET /api/workspaces` 放行但只留他有 `canvas:read` 的；`PATCH/DELETE /api/workspaces/{id}` 要 `workspace:share`；终端：创建要 `terminal:create@workspace`（按请求体的 `workspaceId`），写自己开的要 `terminal:create`、写别人的（含附着 `…/ws`）要 `terminal:drive`。
+- **事件流**：升级前要 `events:read@workspace`；授权一变（授予、撤销、组成员、停用、撤销设备、登出）已开的订阅当场复核，不再有权的以关闭码 **4403** 关掉，重连在升级前拿到 403。

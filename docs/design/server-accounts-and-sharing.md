@@ -1,6 +1,6 @@
 # 服务器端账号、数据中转与共享（预留设计）
 
-> 状态：目标设计。**§2 的数据模型、§3 的接口形状与 §4 的五处预留已经落地**（R6b，迁移 `0019_accounts.sql`，实测与偏差见 [TypeScript Core 实施进度](../status/typescript-core-status.md) §10）；§3 里 passkey、OAuth 绑定、开放注册按设计要求返回 501。剩下的是服务器壳的传输与认证（R6a）与真正把共享用起来（R8）。本文回答一个前置问题：当核心以服务器壳（[TypeScript Core](typescript-core.md) R6）跑在无图形界面的 Linux 上、多台设备从外部访问时，账号登录、数据中转、设备绑定，以及将来「开一个组、组内共享某人的看板并可操作」这类能力，需要**现在**在数据模型、鉴权与接口上预留什么，才能按设置逐步施工而不返工。本文只定模型与接口边界，不排实施批次；实施挂在 R6 之后的 R8。
+> 状态：目标设计。**§2 的数据模型、§3 的接口形状与 §4 的五处预留已经落地**（R6b，迁移 `0019_accounts.sql`，实测与偏差见 [TypeScript Core 实施进度](../status/typescript-core-status.md) §10）；§3 里 passkey、OAuth 绑定、开放注册按设计要求返回 501。R8 已把共享用起来：服务器壳把认证出的主体带进 core，路由门与事件流按它判定，成员会话只快照底线、授予每次现编，持邀请注册做实，设置里有「账号与共享」页（实测与取舍见实施进度 §42，线上形状见 [JSON 契约](../contracts/core-json-api.md) §9）。本文回答一个前置问题：当核心以服务器壳（[TypeScript Core](typescript-core.md) R6）跑在无图形界面的 Linux 上、多台设备从外部访问时，账号登录、数据中转、设备绑定，以及将来「开一个组、组内共享某人的看板并可操作」这类能力，需要**现在**在数据模型、鉴权与接口上预留什么，才能按设置逐步施工而不返工。本文只定模型与接口边界，不排实施批次；实施挂在 R6 之后的 R8。
 > 范围：`core/identity`（已有：单 owner、设备、会话、票据、scope）、`core/canvas`、`core/events`、服务器壳的传输与认证。不涉及计费、组织层级、SSO。
 > 输入：R1c 已落地的 `identity_*` 表与 `scope(permission, workspaceId?, executionHostId?)` 授权模型；R1b 的按工作空间扇出的事件流；R1a 的画布 CAS 保存。
 

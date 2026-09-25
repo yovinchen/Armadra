@@ -1783,3 +1783,33 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm check`、`pnpm format:check`：通过。
 
 没做：浏览器里的两设备实测（只跑了单测与路由测试）；审计日志里记一条「画布接管」；把设备名接到身份域。
+
+## 42. 服务器账号、组与共享真正启用（R8，2026-09-26）
+
+设计 `design/server-accounts-and-sharing.md`，契约 `contracts/core-json-api.md` §9。此前数据模型与接口都在（0019、`accounts-http.ts`），但判定恒为 owner：服务器壳认证完请求就把人丢了，core 里的每一处 `allows()` 问到的都是本机 owner；成员会话还把登录时的授予写进快照，撤销一条共享要等会话过期。
+
+### 42.1 做了什么
+
+- **请求主体**：`core/identity/gate.ts` 新增基于 `AsyncLocalStorage` 的 `runAs` / `requestIdentity` / `currentSubject`，门的 `subject()` 改成「当前请求的主体，没有就是本机 owner」。服务器壳（`serve.ts`）用 `auth.ts` 新的 `admit()` 认证出 `Principal`，把请求与升级都包进 `runAs`；匿名面给一个没有任何授权的成员身份，而不是留空（留空等于 owner）。
+- **路由门**：`core/identity/route-access.ts`，经 `installRouteGuard` 挂在 `core/http/server.ts` 的分发与升级之前（这是对 `server.ts` 的唯一改动，十几行）。按 `router.requiredScope` 判；没有请求身份时放行，所以桌面壳行为不变。成员：表外路由与全局路由 403；`GET /api/workspaces` 放行但过滤；`POST /api/terminals` 按请求体的 `workspaceId` 要 `terminal:create`；已有终端按 `terminal_sessions.workspace_id` 找画布，读画面要 `terminal:read`，写与附着 `…/ws` 要 `terminal:drive`，自己在本进程里开的要 `terminal:create`。`route-scopes.ts` 补两条：`/api/workspaces/{id}` 的写要 `workspace:share`（改根目录与删除只给 owner），`/open` 按读算。
+- **事件流**（`core/events/index.ts`）：升级前的 `events:read@workspace` 判定问的已是请求主体；guard 按升级请求记下身份，socket 打开后订阅 `onAccessChanged`，授权一变就先 `revalidate`（重新认证会话）再判，不够就以 4403 关掉。授予 / 撤销 / 改角色 / 组成员增删 / 删组 / 停用账号 / 撤销设备 / 登出都会发一次 `accessChanged()`。
+- **快照**：成员口令登录只快照 `identity:read`，共享授权每次现编；`GET session` 报「快照 ∪ 现编」。`listDevices` 只列自己的设备（有了成员之后原实现会对 owner 抛 permission）。停用 owner 被拒。
+- **接口补全**：`POST register` 持邀请注册（建成员 + 设口令 + 兑换，一笔事务，再照口令登录发会话；不带邀请仍 501）、`DELETE invitations/{id}` 作废邀请。成员增删、组成员与角色、授予与改角色原本就有。
+- **服务器壳**：`hasAdmin()`（没有 owner 时启动日志提示用配对链接成为首个管理员）、`invite()` 与 `invitationUrl()`（邀请落在页面根的 `#invite=` 片段上）。
+- **页面**：设置「账号与共享」（`AccountsSharingPage.tsx`，`nav.ts` 新增 `serverOnly`，只在服务器壳托管的页面出现）：我的账号（账号标识、设置口令）、未登录时的口令登录；管理员另有成员（添加、停用）、组（新建、成员与组内角色、删除）、邀请（按工作空间与角色生成链接、作废）、共享（按工作空间列授予、改角色、取消、添加成员或组）。`SettingsDialog` 看见 `#invite=` 自动打开到这一页，页面取走令牌弹出兑换对话框。客户端 `api/accounts.ts`，文案 `i18n/sharing.ts`。
+
+### 42.2 取舍与没做的
+
+- 共享只发工作空间上的授权，所以成员在全局路由上一律 403：设置、Agent 目录、模型、执行主机、审批答复、`/api/agent-status/*`、`/api/ownership`、`/api/nodes/{id}/context-reads` 都是。成员打开页面时这些面板会报无权限；要放开得逐条决定哪些全局读对成员无害，这次没做。
+- 终端创建者只记在路由门的内存里（创建成功那一刻），core 重启后旧会话一律按「别人的」判；终端域自己的 `DriveBook` 仍不知道写入者是谁（没有改 `core/terminal`）。
+- 事件流的复核用的是升级时那把访问密钥；它过期（15 分钟）之后再遇到一次授权变化，这条 socket 会被当成失效关掉，页面带新 Cookie 重连。复核只在授权变化时发生，不是定时的。
+- 组角色（`admin`）只存不判：组管理员还不能管自己的组。成员不能自己停用、改名。
+- passkey、OAuth 绑定、开放注册仍按设计返回 501（需要外部条件）。
+- 没有用迁移（0029 未用）。
+
+### 42.3 验证
+
+- `pnpm --filter @armadra/desktop test`：253 文件 2927 条通过（node-pty `spawn-helper` 缺执行位，`chmod +x` 后终端用例全绿，环境问题）。新增 `core/identity/route-access.test.ts`（owner / driver / operator / editor / viewer / 非成员的路由矩阵、列表过滤、终端创建者）与 `accounts.test.ts` 的 R8 四条（持邀请注册、作废邀请、组共享入组即有移出即无、收权通知与 owner 不可停用）。
+- `pnpm --filter @armadra/server test`：10 文件 79 条通过。新增 `sharing.integration.test.ts`：真起 `serve`，首个管理员配对，三人经邀请注册；矩阵（列表 / 读 / 写 / 开终端 / 改工作空间与全局设置 / 改共享）、非成员升级前 403、成员只收自己画布的帧、邀请一次性与作废、撤销共享后事件流 4403 关闭且下一个请求 403。
+- `pnpm --filter @armadra/web test` / `typecheck`：新增 `AccountsSharingPage.test.tsx` 6 条；全量跑时 `AutomationDrawer` 与 `KeybindingsPage` 各有用例超时，单独重跑通过（负载所致）。
+- `pnpm check`、`pnpm format:check` 通过。
