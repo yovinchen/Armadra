@@ -78,7 +78,9 @@ function seedNodes(boardId) {
     size: { width: 380, height: 240 },
     labels: [],
     note: "",
-    data: { kind: "terminal" },
+    // 两端都先起好名字：连线一建立，缺名字的那一端会弹起名对话框（设计
+    // §2.2），它的遮罩会吃掉紧接着的那次「撤销」点击——这里量的是拖拽本身。
+    data: { kind: "terminal", handle: title },
     createdAt: stamp,
     updatedAt: stamp,
   });
@@ -399,12 +401,16 @@ async function main() {
   /** 撤销那一格在 Dock 里，点它比合成一次 ⌘Z 可靠得多。 */
   const undo = async () => {
     const box = await evaluate(`
+      // 有对话框开着时点下去落在遮罩上，只会把对话框关掉，撤销根本没发生。
+      const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+      if (overlay) return { blocked: true };
       const button = document.querySelector('[data-slot="dock"] button[aria-label="撤销"]');
       if (!button) return null;
       const rect = button.getBoundingClientRect();
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
     `);
     if (!box) throw new Error("Dock 里找不到「撤销」");
+    if (box.blocked) throw new Error("连线后弹出了对话框，挡住了「撤销」");
     await mouse("mousePressed", box.x, box.y);
     await mouse("mouseReleased", box.x, box.y, { buttons: 0 });
     await sleep(300);

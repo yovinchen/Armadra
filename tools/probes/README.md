@@ -48,6 +48,8 @@ node tools/probes/connection-drag.mjs [输出目录] [次数]
 
 产物默认在 `target/connection-drag/`：`result.json` 记成功次数、把手实测尺寸与每次失败时指针底下的元素，第一次失败时另存一张 `failure.png`。把手量到小于 12px 直接失败——那说明 React Flow 自己的样式表又盖过了 `apps/web/src/styles/nodes.css`，圆点和它的 34px 命中区会一起被推到节点外面，正是 F6 的根因。
 
+两个节点在种子里就带着名字（`data.handle`）：两端缺名字时，连线一建立就会弹起名对话框（[Agent 投递](../../docs/design/agent-delivery.md) §2.2 的 `requestNodeNames`），它的遮罩会吃掉紧接着的「撤销」点击。点撤销前若看到对话框遮罩，脚本直接报「连线后弹出了对话框」，不会把它误记成撤销失败。起名对话框本身不在这里验证。
+
 只覆盖鼠标：触屏的 pointer 事件、缩放后的坐标换算与多显示器缩放都没有验证。
 
 ## 画布压力（30 个终端 + 真实会话）
@@ -81,6 +83,6 @@ node tools/probes/core-terminal-packaged.mjs              # 打包版，从页�
 ```
 
 - **smoke**：起一个 core，开终端，打字看回显，关掉 WS 再开一次确认看得见刚才那屏（`sawEarlierOutput`），最后销毁会话；顺带验证不存在的会话在升级前就被 404 拒掉。
-- **packaged**：需要先 `pnpm --filter @armadra/desktop dist`。调试端口是运行时选的空闲端口，不是固定值：机器上另一个 Electron 占着固定端口时，探针会连上别人的渲染进程，失败起来和打包出错一模一样。
+- **packaged**：需要先 `pnpm --filter @armadra/desktop dist`（本机没有 `CSC_LINK` 时 `dist.mjs` 自动跳过签名与公证）。按访达的方式启动：`PATH` 只给 launchd 那条（`/usr/bin:/bin:/usr/sbin:/sbin`），数据目录用 `ARMADRA_DATA_DIR`、Chromium profile 用 `--user-data-dir` 都指到临时目录，不碰操作员的 `~/Library/Application Support/Armadra`。本机装了 tmux（Homebrew 等常见位置）时，会话必须是 `tmux` 后端，资源采样（`GET …/resources`）也必须给出这个会话的 pid——两处各自找 tmux，都得用补过的 PATH。调试端口是运行时选的空闲端口，不是固定值：机器上另一个 Electron 占着固定端口时，探针会连上别人的渲染进程，失败起来和打包出错一模一样。
 
 三个脚本都用 `mktemp` 的数据目录与各自私有的 tmux socket，跑完 `kill-server` 并删掉目录；不碰操作者自己的数据目录或 tmux server。

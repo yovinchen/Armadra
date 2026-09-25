@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /**
- * Opens a terminal from inside the **packaged** application, with
- * `ARMADRA_CORE=ts`.
+ * Opens a terminal from inside the **packaged** application.
  *
  * This is the only one of R2's checks that cannot be done with `node
  * out/core/main.js`: what it proves is that `node-pty` loads from
@@ -15,6 +14,16 @@
  * actually judges. `window.armadra.transport.endpointsSync()` is how the page
  * itself learns the address, so the probe asks the same question the page
  * asks.
+ *
+ * The app is started the way Finder starts it: with launchd's PATH, which
+ * has no Homebrew. A core that probes for tmux with the inherited PATH finds
+ * nothing there and quietly falls back to `direct` — terminals then stop
+ * surviving a restart, and nothing else looks wrong. So when tmux is installed
+ * in one of the usual places, the session must come back as `tmux`.
+ *
+ * Chromium's profile goes to a temporary `--user-data-dir` too: without it the
+ * second Electron writes into the operator's `~/Library/Application
+ * Support/Armadra` next to the copy they have open.
  *
  * Usage (after `pnpm --filter @armadra/desktop dist`):
  *   node tools/probes/core-terminal-packaged.mjs
@@ -53,6 +62,18 @@ async function freePort() {
       server.close(() => done(port));
     });
   });
+}
+
+/** What launchd hands an app opened from Finder or the Dock. */
+const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+
+/** tmux where a Mac usually has it — none of these is on LAUNCHD_PATH. */
+function installedTmux() {
+  return [
+    "/opt/homebrew/bin/tmux",
+    "/usr/local/bin/tmux",
+    "/opt/local/bin/tmux",
+  ].find((candidate) => existsSync(candidate));
 }
 
 const WORKSPACE = "00000000-0000-0000-0000-0000000000cc";
@@ -199,7 +220,27 @@ const IN_PAGE = (workspace, cwd) => `(async () => {
       if (frame.type === "output" && frame.data.includes(marker) && hello) {
         clearTimeout(timer);
         socket.close();
-        done({ ok: true, hello, sessionId: session.id, backend: session.backend, httpBase });
+        // 资源采样另起一次 tmux list-panes，走的不是终端域那条路：打包版里它
+        // 也得找得到 tmux，否则活着的会话在面板里没有进程号。
+        (async () => {
+          let row;
+          for (let attempt = 0; attempt < 10 && !(row && row.pid); attempt += 1) {
+            const sample = await (
+              await fetch(httpBase + "/api/workspaces/" + ${JSON.stringify(workspace)} + "/resources")
+            ).json();
+            row = (sample.sessions ?? []).find((entry) => entry.sessionId === session.id);
+            if (!(row && row.pid)) await new Promise((wait) => setTimeout(wait, 1000));
+          }
+          done({
+            ok: true,
+            hello,
+            sessionId: session.id,
+            backend: session.backend,
+            httpBase,
+            resourcePid: row?.pid ?? null,
+            resourceReason: row?.unknownReason ?? null,
+          });
+        })().catch((error) => done({ ok: false, reason: "resources: " + String(error), httpBase }));
       }
     };
     socket.onerror = () => {
@@ -225,11 +266,20 @@ async function main() {
   // Started once with no window work to do, purely so the core creates and
   // migrates the database this probe then seeds. Simpler than teaching the
   // probe the migration ledger.
+  const tmux = installedTmux();
   const first = spawn(
     binary,
-    [`--remote-debugging-port=${port}`, "--remote-allow-origins=*"],
+    [
+      `--remote-debugging-port=${port}`,
+      "--remote-allow-origins=*",
+      `--user-data-dir=${join(dataDir, "electron")}`,
+    ],
     {
-      env: { ...process.env, ARMADRA_CORE: "ts", ARMADRA_DATA_DIR: dataDir },
+      env: {
+        ...process.env,
+        PATH: LAUNCHD_PATH,
+        ARMADRA_DATA_DIR: dataDir,
+      },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
@@ -268,6 +318,21 @@ async function main() {
             raw: result.result,
           };
     client.close();
+    if (outcome?.ok) outcome.launchPath = LAUNCHD_PATH;
+    if (outcome?.ok && outcome.backend === "tmux" && !outcome.resourcePid) {
+      outcome = {
+        ...outcome,
+        ok: false,
+        reason: `the resource sample has no pid for a live tmux session (${outcome.resourceReason})`,
+      };
+    }
+    if (outcome?.ok && tmux !== undefined && outcome.backend !== "tmux") {
+      outcome = {
+        ...outcome,
+        ok: false,
+        reason: `tmux is installed at ${tmux} but the session came back as ${outcome.backend}`,
+      };
+    }
   } catch (error) {
     outcome = { ok: false, reason: String(error), log: log.slice(-4000) };
   } finally {
