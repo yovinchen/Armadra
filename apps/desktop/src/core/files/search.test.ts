@@ -211,9 +211,18 @@ describe("the workspace index and search", () => {
       );
     }
     const during = new AbortController();
-    const running = searchContent(path, request("needle"), during.signal);
+    const progress = { visited: 0 };
+    const running = searchContent(
+      path,
+      request("needle"),
+      during.signal,
+      progress,
+    );
     during.abort();
     await expect(running).rejects.toThrow();
+    // 停在第一次让出事件循环的地方，而不是把剩下的文件读完。
+    expect(progress.visited).toBeGreaterThan(0);
+    expect(progress.visited).toBeLessThan(400);
 
     // Without an abort the same tree still answers in full.
     const complete = await searchContent(path, request("needle"));

@@ -14,7 +14,11 @@ import {
 } from "../workspaces/support";
 import { type Workspace, getWorkspace } from "../workspaces/table";
 import { baseName } from "./paths";
-import { type SearchRequest, searchContent } from "./search";
+import {
+  type SearchProgress,
+  type SearchRequest,
+  searchContent,
+} from "./search";
 import { register, releaseWorkspace, unregister } from "./watch";
 
 /**
@@ -243,12 +247,23 @@ export function install(context: CoreContext): void {
       // 页面换了查询、关了面板或点了「停止」就会掐断这次请求；连接一断就别再
       // 替它把整棵树读完。
       const connection = connectionSignal(request);
+      const progress: SearchProgress = { visited: 0 };
       try {
         return ok(
-          await searchContent(workspace.rootPath, parsed, connection.signal),
+          await searchContent(
+            workspace.rootPath,
+            parsed,
+            connection.signal,
+            progress,
+          ),
         );
       } catch (error) {
         if (connection.signal?.aborted === true) {
+          // 记下停在第几个文件：这是「扫描真的停了」唯一看得见的证据。
+          context.log.debug("文件搜索随连接断开中止", {
+            workspaceId: workspace.id,
+            visited: progress.visited,
+          });
           throw new DomainError(499, "cancelled", "The search was cancelled");
         }
         throw error;

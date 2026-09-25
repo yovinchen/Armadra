@@ -234,6 +234,16 @@ export interface SearchFile {
   readonly truncated: boolean;
 }
 
+/**
+ * How far a search got, kept up to date while it runs. The route reads it
+ * after an abort to log how much of the tree the cancelled walk had touched —
+ * the one number that shows the cancellation stopped the scan rather than
+ * just the answer.
+ */
+export interface SearchProgress {
+  visited: number;
+}
+
 export interface SearchResult {
   readonly files: readonly SearchFile[];
   readonly totalMatches: number;
@@ -344,6 +354,7 @@ export async function searchContent(
   root: string,
   request: SearchRequest,
   signal?: AbortSignal,
+  progress?: SearchProgress,
 ): Promise<SearchResult> {
   signal?.throwIfAborted();
   const base = canonicalDirectory(root);
@@ -370,6 +381,7 @@ export async function searchContent(
   const report: WalkReport = { scanned: 0, truncated: false };
   for (const { relative, size } of walk(base, report)) {
     visited += 1;
+    if (progress) progress.visited = visited;
     if (visited % YIELD_EVERY_FILES === 0) {
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
