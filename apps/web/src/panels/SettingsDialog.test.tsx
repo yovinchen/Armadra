@@ -344,9 +344,14 @@ describe("SettingsDialog", () => {
   it("集成页一行说清注入方式、Hook、技能与旧残留", async () => {
     open();
     fireEvent.click(navItem(zh("integration.nav")));
-    // 旧残留逐条列出来，用户在按「修复」之前看得见将要动哪些东西。
-    // 它也是「Runtime 真的答了这一行」的证据：`GET /api/agents` 那份兜底
-    // 报不出残留，所以等它出现就等于等接口落地。
+    // 旧残留逐条列出来，用户在按「修复」之前看得见将要动哪些东西；清单收在
+    // 「旧残留」徽标里。徽标也是「Runtime 真的答了这一行」的证据：
+    // `GET /api/agents` 那份兜底报不出残留，所以等它出现就等于等接口落地。
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: zh("integration.legacy.count").replace("{count}", "1"),
+      }),
+    );
     expect(await screen.findByText(/hooks\.SessionStart\[0\]/)).toBeTruthy();
     expect(
       screen.getByText(zh("integration.hook.revision").replace("{value}", "3")),

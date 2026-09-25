@@ -104,15 +104,55 @@ describe("IntegrationPage", () => {
       backup: "~/.claude/settings.json.armadra-backup-20260913",
     });
     view();
+    // 清单收在徽标里，点开之前不占行高。
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: zh("integration.legacy.count").replace("{count}", "2"),
+      }),
+    );
     expect(await screen.findByText(/aicc-hook/)).toBeTruthy();
-    expect(screen.getByText(/aicc-canvas/)).toBeTruthy();
-    expect(
-      screen.getByText(zh("integration.legacy.count").replace("{count}", "2")),
-    ).toBeTruthy();
+    expect(screen.getAllByText(/aicc-canvas/).length).toBeGreaterThan(0);
     fireEvent.click(
       screen.getByRole("button", { name: zh("integration.repair") }),
     );
     await waitFor(() => expect(mock.repair).toHaveBeenCalledWith("claude"));
+  });
+
+  /**
+   * 同一条命令在每个 Hook 事件下各挂一次：清单按文件分组、相同的只列一次并标
+   * 次数，主目录写成 `~`。整段命令拼进脚注曾把这一行撑到几屏高。
+   */
+  it("groups repeated leftovers by file with a count", async () => {
+    const command =
+      "(if [ -r '/Users/dev/.aicc/aicc-hook/claude.sh' ]; then sh '/Users/dev/.aicc/aicc-hook/claude.sh'; fi)";
+    mock.integration.mockResolvedValue({
+      agentId: "claude",
+      mode: "launch",
+      hook: { installed: true, revision: 4 },
+      skill: { installed: true, revision: 10 },
+      legacy: {
+        found: Array.from({ length: 11 }, () => ({
+          kind: "hook_entry",
+          path: "/Users/dev/.claude/settings.json",
+          detail: command,
+        })),
+      },
+      revision: 4,
+    });
+    view();
+    // 名字仍在行里，没有被挤出视口。
+    expect(await screen.findByText("Claude Code")).toBeTruthy();
+    expect(screen.queryByText(/aicc-hook\/claude/)).toBeNull();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: zh("integration.legacy.count").replace("{count}", "11"),
+      }),
+    );
+    expect(await screen.findByText("~/.claude/settings.json")).toBeTruthy();
+    const entries = screen.getAllByText(/aicc-hook\/claude\.sh/);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.textContent).toContain("'~/.aicc/aicc-hook");
+    expect(screen.getByText("×11")).toBeTruthy();
   });
 
   /** 扩展型的 CLI 没有文件可装，所以不画一对点了没用的按钮。 */

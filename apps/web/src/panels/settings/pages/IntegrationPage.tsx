@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Wrench } from "lucide-react";
 import { toast } from "sonner";
-import type { AgentInfo } from "@armadra/shared";
+import type { AgentInfo, LegacyIntegrationFinding } from "@armadra/shared";
 
 import { runtimeApi } from "../../../api/client";
 import { useAgentsQuery } from "../../../app/use-agents";
@@ -10,6 +10,8 @@ import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
 import { Badge } from "@/ui/badge";
 import { Button } from "@/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
+import { ScrollArea } from "@/ui/scroll-area";
 import type { IntegrationRepairReport } from "./integration/types";
 import {
   runIntegrationInstall,
@@ -122,57 +124,50 @@ function AgentIntegrationRow({ agent }: { agent: AgentInfo }) {
     );
   }
   const installed = integration.hook.installed;
-  // 每条残留是磁盘上的一处：配置里的一个条目或一个目录，连同它的样子。
-  const legacy = integration.legacy.found.map(
-    (finding) => `${finding.path} (${finding.detail})`,
+  const legacy = integration.legacy.found;
+
+  // 状态徽标放在名字下面、动作按钮留在右边：七样东西挤在一行时右侧不收缩，
+  // 左列被压成一条窄缝，名字被推出视口。
+  const label = (
+    <span className="flex min-w-0 flex-col gap-1.5">
+      <span>{agent.label}</span>
+      <span className="flex flex-wrap items-center gap-1.5">
+        <Badge variant="outline">
+          {t(`integration.mode.${integration.mode}`)}
+        </Badge>
+
+        {/* Hook 与技能各一个状态徽标：它们一起装，但可以各自掉，而「掉了哪
+            一半」正是用户要知道的事。 */}
+        <Badge
+          variant={installed ? "secondary" : "outline"}
+          title={integration.hook.path ?? undefined}
+        >
+          {hooked && !agent.installed
+            ? t("integration.agentMissing")
+            : installed
+              ? t("integration.hook.revision", {
+                  value: integration.hook.revision ?? integration.revision,
+                })
+              : t("integration.hook.missing")}
+        </Badge>
+        <Badge
+          variant={integration.skill.installed ? "secondary" : "outline"}
+          title={integration.skill.path ?? undefined}
+        >
+          {integration.skill.installed
+            ? t("integration.skill.revision", {
+                value: integration.skill.revision ?? integration.revision,
+              })
+            : t("integration.skill.missing")}
+        </Badge>
+
+        {legacy.length > 0 && <LegacyBadge findings={legacy} />}
+      </span>
+    </span>
   );
 
   return (
-    <SettingsRow
-      label={agent.label}
-      {...(legacy.length > 0
-        ? {
-            footnote: t("integration.legacy.list", {
-              items: legacy.join(" · "),
-            }),
-          }
-        : {})}
-    >
-      <Badge variant="outline">
-        {t(`integration.mode.${integration.mode}`)}
-      </Badge>
-
-      {/* Hook 与技能各一个状态徽标：它们一起装，但可以各自掉，而「掉了哪
-          一半」正是用户要知道的事。 */}
-      <Badge
-        variant={installed ? "secondary" : "outline"}
-        title={integration.hook.path ?? undefined}
-      >
-        {hooked && !agent.installed
-          ? t("integration.agentMissing")
-          : installed
-            ? t("integration.hook.revision", {
-                value: integration.hook.revision ?? integration.revision,
-              })
-            : t("integration.hook.missing")}
-      </Badge>
-      <Badge
-        variant={integration.skill.installed ? "secondary" : "outline"}
-        title={integration.skill.path ?? undefined}
-      >
-        {integration.skill.installed
-          ? t("integration.skill.revision", {
-              value: integration.skill.revision ?? integration.revision,
-            })
-          : t("integration.skill.missing")}
-      </Badge>
-
-      {legacy.length > 0 && (
-        <Badge variant="destructive">
-          {t("integration.legacy.count", { count: legacy.length })}
-        </Badge>
-      )}
-
+    <SettingsRow label={label}>
       {/* 扩展型的 CLI 没有「文件」可装：它的扩展随 CLI 自己的安装走，
           这里给一个禁用的按钮只会让人以为是坏了，所以干脆不给。 */}
       {integration.mode !== "extension" && (
@@ -209,4 +204,95 @@ function AgentIntegrationRow({ agent }: { agent: AgentInfo }) {
       )}
     </SettingsRow>
   );
+}
+
+/**
+ * 「旧残留 N」徽标，点开是按文件分组的清单。
+ *
+ * 残留不放进行脚注：一条就是一整段 shell 命令，同一条命令在每个 Hook 事件下
+ * 各挂一次，十几条拼成一段会把整行撑到几屏高。这里同一文件里相同的条目只
+ * 列一次并标出次数，命令超过两行就截断，完整内容在悬停提示里。
+ */
+function LegacyBadge({ findings }: { findings: LegacyIntegrationFinding[] }) {
+  const t = useT();
+  const groups = groupFindings(findings);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Badge asChild variant="destructive">
+          <button type="button">
+            {t("integration.legacy.count", { count: findings.length })}
+          </button>
+        </Badge>
+      </PopoverTrigger>
+      {/* 设置对话框在 --z-dialog 上，弹层与它同层、后挂载，才不会被盖住。 */}
+      <PopoverContent
+        align="start"
+        className="z-[var(--z-dialog)] w-[28rem] max-w-[90vw] p-0"
+      >
+        <ScrollArea className="max-h-80">
+          <div className="flex flex-col gap-3 p-3">
+            {groups.map((group) => (
+              <section key={group.path} className="flex min-w-0 flex-col gap-1">
+                <span
+                  className="truncate text-xs font-medium text-foreground"
+                  title={group.path}
+                >
+                  {shortenHome(group.path)}
+                </span>
+                <ul className="flex flex-col gap-1">
+                  {group.entries.map((entry) => (
+                    <li
+                      key={entry.detail}
+                      className="flex min-w-0 items-start gap-2"
+                    >
+                      <code
+                        className="line-clamp-2 min-w-0 flex-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] leading-4 break-all text-muted-foreground"
+                        title={entry.detail}
+                      >
+                        {shortenHome(entry.detail)}
+                      </code>
+                      {entry.count > 1 && (
+                        <span className="shrink-0 text-[11px] leading-5 text-muted-foreground tabular-nums">
+                          ×{entry.count}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+interface FindingGroup {
+  path: string;
+  entries: { detail: string; count: number }[];
+}
+
+/** 按文件分组、同一文件里相同的条目合并计数；顺序保持 core 给的顺序。 */
+function groupFindings(
+  findings: readonly LegacyIntegrationFinding[],
+): FindingGroup[] {
+  const groups = new Map<string, Map<string, number>>();
+  for (const { path, detail } of findings) {
+    const entries = groups.get(path) ?? new Map<string, number>();
+    entries.set(detail, (entries.get(detail) ?? 0) + 1);
+    groups.set(path, entries);
+  }
+  return [...groups].map(([path, entries]) => ({
+    path,
+    entries: [...entries].map(([detail, count]) => ({ detail, count })),
+  }));
+}
+
+/** 用户主目录写成 `~`：绝对路径的前缀每条都一样，只占宽度。 */
+function shortenHome(text: string): string {
+  return text
+    .replace(/(^|[\s'"(=])\/(?:Users|home)\/[^/\s'"]+(?=\/)/g, "$1~")
+    .replace(/(^|[\s'"(=])[A-Za-z]:\\Users\\[^\\\s'"]+(?=\\)/g, "$1~");
 }
