@@ -616,8 +616,22 @@ const SET_PROJECT_FIELD_MUTATION =
 const PROJECT_STATUSES_QUERY =
   "query($project:ID!,$after:String){node(id:$project){... on ProjectV2{items(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{content{... on Issue{number}} fieldValues(first:50){nodes{... on ProjectV2ItemFieldSingleSelectValue{optionId field{... on ProjectV2FieldCommon{id}}}}}}}}}}";
 
-/** 一次列举的上界。比这更大的 project 只被读到一部分。 */
-const PROJECT_STATUS_PAGES = 5;
+/**
+ * 一次列举最多翻多少页（每页 100 条）。按 cursor 一直翻到 `hasNextPage` 为假；
+ * 这个上界只是保险——一个五千条以上的 project，或者一个翻页永远不结束的响应，
+ * 不能让一次列 Issue 变成几十秒的 GraphQL 往返。碰到上界时如实标成「部分」。
+ */
+export const PROJECT_STATUS_MAX_PAGES = 50;
+
+/** 一个 project 上 Issue 编号 → Status 选项，以及这张表是不是没读全。 */
+export interface ProjectStatuses {
+  readonly statuses: Map<number, string>;
+  /**
+   * 翻到上界还有下一页。没读到的 Issue 在表里是缺席的，和「没设 Status」
+   * 看起来一样，所以调用方必须知道这一点，不能把它们当成未分组。
+   */
+  readonly partial: boolean;
+}
 
 /**
  * 一个 Issue 在一个 project 上的成员关系，以及它的 Status 字段现在持有的选项。
@@ -691,11 +705,13 @@ export async function projectStatuses(
   client: GithubClient,
   projectId: string,
   fieldId: string,
-): Promise<Map<number, string>> {
+  maxPages: number = PROJECT_STATUS_MAX_PAGES,
+): Promise<ProjectStatuses> {
   validNode(projectId, fieldId);
   const result = new Map<number, string>();
   let cursor = "";
-  for (let page = 0; page < PROJECT_STATUS_PAGES; page += 1) {
+  const seen = new Set<string>();
+  for (let page = 0; page < maxPages; page += 1) {
     const variables: Record<string, unknown> = { project: projectId };
     if (cursor !== "") variables.after = cursor;
     const data = (await client.graphql(PROJECT_STATUSES_QUERY, variables)) as {
@@ -719,12 +735,19 @@ export async function projectStatuses(
         }
       }
     }
-    if (items?.pageInfo?.hasNextPage !== true) break;
+    if (items?.pageInfo?.hasNextPage !== true) {
+      return { statuses: result, partial: false };
+    }
     const next = items.pageInfo.endCursor ?? "";
-    if (next === "") break;
+    // 说还有下一页却不给 cursor，或者给回一个翻过的 cursor：再翻只会原地
+    // 打转。停下来，并承认没读全。
+    if (next === "" || seen.has(next)) {
+      return { statuses: result, partial: true };
+    }
+    seen.add(next);
     cursor = next;
   }
-  return result;
+  return { statuses: result, partial: true };
 }
 
 export async function setProjectField(

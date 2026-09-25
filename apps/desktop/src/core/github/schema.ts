@@ -258,6 +258,7 @@ export const ListGithubIssuesResponseSchema =
     fromCache: bool,
     observedAtUnixMs: i64,
     pollIntervalMs: i64,
+    statusGroupsPartial: bool,
   });
 
 export const GetGithubIssueRequestSchema = describe<GetGithubIssueRequest>(

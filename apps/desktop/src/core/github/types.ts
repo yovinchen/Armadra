@@ -300,6 +300,11 @@ export interface ListGithubIssuesResponse {
   fromCache: boolean;
   observedAtUnixMs: bigint;
   pollIntervalMs: bigint;
+  /**
+   * 分组来自 project 字段，而那个 project 大到翻页上界之内没读完：没读到的
+   * Issue 落在「未分组」里，但它们其实可能有 Status。
+   */
+  statusGroupsPartial: boolean;
 }
 
 export interface GetGithubIssueRequest {

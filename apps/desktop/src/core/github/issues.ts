@@ -108,13 +108,13 @@ async function annotate(
   client: GithubClient,
   mapping: GithubStatusMapping,
   issues: readonly GithubIssue[],
-): Promise<void> {
+): Promise<{ readonly partial: boolean }> {
   applyLabelGroups(mapping, issues);
   if (
     mapping.source !== GithubStatusSource.PROJECT_FIELD ||
     issues.length === 0
   ) {
-    return;
+    return { partial: false };
   }
   try {
     const options = await api.projectStatuses(
@@ -122,7 +122,8 @@ async function annotate(
       mapping.projectId,
       mapping.projectFieldId,
     );
-    applyProjectGroups(mapping, issues, options);
+    applyProjectGroups(mapping, issues, options.statuses);
+    return { partial: options.partial };
   } catch (error) {
     throw service.translate(error);
   }
@@ -151,7 +152,7 @@ export async function listIssues(
     throw service.translate(error);
   }
   const mapping = service.storedMapping(caller.workspaceId, ref);
-  await annotate(service, client, mapping, result.issues);
+  const annotated = await annotate(service, client, mapping, result.issues);
   return create(ListGithubIssuesResponseSchema, {
     issues: result.issues,
     nextCursor: encodeCursor(result.response.nextPage),
@@ -160,6 +161,7 @@ export async function listIssues(
     fromCache: result.response.fromCache,
     observedAtUnixMs: BigInt(now),
     pollIntervalMs: BigInt(POLL_INTERVAL_MS),
+    statusGroupsPartial: annotated.partial,
   });
 }
 

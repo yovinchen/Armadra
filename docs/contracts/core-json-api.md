@@ -152,6 +152,8 @@ JSON 本身不定义键的顺序，所以一份「原样 stringify」的文本�
 - **列表不带正文。** `list-issues` / `list-pulls` 的每条记录 `body` 都是 `""`：一百条正文装不进一次合理的响应，而一个被截断的正文比一个缺席的更糟——详情请求会把整份拿回来。
 - **令牌从不外传。** `configure-credential` 的 `token` 是这一面上唯一会外发的值，而且只是入站；`get-credential` 答的是一份状态（哪种来源、能不能用、账号名），永远不是一次回声。
 
+`list-issues` 的分组来自 Projects v2 字段时，core 按 cursor 把 project 的条目翻完，最多 50 页（5000 条）；翻到上界还有下一页，响应的 `statusGroupsPartial` 为 `true`——没读到的 Issue 落在「未分组」，但它们其实可能有 Status。
+
 ### 5.3 枚举名
 
 页面按名字分支，所以这些字符串是契约：

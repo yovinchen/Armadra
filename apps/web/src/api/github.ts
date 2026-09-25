@@ -494,6 +494,7 @@ export const listGithubIssuesResponseSchema = z.object({
   fromCache: flag,
   observedAtUnixMs: bigint,
   pollIntervalMs: bigint,
+  statusGroupsPartial: flag,
 });
 export type ListGithubIssuesResponse = z.infer<
   typeof listGithubIssuesResponseSchema
