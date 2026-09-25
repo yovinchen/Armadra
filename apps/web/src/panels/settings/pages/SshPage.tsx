@@ -6,6 +6,7 @@ import { sshHostSchema, type SshHost } from "@armadra/shared";
 
 import { runtimeApi } from "../../../api/client";
 import { useT } from "../../../app/preferences-store";
+import { useOpenWorkspace } from "../../../app/workspace-actions";
 import { SettingsGroup } from "../SettingsGroup";
 import { SettingsRow } from "../SettingsRow";
 import { sshHostTarget } from "../ssh-hosts";
@@ -165,6 +166,7 @@ export function SshPage() {
 function OpenRemoteProject({ host }: { host: SshHost }) {
   const t = useT();
   const client = useQueryClient();
+  const openWorkspace = useOpenWorkspace();
   const [path, setPath] = React.useState("");
   const open = useMutation({
     mutationFn: (rootPath: string) =>
@@ -175,6 +177,8 @@ function OpenRemoteProject({ host }: { host: SshHost }) {
       }),
     onSuccess: (workspace) => {
       setPath("");
+      // 根已在那台机器上证明过，直接切过去，而不是让人再去列表里找一遍。
+      openWorkspace(workspace);
       void client.invalidateQueries({ queryKey: ["workspaces"] });
       toast.success(t("ssh.remote.opened", { name: workspace.name }));
     },
