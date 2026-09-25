@@ -127,7 +127,27 @@ export function useBoardSync() {
     });
   }, [onCanvasChanged, workspaceId]);
 
-  useBoardPresence(workspaceId, boardId, onCanvasChanged);
+  /**
+   * 丢了租约：按远端重载，而且**不靠文档查询的引用变没变**。远端这段时间
+   * 没人改过时，重取回来的那份与缓存逐字相同，React Query 的结构共享原样
+   * 还回旧引用，下面「同一份响应只合一次」的闸门会把它挡掉——本地那笔没落盘
+   * 的改动就这样一直留在屏幕上。所以这里自己取一份、直接合进去（此时
+   * `saveState` 已被置回 `saved`，合并以远端为准）。
+   */
+  const onLeaseLost = useCallback(() => {
+    if (!workspaceId || !boardId) return;
+    void queryClient
+      .fetchQuery({
+        queryKey: ["board", workspaceId, boardId],
+        queryFn: () => runtimeApi.loadBoard(workspaceId, boardId),
+        staleTime: 0,
+      })
+      .then((remote) => useCanvasStore.getState().mergeRemoteDocument(remote))
+      .catch(() => undefined);
+    void queryClient.invalidateQueries({ queryKey: ["boards", workspaceId] });
+  }, [boardId, queryClient, workspaceId]);
+
+  useBoardPresence(workspaceId, boardId, onCanvasChanged, onLeaseLost);
 
   /* ------------------------ 启动：恢复上次的工作空间 ---------------------- */
   /**
@@ -282,6 +302,7 @@ function useBoardPresence(
   workspaceId: string | null,
   boardId: string | null,
   reload: () => void,
+  discard: () => void,
 ): void {
   useEffect(() => {
     if (!workspaceId || !boardId) return;
@@ -293,7 +314,8 @@ function useBoardPresence(
     const apply = (snapshot: Parameters<typeof applyPresence>[0]) => {
       if (stopped) return;
       const change = applyPresence(snapshot);
-      if (change.lost || change.gained) reload();
+      if (change.lost) discard();
+      else if (change.gained) reload();
     };
     const beat = () => {
       void runtimeApi
@@ -344,5 +366,5 @@ function useBoardPresence(
       window.removeEventListener("pagehide", leave);
       leave();
     };
-  }, [boardId, reload, workspaceId]);
+  }, [boardId, discard, reload, workspaceId]);
 }

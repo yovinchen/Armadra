@@ -256,6 +256,48 @@ describe("useBoardSync", () => {
     expect(loadBoard.mock.calls.length).toBeGreaterThan(reads);
   });
 
+  /**
+   * 远端这段时间没变过：重取回来的文档与缓存里那份逐字相同，React Query 的
+   * 结构共享会原样还回旧引用。以前合并那道「同一份响应只合一次」的闸门就此
+   * 把它挡掉，本地那笔没落盘的改动留在屏幕上（实浏览器两设备探针里发现）。
+   */
+  it("被接管时丢掉本地未落盘的改动，即使远端没有变过", async () => {
+    renderHook(() => useBoardSync(), { wrapper });
+    await waitFor(() => expect(positionOf()).toBe(0));
+    await waitFor(() =>
+      expect(useCanvasStore.getState().presence?.lease).toBeTruthy(),
+    );
+    act(() => {
+      useCanvasStore.getState().updateNode(NODE, { position: { x: 55, y: 0 } });
+    });
+    expect(positionOf()).toBe(55);
+    const reads = loadBoard.mock.calls.length;
+    act(() => {
+      dispatchWorkspaceEvent({
+        type: "canvas.presence",
+        boardId: board.id,
+        clients: [
+          { clientId: presenceClientId(), deviceName: "", lastSeenAt: stamp },
+          {
+            clientId: "other-client-01",
+            deviceName: "iPad",
+            lastSeenAt: stamp,
+          },
+        ],
+        lease: {
+          clientId: "other-client-01",
+          deviceName: "iPad",
+          acquiredAt: later,
+        },
+      });
+    });
+    expect(isReadOnly(useCanvasStore.getState())).toBe(true);
+    await waitFor(() =>
+      expect(loadBoard.mock.calls.length).toBeGreaterThan(reads),
+    );
+    await waitFor(() => expect(positionOf()).toBe(0));
+  });
+
   it("卸载时离开这块画布", async () => {
     const { unmount } = renderHook(() => useBoardSync(), { wrapper });
     await waitFor(() => expect(presenceHeartbeat).toHaveBeenCalled());
