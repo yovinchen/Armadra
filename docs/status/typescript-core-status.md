@@ -1666,3 +1666,29 @@ shared 的 `agentDeliverySchema` 加 `targetState`（缺省空串）。投递队
 - `pnpm --filter @armadra/web test`：2651 条里 3 条在满载时超时（`AutomationDrawer` 两条、`CommitPage` 一条），单独重跑 27/27 通过；另 1 条是基线上已有的失败，与本节无关：`i18n.test.ts` 报 `integration.legacy.list` 没有引用（来自 b1811c85）。
 - `pnpm --filter @armadra/desktop test`：`main.test.ts` 的 health 文档断言补上 `capabilities` 后全绿（vitest 2850 通过，live 1/1，脚本 38/38）。
 - `pnpm --filter @armadra/server test` 通过；`pnpm check`（含 `format:check`、两边 `typecheck`、`repo:check`）通过。
+
+## 34. 远端执行主机：Worker 服务端与按执行主机路由（2026-09-26）
+
+H02 的控制端（帧、握手、重连）早就在，远端那一侧从没写过：`core` 没有 `worker` 子命令，建远端工作空间与切换执行主机两条路由校验完参数就抛 `unsupported`，文件与导入路由遇到 `executionHostId` 一律 501，Git 路由更糟——根本不看执行主机，直接在控制端磁盘上对一条远端路径跑 `git`。
+
+### 34.1 做了什么
+
+- **Worker 服务端**（`core/remote/server.ts`）：`armadra-core worker --stdio [--state-dir D] [--language-link]`，由 `main.ts` 在 `run()` 之前分流，不开数据库、不监听、不写端点文件。先主动发握手帧（`requestId = "hello"`，协议 2.0、服务契约 1、能力 `remote.execution.v1` / `remote.files.v1` / `remote.git.v1`），之后按 `action` 执行；发给别的会话的请求答 `instance_mismatch`，超过帧上限的答复答 413 `resource_exhausted`，不截断。`--language-link` 直接拒绝（退出码 3）。
+- **一张操作表两处用**（`core/remote/operations.ts`）：控制端对本机工作空间直接调，Worker 收到帧后查同一张表。文件（列表、读写、版本、条目、回收站、索引、搜索、下载）、导入、Git（status、diff、head、init、stage / unstage / resolve / revert / commit、hunks、repositories、log、refs、identity、branches、tags、remotes、worktrees、stashes、history、reflog、commit / commit-file、cherry-pick 与 rebase 预览、message source）和根登记（规范路径 + 指纹）。每项标明能否重放。
+- **唯一的缝**（`core/remote/execute.ts` 的 `executeOn`）：执行主机为空在本进程跑，否则经远端域发给 Worker；远端域没装配就是 501，绝不回退到本机磁盘。控制端 `RemoteWorker.request` 按合同处理传输失败：没写出去的在新连接上重发一次；写出去又丢了答复的，读重放一次、写报 `unknown_outcome` 不重发。
+- **路由接通**：`files/routes.ts` 全部、`git/routes.ts` 除操作队列外全部、`imports/routes.ts` 的上传与本机拖入（字节在控制端读，在执行主机上暂存 → 原子发布）。`POST /api/workspaces/remote` 与 `PATCH …/execution-host` 在目标主机上登记根之后才写库；切换按 `remote/switch.ts` 的既有规则判：终端（库里仍在运行的会话）与进行中的 Git 操作列为阻塞项，`stopBlockers` 经终端域自己的 `terminate` 路由结束终端，HEAD 与顶层目录不一致答 409 `root_mismatch`，旧根读不到时也只有 `force` 能越过；成功后释放两种监听、清仓库发现缓存、发 `workspace.updated`。
+- **远端文件监听**：控制端每 2 秒批量问一次版本（`core/remote/watch.ts`），变化发与本机相同的 `file.changed`，注册答 `mode: poll`，编辑器已有「轮询」徽标。
+- **界面**：设置 → SSH 里「在执行主机上打开」成功后直接切到新工作空间；切换执行主机的界面原样可用（接口形状本来就对）。
+
+### 34.2 没做 / 明确拒绝的
+
+- **语言服务**：远端工作空间的服务行与开会话一律 `unsupported_remote`（501），不再报暗示「重连能好」的 `link_lost`；共享包的 `LANGUAGE_UNSUPPORTED_REASONS` 与中英文案同步加了这个键。要做需要一条承载 JSON-RPC 流的第二连接。
+- **Git 操作队列、集成状态、工作树绑定、AI 提交信息生成**：远端答具名 501（列表答空数组），因为它们依赖控制端的操作归属表或要在两台机器上各跑一半。
+- **交接**：远端工作空间与 SSH 终端里的 Agent 都拒绝（501，说明原因）。交接材料是同步读工作空间文件与仓库采出来的，照原样会读控制端磁盘上同名路径里不相干的东西。
+- **大文件**：没有分块上传。远端导入合计上限 11 MiB（一帧 16 MiB 里放得下 base64），超过答 413；下载超过一帧同样 413。
+- **Worker 主动推事件**、协议兼容范围放宽、白板资产导入（`assets/routes.ts` 仍拒绝远端）不在这一轮。
+
+### 34.3 验证
+
+- `remote/execution.test.ts`：把 core 真入口用 vite 打成 CJS 包，本机子进程跑 `worker --stdio`，控制端经同一套帧与握手说话，不需要 sshd。覆盖握手与能力、按会话拒绝、读重放 / 写不重放（第一个子进程握手后在首个请求上断开）、远端文件路由全套、远端轮询监听、上传与拖入导入、Git 读写与提交、操作队列 501、建远端工作空间（不存在的根不落库）、切换的一致 / 不一致 / 强制 / 终端阻塞 / 迁移文件拒绝，以及没装配远端执行时不回退本机。
+- `pnpm --filter @armadra/desktop test`、`pnpm --filter @armadra/web test`（`i18n.test.ts` 里 `integration.legacy.list` 未引用是基线 b1811c85 带来的，与本节无关）、`pnpm --filter @armadra/web typecheck`、`pnpm --filter @armadra/server test`、`pnpm check`、`pnpm format:check`。

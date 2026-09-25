@@ -100,6 +100,14 @@ worktrees、stashes、tags、remotes、integration、hunks、commit / commit-fil
 全部经仓库队列（`GitRepositoryAction`），队列在 Host 接管 git 域之后搬到
 Host，Git 命令始终在执行主机上跑。
 
+执行位置只有一条缝：`core/remote/execute.ts` 的 `executeOn`。文件、导入与
+Git 的路由做完权限与参数解析后，按工作空间的 `executionHostId` 要么在本进程
+里查 `core/remote/operations.ts` 的操作表，要么把同一个操作名经 `ssh` 发给那
+台主机上的 Worker——Worker 就是同一份 core 包以 `worker --stdio` 启动，不开
+数据库、不监听端口，只读写 stdio 帧（`core/remote/server.ts`）。两边跑同一段
+代码，远端工作空间绝不回退到控制端的磁盘。远端文件监听是控制端按 2 秒轮询；
+语言服务、仓库操作队列与交接在远端工作空间上明确答 501。
+
 画布引擎是 React Flow 12（`@xyflow/react`，MIT），白板层自写。
 **`canvas-store` 是画布在内存里的唯一真相**，React Flow 只是受控视图：
 `nodes` / `edges` 由 `document.nodes / edges` 与白板文档投影出来
