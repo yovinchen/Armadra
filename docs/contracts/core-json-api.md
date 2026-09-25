@@ -211,7 +211,7 @@ R7 删掉 `/rpc/*` 之后，这三条用例与它们比对的那一半一起消�
 
 ## 8. 依赖编排：`/api/workspaces/{workspaceId}/dependencies`
 
-`canvas open-agent --after` 建的等待关系（设计 `design/agent-automation-design.md` §6）。等待与启动都归 core：条件满足时由 core 起终端、敲启动行、把第一条任务排进投递队列，页面开不开都一样。表在迁移 0027（`agent_dependency_launches` 一个下游一行，`agent_dependencies` 一条边一行）。权限与画布同一档（`canvas:read` / `canvas:write`）。
+`canvas open-agent --after` 与 `canvas team` 建的等待关系（设计 `design/agent-automation-design.md` §6）。等待与启动都归 core：条件满足时由 core 起终端、敲启动行、把第一条任务排进投递队列，页面开不开都一样。表在迁移 0027（`agent_dependency_launches` 一个下游一行，`agent_dependencies` 一条边一行）。权限与画布同一档（`canvas:read` / `canvas:write`）。
 
 | 方法与路径                             | 说明                                                                                               |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------- |

@@ -171,8 +171,8 @@ core 侧。同一份目录供计费（内置表 → 目录 → `model-pricing.js
 Agent 之间的协作走 core 的两个动词表面：
 
 - `POST /context-link/{verb}`：读取被链接节点的转录、摘要或终端画面。
-- `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `sticky` /
-  `link` / `rename` / `color` / `post` / `inbox` / `ack` / `handoff-read` / `interrupt` / `close`；`send` / `reply` / `notify` 已移除，消息只进信箱由接收方自己读。
+- `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `team` / `sticky` /
+  `link` / `rename` / `color` / `post` / `inbox` / `ack` / `handoff-read` / `interrupt` / `close` / `send` / `outbox` / `cancel`。`team` 一次建一组 Agent 节点，成员之间的先后写进依赖表（`core/dependencies`）。
 
 所有 Agent 终端都能调用 `armadra-hook canvas help` 读取短帮助。默认协作采用
 `post` / `inbox` / `ack` 拉取消息箱，不自动注入终端输入或追加启动提示。显式安装

@@ -90,6 +90,11 @@ CANVAS:
                                       open an agent
                                       node, link it, and give it a first task
                                       once it reports idle
+  team --member "AGENT[@MODEL]|TITLE|TASK"... [--chain]
+       [--gather "AGENT|TITLE|TASK"] [--after ID]
+                                      open up to 6 agents at once; --chain
+                                      makes each wait for the previous one,
+                                      --gather adds one that waits for all
   rename --node ID --handle NAME       set this node's name on the board
   link --from ID --to ID [--role peer|supervises] [--name-from A --name-to B]
                                       link two nodes; supervises means --from

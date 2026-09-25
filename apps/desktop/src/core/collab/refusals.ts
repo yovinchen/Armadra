@@ -168,6 +168,19 @@ export class Args {
     return undefined;
   }
 
+  /**
+   * A repeatable flag whose values may themselves contain commas — a task
+   * text, say — so each occurrence is kept whole.
+   */
+  all(name: string): string[] {
+    const value = this.source[name];
+    const values = Array.isArray(value) ? value : [value];
+    return values
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry !== "");
+  }
+
   /** A repeatable flag, also accepting one comma-separated value. */
   list(name: string): string[] {
     const out: string[] = [];

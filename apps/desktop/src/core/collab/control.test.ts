@@ -62,10 +62,10 @@ afterEach(() => {
 });
 
 describe("the dispatcher", () => {
-  it("publishes exactly the sixteen verbs plus help, and derives help from them", async () => {
+  it("publishes exactly the seventeen verbs plus help, and derives help from them", async () => {
     const dispatcher = controlDispatcher();
     expect(dispatcher?.verbs).toEqual([...VERBS]);
-    expect(VERBS).toHaveLength(17);
+    expect(VERBS).toHaveLength(18);
     const body = ok(await run(me, "help"));
     expect(body.result).toMatchObject({ protocol: "armadra.mailbox.v1" });
     // Derived, not restated: a verb added without a help line would be
@@ -322,6 +322,142 @@ describe("the verbs that add a node", () => {
       await run(me, "sticky", { content: "x".repeat(20_001) }),
     );
     expect(refused.status).toBe(400);
+  });
+});
+
+describe("team", () => {
+  function board() {
+    return loadBoard(fixture.database, fixture.workspaceId, fixture.boardId);
+  }
+  function queued(nodeId: string): string[] {
+    return (
+      fixture.database
+        .prepare(
+          "SELECT body FROM agent_send_queue WHERE target_node_id = ? AND origin = 'first-task'",
+        )
+        .all(nodeId) as { body: string }[]
+    ).map((row) => row.body);
+  }
+
+  it("starts a parallel team at once and has the gatherer wait for everyone", async () => {
+    const body = ok(
+      await run(me, "team", {
+        member: [
+          "codex@gpt-6|实现|实现登录, 带测试",
+          "claude|审阅|审阅 a|b 两处",
+        ],
+        gather: "claude|汇总|把结论写进便签",
+      }),
+    );
+    const rows = (body.result as { members: Record<string, unknown>[] })
+      .members;
+    expect(rows.map((row) => row.title)).toEqual(["实现", "审阅", "汇总"]);
+    const [build, review, summary] = rows.map((row) => row.id as string) as [
+      string,
+      string,
+      string,
+    ];
+
+    const document = board();
+    const nodeData = (id: string) =>
+      document.nodes.find((node) => node.id === id)?.data as {
+        agent: Record<string, unknown>;
+      };
+    expect(nodeData(build).agent).toMatchObject({
+      id: "codex",
+      model: "gpt-6",
+    });
+    // 逗号与竖线原样留在任务里：只切前两个 `|`。
+    expect(queued(build)).toEqual(["实现登录, 带测试"]);
+    expect(queued(review)).toEqual(["审阅 a|b 两处"]);
+    // 汇总节点的任务跟着启动记录走，现在不排。
+    expect(queued(summary)).toEqual([]);
+    expect(
+      dependenciesOf(fixture.database, summary)
+        .map((row) => row.upstreamNodeId)
+        .sort(),
+    ).toEqual([build, review].sort());
+    expect(dependenciesOf(fixture.database, build)).toEqual([]);
+
+    // 调用者是每个成员的主；汇总与每个成员对等相连。
+    const edge = (source: string, target: string) =>
+      document.edges.find(
+        (entry) => entry.source === source && entry.target === target,
+      );
+    for (const id of [build, review, summary]) {
+      expect(edge(me, id)?.role).toBe("supervises");
+    }
+    expect(edge(summary, build)?.role).toBe("peer");
+    expect(edge(summary, review)?.role).toBe("peer");
+    expect(
+      getContextLinks(fixture.database, summary).links.map((link) => link.id),
+    ).toEqual(expect.arrayContaining([me, build, review]));
+
+    // 一列排开，不叠在一起。
+    const positions = [build, review, summary].map(
+      (id) => document.nodes.find((node) => node.id === id)?.position,
+    );
+    expect(
+      new Set(positions.map((point) => `${point?.x},${point?.y}`)).size,
+    ).toBe(3);
+  });
+
+  it("chains members so each waits for the one before it", async () => {
+    const upstream = fixture.agentNode("Plan");
+    const body = ok(
+      await run(me, "team", {
+        member: ["claude|一|a", "codex|二|b", "claude|三"],
+        chain: true,
+        after: upstream,
+        "after-turn": "next",
+      }),
+    );
+    const ids = (body.result as { members: { id: string }[] }).members.map(
+      (row) => row.id,
+    ) as [string, string, string];
+    expect(
+      dependenciesOf(fixture.database, ids[0]).map((row) => [
+        row.upstreamNodeId,
+        row.condition,
+      ]),
+    ).toEqual([[upstream, "next"]]);
+    expect(
+      dependenciesOf(fixture.database, ids[1]).map((row) => row.upstreamNodeId),
+    ).toEqual([ids[0]]);
+    expect(
+      dependenciesOf(fixture.database, ids[2]).map((row) => row.upstreamNodeId),
+    ).toEqual([ids[1]]);
+    // 都在等：没有一条任务现在就排上。
+    for (const id of ids) expect(queued(id)).toEqual([]);
+    const document = board();
+    expect(
+      document.edges.find(
+        (entry) => entry.source === ids[0] && entry.target === ids[1],
+      )?.role,
+    ).toBe("peer");
+  });
+
+  it("refuses before creating anything", async () => {
+    const before = board().nodes.length;
+    const plain = fixture.agentNode("Shell", null);
+    for (const args of [
+      {},
+      { member: "gemini|x" },
+      { member: Array.from({ length: 7 }, () => "claude") },
+      { member: "claude|x", after: plain },
+      { member: "claude@|x" },
+    ]) {
+      expect(refusal(await run(me, "team", args)).status).toBe(400);
+    }
+    const dry = ok(
+      await run(me, "team", {
+        member: ["claude|a", "codex|b"],
+        chain: true,
+        "dry-run": true,
+      }),
+    );
+    expect(dry.result).toMatchObject({ dryRun: true, chain: true });
+    expect(board().nodes).toHaveLength(before + 1);
   });
 });
 

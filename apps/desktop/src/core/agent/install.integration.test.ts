@@ -14,7 +14,7 @@ import { type RunningCore, run } from "../main";
  * this side of it — that the one-way gate applies migration 0016, that the
  * domain installs, that the runtime routes answer for real rather than 501,
  * and that the {@link controlDispatcher} the Hook server will call is
- * published and carries the fourteen verbs.
+ * published and carries every canvas verb.
  */
 
 let core: RunningCore;
@@ -94,7 +94,7 @@ describe("the assembled agent domain", () => {
   it("publishes the dispatcher the Hook surface will call", () => {
     const dispatcher = controlDispatcher();
     expect(dispatcher).toBeDefined();
-    expect(dispatcher?.verbs).toHaveLength(17);
+    expect(dispatcher?.verbs).toHaveLength(18);
     expect(dispatcher?.verbs).toContain("handoff-read");
     expect(dispatcher?.verbs).toContain("open-agent");
   });

@@ -7,7 +7,7 @@ import { cancel } from "./cancel";
 import { close } from "./close";
 import { color, link, rename } from "./edits";
 import { interrupt } from "./interrupt";
-import { list, openAgent, openTerminal, sticky } from "./nodes";
+import { list, openAgent, openTerminal, sticky, team } from "./nodes";
 import { outbox } from "./outbox";
 import { send } from "./send";
 import { type Outcome, outcomeBody, raw, result } from "./outcome";
@@ -19,7 +19,7 @@ export { NODE_PALETTE, PLACEMENT_GAP, PLACEMENT_STEP } from "./board";
 export type { Outcome } from "./outcome";
 
 /**
- * The thirteen canvas verbs, and the one function the Hook surface calls.
+ * The canvas verbs, and the one function the Hook surface calls.
  *
  * Ported from the pre-merge implementation. The split of
  * responsibilities with the Hook domain is deliberate and is the whole reason
@@ -55,6 +55,8 @@ export const VERBS = [
   "send",
   "outbox",
   "cancel",
+  // 批量组队（Agent 自动化设计 §6）：几次 `open-agent` 加上它们之间的依赖。
+  "team",
 ] as const;
 
 export type ControlVerb = (typeof VERBS)[number];
@@ -203,6 +205,8 @@ export async function run(
       return outbox(context, caller, args);
     case "cancel":
       return cancel(context, caller, args);
+    case "team":
+      return team(context, caller, args);
     default:
       throw Refusal.badRequest(`未知的画布动词 \`${verb}\`。`);
   }
