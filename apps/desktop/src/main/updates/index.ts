@@ -40,7 +40,6 @@ export function installUpdates(
 ): UpdatesAssembly {
   const deps: UpdatesDeps = {
     // 壳不再拉起任何独立的后台进程：core 就是全部，它由 `runtime.stop()` 停。
-    host: { launchConfig: () => null, stop: async () => {} },
     runtime: { stop: () => runtime.stop() },
     runtimeVersion: async () =>
       (await socketHealth(ownedRuntimeAddress()))?.version ?? null,

@@ -7,7 +7,7 @@
  * testing here is the part that only exists once the two are joined, and the
  * one rule that is Armadra's alone:
  *
- * **A Host that will not stop means nothing is installed.** Not "installed
+ * **A Runtime that will not stop means nothing is installed.** Not "installed
  * anyway", not "installed after a timeout" — the installer is never reached,
  * no pending record is written, and the update goes back to waiting with
  * `hostStopFailed` attached so the page can say why.
@@ -162,7 +162,6 @@ function verdict() {
 
 let directory: string;
 let stagedFile: string;
-let hostStops: () => Promise<void>;
 let runtimeStops: () => Promise<void>;
 let restarts: number;
 
@@ -176,13 +175,6 @@ async function subject(
   const { UpdatesController } = await import("./updater");
   return {
     controller: new UpdatesController({
-      host: {
-        launchConfig: () => ({
-          binary: join(directory, "armadra-host"),
-          dataDir: directory,
-        }),
-        stop: () => hostStops(),
-      },
       runtime: { stop: () => runtimeStops() },
       runtimeVersion: async () => "0.2.0",
       onBeforeRestart: () => {
@@ -207,17 +199,7 @@ beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "armadra-updater-"));
   stagedFile = join(directory, "Armadra-0.2.0-arm64-mac.zip");
   writeFileSync(stagedFile, PAYLOAD);
-  // The Host's launcher record says this shell started it, so it is ours to
-  // stop. The tests that need "not ours" rewrite it.
-  writeFileSync(
-    join(directory, "launcher.json"),
-    JSON.stringify({
-      launcher: "desktop",
-      executable: join(directory, "armadra-host"),
-    }),
-  );
   process.env.ARMADRA_DATA_DIR = directory;
-  process.env.ARMADRA_HOST_DATA_DIR = directory;
   // A development build only reaches a loopback release server when it was
   // explicitly asked to. Without both of these it reports `notConfigured`.
   process.env.ARMADRA_UPDATES_DEV = "1";
@@ -231,7 +213,6 @@ beforeEach(() => {
   cancellations.length = 0;
   sent.length = 0;
   restarts = 0;
-  hostStops = async () => undefined;
   runtimeStops = async () => undefined;
 
   vi.stubGlobal("fetch", async (url: URL | string) => {
@@ -246,7 +227,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   rmSync(directory, { recursive: true, force: true });
   delete process.env.ARMADRA_DATA_DIR;
-  delete process.env.ARMADRA_HOST_DATA_DIR;
   delete process.env.ARMADRA_UPDATES_DEV;
   delete process.env.ARMADRA_UPDATER_ENDPOINTS;
 });
@@ -331,13 +311,11 @@ it("a cancelled transfer keeps the offer and stops the bytes", async () => {
 });
 
 describe("stopping the background before an install (§2.3, R5)", () => {
-  it("a host that will not stop means nothing is installed", async () => {
+  it("a runtime that will not stop means nothing is installed", async () => {
     const controller = await staged();
-    hostStops = () => Promise.reject(new Error("Host shutdown timed out"));
+    runtimeStops = () => Promise.reject(new Error("Runtime did not confirm"));
 
-    const state = await controller.install();
-
-    expect(state).toEqual({
+    expect(await controller.install()).toEqual({
       state: "downloaded",
       offer: expect.objectContaining({ version: "0.2.0" }),
       phase: "ready",
@@ -349,40 +327,6 @@ describe("stopping the background before an install (§2.3, R5)", () => {
     expect(existsSync(join(directory, "updates", "pending-restart.json"))).toBe(
       false,
     );
-  });
-
-  it("a runtime that will not stop is the same answer", async () => {
-    const controller = await staged();
-    runtimeStops = () => Promise.reject(new Error("Runtime did not confirm"));
-
-    expect(await controller.install()).toMatchObject({
-      state: "downloaded",
-      phase: "ready",
-      problem: "hostStopFailed",
-    });
-    expect(updater.installs).toBe(0);
-    expect(existsSync(join(directory, "updates", "pending-restart.json"))).toBe(
-      false,
-    );
-  });
-
-  it("a host somebody else launched is never stopped, and the install runs", async () => {
-    writeFileSync(
-      join(directory, "launcher.json"),
-      JSON.stringify({ launcher: "service" }),
-    );
-    let asked = 0;
-    hostStops = async () => {
-      asked += 1;
-    };
-    const controller = await staged();
-
-    await controller.install();
-
-    // Its sessions belong to whoever installed it; this update does not end
-    // them, and it does not need to.
-    expect(asked).toBe(0);
-    expect(updater.installs).toBe(1);
   });
 
   it("a confirmed restart records what it expects before handing over", async () => {
@@ -432,10 +376,6 @@ describe("the restart report (§2.3, R6)", () => {
     const { controller } = await subject({
       runtimeVersion: async () => "0.1.0",
     });
-    writeFileSync(
-      join(directory, "launcher.json"),
-      JSON.stringify({ launcher: "desktop" }),
-    );
     const { writePending } = await import(
       "../../shell-core/updates/coordinate"
     );

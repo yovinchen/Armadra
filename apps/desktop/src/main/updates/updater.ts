@@ -61,18 +61,13 @@ import { updaterEnvironment } from "./environment";
  *      captured in a closure. A download can finish long after a
  *      close→dock-reopen, and a captured reference is a destroyed window.
  *      Sending through that reference can crash the updater.
- *   2. **Only what this shell started is stopped** before an install, and a
- *      Host that will not stop means the install never starts. That is
- *      `hostStopFailed`, which blocks installation in Armadra.
+ *   2. **Only what this shell started is stopped** before an install — the
+ *      in-process Runtime — and a Runtime that will not stop means the install
+ *      never starts. That is `hostStopFailed`, which blocks installation.
  */
 
 /** What the updater needs from the rest of the shell. */
 export interface UpdatesDeps {
-  /** Stops the Host this shell configured, and says who that Host is. */
-  readonly host: {
-    launchConfig(): { binary: string; dataDir?: string | undefined } | null;
-    stop(): Promise<void>;
-  };
   /** Stops the Runtime this shell owns. */
   readonly runtime: { stop(): Promise<void> };
   /** The Runtime's own version, for the restart report. `null` if unreachable. */
@@ -373,24 +368,14 @@ export class UpdatesController {
   }
 
   /**
-   * Stops the background this shell started, and only that (design §2.3).
-   * Returns the reason it could not, or `null` when everything is down.
+   * Stops the background this shell started (design §2.3): that is only the
+   * in-process Runtime now. Returns the reason it could not, or `null` when it
+   * is down.
    *
-   * A Host that reports another launcher keeps running: it belongs to whoever
-   * installed it, and its sessions are not this update's to end.
+   * 原因码仍叫 `hostStopFailed`：它是页面与文案共用的线上取值，含义是「后台停
+   * 不下来，所以不装」，不因独立 Host 进程拆掉而改名。
    */
   private async stopOwnedBackground(): Promise<Reason | null> {
-    const config = this.deps.host.launchConfig();
-    if (config !== null) {
-      const directory = coordinate.hostDataDir(config.dataDir);
-      if (coordinate.hostIsOurs(directory, config.binary)) {
-        try {
-          await this.deps.host.stop();
-        } catch {
-          return "hostStopFailed";
-        }
-      }
-    }
     try {
       await this.deps.runtime.stop();
     } catch {
@@ -409,13 +394,8 @@ export class UpdatesController {
     const directory = dataDir();
     const pending = coordinate.readPending(directory);
     if (pending === null) return null;
-    const config = this.deps.host.launchConfig();
     const outcome = coordinate.verifyRestart(pending, {
       shell: app.getVersion(),
-      host:
-        config === null
-          ? null
-          : await coordinate.probeHostVersion(config.binary, config.dataDir),
       runtime: await this.deps.runtimeVersion(),
     });
     if (outcome.outcome === "completed") coordinate.clearPending(directory);
