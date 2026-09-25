@@ -26,8 +26,12 @@ import type { EventBus } from "../bus";
 import { eventStream } from "../events";
 import type { SettingsStore } from "../settings/store";
 import {
+  browserProcesses,
   components,
+  shellComponents,
+  shellProcesses,
   type PlatformComponent,
+  type ShellProcessReport,
   type TrackedProcess,
 } from "./platform";
 import { memoryPressure, powerSource, swapUsage } from "./platform-probe";
@@ -157,6 +161,10 @@ export interface ResourceServiceOptions {
   readonly sampler?: Sampler;
   /** 语言域记下来的服务器进程。 */
   readonly languageProcesses?: () => readonly TrackedProcess[];
+  /** 测试注入；缺省读 headless 后端登记的来源（`platform.browserProcesses`）。 */
+  readonly browserProcesses?: () => readonly TrackedProcess[];
+  /** 测试注入；缺省读壳最近一次的报告（`platform.shellProcesses`）。 */
+  readonly shellProcesses?: () => readonly ShellProcessReport[];
   /**
    * 当下的电源状态，由租约簿回答。不给就只报策略与机制、租约恒空——单测与
    * 任何只要一次采样的调用方不必先装一个租约簿。
@@ -300,11 +308,19 @@ export class ResourceService {
         elapsedMs: refresh.elapsedMs,
         selfPid: process.pid,
         language: this.options.languageProcesses?.() ?? [],
-        // 浏览器节点的页面是桌面窗口的客人，所以它的渲染进程属于壳的进程树，
-        // 在那里被计入。永远是空而不是被删掉，因为「只有 pid 加启动时间才是身份」
-        // 那条规矩值得留着可寻址。
-        browsers: [],
-      }),
+        // 服务器壳上浏览器节点的页面在 core 自己起的 headless Chromium 里，
+        // 按 pid + 启动时间计入（按树算，渲染进程是它的子进程）。桌面壳上
+        // 这里是空的：那些页面是窗口的 guest，由壳报上来，在下面那一组里。
+        browsers: this.options.browserProcesses?.() ?? browserProcesses(),
+      }).concat(
+        shellComponents({
+          reports: this.options.shellProcesses?.() ?? shellProcesses(),
+          table: refresh.table,
+          previousTable: refresh.previousTable,
+          elapsedMs: refresh.elapsedMs,
+          selfPid: process.pid,
+        }),
+      ),
       orphans,
       power: this.powerState(),
       intervalMs: this.effectiveInterval(),

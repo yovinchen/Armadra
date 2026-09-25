@@ -84,6 +84,8 @@ export class HeadlessNode {
   readonly nodeId: string;
   private readonly options: HeadlessNodeOptions;
   private process: BrowserProcess | undefined;
+  /** 起浏览器那一刻；和 pid 一起交给资源域，pid 被重用时认得出来。 */
+  private launchedAt: number | null = null;
   private connection: CdpConnection | undefined;
   private readonly tabs = new Map<string, Tab>();
   private readonly bySession = new Map<string, Tab>();
@@ -105,6 +107,15 @@ export class HeadlessNode {
     return !this.gone && this.connection?.isOpen() === true;
   }
 
+  /** 这个节点的 Chromium 主进程，给资源面板按树计入；没在跑就没有。 */
+  trackedProcess():
+    | { pid: number; startTimeUnixMs: number | null }
+    | undefined {
+    const pid = this.process?.pid;
+    if (!this.isAlive() || pid === undefined || pid <= 0) return undefined;
+    return { pid, startTimeUnixMs: this.launchedAt };
+  }
+
   /** Starts the browser and its first tab. Idempotent. */
   async start(url: string): Promise<void> {
     if (this.isAlive()) return;
@@ -117,6 +128,7 @@ export class HeadlessNode {
       height: this.viewport.height,
     });
     this.process = child;
+    this.launchedAt = Date.now();
     this.gone = false;
     const connection = new CdpConnection(child.write, child.read);
     this.connection = connection;

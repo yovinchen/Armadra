@@ -152,6 +152,17 @@ export const platformComponentSchema = z.object({
     "sessionHost",
     /** A managed browser a browser node started (B01), measured as a tree. */
     "browserWorker",
+    /**
+     * The desktop shell's own processes, reported by the shell over the drive
+     * channel: the Electron main process, the UI renderer, the GPU process,
+     * other helpers, and the renderer of each browser node's `<webview>` guest.
+     * Each is measured on its own.
+     */
+    "shellMain",
+    "shellRenderer",
+    "shellGpu",
+    "shellUtility",
+    "browserGuest",
   ]),
   /**
    * Which machine the process is on. A language server for a remote workspace

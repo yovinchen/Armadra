@@ -8,6 +8,9 @@
  * Runtime 那一行只算它自己：它启动的会话是它的子进程，加进来就等于把用户的
  * Agent 在平台这边再数一遍。命令 Worker 反过来算整棵树，它跑的命令就是它存在
  * 的理由。哪一种，行里直接写出来，不让读者猜。
+ *
+ * 桌面壳自己的进程（主进程、界面渲染、GPU、浏览器节点的页面）由壳报上来，
+ * 每个进程一行、只算它自己；「它启动的会话在上面」那句只属于 Runtime。
  */
 import type { PlatformComponent } from "@armadra/shared";
 
@@ -45,7 +48,9 @@ export function ComponentList({
               <div className="truncate text-[11px] text-muted-foreground">
                 {component.tree
                   ? t("resources.component.tree")
-                  : t("resources.component.selfOnly")}
+                  : component.kind === "runtime"
+                    ? t("resources.component.selfOnly")
+                    : t("resources.component.single")}
                 {` · pid ${component.process.pid}`}
                 {component.location === "remote" &&
                   ` · ${t("resources.location.remote")}`}

@@ -47,7 +47,27 @@ export type ComponentKind =
   | "commandWorker"
   | "languageServer"
   | "sessionHost"
-  | "browserWorker";
+  | "browserWorker"
+  | ShellProcessKind;
+
+/**
+ * 桌面壳报上来的它自己的进程（`main/browser/metrics.ts`）：Electron 主进程、
+ * 界面渲染进程、GPU、其余辅助进程，以及浏览器节点的 `<webview>` guest。
+ */
+export type ShellProcessKind =
+  | "shellMain"
+  | "shellRenderer"
+  | "shellGpu"
+  | "shellUtility"
+  | "browserGuest";
+
+const SHELL_KINDS: readonly ShellProcessKind[] = [
+  "shellMain",
+  "shellRenderer",
+  "shellGpu",
+  "shellUtility",
+  "browserGuest",
+];
 
 /**
  * 一个 Armadra 启动过、并且还有记录的进程：一个语言服务器，或者一个受管浏览器。
@@ -271,4 +291,139 @@ export function remoteLanguageComponent(server: {
     children: [],
     unknownReason: "remote",
   };
+}
+
+/* ------------------------- 来自 core 之外的进程来源 ------------------------ */
+
+/**
+ * headless 浏览器后端登记的来源（`core/browser/headless`）。放一个模块级的槽
+ * 而不是让资源域去找浏览器域：两个域各自装配，谁先谁后不固定，这里只在采样
+ * 那一刻问一次。
+ */
+let browserSource: (() => readonly TrackedProcess[]) | undefined;
+
+export function setBrowserProcessSource(
+  source: (() => readonly TrackedProcess[]) | undefined,
+): void {
+  browserSource = source;
+}
+
+export function browserProcesses(): readonly TrackedProcess[] {
+  try {
+    return browserSource?.() ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** 壳报上来的一行，已经校验过形状。 */
+export interface ShellProcessReport {
+  readonly pid: number;
+  readonly kind: ShellProcessKind;
+  readonly startTimeUnixMs: number | null;
+  readonly memoryBytes: number | null;
+  readonly cpuPercent: number | null;
+}
+
+/**
+ * 壳每 5 秒报一次；超过这个时间没有新报告，就当壳已经不在（或者通道断了），
+ * 不再把旧数字当成现在的。
+ */
+export const SHELL_REPORT_TTL_MS = 30_000;
+
+let shellReport: { atMs: number; processes: ShellProcessReport[] } | undefined;
+
+/**
+ * 收下壳的一次报告。壳是另一个进程，这里按不可信的输入逐行校验：形状不对的
+ * 行丢掉，整份不是数组就当没报。
+ */
+export function reportShellProcesses(raw: unknown, atMs = Date.now()): void {
+  if (!Array.isArray(raw)) return;
+  const processes: ShellProcessReport[] = [];
+  for (const entry of raw.slice(0, 256)) {
+    const row = entry as Record<string, unknown> | null;
+    if (typeof row !== "object" || row === null) continue;
+    const pid = row.pid;
+    const kind = row.kind;
+    if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) continue;
+    if (!SHELL_KINDS.includes(kind as ShellProcessKind)) continue;
+    processes.push({
+      pid,
+      kind: kind as ShellProcessKind,
+      startTimeUnixMs: finiteOrNull(row.startTimeUnixMs),
+      memoryBytes: finiteOrNull(row.memoryBytes),
+      cpuPercent: finiteOrNull(row.cpuPercent),
+    });
+  }
+  shellReport = { atMs, processes };
+}
+
+export function shellProcesses(nowMs = Date.now()): ShellProcessReport[] {
+  if (shellReport === undefined) return [];
+  if (nowMs - shellReport.atMs > SHELL_REPORT_TTL_MS) return [];
+  return shellReport.processes;
+}
+
+/** 测试用。 */
+export function resetExternalProcesses(): void {
+  shellReport = undefined;
+  browserSource = undefined;
+}
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : null;
+}
+
+/**
+ * 壳的进程 → 面板上的行。
+ *
+ * 都按单个进程算（`tree: false`）：Electron 的每个进程各自一行，主进程的子进程
+ * 里还有 core 本身，按树算就把 core 和用户的会话又数一遍。
+ *
+ * 数字优先用本机进程表里那一行——和其余各行同一种量法；进程表里没有（或者
+ * pid 对不上启动时间）才用壳自己量的。
+ */
+export function shellComponents(options: {
+  readonly reports: readonly ShellProcessReport[];
+  readonly table: ReadonlyMap<number, ProcessRow>;
+  readonly previousTable: Map<number, ProcessRow> | undefined;
+  readonly elapsedMs: number;
+  readonly selfPid: number;
+}): PlatformComponent[] {
+  const order = new Map(SHELL_KINDS.map((kind, index) => [kind, index]));
+  return options.reports
+    .filter((report) => report.pid !== options.selfPid)
+    .map((report): PlatformComponent => {
+      const live = livePid(options.table, report);
+      const row = live === undefined ? undefined : options.table.get(live);
+      const measured =
+        row === undefined
+          ? undefined
+          : processSample(row, options.previousTable, options.elapsedMs);
+      const sample: ProcessSample = measured ?? {
+        pid: report.pid,
+        startTimeUnixMs: report.startTimeUnixMs,
+        name: report.kind,
+        parentPid: null,
+        memoryBytes: report.memoryBytes,
+        cpuPercent: report.cpuPercent,
+      };
+      return {
+        kind: report.kind,
+        location: "local",
+        process: sample,
+        tree: false,
+        childCount: null,
+        children: [],
+        unknownReason: sample.cpuPercent === null ? "warming-up" : null,
+      };
+    })
+    .sort(
+      (left, right) =>
+        (order.get(left.kind as ShellProcessKind) ?? 0) -
+          (order.get(right.kind as ShellProcessKind) ?? 0) ||
+        left.process.pid - right.process.pid,
+    );
 }

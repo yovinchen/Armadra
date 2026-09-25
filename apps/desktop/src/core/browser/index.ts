@@ -12,6 +12,10 @@ import { BROWSER_STREAM_PATH, attachStream, streamGuard } from "./stream";
 import { type BrowserContext, browserContext } from "./context";
 import { onShellEvent } from "./events";
 import { runBrowserVerb } from "./verbs";
+import { reportShellProcesses } from "../resources/platform";
+
+/** 与 `main/browser/metrics.ts` 的同名常量一致。 */
+const SHELL_METRICS_EVENT = "shellMetrics";
 
 /**
  * The browser domain's assembly point — authorization, the lease, the URL
@@ -142,6 +146,12 @@ export function install(context: CoreContext): BrowserContext {
   assembled = state;
   setBrowserVerbs(createBrowserVerbs(state));
   client?.connect((event) => {
+    // 壳自身的进程占用走同一条 drive 通道过来（`main/browser/metrics.ts`），
+    // 它不属于任何节点，交给资源域，不进浏览器会话的事件处理。
+    if (event.event === SHELL_METRICS_EVENT) {
+      reportShellProcesses(event.processes);
+      return;
+    }
     onShellEvent(state, event);
   });
 

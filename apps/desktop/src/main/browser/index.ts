@@ -1,4 +1,4 @@
-import { Menu, clipboard, type WebContents } from "electron";
+import { Menu, app, clipboard, webContents, type WebContents } from "electron";
 
 import type { DriveEvent } from "../../shell-core/browser/drive";
 import {
@@ -34,6 +34,11 @@ import {
   watchDownloads,
 } from "./transfers";
 import { openDialogs, runVerb } from "./verbs";
+import {
+  SHELL_METRICS_INTERVAL_MS,
+  classifyMetrics,
+  shellMetricsEvent,
+} from "./metrics";
 
 /**
  * The browser node's assembly (W3.3 / W3.4).
@@ -44,6 +49,7 @@ import { openDialogs, runVerb } from "./verbs";
  */
 
 let server: DriveServer | null = null;
+let metricsTimer: NodeJS.Timeout | null = null;
 
 export interface BrowserWiring {
   readonly driveAddress: string;
@@ -87,7 +93,25 @@ export async function installBrowser(
     publishEvent({ type: "event", event: "guestLost", nodeId, reason });
   });
 
+  // 壳自身的进程占用，定时报给 core 的资源域（`./metrics`）。core 没连上时
+  // 不报：发不到任何人手里。
+  metricsTimer = setInterval(() => {
+    if (!server?.connected()) return;
+    publishEvent(shellMetricsEvent(sampleShellMetrics()));
+  }, SHELL_METRICS_INTERVAL_MS);
+  metricsTimer.unref();
+
   return { driveAddress: server.address, driveToken: server.token };
+}
+
+function sampleShellMetrics() {
+  const guests = new Set<number>();
+  for (const contents of webContents.getAllWebContents()) {
+    if (contents.isDestroyed() || contents.getType() !== "webview") continue;
+    const pid = contents.getOSProcessId();
+    if (pid > 0) guests.add(pid);
+  }
+  return classifyMetrics(app.getAppMetrics(), guests);
 }
 
 export function publish(event: DriveEvent): void {
@@ -99,6 +123,8 @@ export function driveConnected(): boolean {
 }
 
 export function stopBrowser(): void {
+  if (metricsTimer) clearInterval(metricsTimer);
+  metricsTimer = null;
   server?.close();
   server = null;
   setPublisher(() => {});

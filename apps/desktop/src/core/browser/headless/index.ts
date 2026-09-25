@@ -9,6 +9,10 @@ import { interpret } from "../client";
 import { discoverBrowser, type BrowserDiscovery } from "./discover";
 import { HeadlessNode, type ViewerSocket } from "./node";
 import type { Launcher } from "./process";
+import {
+  setBrowserProcessSource,
+  type TrackedProcess,
+} from "../../resources/platform";
 
 /**
  * The browser backend of a shell with no window.
@@ -56,6 +60,8 @@ export class HeadlessBackend implements DriveBackend {
   connect(events: EventSink): void {
     this.events = events;
     this.stopped = false;
+    // 这些 Chromium 是 core 自己起的，资源面板的「平台组件」里按树算它们。
+    setBrowserProcessSource(() => this.processes());
     if (this.discovery.path === undefined) {
       this.options.log?.("no browser for the headless backend", {
         searched: this.discovery.searched.length,
@@ -124,8 +130,19 @@ export class HeadlessBackend implements DriveBackend {
     this.nodes.get(nodeId)?.revoke(reason);
   }
 
+  /** 正在跑的每个节点的浏览器主进程（pid + 启动时间）。 */
+  processes(): TrackedProcess[] {
+    const out: TrackedProcess[] = [];
+    for (const node of this.nodes.values()) {
+      const tracked = node.trackedProcess();
+      if (tracked !== undefined) out.push(tracked);
+    }
+    return out;
+  }
+
   close(): void {
     this.stopped = true;
+    setBrowserProcessSource(undefined);
     for (const node of this.nodes.values()) node.stop("the core is stopping");
     this.nodes.clear();
   }
