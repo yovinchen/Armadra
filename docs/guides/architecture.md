@@ -112,8 +112,12 @@ Git 的路由做完权限与参数解析后，按工作空间的 `executionHostI
 的平台 watcher 推变化，连接断开或 Worker 太旧时退回控制端 2 秒轮询；资源面板
 每拍对每台远端主机做一轮 `resources.read`（`core/resources/remote.ts`）。语言
 服务走同一台主机上的第二个 Worker（`worker --stdio --language-link`，
-`core/remote/language.ts`），语言服务器是它的子进程。交接在远端工作空间上仍
-明确答 501。
+`core/remote/language.ts`），语言服务器是它的子进程；长时间没有会话时控制端
+关掉这条连接（`core/remote/language-idle.ts`），下次按需重连。交接材料经 Worker
+在执行主机上采集（`handoff.capture`）。比一帧大的上传与下载分块传输、按 Worker
+已收的字节续传（`core/remote/transfer.ts`）。画布 SSH 终端里的 CLI 由 Worker
+同步过去的产物与垫片注入，Hook 经 Worker 的 unix socket 中继回控制端
+（`core/remote/integration.ts`，见[远端画布注入](../design/remote-canvas-injection.md)）。
 
 画布引擎是 React Flow 12（`@xyflow/react`，MIT），白板层自写。
 **`canvas-store` 是画布在内存里的唯一真相**，React Flow 只是受控视图：

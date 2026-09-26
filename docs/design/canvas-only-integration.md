@@ -33,6 +33,8 @@
 | 节能唤醒                        | `terminal/hibernator.ts::resumeLine` → `canvasLaunchLine`（带 resume）        | `Hibernator.environment` → `ownedEnvironment` |
 | 计划任务冷启动                  | `schedule/cold-start.ts::launchLine` → `canvasLaunchLine`（冻结 argv + 注入） | 冷启动器 → `ownedEnvironment`                 |
 
+SSH 节点的启动行不带注入的词，也不带本机解析到的程序路径：那些路径都在控制端，注入由执行主机上的垫片补上，见[远端画布注入](./remote-canvas-injection.md)。
+
 冷启动此前漏带 `launchArgs`（Claude 缺 `--settings`）；现在冻结的计划仍只存 agent id 与 argv，注入的路径在执行时由 core 现取，不进计划。
 
 `core/agent/canvas-launch.test.ts` 的结构性用例守住出口：core 里调用 `planLaunch(` 的只有 `canvas-launch.ts`，调用 `canvasInjection(` 的只有它与集成状态；`launchCommand(` 只剩 `open-agent` 回报里显示用；页面里调用 `assembleLaunchCommand(` / `assembleLaunchArgv(` 的只有 `web/agent/launch.ts`，且它读 `launchArgs`。新加一条启动路径而绕过出口，这些用例会先红。

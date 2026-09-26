@@ -2366,3 +2366,50 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm check`、`pnpm format:check` 通过。
 
 没做：core 重启后创建者生效只在单测（真库、重建路由门）与路由门层面验证，探针没有真的重启服务器壳再写终端；成员自己改名、停用自己（§42.2 的遗留，不在这次范围）。
+
+## 55. 远端执行主机补齐：SSH 终端的画布注入、远端交接、分块传输、远端语言服务器计量与语言连接空闲关闭（2026-09-26）
+
+§34 / §44 / §51 之后远端执行主机还剩五块：SSH 终端里的 Agent 拿不到画布注入（路径都在控制端，远端 shell 里也没有节点身份）；远端工作空间的交接被拒；远端导入合计超过 11 MiB 答 413、白板资产拒绝远端；资源面板没有远端语言服务器；语言连接没有空闲关闭。设计见 [远端画布注入](../design/remote-canvas-injection.md)。
+
+### 55.1 SSH 终端里的画布注入
+
+- **产物同步**（`hook/install/remote.ts`、`remote/integration-worker.ts`）：控制端按执行主机上的根（`<Worker 状态目录>/integration/<版本>/`，状态目录缺省 `~/.armadra-worker`）用同一套 `artifactFiles` 生成六个 CLI 的产物（`inject.ts` 的布局与文件生成加了路径拼接与平台参数，远端一律 `path.posix`）。`integration.sync` 先只报路径与 SHA-256，Worker 答缺了或不一样的，控制端再只发这些；相同的文件不重写，落在注入目录之外的路径拒绝。同一台主机指纹没变不再同步，断线后重新确认。Codex 的信任记录在执行主机上写（那台机器有 `~/.codex` 才写，`ARMADRA_NO_GLOBAL_WRITES=1` 时不写）。
+- **Hook 客户端**：`armadra-hook.js` 本身同步过去，`bin/armadra-hook` 用 Worker 自己那个 node 跑它。
+- **垫片**：每个 CLI 一个同名 `shims/<cli>`，把自己从 `PATH` 摘掉、设好注入要的环境、`exec <cli> "$@" <注入的 argv>`。启动行因此不带注入的词，也不带本机解析到的程序路径：`agent/canvas-launch.ts` 加 `ssh` 分支（依赖编排与节能唤醒传进来），页面 `web/agent/launch.ts::buildAgentLaunch` 加 `remote` 参数（`use-launch.ts` 按 `nodeData.ssh` 传）。此前页面给 SSH 节点敲的是本机的 `/opt/homebrew/bin/claude …`，在真的执行主机上起不来。
+- **远端 shell 的环境**：画布 Agent 的 SSH 终端改成 `ssh -t host 'env ARMADRA_NODE_ID=… ARMADRA_SHIMS=… /bin/sh -c …'`，由 `/bin/sh` 把垫片目录放到 `PATH` 最前面再 `exec` 用户的登录 shell（`terminal/ssh/argv.ts::remoteShellCommand`，`terminal/ssh/backend.ts::decorate` 在新建与回收时都调）。转过去的是 `ARMADRA_*` 的身份、会话代次与权限等待，端点文件换成远端的，另加 `ARMADRA_HOOK_TIMEOUT_MS=4000`；含 `'`、`\`、`!`、控制字符的值不转（只可能是节点名）。准备最多等 30 秒，任何一步失败只让这个终端不带注入。
+- **Hook 回传：Worker 中继**。选了「Worker 在远端开 unix socket 当 Hook 端点」：socket 随控制连接的 Worker 会话生死，0600；客户端的 HTTP 请求整个推给控制端（`hook.request`），控制端原样发给本机 Hook 服务、只把应用令牌换成真的，再用 `hook.reply` 送回。执行主机上的端点文件里令牌是占位值，应用令牌不离开控制端；节点令牌照本机规矩按节点同步一份（0600）。控制连接每次握手成功重开中继，这台主机开过画布 SSH 终端时断线后控制端隔几秒自己拉起连接。没选 `ssh -R` 转发（要 sshd 开 `AllowStreamLocalForwarding`、每个终端一条、应用令牌要写到远端）与远端起完整 core。
+- 新能力 `remote.integration.v1`；Worker 太旧时远端不注入，CLI 照常启动。
+
+### 55.2 远端交接
+
+- `handoff/capture.ts`：文件引用指纹、仓库指纹与转录尾巴在「文件所在的机器」上读。本机工作空间直接调；远端经 Worker 的 `handoff.capture`（能力 `remote.handoff.v1`）在执行主机上调同一个函数。转录跟着 Agent 走：SSH 终端里的 Agent 的在执行主机上读，本机终端的在本机读。
+- `prepare` 改成异步，去掉远端工作空间的 501；SSH 终端里的 Agent 只要终端的主机就是工作空间的执行主机就可交接（此前一律 501），别的主机仍拒绝。材料里的 `executionHost` 写 `execution-host:<主机 id>`（共享包的 schema 从字面量 `local-runtime` 放宽成字符串）。
+
+### 55.3 分块传输
+
+- 帧不变（一帧一个完整 JSON，上限 16 MiB），分块是帧之上的一组动作（`remote/transfer-worker.ts`，能力 `remote.transfer.v1`）：`transfer.begin`（控制端自己取 id，重发就是同一个传输）、`transfer.chunk`（只接在已收的末尾或覆盖已收的一段，答已收多少）、`transfer.status`（续传）、`transfer.discard`。暂存在 `<状态目录>/transfers/`，不随会话收掉；一天没人取的在下一次 begin 时清掉。消费方取字节时核对长度与哈希。
+- 控制端 `remote/transfer.ts`：4 MiB 一块；某一块因连接失败时问 Worker 收了多少、从那里接着发（最多三次）。下载 `files.downloadChunk` 每块带文件当前的长度与修改时间，中途变了答 409。
+- 导入（`imports/routes.ts::writeRemote`）：上限与本机相同（256 个文件、64 MiB）；1 MiB 以内的小文件随发布那一帧走（合计 8 MiB 以内），其余先分块传、帧里只写传输 id；发布失败把暂存收回。Worker 不认分块时整批退回单帧，放不下答 413 并说明原因。下载（`files/routes.ts`）远端先走分块，老 Worker 退回单帧。
+- 白板资产（`assets/routes.ts`，能力 `remote.assets.v1`）：上传、从工作空间导入、读回、画布导出 PNG 都在执行主机上执行（`assets.store` / `assets.import` / `assets.read` / `assets.exportPng`），大的先分块。
+
+### 55.4 资源面板计入远端语言服务器
+
+- 资源读取那一轮，语言连接连着才问它 `language.processes`（不为一行数字新建连接），把 `(pid, 启动时间)` 随 `resources.read` 发给控制连接的 Worker，在执行主机上按本机同一套规矩按树量（`resources/platform.ts::components` 只取语言服务器那几行）。`resources/hosts.ts` 把这些行并进快照的 `components`，带 `executionHostId`（共享包 schema 加这个可选字段）；面板的平台组件跟着主机筛选（`web/panels/resources/metrics.ts::componentsOnHost`）。
+
+### 55.5 语言连接空闲关闭
+
+- `remote/language-idle.ts`：每分钟看一眼活着的语言连接，Worker 答没有开着的会话（新动作 `language.activity`，只数经这条连接开过、服务器那边还在的会话）、这段时间也没有语言请求，持续 10 分钟就关掉；下一次开会话 `RemoteWorker` 按需再握一次手。问会话数不经记账口，不算一次请求。
+
+### 55.6 取舍与已知
+
+- 远端登录 shell 的 profile 若整条重设 `PATH`，垫片目录就丢了，CLI 照常启动但不带注入；macOS 的 `path_helper` 会把已有条目挪到系统路径之后，真 CLI 装在 `/usr/local/bin` 这类位置时同样绕过垫片。`custom:` 条目改了程序名的，远端不注入。
+- core 重启后还活着的 SSH 终端，中继要等这台主机的控制连接下次建立时才重开。
+- 探针的假 ssh 是同一台机器上的 `/bin/sh -c`，没有验证真 sshd 对远端命令的处理。
+
+### 55.7 验证
+
+- 新增 `remote/integration.test.ts`（真 Worker + 打成包的 Hook 客户端 + 假 ssh：按哈希只同步一次、令牌与端点文件、假 CLI 经垫片拿到注入并读到说明与技能、Hook 经中继到达控制端且令牌已换、断线后中继自己恢复）、`remote/transfer.test.ts`（18 MiB 导入分块、丢一块答复后续传不重发、13 MiB 下载分块、资产上传 / 导入 / 读回 / 导出落在执行主机、老 Worker 退回单帧与 413、留洞的块 409）、`handoff/remote.test.ts`（远端采集、同主机 SSH Agent 可交接而别的主机拒绝、主机不可达按名报错、转录尾巴）、`remote/language-idle.test.ts`；`worker-push.test.ts` 加远端语言服务器按树计量（语言连接不在时不问）与语言连接空闲关闭后按需重连；`canvas-launch.test.ts`、web `launch.test.ts` / `metrics.test.ts` 补 SSH 行与组件筛选。
+- `node tools/probes/remote-e2e.mjs`：26 项全部通过，含新场景 8（画布上建连到假远端的 SSH Agent 节点、开终端、敲 `claude --model probe`：执行主机上的假 CLI 经垫片收到注入的 argv、远端 shell 带着节点身份与远端端点文件、读到同步过去的说明（1936 字节）与技能（11122 字节），SessionStart 经 Worker 中继记进 `agent_status`）。探针的 core 现在带 `ARMADRA_NO_GLOBAL_WRITES=1`，假 ssh 像真 ssh 一样不带本机的 `ARMADRA_*` 过去。
+- `pnpm --filter @armadra/desktop test`：272 文件通过、2 跳过（3177 条通过、8 跳过），live 2 条、脚本 38 条通过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
+- `pnpm --filter @armadra/web test`：284 文件 2782 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条；`pnpm --filter @armadra/shared test`：29 文件 247 条。
+- `pnpm check`、`pnpm format:check` 通过。
