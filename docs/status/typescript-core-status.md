@@ -5,19 +5,20 @@
 
 ## 1. 阶段状态
 
-| 阶段   | 范围                                                                                                                                                                                                                                                                                              | 状态                                                     |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                                                                                                                                                                                                                                   | 已合入（`6f2207dd4`）                                    |
-| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                                                                                                                                                                                                                                         | 已合入（`e7cbaf38c`）                                    |
-| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                                                                                                                                                                                                                                  | 已合入（`00d551f71`）                                    |
-| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                                                                                                                                                                                                                                          | 已合入（`00d551f71`）                                    |
-| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                                                                                                                                                                                                                                           | 已合入（`9131d4f59`）                                    |
-| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                                                                                                                                                                                                                                  | 已合入（`9131d4f59`）                                    |
-| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d）                                                                                                                                                                                                                | 全部已合入                                               |
-| R7a    | GitHub 与自动化改打 JSON 面（R7 的前置）                                                                                                                                                                                                                                                          | 已合入                                                   |
-| R7c    | 页面的身份 / 会话 / 事件流 / 更新脱离 `host-client`                                                                                                                                                                                                                                               | 已合入                                                   |
-| R7d    | 收尾：删 Rust / Go / proto 与 `/rpc/` 面，CI、规则、打包与文档收口                                                                                                                                                                                                                                | 全部已合入；发布干跑六目标 + 公证 + 汇总全绿（§17、§18） |
-| 补齐轮 | 2026-09-25/26 两批：远端执行主机 Worker 与补齐（§34、§44）、冷启动与防休眠（§35）、依赖编排（§36）、编辑器节点（§37）、搜索 / 文件树 / 语言授权 / Projects（§38）、浏览器与状态徽标（§39）、快捷键与更新器（§40）、在线设备与编辑租约（§41）、账号与共享（§42）、节能休眠（§43）、零散缺口（§45） | 全部已合入                                               |
+| 阶段   | 范围                                                                                                                                                                                                                                                                                                                                    | 状态                                                     |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **R0** | core 进程骨架、三种监听、`/health`、SQLite 账本                                                                                                                                                                                                                                                                                         | 已合入（`6f2207dd4`）                                    |
+| **R1** | 画布 / 工作空间 / 设置 / 身份、统一库迁移                                                                                                                                                                                                                                                                                               | 已合入（`e7cbaf38c`）                                    |
+| **R2** | 终端域：tmux 纵切、direct / sessionHost、SSH、GC                                                                                                                                                                                                                                                                                        | 已合入（`00d551f71`）                                    |
+| **R3** | Hook 面、Agent / 协作、TS `armadra-hook`                                                                                                                                                                                                                                                                                                | 已合入（`00d551f71`）                                    |
+| **R4** | Git、文件 / 导入导出、定时与事件 outbox                                                                                                                                                                                                                                                                                                 | 已合入（`9131d4f59`）                                    |
+| **R5** | 语言服务、GitHub / 资源 / 用量、浏览器授权与租约                                                                                                                                                                                                                                                                                        | 已合入（`9131d4f59`）                                    |
+| **R6** | 服务器壳（R6a）、账号与共享（R6b）、远程浏览器（R6c）、Windows session-host（R6d）                                                                                                                                                                                                                                                      | 全部已合入                                               |
+| R7a    | GitHub 与自动化改打 JSON 面（R7 的前置）                                                                                                                                                                                                                                                                                                | 已合入                                                   |
+| R7c    | 页面的身份 / 会话 / 事件流 / 更新脱离 `host-client`                                                                                                                                                                                                                                                                                     | 已合入                                                   |
+| R7d    | 收尾：删 Rust / Go / proto 与 `/rpc/` 面，CI、规则、打包与文档收口                                                                                                                                                                                                                                                                      | 全部已合入；发布干跑六目标 + 公证 + 汇总全绿（§17、§18） |
+| 补齐轮 | 2026-09-25/26 两批：远端执行主机 Worker 与补齐（§34、§44）、冷启动与防休眠（§35）、依赖编排（§36）、编辑器节点（§37）、搜索 / 文件树 / 语言授权 / Projects（§38）、浏览器与状态徽标（§39）、快捷键与更新器（§40）、在线设备与编辑租约（§41）、账号与共享（§42）、节能休眠（§43）、零散缺口（§45）                                       | 全部已合入                                               |
+| 第三批 | 2026-09-26：端到端探针与打包版复跑（§47）、Agent 协作 / 界面 / 服务器壳与远端的端到端（§48–§50）、画布内注入（§51）与远端注入 / 交接 / 分块（§55）、浏览器 Agent 工具补强（§52、§59）、三平台 CI 与 Windows 启动行 / `.cmd` 绕过 / `.exe` 启动器（§53、§54、§57、§61）、成员权限与组管理员（§56）、界面收尾（§58）、真实环境复验（§60） | 全部已合入                                               |
 
 ## 2. R2 纵切：只有 tmux 后端的建 / 附 / 输入 / 断
 
@@ -1994,6 +1995,46 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：261 文件通过、1 跳过（3023 条通过、6 跳过），scripts 的 node:test 38 条全过。
 - 探针：上表六项 + 打包版 `core-terminal-packaged.mjs` 退出码 0。
 
+## 48. Agent 协作端到端：真 Claude Code 与真 Codex CLI（2026-09-26）
+
+新探针 `tools/probes/agent-e2e.mjs`（说明在 `tools/probes/README.md`「Agent 协作端到端」）。真 core、Vite 页面、新 profile 的无头 Chrome，Claude Code 2.1.260 与 Codex CLI 0.155.1，tmux 后端。每个 Agent 节点都由页面挂载、由页面敲启动行，CLI 的终端查询经 xterm 写回 PTY——§31.7 那一类问题只在这条路上出现。
+
+### 48.1 场景与结果（最后一次全量：245 秒，56 条断言全过，控制台错误 0，操作员配置与 CLI 版本未变）
+
+| 场景          | 结果       | 实测                                                                                                                                                                                                                                                       |
+| ------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Codex 首投  | 通过       | 源节点 `send` 给两个新 Codex：入队 `TARGET_STARTING`，约 6 秒后按首投放行门投出，`targetState = observed-quiet`，随后 hook 报 working → done；`open-agent --task` 建的第三个同样 `observed-quiet` 投出并跑完一轮                                           |
+| 2 Claude 投递 | 已修后通过 | 首投 `targetState = idle`（上报），信任对话框确认后约 8 秒投出；半行在输入框里、人的租约过期后 `send` 排队 `TARGET_INPUT_PENDING`，回车后投出并又跑一轮                                                                                                    |
+| 3 依赖与组队  | 通过       | `open-agent --after … --after-turn next`：上游这一轮结束前下游只有 shell，结束后由 core 敲启动行并投出任务；`team --chain`：第二棒（Claude）在第一棒（Codex）结束后启动并收到任务；关掉页面再来一次，core 经 `spawnForNode` 起会话并 `observed-quiet` 投出 |
+| 4 节能休眠    | 已修后通过 | 阈值 20 秒（测试注入）：关页面后约 22 秒 Claude 与 Codex 都进入 hibernated，CLI 进程确实退出；重开页面两者都显示「休眠中」，点节点后同一会话 id 起第 2 代、恢复行带同一个 provider 会话 id，经页面问「之前让你记的数加一」两者都答 418                     |
+
+截图在 `target/agent-e2e/`：`1-codex-idle.png`、`1-codex-delivered.png`、`1-codex-open-agent.png`、`2-claude-delivered.png`、`2-claude-input-pending.png`、`2-claude-after-enter.png`、`3-dependency-waiting.png`、`3-dependency-launched.png`、`3-team-chain.png`、`3-headless-launched.png`、`4-before-hibernate.png`、`4-hibernated.png`、`4-claude-resumed.png`、`4-codex-resumed.png`。
+
+### 48.2 修掉的两个 bug
+
+- **只报过开场的 Claude 永远收不到第一条任务。** Claude 起来报一条 `SessionStart`，归约按规则 4 把状态清空，此后停在输入框上不再发事件；`targetState()` 对空状态答 `starting`，`send` / `open-agent --agent claude --task` 的第一条一直停在 `queued / TARGET_STARTING`（实测两分钟 `attempts = 0`）。与 §31 的 Codex 同一个死锁，只是多报了一条开场。新增 `agent/target-state.ts::sessionStartIdle`：真上报的开场（hook / extension、`sessionPhase = start`、状态空、非 `restored`）+ 会话满 6 秒 + 没有半截的行，就当作 `idle`（回执照写 `idle`，那是一条上报）；`send.ts::attempt` 在五态之后调用它，出队泵的快探也把这类目标算进去（开场之后没有事件可听）。探针记下了信任对话框出现时 `agent_status` 还没有行——开场事件在信任之后才到，这条门不会把正文打进那个对话框。用例 `collab/session-start.test.ts`（修前两条失败）。
+- **页面重开时休眠的节点显示「已退出」。** 挂载时按节点数据里的会话 id 抢先连的 socket 收到 `hello { alive: false }`，与挂载那次读谁先到没有保证；读先到、状态已是休眠而 socket 还没收掉时，它把「休眠中」改写成「已退出」，节点头给出「重新运行」，点击也不再唤醒——点「重新运行」就是另起一个 CLI，休眠的对话接不回来。`use-transport.ts` 在状态为 `hibernated` 时不理会这条 socket 的 hello / status。`TerminalSurface.render.test.tsx` 两种先后各一条（修前「读先到」那条失败）。
+
+### 48.3 测试注入与取舍
+
+- 休眠阈值的设置下限是 5 分钟，巡检 60 秒一轮，没有注入点。加了环境变量 `ARMADRA_TEST_ECO_IDLE_SECONDS`（1–600 秒，`hibernate.ts::ecoTestOverride`，巡检同时缩到 2 秒），开关仍听设置。不放宽设置下限：那是给人的下限，几秒的休眠会杀掉刚停下来等人看结果的 CLI；环境变量只有启动 core 的进程能给，不进设置与界面。
+- 发送方是普通终端节点：普通终端的会话不带 `ARMADRA_NODE_ID`，探针以它的节点身份（`node-token/refresh` 签发的令牌）从探针进程跑 `armadra-hook canvas`，对 core 来说与在那个终端里敲是同一个请求。
+- 「记住 417 / 问加一」由人经页面打进去，不用 `send`：投递正文带来源信封，Claude 按「同级消息是资料」处理，会拒绝回答一个像是在套上下文的问题（实测如此）。
+- Codex：临时 CODEX_HOME 只复制 `auth.json`，关掉启动时的升级检查、预先信任工作目录，并先跑一次最小的 `codex exec` 让它完成自己的 sqlite 迁移（两个 Codex 同时第一次用全新 CODEX_HOME 会撞在迁移上直接退出；操作员自己的目录早已迁移过）。Claude：钥匙串登录在临时 `CLAUDE_CONFIG_DIR` 下认证不上，确认 `claude.ts` 是启动时注入（`--settings` 指向数据目录，不写 `~/.claude/settings.json`）后，只对 Claude 进程用真实配置目录；core 自己的 `CLAUDE_CONFIG_DIR` 仍指向临时目录。
+
+### 48.4 发现但没有修
+
+- **Codex 的升级提示会吃掉第一条任务。** 首跑时临时 CODEX_HOME 第一次启动记下了最新版本，第三个 Codex 起来就停在「Update now?」上；首投放行门按「没有半截的行、会话满 6 秒」放行，正文加回车选中了缺省的「升级」，Codex 执行了 `npm install -g @openai/codex`，把本机全局 CLI 从 0.155.1 升到了 0.157.0（已手动装回 0.155.1，探针此后关掉启动检查，并在跑后比对两个 CLI 的版本）。这是设计 §4.3 已记的「安静的提示」误判面的又一例，而且代价比目录信任大：它会改用户的机器。复现：新 CODEX_HOME 里起一次 Codex、退出，再用 `open-agent --agent codex --task …` 建一个节点。修法涉及要不要识别提示符（§12 第 3 条不做）或在启动行上替用户关掉升级检查（与「保留各 CLI 的策略」冲突），留给设计决定。
+- 没验证：direct / 会话宿主后端、Claude 的权限提示与审批、休眠后经 `send` 唤醒、打包版。
+
+### 48.5 验证
+
+- `node tools/probes/agent-e2e.mjs`：四个场景全过（245 秒）；单跑 `--only 2`、`--only 4` 也各过一次。
+- `pnpm --filter @armadra/desktop test`：262 文件通过、1 跳过（3027 条通过、6 跳过），scripts 的 node:test 全过；`typecheck` 通过。
+- `pnpm --filter @armadra/web test`：279 文件 2743 条通过；`typecheck` 通过。
+- `pnpm --filter @armadra/server test`：10 文件 79 条通过。
+- `pnpm check`、`pnpm format:check` 通过。
+
 ## 49. 本轮界面功能的实浏览器端到端验证（2026-09-26）
 
 新探针 `tools/probes/ui-features-e2e.mjs`（场景在 `tools/probes/ui-features/`，怎么跑、验什么、没验什么见 `tools/probes/README.md` 末节）。真 core（`out/core/main.js`）+ 真 Vite 页面 + 新 profile 的无头 Chrome，经浏览器级 CDP 连接驱动；数据目录、HOME、`CLAUDE_CONFIG_DIR` / `CODEX_HOME`、替身脚本与 profile 都是 `mktemp` 的，跑完删除并停掉 tmux 服务器，跑完后 `$TMPDIR` 下没有 `armadra-ui-*` 残留、没有遗留的 Worker 或 tmux 进程。每个场景截图目视检查并收集控制台，error 级别算失败。整套 7 个场景 78 项检查全过，产物在 `target/ui-features-e2e/`。
@@ -2037,46 +2078,6 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：261 文件通过、1 跳过（3024 过、6 跳过），脚本用例全过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
 - `pnpm --filter @armadra/server test`：10 文件 79 条通过。
 - `pnpm check`（含 `format:check`、两边 typecheck、`repo:check`）通过。
-
-## 48. Agent 协作端到端：真 Claude Code 与真 Codex CLI（2026-09-26）
-
-新探针 `tools/probes/agent-e2e.mjs`（说明在 `tools/probes/README.md`「Agent 协作端到端」）。真 core、Vite 页面、新 profile 的无头 Chrome，Claude Code 2.1.260 与 Codex CLI 0.155.1，tmux 后端。每个 Agent 节点都由页面挂载、由页面敲启动行，CLI 的终端查询经 xterm 写回 PTY——§31.7 那一类问题只在这条路上出现。
-
-### 48.1 场景与结果（最后一次全量：245 秒，56 条断言全过，控制台错误 0，操作员配置与 CLI 版本未变）
-
-| 场景          | 结果       | 实测                                                                                                                                                                                                                                                       |
-| ------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 Codex 首投  | 通过       | 源节点 `send` 给两个新 Codex：入队 `TARGET_STARTING`，约 6 秒后按首投放行门投出，`targetState = observed-quiet`，随后 hook 报 working → done；`open-agent --task` 建的第三个同样 `observed-quiet` 投出并跑完一轮                                           |
-| 2 Claude 投递 | 已修后通过 | 首投 `targetState = idle`（上报），信任对话框确认后约 8 秒投出；半行在输入框里、人的租约过期后 `send` 排队 `TARGET_INPUT_PENDING`，回车后投出并又跑一轮                                                                                                    |
-| 3 依赖与组队  | 通过       | `open-agent --after … --after-turn next`：上游这一轮结束前下游只有 shell，结束后由 core 敲启动行并投出任务；`team --chain`：第二棒（Claude）在第一棒（Codex）结束后启动并收到任务；关掉页面再来一次，core 经 `spawnForNode` 起会话并 `observed-quiet` 投出 |
-| 4 节能休眠    | 已修后通过 | 阈值 20 秒（测试注入）：关页面后约 22 秒 Claude 与 Codex 都进入 hibernated，CLI 进程确实退出；重开页面两者都显示「休眠中」，点节点后同一会话 id 起第 2 代、恢复行带同一个 provider 会话 id，经页面问「之前让你记的数加一」两者都答 418                     |
-
-截图在 `target/agent-e2e/`：`1-codex-idle.png`、`1-codex-delivered.png`、`1-codex-open-agent.png`、`2-claude-delivered.png`、`2-claude-input-pending.png`、`2-claude-after-enter.png`、`3-dependency-waiting.png`、`3-dependency-launched.png`、`3-team-chain.png`、`3-headless-launched.png`、`4-before-hibernate.png`、`4-hibernated.png`、`4-claude-resumed.png`、`4-codex-resumed.png`。
-
-### 48.2 修掉的两个 bug
-
-- **只报过开场的 Claude 永远收不到第一条任务。** Claude 起来报一条 `SessionStart`，归约按规则 4 把状态清空，此后停在输入框上不再发事件；`targetState()` 对空状态答 `starting`，`send` / `open-agent --agent claude --task` 的第一条一直停在 `queued / TARGET_STARTING`（实测两分钟 `attempts = 0`）。与 §31 的 Codex 同一个死锁，只是多报了一条开场。新增 `agent/target-state.ts::sessionStartIdle`：真上报的开场（hook / extension、`sessionPhase = start`、状态空、非 `restored`）+ 会话满 6 秒 + 没有半截的行，就当作 `idle`（回执照写 `idle`，那是一条上报）；`send.ts::attempt` 在五态之后调用它，出队泵的快探也把这类目标算进去（开场之后没有事件可听）。探针记下了信任对话框出现时 `agent_status` 还没有行——开场事件在信任之后才到，这条门不会把正文打进那个对话框。用例 `collab/session-start.test.ts`（修前两条失败）。
-- **页面重开时休眠的节点显示「已退出」。** 挂载时按节点数据里的会话 id 抢先连的 socket 收到 `hello { alive: false }`，与挂载那次读谁先到没有保证；读先到、状态已是休眠而 socket 还没收掉时，它把「休眠中」改写成「已退出」，节点头给出「重新运行」，点击也不再唤醒——点「重新运行」就是另起一个 CLI，休眠的对话接不回来。`use-transport.ts` 在状态为 `hibernated` 时不理会这条 socket 的 hello / status。`TerminalSurface.render.test.tsx` 两种先后各一条（修前「读先到」那条失败）。
-
-### 48.3 测试注入与取舍
-
-- 休眠阈值的设置下限是 5 分钟，巡检 60 秒一轮，没有注入点。加了环境变量 `ARMADRA_TEST_ECO_IDLE_SECONDS`（1–600 秒，`hibernate.ts::ecoTestOverride`，巡检同时缩到 2 秒），开关仍听设置。不放宽设置下限：那是给人的下限，几秒的休眠会杀掉刚停下来等人看结果的 CLI；环境变量只有启动 core 的进程能给，不进设置与界面。
-- 发送方是普通终端节点：普通终端的会话不带 `ARMADRA_NODE_ID`，探针以它的节点身份（`node-token/refresh` 签发的令牌）从探针进程跑 `armadra-hook canvas`，对 core 来说与在那个终端里敲是同一个请求。
-- 「记住 417 / 问加一」由人经页面打进去，不用 `send`：投递正文带来源信封，Claude 按「同级消息是资料」处理，会拒绝回答一个像是在套上下文的问题（实测如此）。
-- Codex：临时 CODEX_HOME 只复制 `auth.json`，关掉启动时的升级检查、预先信任工作目录，并先跑一次最小的 `codex exec` 让它完成自己的 sqlite 迁移（两个 Codex 同时第一次用全新 CODEX_HOME 会撞在迁移上直接退出；操作员自己的目录早已迁移过）。Claude：钥匙串登录在临时 `CLAUDE_CONFIG_DIR` 下认证不上，确认 `claude.ts` 是启动时注入（`--settings` 指向数据目录，不写 `~/.claude/settings.json`）后，只对 Claude 进程用真实配置目录；core 自己的 `CLAUDE_CONFIG_DIR` 仍指向临时目录。
-
-### 48.4 发现但没有修
-
-- **Codex 的升级提示会吃掉第一条任务。** 首跑时临时 CODEX_HOME 第一次启动记下了最新版本，第三个 Codex 起来就停在「Update now?」上；首投放行门按「没有半截的行、会话满 6 秒」放行，正文加回车选中了缺省的「升级」，Codex 执行了 `npm install -g @openai/codex`，把本机全局 CLI 从 0.155.1 升到了 0.157.0（已手动装回 0.155.1，探针此后关掉启动检查，并在跑后比对两个 CLI 的版本）。这是设计 §4.3 已记的「安静的提示」误判面的又一例，而且代价比目录信任大：它会改用户的机器。复现：新 CODEX_HOME 里起一次 Codex、退出，再用 `open-agent --agent codex --task …` 建一个节点。修法涉及要不要识别提示符（§12 第 3 条不做）或在启动行上替用户关掉升级检查（与「保留各 CLI 的策略」冲突），留给设计决定。
-- 没验证：direct / 会话宿主后端、Claude 的权限提示与审批、休眠后经 `send` 唤醒、打包版。
-
-### 48.5 验证
-
-- `node tools/probes/agent-e2e.mjs`：四个场景全过（245 秒）；单跑 `--only 2`、`--only 4` 也各过一次。
-- `pnpm --filter @armadra/desktop test`：262 文件通过、1 跳过（3027 条通过、6 跳过），scripts 的 node:test 全过；`typecheck` 通过。
-- `pnpm --filter @armadra/web test`：279 文件 2743 条通过；`typecheck` 通过。
-- `pnpm --filter @armadra/server test`：10 文件 79 条通过。
-- `pnpm check`、`pnpm format:check` 通过。
 
 ## 50. 服务器壳与远端执行主机的端到端（2026-09-26）
 
@@ -2294,79 +2295,6 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/web test`：284 文件 2780 条通过；`typecheck` 通过。
 - `pnpm check`、`pnpm format:check` 通过。Windows 上的两条集成用例待 CI 确认。
 
-## 57. Windows 启动：绕过 npm 的 `.cmd` 包装、Windows PowerShell 5.1 用 `--%`；节能休眠先敲 CLI 的退出命令（2026-09-26）
-
-接 §54 的两条已知限制，以及 §43.2 里「友好退出只是结束会话」。
-
-### 57.1 绕过 npm 的 `.cmd` 包装
-
-- 批处理用 `%*` 把参数交给真正的程序，这一步 `cmd.exe` 会把参数文本再读一遍：值里的 `"` 让引号翻面，被它护着的 `&`、`|` 当成命令执行，敲进去的那一行怎么引用都挡不住。所以不去引用它，而是绕过它。
-- `core/agent/windows-shim.ts`：读 npm / pnpm 写的包装脚本，找出最后那条命令。认 npm 7–10（cmd-shim 的 `SET "_prog=…"` 两支加 `endLocal & goto … & "%_prog%" "<脚本>" %*`，以及目标是原生程序时的 `"%dp0%\…\claude.exe" %*`）、npm 6 与 pnpm 的 `IF EXIST "%~dp0\node.exe" ( … ) ELSE ( node … )` 块、同一套生成器写的 `.ps1`（`& "$basedir/node$exe" "…" $args`）。`.cmd` 读不出来再试同名 `.ps1`。包旁边有 `node.exe` 用它，否则按 CLI 的 PATH 找 `node`；目标脚本不存在、程序是变量、先 `call` 别的批处理这类都答「读不出来」。
-- 注册表：`GET /api/agents` 每行多一个可选的 `launchTarget: { program, args }`（`resolvedPath` 仍是包装本身，设置页照旧显示它）。页面 `agent/launch.ts` 有它就用 `program` 当程序、`args` 接在最前（`assembleLaunchCommand` 新增 `programArgs`，只进敲出来的行，不进冻结的计划 argv）；用户在设置里写了自定义启动命令时不用它。core 这边在唯一出口 `canvasLaunch` 里做同一件事，Windows 上调用方没给程序时先在 PATH 上解析，免得 shell 自己找到 `.cmd`。依赖编排、休眠唤醒、计划冷启动因此都不用改。
-- 读不出来的包装留作程序：`shell.ts::shellCommandLine` 遇到 `.cmd` / `.bat` 程序时，词里有 `" % ^ & | < > ( )` 或换行就拒绝拼行（抛错，这次启动不发生），而不是敲一行会被拆开的命令。环境变量引用只看前缀；它的值由写的一方保证——`canvas-launch.ts::startsThroughBatch` 为真时 Codex 的两个环境变量不管节点跑什么 shell 都按 `cmd.exe` 的形状写（`codexTomlString` 的 `\"` 与 `\uXXXX`），两遍都读不坏。
-- 任务里提到「有危险字符就把长值改走环境变量」，这里没这么做：`cmd.exe` 第一遍就把变量的值贴进行里，批处理的第二遍读到的还是那段文本，挪进环境变量挡不住任何东西；只有 CLI 自己能解码的写法（Codex 的 TOML `\uXXXX`）才有用，所以只对 Codex 这么写，其余拒绝。
-
-### 57.2 Windows PowerShell 5.1
-
-- 方言多一种：`shellDialect("powershell.exe")` 现在答 `windows-powershell`，`pwsh` 仍是 `powershell`。单个词的写法两者相同；整行上，5.1 在第一个它传不好的词（含 `"`、空串、带空白又以 `\` 结尾、环境变量引用）前面放停止解析符 `--%`，之后的词按 C 运行库的规则引用，变量写 `%NAME%`（`--%` 仍会展开的唯一一种）。`--%` 之前的词照旧是 PowerShell 的单引号词。
-- 二选一选了 `--%`，理由：5.1 丢引号发生在它把参数交给原生程序的那一步，字符串从哪来都一样，值挪进环境变量再 `"${env:X}"` 引用照样被剥；`--%` 之后的文本原样交给程序，写成 C 运行库的引用就是程序看到的参数，而且变量正好是 `%NAME%` 这种展开，Codex 的值用 `cmd.exe` 那套现成的写法。代价：`--%` 之后带不了 `%`（会和后面的 `%` 配对吞掉变量）与 `|`（到那里就结束），这样的值拒绝拼行。
-- 缺省 shell（`terminal/environment.ts::defaultShell`）：Windows 上仍是 `COMSPEC`；没有它时，PATH 上有 `pwsh.exe` 就用 PowerShell 7，再没有才是 `powershell.exe`。
-- 顺手：`codexTomlString` 在 `windows-powershell` 下也写 `cmd.exe` 形状。
-
-### 57.3 节能休眠先礼后兵
-
-- 注册表加 `exitCommand`（`packages/shared` 的 `AGENT_REGISTRY` 与 core `agent/launch.ts` 的镜像各一份，两边用例逐个比对）：Claude、OpenCode、Oh My Pi、Copilot `/exit`，Codex、Pi `/quit`。Pi、Oh My Pi、Codex 从本机装的包里核对过命令表；自定义条目用 base 的。
-- `Hibernator.hibernate`：判定该睡之后先敲退出命令，命令与回车分两次写（中间 150 ms，一口气写进去的回车有的 TUI 当成粘贴里的换行），然后每 200 ms 看一次前台，变回 shell 就接着结束会话，最多等 5 秒；敲不进去或等不到都照旧结束。CLI 自己退出时会写完会话状态，resume 接得更全。日志里记 `quit: quit | timeout | none`。
-- 退出命令只在判据全过（空闲、没有半截输入、租约空闲、没人附着）之后敲，所以不会打进人正在用的输入框。
-
-### 57.4 技能与说明
-
-- 技能正文（`collab/skill.ts`）与各 help 里没有 Windows 专门的说明，无须改。设计文档同步：`canvas-only-integration.md` 的方言一段（五种方言、`--%`、绕过包装），`terminal-host-design.md` §7.4（退出命令，删掉「没先发退出命令」一条）。
-- 发现但不在本任务的文件范围内：Agent 按技能调用的 `armadra-hook` 在 Windows 上也是 `.cmd` 启动器（`cli/armadra-hook/launcher.ts`），`canvas send --body '…'` 这类带正文的调用同样会被批处理再读一遍，正文里的 `&`、`"` 有同样的问题。
-
-### 57.5 验证
-
-- `core/agent/windows-shim.test.ts`：15 个样本表驱动（npm 7–10 的 node 脚本 / 包内 `node.exe` / shebang 参数 / 原生程序，npm 6 两支，pnpm 两种目录，`.ps1` 三种，读不出来的四种），加分派、`.cmd` 退到 `.ps1`、PATH 上没有 node。
-- `packages/shared/test/shell.test.ts`：五种方言；模拟 5.1 的读法（单引号词、不转义地传参、`--%` 之后原样并展开 `%NAME%`、C 运行库切参数），断言值原样到达、不加 `--%` 时 `"` 会丢、`--%` 带不了的拒绝；批处理程序后各方言拒绝危险词、放行安全词并经模拟的 `cmd.exe` 读回。`agents.test.ts` 补 `programArgs` 与退出命令。
-- `core/agent/canvas-launch.test.ts`：5.1 下 Codex 行的 `--%` 与环境变量形状；读不出来的包装（真文件）下 `startsThroughBatch`、环境变量按 `cmd.exe` 写、危险词拒绝。`web/agent/launch.test.ts`：有 `launchTarget` 时绕过 `.cmd`、带 `&` 与 `"` 的提示词照常引用，没有时拒绝；5.1 的 `--%`。
-- `core/agent/windows-launch.test.ts`（`it.runIf(win32)`）新增三条：真 `powershell.exe` 5.1 跑 `--%` 行；照 cmd-shim 格式造一个包装指向回显 argv 的 node 脚本，`launchTargetOf` 读出 `node <脚本>`，整行交给 `cmd.exe`，§54 那十八个值与两个环境变量原样到达；读不出来的包装只放行安全词并真的经批处理到达。macOS 上跳过、能编译，待 Windows CI 确认。
-- `core/terminal/hibernator.test.ts`：收到 `/exit` 自己退的假 CLI 不等满宽限期就结束、不退的等满 5 秒后被结束、Codex 敲 `/quit`；`hibernator.pty.test.ts`：真 PTY 上读输入的假 `claude` 收到 `/exit` 先写「saved」再退、5 秒内结束，原来那个不读输入的等满宽限期后被结束，接回照旧 `--resume`。`terminal/environment.test.ts` 补缺省 shell。
-
-## 56. 成员的全局权限表、组管理员、终端创建者落库与多设备画布的收尾（2026-09-26）
-
-接 §42.2 与 §41.2 留下的五件事：成员在全局路由上一律 403、组角色只存不判、终端创建者只记在内存里、撤销共享后租约要等 TTL、在线表不认身份域的设备。设计 `design/server-accounts-and-sharing.md` 新增 §6（权限表），契约 `contracts/core-json-api.md` §9、§10 同步。
-
-### 56.1 做了什么
-
-- **全局路由逐条归类**（`core/identity/route-access.ts` 重写）：三类——按对象落到工作空间（`agent-status/{nodeId}/read|transcript|suggest-title`、`nodes/{nodeId}/context-reads` 按节点所在画布；`approvals/{id}/answer` 与 `control/confirm/{id}` 按那条请求所在画布要 `approval:answer`）、无害的全局读（Agent 目录、模型、模型目录、终端后端、公开状态页，被共享过任意一块画布即放行）、本机管理（设置、执行主机、SSH、数据、用量、对话索引、集成、克隆、电源、浏览器、GitHub、自动化，只给 owner）。节点 → 画布依次查 `agent_status`、`terminal_sessions.owner_node_id`、`node_handles` + `boards`；关闭确认只在内存里，`collab/control/close.ts` 给待确认的请求记下工作空间并导出 `confirmWorkspace`。`route-scopes.ts` 删掉 `/api/ownership` 那条死规则（路由 2026-09-20 就删了）。
-- **组管理员**（`core/identity/accounts.ts`）：组内 `admin` 能增删本组成员、改本组组内角色、签发与作废只指向本组的邀请，`GET invitations` 只列这些；建组、改名、删组、动 owner、带工作空间的邀请、别的组仍要 `identity:manage` 或 `workspace:share`。组角色不编译成 scope，判定仍只有 `permits` 一条路（设计 S3）。
-- **终端创建者落库**：迁移 `0028_terminal_creator.sql` 给 `terminal_sessions` 加 `creator_principal_id`（缺省空串 = 本机 owner 或 core 自己）。路由门在成员 `POST /api/terminals` 成功后写这一列，判「自己开的」读这一列；终端域本身没改。休眠唤醒走 `revive`，同一行，创建者随行保留。
-- **撤销即释放**（`core/canvas/presence.ts`、`routes.ts`）：每个客户端记下它最近一次请求的「来源」——设备与一个复判函数（重新认证会话，再判 `canvas:read` / `canvas:write`）。`onAccessChanged` 触发 `presence.recheck()`：看不见的摘掉、只能看的交出租约，变了就广播；只剩一个能写的直接交给它。心跳里 `writable` 变假时也当拍交出租约。
-- **同一台设备**：`RequestIdentity` 多一个 `device`（服务器壳从会话的 `Principal` 取 `deviceId` / `deviceName`）；桌面壳没有请求身份，一律算「本机」。快照里每个客户端与租约多一个 `deviceKey`（设备标识的 sha256 摘要前 16 位），心跳与拿租约的回答另带自己的 `deviceKey`；设备名优先取身份域登记的。页面 `PresenceBar` 在持有者与自己同 `deviceKey` 时写「本机另一个窗口正在编辑」、接管不弹确认，悬停的圆点写「本机另一个窗口」。
-- **接管审计**：`POST …/lease` 从别的客户端手里接过来时写 `canvas.lease.takeover`（`detail: { from, to, sameDevice }`）。审计的写入口在调用方没写 principal / 设备时用这次请求的，所以审批答复那条也补上了「是谁答的」。
-- **页面对成员的可见性**：`app/use-access.ts` 按 `GET /api/identity/session`（快照 ∪ 现编）回答「是不是成员、在这块画布上能不能做某事」，桌面壳恒为全权且不发请求。设置导航按 `nav.ts` 的 `ownerOnly` 对成员隐去 Agent、集成、终端、工作区、GitHub、SSH、执行主机、数据、账号与用量、快捷键、更新（剩通用、通知、白板、后台服务、账号与共享、关于）；审批按钮与关闭确认只对 driver 出现；用量、成本、SSH 提示、键位与主机表的设置查询、旧版接入残留横幅对成员不发。「账号与共享」对组管理员给一份收窄的：只列他管的组（没有新建与删除），邀请对话框选组而不是工作空间与角色。
-
-### 56.2 取舍
-
-- 审批答复要的是 `approval:answer`（driver），不是 `canvas:write`：它替 Agent 回答权限提示，和写别人的终端同一档（设计 S5）。editor、operator 看得见「在等审批」，没有按钮。
-- 无害的全局读的门槛是「被共享了任意一块画布」而不是「任何登录的人」：一个没有任何共享的账号没有理由知道这台机器装了哪些 CLI。
-- 设置只读（`GET /api/settings`）对成员也不开：文档里有 SSH 主机与 Agent 配置，逐字段筛一份给成员不值，页面对成员用内置默认（键位是默认 + 本设备覆盖）。
-- 创建者写在路由门而不是终端管理器：终端的建会话路径还被 core 自己（依赖编排、冷启动）走，它们没有请求身份；路由门本来就是唯一知道「这次是哪个成员开的」的地方。代价是没经过 `POST /api/terminals` 开的终端创建者一律为空，对成员就是「别人的」。
-- 复判用的是客户端最近一次请求的会话。每次心跳都换成最新的，而访问密钥 15 分钟过期、页面按时刷新，所以不会拿一把过期的钥匙误判；万一误摘，下一拍心跳（≤10 秒）就回来了，只是租约要重新拿。
-- `deviceKey` 是摘要而不是设备标识：页面只需要比较，而设备标识出现在撤销设备的接口上。
-- 同一浏览器的两个标签页共享 Cookie、是同一个会话设备；两个不同的浏览器在同一台电脑上是两台设备（各自配对或登录），不会被当成「本机另一个窗口」。
-- 迁移只用了 0028。
-
-### 56.3 验证
-
-- `pnpm --filter @armadra/desktop test`：268 文件通过、2 跳过（3204 条通过、8 跳过），live 2 条通过。新增：`route-access.test.ts` 的「全局路由的权限表」39 行（每条路由对 owner / driver / operator / editor / viewer / 非成员）、没被共享的成员连无害读也没有、路由门重建后创建者照旧、真库上的查询（创建者落进会话行，节点与审批按库找画布）；`accounts.test.ts` 的组管理员 2 条（能做的与越不了的）；`presence.test.ts` 3 条（同设备同 `deviceKey` 且身份域设备名优先、撤销即摘除并交给剩下的、降为只读交出租约）；`canvas/routes.test.ts` 2 条（桌面窗口都算本机、接管记审计而自己拿回不记；授权一变被撤销成员的租约当场释放并广播）。
-- `pnpm --filter @armadra/server test`：10 文件 85 条通过。`sharing.integration.test.ts` 新增 3 条：成员的全局读放行、本机管理 403、不存在的审批 403；组管理员经 HTTP 管自己的组、签本组邀请、碰不到别的组也删不了组；撤销编辑者之后管理员的事件流上当场收到租约归自己的 `canvas.presence`，设备名是配对时登记的「管理员的电脑」。
-- `pnpm --filter @armadra/web test`：285 文件 2786 条通过；`typecheck` 通过。新增 `use-access.test.ts` 3 条，`AccountsSharingPage.test.tsx` 2 条（成员的设置导航、组管理员的收窄视图），`PresenceBar.test.tsx` 1 条（本机另一个窗口的文案与一次点击接管）。
-- `node tools/probes/server-e2e.mjs`：31 项全部通过。相比 §50 新增：成员打开共享画布零个 403（§50.3 记下的 `/api/agents`、`/api/terminals/backend`、`/api/settings`、`/api/usage`、`/api/ssh/prompts`，以及第一轮新暴露的 `/api/agents/{id}/integration` 都没了）、设置导航只剩六页且逐页零个 403；撤销共享后管理员打开画布时租约已经释放（§50.4 实测要 19.5 秒）；同一浏览器第二个管理员窗口写「本机另一个窗口正在编辑」、接管不弹确认、一次拿到，第一个窗口转只读，审计 `detail` 为 `{"from":"服务器配对","to":"服务器配对","sameDevice":true}`。
-- `pnpm check`、`pnpm format:check` 通过。
-
-没做：core 重启后创建者生效只在单测（真库、重建路由门）与路由门层面验证，探针没有真的重启服务器壳再写终端；成员自己改名、停用自己（§42.2 的遗留，不在这次范围）。
-
 ## 55. 远端执行主机补齐：SSH 终端的画布注入、远端交接、分块传输、远端语言服务器计量与语言连接空闲关闭（2026-09-26）
 
 §34 / §44 / §51 之后远端执行主机还剩五块：SSH 终端里的 Agent 拿不到画布注入（路径都在控制端，远端 shell 里也没有节点身份）；远端工作空间的交接被拒；远端导入合计超过 11 MiB 答 413、白板资产拒绝远端；资源面板没有远端语言服务器；语言连接没有空闲关闭。设计见 [远端画布注入](../design/remote-canvas-injection.md)。
@@ -2413,58 +2341,78 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：272 文件通过、2 跳过（3177 条通过、8 跳过），live 2 条、脚本 38 条通过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
 - `pnpm --filter @armadra/web test`：284 文件 2782 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条；`pnpm --filter @armadra/shared test`：29 文件 247 条。
 
-## 59. 浏览器工具四项补强、被动旁听、草稿 base、组队 worktree（2026-09-26）
+## 56. 成员的全局权限表、组管理员、终端创建者落库与多设备画布的收尾（2026-09-26）
 
-接 §52（浏览器工具）、§37 / §45（编辑器）与 G03（Frame 绑定 worktree）。设计文档 `design/browser-agent-tools.md` 的 §2、§4、§5、§7、§9 已同步。
+接 §42.2 与 §41.2 留下的五件事：成员在全局路由上一律 403、组角色只存不判、终端创建者只记在内存里、撤销共享后租约要等 TTL、在线表不认身份域的设备。设计 `design/server-accounts-and-sharing.md` 新增 §6（权限表），契约 `contracts/core-json-api.md` §9、§10 同步。
 
-### 59.1 整页截图里的跨源 iframe
+### 56.1 做了什么
 
-- `captureBeyondViewport` 把视图撑到整页大小再截，跨源 iframe 的渲染进程不为此重画，视口以外截出来是空白（实测：页底一块红色的跨源 iframe，旧路径截出的红像素为 0）。
-- 页面有跨源 iframe 时改为逐屏：按视口大小滚过去（与 `scroll` 同一种滚轮，经白名单），每屏截可见区域（不带 `captureBeyondViewport`，clip 是文档坐标），按**实测**滚动位置贴到画布上，横向也分段，截完滚回原处；没有跨源 iframe 仍一次截完。上限 120 屏、6400 万像素，超了截到那里并在回答里说。jpeg 不拼接，回答说明代价。`fixed` / `sticky` 元素每屏都在、会重复出现，是按屏截的必然结果。
-- PNG 编解码：仓库里只有探针脚本 `tools/probes/ui-features/fixtures.mjs` 有一份手写的（core 不能引 `tools/`），于是在 `core/browser/cdp/png.ts` 按同样的做法写一份 TS 版：`node:zlib` 负责压缩与解压，只认 Chromium 截图的 8 位非交错 RGB/RGBA，输出 RGBA。没有引入依赖——纯 JS 的现成包做的也是这一百来行，外加用不到的调色板、16 位与交错；原生图像库要跟着 Electron 与 Node 各编一份。
+- **全局路由逐条归类**（`core/identity/route-access.ts` 重写）：三类——按对象落到工作空间（`agent-status/{nodeId}/read|transcript|suggest-title`、`nodes/{nodeId}/context-reads` 按节点所在画布；`approvals/{id}/answer` 与 `control/confirm/{id}` 按那条请求所在画布要 `approval:answer`）、无害的全局读（Agent 目录、模型、模型目录、终端后端、公开状态页，被共享过任意一块画布即放行）、本机管理（设置、执行主机、SSH、数据、用量、对话索引、集成、克隆、电源、浏览器、GitHub、自动化，只给 owner）。节点 → 画布依次查 `agent_status`、`terminal_sessions.owner_node_id`、`node_handles` + `boards`；关闭确认只在内存里，`collab/control/close.ts` 给待确认的请求记下工作空间并导出 `confirmWorkspace`。`route-scopes.ts` 删掉 `/api/ownership` 那条死规则（路由 2026-09-20 就删了）。
+- **组管理员**（`core/identity/accounts.ts`）：组内 `admin` 能增删本组成员、改本组组内角色、签发与作废只指向本组的邀请，`GET invitations` 只列这些；建组、改名、删组、动 owner、带工作空间的邀请、别的组仍要 `identity:manage` 或 `workspace:share`。组角色不编译成 scope，判定仍只有 `permits` 一条路（设计 S3）。
+- **终端创建者落库**：迁移 `0028_terminal_creator.sql` 给 `terminal_sessions` 加 `creator_principal_id`（缺省空串 = 本机 owner 或 core 自己）。路由门在成员 `POST /api/terminals` 成功后写这一列，判「自己开的」读这一列；终端域本身没改。休眠唤醒走 `revive`，同一行，创建者随行保留。
+- **撤销即释放**（`core/canvas/presence.ts`、`routes.ts`）：每个客户端记下它最近一次请求的「来源」——设备与一个复判函数（重新认证会话，再判 `canvas:read` / `canvas:write`）。`onAccessChanged` 触发 `presence.recheck()`：看不见的摘掉、只能看的交出租约，变了就广播；只剩一个能写的直接交给它。心跳里 `writable` 变假时也当拍交出租约。
+- **同一台设备**：`RequestIdentity` 多一个 `device`（服务器壳从会话的 `Principal` 取 `deviceId` / `deviceName`）；桌面壳没有请求身份，一律算「本机」。快照里每个客户端与租约多一个 `deviceKey`（设备标识的 sha256 摘要前 16 位），心跳与拿租约的回答另带自己的 `deviceKey`；设备名优先取身份域登记的。页面 `PresenceBar` 在持有者与自己同 `deviceKey` 时写「本机另一个窗口正在编辑」、接管不弹确认，悬停的圆点写「本机另一个窗口」。
+- **接管审计**：`POST …/lease` 从别的客户端手里接过来时写 `canvas.lease.takeover`（`detail: { from, to, sameDevice }`）。审计的写入口在调用方没写 principal / 设备时用这次请求的，所以审批答复那条也补上了「是谁答的」。
+- **页面对成员的可见性**：`app/use-access.ts` 按 `GET /api/identity/session`（快照 ∪ 现编）回答「是不是成员、在这块画布上能不能做某事」，桌面壳恒为全权且不发请求。设置导航按 `nav.ts` 的 `ownerOnly` 对成员隐去 Agent、集成、终端、工作区、GitHub、SSH、执行主机、数据、账号与用量、快捷键、更新（剩通用、通知、白板、后台服务、账号与共享、关于）；审批按钮与关闭确认只对 driver 出现；用量、成本、SSH 提示、键位与主机表的设置查询、旧版接入残留横幅对成员不发。「账号与共享」对组管理员给一份收窄的：只列他管的组（没有新建与删除），邀请对话框选组而不是工作空间与角色。
 
-### 59.2 桌面壳被动旁听（第一次驱动之前的控制台与请求）
+### 56.2 取舍
 
-- core `browser/observe.ts`：「被连着的浏览器节点」= 任一终端节点的链接文档里 `kind: "browser"` 的那些（与驱动授权同一份事实），整份经 drive 通道的 `observe` 通知推给壳；链接文档写入（`canvas/context-links.ts` 新增 `onContextLinksChanged`）、`board.changed`（节点删除时链接文档随之删）与通道接通（`DriveClient` 在 `ready` 时交出 `channelReady`）时推，同一份不重推。只有桌面壳后端这样做，headless 本来从开标签就在记。
-- 壳 `main/browser/observe.ts` 与 `GuestSession.observe`：连着的节点，它在画布上的每个 guest 被动接上调试器，只经 `CdpSession.listen` 发 `Runtime.enable`、`Log.enable`、`Network.enable`（`maxPostDataSize: 0`）三条订阅，与 `send` 走同一道白名单、只是不看撤销标记。不开 `Page` 域（对话框与文件选择框照旧由页面自己弹）、不拦文件选择框、不自动附加 iframe、不发输入、不算租约（`isAttached()` 仍为 false，下载照旧归人）。新注册的 guest（新标签页、刷新）连着就接上。
-- 语义不变的两件事：`before-input-event` 与人工接管——人收回页面仍整个摘掉调试器（设备尺寸模拟、对话框接管随那次会话结束），随后重新被动接上，缓冲在会话对象上原样留着；最后一条连线断开时摘掉，正在驱动时不摘（租约结束时摘）。探针桌面壳一段整批动词后租约仍在 Agent 手里。
-- 限制：跨源 iframe 里的控制台要等第一次驱动开了自动附加才进来；`Runtime.enable` 可被页面用已知手法探测到（这是需求点名要开的三路之一）。
-- 开销（本机 Chrome headless 各跑 12 次取中位数，同一页面分别不接调试器 / 只开这三路订阅）：常见页面（20 条 console、50 个请求）页面自测完成时间 16.1 → 18.9 ms；压力页面（2000 条带对象参数的 console、300 个请求，约 3200 条事件）117 → 162 ms。主进程这一侧把事件记进环形缓冲约 1 µs/条（回放同一批 4000 条事件 × 20 轮，80 ms）；缓冲每页各 500 条封顶，内存有界。
+- 审批答复要的是 `approval:answer`（driver），不是 `canvas:write`：它替 Agent 回答权限提示，和写别人的终端同一档（设计 S5）。editor、operator 看得见「在等审批」，没有按钮。
+- 无害的全局读的门槛是「被共享了任意一块画布」而不是「任何登录的人」：一个没有任何共享的账号没有理由知道这台机器装了哪些 CLI。
+- 设置只读（`GET /api/settings`）对成员也不开：文档里有 SSH 主机与 Agent 配置，逐字段筛一份给成员不值，页面对成员用内置默认（键位是默认 + 本设备覆盖）。
+- 创建者写在路由门而不是终端管理器：终端的建会话路径还被 core 自己（依赖编排、冷启动）走，它们没有请求身份；路由门本来就是唯一知道「这次是哪个成员开的」的地方。代价是没经过 `POST /api/terminals` 开的终端创建者一律为空，对成员就是「别人的」。
+- 复判用的是客户端最近一次请求的会话。每次心跳都换成最新的，而访问密钥 15 分钟过期、页面按时刷新，所以不会拿一把过期的钥匙误判；万一误摘，下一拍心跳（≤10 秒）就回来了，只是租约要重新拿。
+- `deviceKey` 是摘要而不是设备标识：页面只需要比较，而设备标识出现在撤销设备的接口上。
+- 同一浏览器的两个标签页共享 Cookie、是同一个会话设备；两个不同的浏览器在同一台电脑上是两台设备（各自配对或登录），不会被当成「本机另一个窗口」。
+- 迁移只用了 0028。
 
-### 59.3 多选 `<select>`
+### 56.3 验证
 
-- `select` 给多个 `--value` / `--label` 时只对 `<select multiple>` 生效：直接走唯一的写入脚本 `chooseOption`（下标列表逗号分隔，结束时恰好这些被选中；逐项 ctrl 点选不是合成输入够得着的，键入跳转会把选区换成一项），读回核对；同一个选项用值和文字各写一次算一个。非 multiple 的元素给多个，动词与脚本两处都拒绝；自绘下拉给多个也拒。单选的核对改为按下标，选项重名时键入跳转落在同名的另一项上不再被当成成功。
-- 冻结脚本表的源码守卫同步：写入者判定加上 `.selected =`，`chooseOption` 的每一处赋值逐个钉住（本地变量与循环变量之外，页面上只有 `options[j].selected` 与 `selectedIndex` 两处）。
-
-### 59.4 `--selector` 穿透 Shadow DOM
-
-- 二选一选了显式的 `宿主 >>> 里面`（可连写多层）：自动递归会让同一个选择器在页面改版后悄悄指到影子树里的别的元素，显式写法让「进了影子树」是调用方看得见的决定。普通选择器找不到时回答提示这种写法。
-- 新冻结读脚本 `shadowQuery`：逐层 `querySelector`，每层进上一层结果的开放 shadow root，答回元素本身；这是表里唯一按引用作答的一条，白名单只对它放开 `returnByValue: false`，句柄只交给新放行的 `DOM.requestNode`（只收 `objectId`、只答节点 id），用完立刻释放。失败答短串：`bad`、`none:N`、`closed:N`。闭合的 shadow root 页面脚本与调试协议都进不去，回答如实说「没有开放的 shadow root」。`wait --selector` 同一种写法。
-- `elementState` 的遮挡检查改为在元素自己的根上取 `elementFromPoint`：否则影子树里的按钮永远被宿主「挡住」（真浏览器用例先撞上了这一条）。
-
-### 59.5 编辑器：文件被删后草稿的 base
-
-- 原因：文件没了时编辑器基准是空串，之后每次改写本机副本 `base` 都跟着变空，「重新定位 → 合并」拿空串做三方 base，整份草稿都成了新增、处处冲突。
-- `drafts.ts` 的副本加 `origin` / `originVersion`：文件被删期间改写时，从上一份副本接着带下去（上一份还在时就是它的 `base` + `baseVersion`），都没有时退回编辑器手里删之前的正文；超过 256K 字符不存第二份。`use-relocate` 合并用 `draftOrigin()` 取 base。用例：删后改、重开、再改之后重新定位合并，两边改的是不相邻的行，直接应用无冲突；超大正文不存 `origin`。
-
-### 59.6 `canvas team` / `open-agent` 每人一条 worktree
-
-- 写法二选一选了成员内联：`--member "agent|标题|任务|worktree=名字或路径"`（没有任务写 `agent|标题||worktree=名字`；只在最后一段以 `worktree=` 开头时摘下，任务里的竖线照旧保留），`open-agent --worktree`。独立参数配对在多个成员时要靠顺序对齐，容易错位。
-- `core/collab/control/worktree.ts`：名字先找分支名或目录名是它的现有 worktree（主检出不算），没有就在 `.worktrees/名字` 从当前 HEAD 建同名分支；路径是工作区内的相对路径或落在工作区里的绝对路径，那里已有检出就用，否则新建、分支取目录名。新建走 Git 域装好的那一个 `RepositoryService` 的同一条写队列（`core/git/index.ts` 导出 `gitService()`），等它结束，失效仓库发现缓存。要求本机工作区、有写与执行权限、根目录是仓库。
-- 画布：已有 Frame 绑着这条检出就放进去，没有就建一个（绑定与页面上 `worktreeFrameBinding` 同一口径，1040×720），成员 `parentId` 指向它、落点在 Frame 内错开、`cwd` 是检出的绝对路径——与 `addNode` 在绑定 Frame 里继承的那一份相同，依赖编排的启动也读它。检出在建任何节点之前备好，Git 拒绝就整队不建；建完重新读一次画布再存。`--dry-run` 不建。
-- 技能正文（示例与一段说明）与 `armadra-hook --help` 的 canvas 段同步，`SKILLS_REVISION` 13 → 14；`guides/architecture.md` 的控制动词一段补了一句。
-
-### 59.7 端到端
-
-- `tools/probes/browser-agent-e2e.mjs`：fixture 加开放与闭合的 shadow root、`<select multiple>`、页底一整块红色的跨源 iframe、加载后 1.2 秒的一条控制台；新增多选与非 multiple 被拒、`>>>` 点击与闭合拒绝、整页截图拼接后页底 iframe 确实是红的（按「红明显多于绿」认：前面按过 Control+a，页面整体处在选中态）；桌面壳一段在任何动词之前读控制台，读得到那条日志。`resize` 的断言改成与真浏览器用例同一口径（滚动条占位的机器答 785×585，本机接了鼠标时就是这样）。
-- `tools/probes/agent-e2e.mjs` 场景 6：假 CLI（记下自己工作目录的 sh）、自己一套 core 与临时仓库，`--only 6` 单跑不需要真 CLI 登录；断言检出与分支、两个 Frame 的绑定、同名成员共用 Frame、成员终端从节点 `cwd` 起在检出里、`open-agent --worktree` 按分支名进同一个 Frame、`--dry-run` 不建、Git 拒绝（`main` 已存在）时画布不多节点、worktree 列表正好多两条。
-
-### 59.8 验证
-
-- `pnpm --filter @armadra/desktop test`：270 文件通过、2 跳过（3172 条通过、8 跳过）；live 2 文件 3 条通过（新增一条真 Chromium：`>>>` 点击、闭合拒绝、多选与禁用项被拒、红色跨源 iframe 在拼接图里——临时切回旧路径时同一断言红像素为 0）；脚本 38 条通过。
-- `pnpm --filter @armadra/web test`：284 文件 2782 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条通过。
-- `node tools/probes/browser-agent-e2e.mjs --electron`：headless 与桌面壳两段共 124 条全过。`node tools/probes/agent-e2e.mjs --only 6`：13 条全过，操作员配置未改动。
+- `pnpm --filter @armadra/desktop test`：268 文件通过、2 跳过（3204 条通过、8 跳过），live 2 条通过。新增：`route-access.test.ts` 的「全局路由的权限表」39 行（每条路由对 owner / driver / operator / editor / viewer / 非成员）、没被共享的成员连无害读也没有、路由门重建后创建者照旧、真库上的查询（创建者落进会话行，节点与审批按库找画布）；`accounts.test.ts` 的组管理员 2 条（能做的与越不了的）；`presence.test.ts` 3 条（同设备同 `deviceKey` 且身份域设备名优先、撤销即摘除并交给剩下的、降为只读交出租约）；`canvas/routes.test.ts` 2 条（桌面窗口都算本机、接管记审计而自己拿回不记；授权一变被撤销成员的租约当场释放并广播）。
+- `pnpm --filter @armadra/server test`：10 文件 85 条通过。`sharing.integration.test.ts` 新增 3 条：成员的全局读放行、本机管理 403、不存在的审批 403；组管理员经 HTTP 管自己的组、签本组邀请、碰不到别的组也删不了组；撤销编辑者之后管理员的事件流上当场收到租约归自己的 `canvas.presence`，设备名是配对时登记的「管理员的电脑」。
+- `pnpm --filter @armadra/web test`：285 文件 2786 条通过；`typecheck` 通过。新增 `use-access.test.ts` 3 条，`AccountsSharingPage.test.tsx` 2 条（成员的设置导航、组管理员的收窄视图），`PresenceBar.test.tsx` 1 条（本机另一个窗口的文案与一次点击接管）。
+- `node tools/probes/server-e2e.mjs`：31 项全部通过。相比 §50 新增：成员打开共享画布零个 403（§50.3 记下的 `/api/agents`、`/api/terminals/backend`、`/api/settings`、`/api/usage`、`/api/ssh/prompts`，以及第一轮新暴露的 `/api/agents/{id}/integration` 都没了）、设置导航只剩六页且逐页零个 403；撤销共享后管理员打开画布时租约已经释放（§50.4 实测要 19.5 秒）；同一浏览器第二个管理员窗口写「本机另一个窗口正在编辑」、接管不弹确认、一次拿到，第一个窗口转只读，审计 `detail` 为 `{"from":"服务器配对","to":"服务器配对","sameDevice":true}`。
 - `pnpm check`、`pnpm format:check` 通过。
+
+没做：core 重启后创建者生效只在单测（真库、重建路由门）与路由门层面验证，探针没有真的重启服务器壳再写终端；成员自己改名、停用自己（§42.2 的遗留，不在这次范围）。
+
+## 57. Windows 启动：绕过 npm 的 `.cmd` 包装、Windows PowerShell 5.1 用 `--%`；节能休眠先敲 CLI 的退出命令（2026-09-26）
+
+接 §54 的两条已知限制，以及 §43.2 里「友好退出只是结束会话」。
+
+### 57.1 绕过 npm 的 `.cmd` 包装
+
+- 批处理用 `%*` 把参数交给真正的程序，这一步 `cmd.exe` 会把参数文本再读一遍：值里的 `"` 让引号翻面，被它护着的 `&`、`|` 当成命令执行，敲进去的那一行怎么引用都挡不住。所以不去引用它，而是绕过它。
+- `core/agent/windows-shim.ts`：读 npm / pnpm 写的包装脚本，找出最后那条命令。认 npm 7–10（cmd-shim 的 `SET "_prog=…"` 两支加 `endLocal & goto … & "%_prog%" "<脚本>" %*`，以及目标是原生程序时的 `"%dp0%\…\claude.exe" %*`）、npm 6 与 pnpm 的 `IF EXIST "%~dp0\node.exe" ( … ) ELSE ( node … )` 块、同一套生成器写的 `.ps1`（`& "$basedir/node$exe" "…" $args`）。`.cmd` 读不出来再试同名 `.ps1`。包旁边有 `node.exe` 用它，否则按 CLI 的 PATH 找 `node`；目标脚本不存在、程序是变量、先 `call` 别的批处理这类都答「读不出来」。
+- 注册表：`GET /api/agents` 每行多一个可选的 `launchTarget: { program, args }`（`resolvedPath` 仍是包装本身，设置页照旧显示它）。页面 `agent/launch.ts` 有它就用 `program` 当程序、`args` 接在最前（`assembleLaunchCommand` 新增 `programArgs`，只进敲出来的行，不进冻结的计划 argv）；用户在设置里写了自定义启动命令时不用它。core 这边在唯一出口 `canvasLaunch` 里做同一件事，Windows 上调用方没给程序时先在 PATH 上解析，免得 shell 自己找到 `.cmd`。依赖编排、休眠唤醒、计划冷启动因此都不用改。
+- 读不出来的包装留作程序：`shell.ts::shellCommandLine` 遇到 `.cmd` / `.bat` 程序时，词里有 `" % ^ & | < > ( )` 或换行就拒绝拼行（抛错，这次启动不发生），而不是敲一行会被拆开的命令。环境变量引用只看前缀；它的值由写的一方保证——`canvas-launch.ts::startsThroughBatch` 为真时 Codex 的两个环境变量不管节点跑什么 shell 都按 `cmd.exe` 的形状写（`codexTomlString` 的 `\"` 与 `\uXXXX`），两遍都读不坏。
+- 任务里提到「有危险字符就把长值改走环境变量」，这里没这么做：`cmd.exe` 第一遍就把变量的值贴进行里，批处理的第二遍读到的还是那段文本，挪进环境变量挡不住任何东西；只有 CLI 自己能解码的写法（Codex 的 TOML `\uXXXX`）才有用，所以只对 Codex 这么写，其余拒绝。
+
+### 57.2 Windows PowerShell 5.1
+
+- 方言多一种：`shellDialect("powershell.exe")` 现在答 `windows-powershell`，`pwsh` 仍是 `powershell`。单个词的写法两者相同；整行上，5.1 在第一个它传不好的词（含 `"`、空串、带空白又以 `\` 结尾、环境变量引用）前面放停止解析符 `--%`，之后的词按 C 运行库的规则引用，变量写 `%NAME%`（`--%` 仍会展开的唯一一种）。`--%` 之前的词照旧是 PowerShell 的单引号词。
+- 二选一选了 `--%`，理由：5.1 丢引号发生在它把参数交给原生程序的那一步，字符串从哪来都一样，值挪进环境变量再 `"${env:X}"` 引用照样被剥；`--%` 之后的文本原样交给程序，写成 C 运行库的引用就是程序看到的参数，而且变量正好是 `%NAME%` 这种展开，Codex 的值用 `cmd.exe` 那套现成的写法。代价：`--%` 之后带不了 `%`（会和后面的 `%` 配对吞掉变量）与 `|`（到那里就结束），这样的值拒绝拼行。
+- 缺省 shell（`terminal/environment.ts::defaultShell`）：Windows 上仍是 `COMSPEC`；没有它时，PATH 上有 `pwsh.exe` 就用 PowerShell 7，再没有才是 `powershell.exe`。
+- 顺手：`codexTomlString` 在 `windows-powershell` 下也写 `cmd.exe` 形状。
+
+### 57.3 节能休眠先礼后兵
+
+- 注册表加 `exitCommand`（`packages/shared` 的 `AGENT_REGISTRY` 与 core `agent/launch.ts` 的镜像各一份，两边用例逐个比对）：Claude、OpenCode、Oh My Pi、Copilot `/exit`，Codex、Pi `/quit`。Pi、Oh My Pi、Codex 从本机装的包里核对过命令表；自定义条目用 base 的。
+- `Hibernator.hibernate`：判定该睡之后先敲退出命令，命令与回车分两次写（中间 150 ms，一口气写进去的回车有的 TUI 当成粘贴里的换行），然后每 200 ms 看一次前台，变回 shell 就接着结束会话，最多等 5 秒；敲不进去或等不到都照旧结束。CLI 自己退出时会写完会话状态，resume 接得更全。日志里记 `quit: quit | timeout | none`。
+- 退出命令只在判据全过（空闲、没有半截输入、租约空闲、没人附着）之后敲，所以不会打进人正在用的输入框。
+
+### 57.4 技能与说明
+
+- 技能正文（`collab/skill.ts`）与各 help 里没有 Windows 专门的说明，无须改。设计文档同步：`canvas-only-integration.md` 的方言一段（五种方言、`--%`、绕过包装），`terminal-host-design.md` §7.4（退出命令，删掉「没先发退出命令」一条）。
+- 发现但不在本任务的文件范围内：Agent 按技能调用的 `armadra-hook` 在 Windows 上也是 `.cmd` 启动器（`cli/armadra-hook/launcher.ts`），`canvas send --body '…'` 这类带正文的调用同样会被批处理再读一遍，正文里的 `&`、`"` 有同样的问题。
+
+### 57.5 验证
+
+- `core/agent/windows-shim.test.ts`：15 个样本表驱动（npm 7–10 的 node 脚本 / 包内 `node.exe` / shebang 参数 / 原生程序，npm 6 两支，pnpm 两种目录，`.ps1` 三种，读不出来的四种），加分派、`.cmd` 退到 `.ps1`、PATH 上没有 node。
+- `packages/shared/test/shell.test.ts`：五种方言；模拟 5.1 的读法（单引号词、不转义地传参、`--%` 之后原样并展开 `%NAME%`、C 运行库切参数），断言值原样到达、不加 `--%` 时 `"` 会丢、`--%` 带不了的拒绝；批处理程序后各方言拒绝危险词、放行安全词并经模拟的 `cmd.exe` 读回。`agents.test.ts` 补 `programArgs` 与退出命令。
+- `core/agent/canvas-launch.test.ts`：5.1 下 Codex 行的 `--%` 与环境变量形状；读不出来的包装（真文件）下 `startsThroughBatch`、环境变量按 `cmd.exe` 写、危险词拒绝。`web/agent/launch.test.ts`：有 `launchTarget` 时绕过 `.cmd`、带 `&` 与 `"` 的提示词照常引用，没有时拒绝；5.1 的 `--%`。
+- `core/agent/windows-launch.test.ts`（`it.runIf(win32)`）新增三条：真 `powershell.exe` 5.1 跑 `--%` 行；照 cmd-shim 格式造一个包装指向回显 argv 的 node 脚本，`launchTargetOf` 读出 `node <脚本>`，整行交给 `cmd.exe`，§54 那十八个值与两个环境变量原样到达；读不出来的包装只放行安全词并真的经批处理到达。macOS 上跳过、能编译，待 Windows CI 确认。
+- `core/terminal/hibernator.test.ts`：收到 `/exit` 自己退的假 CLI 不等满宽限期就结束、不退的等满 5 秒后被结束、Codex 敲 `/quit`；`hibernator.pty.test.ts`：真 PTY 上读输入的假 `claude` 收到 `/exit` 先写「saved」再退、5 秒内结束，原来那个不读输入的等满宽限期后被结束，接回照旧 `--resume`。`terminal/environment.test.ts` 补缺省 shell。
 
 ## 58. 第三波界面收尾：抽屉、Dock、通知条、时区选择、终端租约广播与两处残留（2026-09-26）
 
@@ -2521,41 +2469,58 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - 设备条本身不随右侧抽屉让位（开着抽屉时被盖住），不在本节范围。
 - 通知条一次有两条以上时，第二条起仍在标题带下面，会压住画布顶端的内容。
 
-## 61. Windows 上 `armadra-hook` 不再经过 `cmd.exe`：`.exe` 启动器与从标准输入 / 文件读参数（2026-09-26）
+## 59. 浏览器工具四项补强、被动旁听、草稿 base、组队 worktree（2026-09-26）
 
-§57 的范围外发现：Windows 上装的 `armadra-hook.cmd` 由 `cmd.exe` 执行，Git Bash 与 PowerShell 调 `.cmd` 都会过它，`canvas send --body`、`post`、`sticky`、`open-agent --task`、`team --member`、`browser type --text`、`fill --field` 里的 `&`、`|`、`"`、`%`、`^` 会被当成命令分隔、变量展开或让引号错位。
+接 §52（浏览器工具）、§37 / §45（编辑器）与 G03（Frame 绑定 worktree）。设计文档 `design/browser-agent-tools.md` 的 §2、§4、§5、§7、§9 已同步。
 
-### 61.1 启动器换成 `.exe`
+### 59.1 整页截图里的跨源 iframe
 
-评估过的三条路：
+- `captureBeyondViewport` 把视图撑到整页大小再截，跨源 iframe 的渲染进程不为此重画，视口以外截出来是空白（实测：页底一块红色的跨源 iframe，旧路径截出的红像素为 0）。
+- 页面有跨源 iframe 时改为逐屏：按视口大小滚过去（与 `scroll` 同一种滚轮，经白名单），每屏截可见区域（不带 `captureBeyondViewport`，clip 是文档坐标），按**实测**滚动位置贴到画布上，横向也分段，截完滚回原处；没有跨源 iframe 仍一次截完。上限 120 屏、6400 万像素，超了截到那里并在回答里说。jpeg 不拼接，回答说明代价。`fixed` / `sticky` 元素每屏都在、会重复出现，是按屏截的必然结果。
+- PNG 编解码：仓库里只有探针脚本 `tools/probes/ui-features/fixtures.mjs` 有一份手写的（core 不能引 `tools/`），于是在 `core/browser/cdp/png.ts` 按同样的做法写一份 TS 版：`node:zlib` 负责压缩与解压，只认 Chromium 截图的 8 位非交错 RGB/RGBA，输出 RGBA。没有引入依赖——纯 JS 的现成包做的也是这一百来行，外加用不到的调色板、16 位与交错；原生图像库要跟着 Electron 与 Node 各编一份。
 
-- **Node 单文件可执行**：要带一整份 Node，约 80 MB，每个架构一份，注入后还得重签。不取。
-- **Go / Rust 小壳**：1–2 MB，但发布机要多一套工具链（仓库已经是纯 TS），未签名的 Go 程序还常被杀软误报。不取。
-- **C# 小壳，用系统自带的 `csc.exe` 编**：每台 Windows 10/11 都有 .NET Framework 4 与它的 `csc.exe`，构建不加工具链；产物几 KB，`/platform:anycpu` 在 x64 与 arm64 上都原生运行。采用。
-- 让 `ARMADRA_HOOK_BIN` 直接指 `electron.exe` 不行：它是 GUI 子系统，PowerShell 调它不等退出、拿不到退出码，而且 `ELECTRON_RUN_AS_NODE` 与 bundle 路径没有地方带。
+### 59.2 桌面壳被动旁听（第一次驱动之前的控制台与请求）
 
-实现：
+- core `browser/observe.ts`：「被连着的浏览器节点」= 任一终端节点的链接文档里 `kind: "browser"` 的那些（与驱动授权同一份事实），整份经 drive 通道的 `observe` 通知推给壳；链接文档写入（`canvas/context-links.ts` 新增 `onContextLinksChanged`）、`board.changed`（节点删除时链接文档随之删）与通道接通（`DriveClient` 在 `ready` 时交出 `channelReady`）时推，同一份不重推。只有桌面壳后端这样做，headless 本来从开标签就在记。
+- 壳 `main/browser/observe.ts` 与 `GuestSession.observe`：连着的节点，它在画布上的每个 guest 被动接上调试器，只经 `CdpSession.listen` 发 `Runtime.enable`、`Log.enable`、`Network.enable`（`maxPostDataSize: 0`）三条订阅，与 `send` 走同一道白名单、只是不看撤销标记。不开 `Page` 域（对话框与文件选择框照旧由页面自己弹）、不拦文件选择框、不自动附加 iframe、不发输入、不算租约（`isAttached()` 仍为 false，下载照旧归人）。新注册的 guest（新标签页、刷新）连着就接上。
+- 语义不变的两件事：`before-input-event` 与人工接管——人收回页面仍整个摘掉调试器（设备尺寸模拟、对话框接管随那次会话结束），随后重新被动接上，缓冲在会话对象上原样留着；最后一条连线断开时摘掉，正在驱动时不摘（租约结束时摘）。探针桌面壳一段整批动词后租约仍在 Agent 手里。
+- 限制：跨源 iframe 里的控制台要等第一次驱动开了自动附加才进来；`Runtime.enable` 可被页面用已知手法探测到（这是需求点名要开的三路之一）。
+- 开销（本机 Chrome headless 各跑 12 次取中位数，同一页面分别不接调试器 / 只开这三路订阅）：常见页面（20 条 console、50 个请求）页面自测完成时间 16.1 → 18.9 ms；压力页面（2000 条带对象参数的 console、300 个请求，约 3200 条事件）117 → 162 ms。主进程这一侧把事件记进环形缓冲约 1 µs/条（回放同一批 4000 条事件 × 20 轮，80 ms）；缓冲每页各 500 条封顶，内存有界。
 
-- `cli/armadra-hook/windows-launcher.cs`：读自己旁边的 `armadra-hook.launch`（第一行 runner，第二行 bundle），设 `ELECTRON_RUN_AS_NODE=1`，把调用方命令行里 argv[0] 之后的部分**原样**接在 `"runner" "bundle"` 后面交给 `CreateProcessW`——调用方给普通 `.exe` 拼命令行用的就是 runner 解析时的那套规则，参数不经第二次解释。标准句柄显式继承；子进程进一个 `KILL_ON_JOB_CLOSE` 作业，调用方超时杀掉启动器时 Electron 一起退；Ctrl+C 交给子进程。
-- `scripts/hook-launcher.mjs`：找 `%WINDIR%\Microsoft.NET\Framework{Arm64,64,}\v4.0.30319\csc.exe` 编它。`after-pack.mjs` 对 Windows 目标编进 `resources/cli/armadra-hook.exe`；Windows 宿主上编不出来构建失败，非 Windows 宿主打 Windows 目标只打警告（那样的包退回 `.cmd`）。
-- `launcher.ts::writeLauncher`（win32）：bundle 旁边有 `armadra-hook.exe` 就复制进 `<数据目录>/bin/`、写 `.launch`、返回 `.exe`；同时照旧写 `.cmd`，给还指着它的旧配置与没有 `.exe` 的构建兜底。字节相同不重写（正在跑的 hook 占着文件），不同而被占用时先改名挪开再写。`core/hook/install/shared.ts` 从 bundle 旁边找 `.exe`；侧车 / PATH 查找改为 `.exe` 优先。
-- 签名：Windows 构建目前不签名。`after-pack` 在 electron-builder 签名之前运行，`.exe` 与 `resources/` 里其他文件一起进签名步骤；配上真证书后要确认它被签到。
+### 59.3 多选 `<select>`
 
-### 61.2 兜底：任意参数从标准输入或文件读
+- `select` 给多个 `--value` / `--label` 时只对 `<select multiple>` 生效：直接走唯一的写入脚本 `chooseOption`（下标列表逗号分隔，结束时恰好这些被选中；逐项 ctrl 点选不是合成输入够得着的，键入跳转会把选区换成一项），读回核对；同一个选项用值和文字各写一次算一个。非 multiple 的元素给多个，动词与脚本两处都拒绝；自绘下拉给多个也拒。单选的核对改为按下标，选项重名时键入跳转落在同名的另一项上不再被当成成功。
+- 冻结脚本表的源码守卫同步：写入者判定加上 `.selected =`，`chooseOption` 的每一处赋值逐个钉住（本地变量与循环变量之外，页面上只有 `options[j].selected` 与 `selectedIndex` 两处）。
 
-`cli/armadra-hook/text-input.ts`，在 `control.ts::parseFlags`（canvas 与 browser 共用）里统一接：`--x -` / `--x=-` 读标准输入（一次调用只许一个；标准输入是终端时直接报错，不等键盘），`--x-file <路径>` 读文件并存成 `x`（重复的 `--member-file` 与重复的 `--member` 一样追加）。UTF-8，带 BOM 的 UTF-16（Windows PowerShell 5.1 的 `>`）也认；CRLF 变 LF（否则往终端里多敲一个回车）；去掉末尾一个换行；上限与 hook 载荷同为 1 MB。`--help` 与技能加了一节说明，Windows 上正文有特殊字符时用它们——PowerShell 5.1 自己会弄丢参数里的 `"`，与启动器无关。`SKILLS_REVISION` 14 → 15。
+### 59.4 `--selector` 穿透 Shadow DOM
 
-### 61.3 验证
+- 二选一选了显式的 `宿主 >>> 里面`（可连写多层）：自动递归会让同一个选择器在页面改版后悄悄指到影子树里的别的元素，显式写法让「进了影子树」是调用方看得见的决定。普通选择器找不到时回答提示这种写法。
+- 新冻结读脚本 `shadowQuery`：逐层 `querySelector`，每层进上一层结果的开放 shadow root，答回元素本身；这是表里唯一按引用作答的一条，白名单只对它放开 `returnByValue: false`，句柄只交给新放行的 `DOM.requestNode`（只收 `objectId`、只答节点 id），用完立刻释放。失败答短串：`bad`、`none:N`、`closed:N`。闭合的 shadow root 页面脚本与调试协议都进不去，回答如实说「没有开放的 shadow root」。`wait --selector` 同一种写法。
+- `elementState` 的遮挡检查改为在元素自己的根上取 `elementFromPoint`：否则影子树里的按钮永远被宿主「挡住」（真浏览器用例先撞上了这一条）。
 
-- 单测：`text-input.test.ts`（标准输入两种写法、只读一次、终端拒绝、空输入、值里带 `-`、文件、重复文件追加、读不到 / 没路径 / 超限、`--file` 不受影响、UTF-8/UTF-16 BOM、CRLF、末尾换行）；`hook.test.ts` 与 `launcher-client.test.ts` 补 win32 的 `.exe` 安装、字节相同不重写、没有 `.exe` 退回 `.cmd`；`scripts/hook-launcher.test.mjs`（csc 候选、参数、after-pack 只对 Windows 目标编、非 Windows 宿主打警告；真编译 Windows 上跑）。
-- 端到端 `text-transport.test.ts`：真 bundle + 假 core，`--body -` 与 `--body-file` 各一次，正文 `& | " % ^ %PATH% 中文 换行` 原样到达（本机通过）。Windows 专用三条（`describe.runIf(win32)`）：用 csc 现编 `.exe`，从 Git Bash（单引号正文）与 PowerShell（pwsh 用参数，只有 5.1 时用 `--body-file`）各调一次断言正文原样，另查退出码回传；本机跳过，编译与类型检查通过，要 Windows CI 跑实。
-- `pnpm --filter @armadra/desktop test`：276 文件通过、3 跳过（3284 条通过、21 跳过），脚本用例 42 条通过。
-- `pnpm check` 与 `pnpm format:check` 通过。
+### 59.5 编辑器：文件被删后草稿的 base
 
-### 61.4 没做 / 已知
+- 原因：文件没了时编辑器基准是空串，之后每次改写本机副本 `base` 都跟着变空，「重新定位 → 合并」拿空串做三方 base，整份草稿都成了新增、处处冲突。
+- `drafts.ts` 的副本加 `origin` / `originVersion`：文件被删期间改写时，从上一份副本接着带下去（上一份还在时就是它的 `base` + `baseVersion`），都没有时退回编辑器手里删之前的正文；超过 256K 字符不存第二份。`use-relocate` 合并用 `draftOrigin()` 取 base。用例：删后改、重开、再改之后重新定位合并，两边改的是不相邻的行，直接应用无冲突；超大正文不存 `origin`。
 
-- C# 启动器本机（macOS）编不了，只在 Windows CI 上真正编译与运行；首次跑前没有实机结果。
-- Git Bash 会把形如 `/c/...` 的参数改写成 Windows 路径，这是 MSYS 自己的行为，正文以 `/` 开头时同样建议走文件或标准输入；技能里没单独写。
+### 59.6 `canvas team` / `open-agent` 每人一条 worktree
+
+- 写法二选一选了成员内联：`--member "agent|标题|任务|worktree=名字或路径"`（没有任务写 `agent|标题||worktree=名字`；只在最后一段以 `worktree=` 开头时摘下，任务里的竖线照旧保留），`open-agent --worktree`。独立参数配对在多个成员时要靠顺序对齐，容易错位。
+- `core/collab/control/worktree.ts`：名字先找分支名或目录名是它的现有 worktree（主检出不算），没有就在 `.worktrees/名字` 从当前 HEAD 建同名分支；路径是工作区内的相对路径或落在工作区里的绝对路径，那里已有检出就用，否则新建、分支取目录名。新建走 Git 域装好的那一个 `RepositoryService` 的同一条写队列（`core/git/index.ts` 导出 `gitService()`），等它结束，失效仓库发现缓存。要求本机工作区、有写与执行权限、根目录是仓库。
+- 画布：已有 Frame 绑着这条检出就放进去，没有就建一个（绑定与页面上 `worktreeFrameBinding` 同一口径，1040×720），成员 `parentId` 指向它、落点在 Frame 内错开、`cwd` 是检出的绝对路径——与 `addNode` 在绑定 Frame 里继承的那一份相同，依赖编排的启动也读它。检出在建任何节点之前备好，Git 拒绝就整队不建；建完重新读一次画布再存。`--dry-run` 不建。
+- 技能正文（示例与一段说明）与 `armadra-hook --help` 的 canvas 段同步，`SKILLS_REVISION` 13 → 14；`guides/architecture.md` 的控制动词一段补了一句。
+
+### 59.7 端到端
+
+- `tools/probes/browser-agent-e2e.mjs`：fixture 加开放与闭合的 shadow root、`<select multiple>`、页底一整块红色的跨源 iframe、加载后 1.2 秒的一条控制台；新增多选与非 multiple 被拒、`>>>` 点击与闭合拒绝、整页截图拼接后页底 iframe 确实是红的（按「红明显多于绿」认：前面按过 Control+a，页面整体处在选中态）；桌面壳一段在任何动词之前读控制台，读得到那条日志。`resize` 的断言改成与真浏览器用例同一口径（滚动条占位的机器答 785×585，本机接了鼠标时就是这样）。
+- `tools/probes/agent-e2e.mjs` 场景 6：假 CLI（记下自己工作目录的 sh）、自己一套 core 与临时仓库，`--only 6` 单跑不需要真 CLI 登录；断言检出与分支、两个 Frame 的绑定、同名成员共用 Frame、成员终端从节点 `cwd` 起在检出里、`open-agent --worktree` 按分支名进同一个 Frame、`--dry-run` 不建、Git 拒绝（`main` 已存在）时画布不多节点、worktree 列表正好多两条。
+
+### 59.8 验证
+
+- `pnpm --filter @armadra/desktop test`：270 文件通过、2 跳过（3172 条通过、8 跳过）；live 2 文件 3 条通过（新增一条真 Chromium：`>>>` 点击、闭合拒绝、多选与禁用项被拒、红色跨源 iframe 在拼接图里——临时切回旧路径时同一断言红像素为 0）；脚本 38 条通过。
+- `pnpm --filter @armadra/web test`：284 文件 2782 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条通过。
+- `node tools/probes/browser-agent-e2e.mjs --electron`：headless 与桌面壳两段共 124 条全过。`node tools/probes/agent-e2e.mjs --only 6`：13 条全过，操作员配置未改动。
+- `pnpm check`、`pnpm format:check` 通过。
 
 ## 60. 真实环境复验：另外四个 CLI 的画布内注入、Claude 的 direct / 审批 / 投递唤醒、打包版与画布压力（2026-09-26）
 
@@ -2629,3 +2594,39 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：271 文件通过、2 跳过（3181 条通过、8 跳过），scripts 的 node:test 38 条全过；`typecheck` 通过。
 - `pnpm --filter @armadra/web test`：284 文件 2781 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条；`pnpm --filter @armadra/shared test`：29 文件 247 条。
 - `pnpm check`、`pnpm format:check` 通过。跑完后 `$TMPDIR` 下没有本节探针的残留目录，没有遗留的 Vite、Armadra 打包版或 tmux 进程。
+
+## 61. Windows 上 `armadra-hook` 不再经过 `cmd.exe`：`.exe` 启动器与从标准输入 / 文件读参数（2026-09-26）
+
+§57 的范围外发现：Windows 上装的 `armadra-hook.cmd` 由 `cmd.exe` 执行，Git Bash 与 PowerShell 调 `.cmd` 都会过它，`canvas send --body`、`post`、`sticky`、`open-agent --task`、`team --member`、`browser type --text`、`fill --field` 里的 `&`、`|`、`"`、`%`、`^` 会被当成命令分隔、变量展开或让引号错位。
+
+### 61.1 启动器换成 `.exe`
+
+评估过的三条路：
+
+- **Node 单文件可执行**：要带一整份 Node，约 80 MB，每个架构一份，注入后还得重签。不取。
+- **Go / Rust 小壳**：1–2 MB，但发布机要多一套工具链（仓库已经是纯 TS），未签名的 Go 程序还常被杀软误报。不取。
+- **C# 小壳，用系统自带的 `csc.exe` 编**：每台 Windows 10/11 都有 .NET Framework 4 与它的 `csc.exe`，构建不加工具链；产物几 KB，`/platform:anycpu` 在 x64 与 arm64 上都原生运行。采用。
+- 让 `ARMADRA_HOOK_BIN` 直接指 `electron.exe` 不行：它是 GUI 子系统，PowerShell 调它不等退出、拿不到退出码，而且 `ELECTRON_RUN_AS_NODE` 与 bundle 路径没有地方带。
+
+实现：
+
+- `cli/armadra-hook/windows-launcher.cs`：读自己旁边的 `armadra-hook.launch`（第一行 runner，第二行 bundle），设 `ELECTRON_RUN_AS_NODE=1`，把调用方命令行里 argv[0] 之后的部分**原样**接在 `"runner" "bundle"` 后面交给 `CreateProcessW`——调用方给普通 `.exe` 拼命令行用的就是 runner 解析时的那套规则，参数不经第二次解释。标准句柄显式继承；子进程进一个 `KILL_ON_JOB_CLOSE` 作业，调用方超时杀掉启动器时 Electron 一起退；Ctrl+C 交给子进程。
+- `scripts/hook-launcher.mjs`：找 `%WINDIR%\Microsoft.NET\Framework{Arm64,64,}\v4.0.30319\csc.exe` 编它。`after-pack.mjs` 对 Windows 目标编进 `resources/cli/armadra-hook.exe`；Windows 宿主上编不出来构建失败，非 Windows 宿主打 Windows 目标只打警告（那样的包退回 `.cmd`）。
+- `launcher.ts::writeLauncher`（win32）：bundle 旁边有 `armadra-hook.exe` 就复制进 `<数据目录>/bin/`、写 `.launch`、返回 `.exe`；同时照旧写 `.cmd`，给还指着它的旧配置与没有 `.exe` 的构建兜底。字节相同不重写（正在跑的 hook 占着文件），不同而被占用时先改名挪开再写。`core/hook/install/shared.ts` 从 bundle 旁边找 `.exe`；侧车 / PATH 查找改为 `.exe` 优先。
+- 签名：Windows 构建目前不签名。`after-pack` 在 electron-builder 签名之前运行，`.exe` 与 `resources/` 里其他文件一起进签名步骤；配上真证书后要确认它被签到。
+
+### 61.2 兜底：任意参数从标准输入或文件读
+
+`cli/armadra-hook/text-input.ts`，在 `control.ts::parseFlags`（canvas 与 browser 共用）里统一接：`--x -` / `--x=-` 读标准输入（一次调用只许一个；标准输入是终端时直接报错，不等键盘），`--x-file <路径>` 读文件并存成 `x`（重复的 `--member-file` 与重复的 `--member` 一样追加）。UTF-8，带 BOM 的 UTF-16（Windows PowerShell 5.1 的 `>`）也认；CRLF 变 LF（否则往终端里多敲一个回车）；去掉末尾一个换行；上限与 hook 载荷同为 1 MB。`--help` 与技能加了一节说明，Windows 上正文有特殊字符时用它们——PowerShell 5.1 自己会弄丢参数里的 `"`，与启动器无关。`SKILLS_REVISION` 14 → 15。
+
+### 61.3 验证
+
+- 单测：`text-input.test.ts`（标准输入两种写法、只读一次、终端拒绝、空输入、值里带 `-`、文件、重复文件追加、读不到 / 没路径 / 超限、`--file` 不受影响、UTF-8/UTF-16 BOM、CRLF、末尾换行）；`hook.test.ts` 与 `launcher-client.test.ts` 补 win32 的 `.exe` 安装、字节相同不重写、没有 `.exe` 退回 `.cmd`；`scripts/hook-launcher.test.mjs`（csc 候选、参数、after-pack 只对 Windows 目标编、非 Windows 宿主打警告；真编译 Windows 上跑）。
+- 端到端 `text-transport.test.ts`：真 bundle + 假 core，`--body -` 与 `--body-file` 各一次，正文 `& | " % ^ %PATH% 中文 换行` 原样到达（本机通过）。Windows 专用三条（`describe.runIf(win32)`）：用 csc 现编 `.exe`，从 Git Bash（单引号正文）与 PowerShell（pwsh 用参数，只有 5.1 时用 `--body-file`）各调一次断言正文原样，另查退出码回传；本机跳过，编译与类型检查通过，要 Windows CI 跑实。
+- `pnpm --filter @armadra/desktop test`：276 文件通过、3 跳过（3284 条通过、21 跳过），脚本用例 42 条通过。
+- `pnpm check` 与 `pnpm format:check` 通过。
+
+### 61.4 没做 / 已知
+
+- C# 启动器本机（macOS）编不了，只在 Windows CI 上真正编译与运行；首次跑前没有实机结果。
+- Git Bash 会把形如 `/c/...` 的参数改写成 Windows 路径，这是 MSYS 自己的行为，正文以 `/` 开头时同样建议走文件或标准输入；技能里没单独写。
