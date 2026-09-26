@@ -8,8 +8,12 @@
 //   2. 管理员在「账号与共享」生成邀请，成员在另一个上下文打开 `#invite=` 链接注册；
 //   3. 只读共享：成员看得见、写被拒（403 与界面反应）；改成可写后能写；撤销
 //      之后成员已开的事件流以 4403 关闭，下一次请求 403；
-//   4. 成员打开页面时全局路由的 403 逐条记下，并检查有没有整页白屏或一串报错；
-//   5. 服务器壳上新建浏览器节点，看到画面流（§39 的 `headlessBrowser` 能力位）。
+//   4. 成员打开页面不撞任何全局 403（§56 的权限表：无害的全局读放行，本机管理
+//      的入口对成员不摆出来），设置导航里没有本机管理的那几页；
+//   5. 撤销共享的那一刻，被撤销者手里的写租约当场释放（§56），不等心跳过期；
+//   6. 同一浏览器里的两个管理员窗口：后开的那个写「本机另一个窗口正在编辑」，
+//      接管不弹确认框，审计里记一条 `canvas.lease.takeover`；
+//   7. 服务器壳上新建浏览器节点，看到画面流（§39 的 `headlessBrowser` 能力位）。
 //
 // 一切都是临时的、回环的：随机端口，mktemp 出来的数据目录、工作空间与浏览器
 // profile，跑完全部删除并停掉 tmux 服务器；不读写操作员自己的数据目录。
@@ -281,11 +285,44 @@ await h.run(async () => {
     "打开共享画布时没有被拒的画布读写",
     Object.keys(tally).join("，") || "无",
   );
+  // §56：Agent 目录、终端后端这类无害的全局读对成员放行，设置、用量、SSH
+  // 提示这些本机管理的面页面不再去问——打开共享画布一个 403 都不该有。
+  const forbiddenOnOpen = Object.keys(tally).filter((key) =>
+    key.startsWith("403 "),
+  );
+  check(
+    forbiddenOnOpen.length === 0,
+    "成员打开共享画布没有任何 403",
+    forbiddenOnOpen.join("，") || "无",
+  );
 
-  // 设置对成员打开也不该整页出错：逐页点一遍，记下每一页的 403 与报错。
+  // 设置对成员只列不碰本机管理的那几页；逐页点一遍，记下每一页的 403 与报错。
   const settingsPages = {};
   await openSettings(member, "通用");
-  for (const section of ["通用", "Agent", "终端", "账号与共享", "账号与用量"]) {
+  const memberNav = await member.evaluate(
+    `return [...document.querySelectorAll('[role="dialog"] nav button')].map((item) => item.innerText.trim()).filter(Boolean);`,
+  );
+  report.memberSettingsNav = memberNav;
+  const ownerOnly = [
+    "Agent",
+    "集成",
+    "终端",
+    "工作区",
+    "GitHub",
+    "SSH",
+    "执行主机",
+    "数据",
+    "账号与用量",
+    "快捷键",
+    "更新",
+  ];
+  check(
+    memberNav.length > 0 &&
+      memberNav.every((label) => !ownerOnly.includes(label)),
+    "成员的设置导航里没有本机管理的页",
+    memberNav.join("、"),
+  );
+  for (const section of memberNav) {
     await member.click('[role="dialog"] nav button', section);
     await sleep(1200);
     const seen = member.drain();
@@ -305,6 +342,17 @@ await h.run(async () => {
   check(
     Object.values(settingsPages).every((page) => page.errors.length === 0),
     "成员逐页打开设置没有控制台错误",
+  );
+  const settingsForbidden = Object.entries(settingsPages).flatMap(
+    ([section, page]) =>
+      page.forbidden
+        .filter((line) => line.startsWith("403 "))
+        .map((line) => `${section}: ${line}`),
+  );
+  check(
+    settingsForbidden.length === 0,
+    "成员逐页打开设置没有 403",
+    settingsForbidden.join("，") || "无",
   );
 
   /* ------------------ 3. 只读：看得见、写不进；改可写；撤销 ------------------ */
@@ -504,21 +552,84 @@ await h.run(async () => {
       what: "画布挂好",
     },
   );
-  // 被撤销的成员刚才拿着写租约（他拖过便签）。他的心跳此后都是 403，core 要等
-  // 30 秒 TTL 才把他摘掉，这段时间里管理员这边是只读（右上角「某某正在编辑」）。
+  // 被撤销的成员刚才拿着写租约（他拖过便签）。§56 之前 core 要等 30 秒 TTL 才
+  // 把他摘掉，这段时间里管理员这边是只读；现在撤销的那一刻就复判、释放并广播。
+  await sleep(1500);
   const heldBy = await admin.evaluate(
     `return document.querySelector('[data-slot="presence-bar"]')?.innerText ?? "";`,
   );
   report.leaseAfterRevoke = heldBy;
-  if (heldBy.includes("正在编辑")) {
-    await admin.capture("11-admin-lease-held-by-revoked");
-    const started = Date.now();
-    await admin.waitFor(
-      `return !(document.querySelector('[data-slot="presence-bar"]')?.innerText ?? "").includes("正在编辑");`,
-      { what: "被撤销成员的租约过期", timeout: 60_000 },
+  check(
+    !heldBy.includes("正在编辑"),
+    "撤销共享后被撤销者的写租约当场释放",
+    heldBy || "只有自己，没有设备条",
+  );
+
+  /* ----------------------- 6. 同一浏览器里的两个窗口 ----------------------- */
+
+  // 同一个浏览器上下文 = 同一份 Cookie = 同一个会话设备。先开的那个窗口拿着
+  // 租约；后开的只读，文案说「本机另一个窗口」，接管一步到位。
+  const second = await chrome.open({ name: "admin-2" });
+  await second.navigate(`${origin}/?workspace=${shared.id}&board=${board.id}`);
+  await second.settle();
+  const otherWindow = await second
+    .waitFor(
+      `const text = document.querySelector('[data-slot="presence-bar"]')?.innerText ?? "";
+       return text.includes("本机另一个窗口正在编辑") ? text : null;`,
+      { what: "后开的窗口写「本机另一个窗口正在编辑」", timeout: 25_000 },
+    )
+    .catch(() => "");
+  await second.capture("12-second-window-readonly");
+  check(
+    otherWindow !== "",
+    "同机第二个窗口：写「本机另一个窗口正在编辑」",
+    otherWindow.replace(/\s+/g, " "),
+  );
+  if (otherWindow !== "") {
+    await second.click('[data-slot="presence-bar"] button', "接管");
+    await sleep(800);
+    const dialog = await second.evaluate(
+      `return !!document.querySelector('[role="alertdialog"]');`,
     );
-    report.leaseReleasedAfterMs = Date.now() - started;
+    check(!dialog, "同机第二个窗口：接管不弹确认框");
+    const taken = await second
+      .waitFor(
+        `return !(document.querySelector('[data-slot="presence-bar"]')?.innerText ?? "").includes("正在编辑");`,
+        { what: "第二个窗口拿到租约", timeout: 10_000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    check(taken, "同机第二个窗口：一次点击拿到租约");
+    await second.capture("13-second-window-took-over");
+    const firstNow = await admin
+      .waitFor(
+        `const text = document.querySelector('[data-slot="presence-bar"]')?.innerText ?? "";
+         return text.includes("本机另一个窗口正在编辑") ? text : null;`,
+        { what: "先开的窗口转成只读", timeout: 15_000 },
+      )
+      .catch(() => "");
+    check(
+      firstNow !== "",
+      "同机第一个窗口：转只读并写「本机另一个窗口正在编辑」",
+    );
+    const audit = await adminApi(
+      `/api/identity/audit?workspaceId=${shared.id}&limit=50`,
+    );
+    const takeover = (audit.entries ?? []).find(
+      (entry) => entry.action === "canvas.lease.takeover",
+    );
+    report.takeoverAudit = takeover ?? null;
+    check(
+      takeover !== undefined,
+      "接管记了一条审计",
+      takeover ? JSON.stringify(takeover.detail ?? {}) : "没有",
+    );
+    // 把租约还给第一个窗口，后面的浏览器节点在它上面建。
+    await admin.click('[data-slot="presence-bar"] button', "接管");
+    await sleep(800);
   }
+  second.drain();
+  await second.navigate("about:blank");
   await admin.click('[data-slot="dock"] button', "新建");
   await admin.click('[role="menuitem"]', "新建浏览器");
   await admin.waitFor(
