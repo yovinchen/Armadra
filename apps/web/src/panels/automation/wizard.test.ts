@@ -194,6 +194,22 @@ describe("command launch spec", () => {
       buildLaunchSpec({ executable: "/bin/echo", args: "", timeoutMs: "0" }),
     ).toMatchObject({ messageKey: "automation.wizard.invalidInterval" });
   });
+
+  it("按 core 本机的平台判程序路径：Windows 上收盘符路径，不收 POSIX 路径", () => {
+    const input = { args: "", timeoutMs: "60000" };
+    expect(
+      buildLaunchSpec(
+        { ...input, executable: "C:\\Program Files\\Tool\\tool.exe" },
+        "windows",
+      ),
+    ).toMatchObject({ executable: "C:\\Program Files\\Tool\\tool.exe" });
+    expect(
+      buildLaunchSpec({ ...input, executable: "/bin/echo" }, "windows"),
+    ).toMatchObject({ messageKey: "automation.wizard.invalidPath" });
+    expect(
+      buildLaunchSpec({ ...input, executable: "C:\\tool.exe" }),
+    ).toMatchObject({ messageKey: "automation.wizard.invalidPath" });
+  });
 });
 
 describe("datetime inputs", () => {

@@ -12,7 +12,9 @@ import {
   SelectValue,
 } from "@/ui/select";
 import { Textarea } from "@/ui/textarea";
+import { localPathRules, useCoreHost } from "@/app/core-host";
 import { useT } from "@/app/preferences-store";
+import { isAbsoluteHostPath } from "@/lib/host-path";
 import { runtimeApi } from "@/api/client";
 import { useCanvasStore } from "@/store/canvas-store";
 import { agentTargets, frozenLaunch } from "./agent-targets";
@@ -139,6 +141,13 @@ export function CreatePlanForm({
   onCreate,
 }: CreatePlanFormProps) {
   const t = useT();
+  // 命令会话的根目录与程序在哪台机器上，就按哪台的规则判：工作区绑在执行主机
+  // 上时是那台（POSIX），否则是 core 本机（Windows 上是盘符或 UNC 路径）。
+  const coreHost = useCoreHost();
+  const remote = useCanvasStore(
+    (store) => (store.workspace?.executionHostId ?? "") !== "",
+  );
+  const pathRules = remote ? "posix" : localPathRules(coreHost);
   // A native card's rule is translated once, not on every render, and the
   // refusal is kept: "we could not translate this, here is what it said" is
   // the useful answer, and re-deriving it below would drop it.
@@ -313,12 +322,12 @@ export function CreatePlanForm({
     };
     let session: NewSessionRequest | undefined;
     if (mode === "new") {
-      const launch = buildLaunchSpec(draft);
+      const launch = buildLaunchSpec(draft, pathRules);
       if ("messageKey" in launch) {
         setError({ field: "executable", messageKey: launch.messageKey });
         return;
       }
-      if (!draft.rootPath.trim().startsWith("/")) {
+      if (!isAbsoluteHostPath(draft.rootPath.trim(), pathRules)) {
         setError({
           field: "rootPath",
           messageKey: "automation.wizard.invalidPath",
@@ -536,7 +545,7 @@ export function CreatePlanForm({
               t("automation.wizard.rootPath"),
               <Input
                 value={draft.rootPath}
-                placeholder="/"
+                placeholder={pathRules === "windows" ? "C:\\" : "/"}
                 onChange={(event) =>
                   setDraft({ ...draft, rootPath: event.target.value })
                 }
@@ -547,7 +556,11 @@ export function CreatePlanForm({
               t("automation.wizard.executable"),
               <Input
                 value={draft.executable}
-                placeholder="/bin/echo"
+                placeholder={
+                  pathRules === "windows"
+                    ? "C:\\Windows\\System32\\cmd.exe"
+                    : "/bin/echo"
+                }
                 onChange={(event) =>
                   setDraft({ ...draft, executable: event.target.value })
                 }

@@ -1,5 +1,6 @@
 import type { AutomationScheduleKind } from "@armadra/shared";
 
+import { isAbsoluteExecutable, type PathRules } from "@/lib/host-path";
 import { validCron, validTimezone } from "./model";
 import {
   AgentLaunchSpec,
@@ -190,13 +191,20 @@ function optionalCount(value: string): bigint | null | "invalid" {
   return bounded(value, 1n, 1_000_000_000n) ?? "invalid";
 }
 
-export function buildLaunchSpec(input: {
-  executable: string;
-  args: string;
-  timeoutMs: string;
-}): CommandLaunchSpec | { messageKey: string } {
+/**
+ * `rules`：可执行文件所在那台机器的路径规则。命令会话跑在 core 本机时按 core
+ * 的平台，跑在执行主机上时按 POSIX（`lib/host-path.ts`）。
+ */
+export function buildLaunchSpec(
+  input: {
+    executable: string;
+    args: string;
+    timeoutMs: string;
+  },
+  rules: PathRules = "posix",
+): CommandLaunchSpec | { messageKey: string } {
   const executable = input.executable.trim();
-  if (!/^\/[^\s\u0000]*$/.test(executable))
+  if (!isAbsoluteExecutable(executable, rules))
     return { messageKey: "automation.wizard.invalidPath" };
   const timeout = bounded(input.timeoutMs, MIN_PERIOD_MS, MAX_TIMEOUT_MS);
   if (timeout === null)

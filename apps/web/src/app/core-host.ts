@@ -2,6 +2,7 @@ import * as React from "react";
 import { shellDialect, type ShellDialect } from "@armadra/shared";
 
 import { systemApi } from "@/api/system";
+import type { PathRules } from "@/lib/host-path";
 
 /**
  * core 那台机器是什么平台、终端缺省跑哪个 shell（`/api/health` 的
@@ -46,9 +47,9 @@ export function coreHost(): CoreHost {
   return host;
 }
 
-/** core 跑在 Windows 上。还不知道时答否。 */
-export function coreOnWindows(): boolean {
-  return host.platform === "win32";
+/** core 本机路径的校验规则（`lib/host-path.ts`）。还不知道时按 POSIX。 */
+export function localPathRules(current: CoreHost = host): PathRules {
+  return current.platform === "win32" ? "windows" : "posix";
 }
 
 /** 节点没指定 shell 时，终端里那个 shell 的方言。 */
