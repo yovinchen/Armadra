@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { runtimeApi } from "../api/client";
 import { onWorkspaceEvent } from "../api/events";
 import { useT } from "../app/preferences-store";
+import { useAccess } from "../app/use-access";
+import { useCanvasStore } from "../store/canvas-store";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +28,8 @@ import {
  *  - 摘要是 Runtime 生成的（`「谁」请求关闭「谁」`），不是 Agent 写的正文：
  *    请求方不能往这个对话框里塞话。
  *  - 一次只显示一条；等待中的其余请求排队，答完一条立刻显示下一条。
+ *  - 答它是替 Agent 代答，和审批同一档：服务器壳上没有这块画布
+ *    `approval:answer` 的人不弹——弹了也只能拿到一个 403。
  */
 
 export interface ControlConfirmRequest {
@@ -39,10 +43,18 @@ export function ControlConfirmDialog() {
   const t = useT();
   const [queue, setQueue] = useState<ControlConfirmRequest[]>([]);
   const current = queue[0];
+  const access = useAccess();
+  const workspaceId = useCanvasStore((state) => state.workspace?.id ?? "");
+  const allowed = access.can("approval:answer", workspaceId);
+  const canAnswer = useRef(allowed);
+  useEffect(() => {
+    canAnswer.current = allowed;
+  }, [allowed]);
 
   useEffect(
     () =>
       onWorkspaceEvent("control.confirm", (event) => {
+        if (!canAnswer.current) return;
         setQueue((pending) =>
           pending.some((item) => item.requestId === event.requestId)
             ? pending

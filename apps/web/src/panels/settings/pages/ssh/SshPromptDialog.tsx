@@ -5,6 +5,7 @@ import type { SshPrompt } from "@armadra/shared";
 import { runtimeApi } from "@/api/client";
 import { onWorkspaceEvent } from "@/api/events";
 import { useT } from "@/app/preferences-store";
+import { useAccess } from "@/app/use-access";
 import { Button } from "@/ui/button";
 import {
   Dialog,
@@ -41,13 +42,20 @@ export function SshPromptDialog() {
     ]);
   }, []);
 
+  // SSH 的口令与主机密钥是本机管理：服务器壳上的成员答不了（403），不弹。
+  const { member } = useAccess();
+
   React.useEffect(
-    () => onWorkspaceEvent("ssh.prompt", (event) => enqueue([event.prompt])),
-    [enqueue],
+    () =>
+      member
+        ? undefined
+        : onWorkspaceEvent("ssh.prompt", (event) => enqueue([event.prompt])),
+    [enqueue, member],
   );
 
   // 页面刚打开时可能已经有人在等了：事件是广播的，错过就不会重发。
   React.useEffect(() => {
+    if (member) return;
     let cancelled = false;
     void runtimeApi
       .sshPrompts()
@@ -58,7 +66,7 @@ export function SshPromptDialog() {
     return () => {
       cancelled = true;
     };
-  }, [enqueue]);
+  }, [enqueue, member]);
 
   function done(promptId: string) {
     setAnswer("");

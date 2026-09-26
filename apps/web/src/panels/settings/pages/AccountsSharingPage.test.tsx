@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   redeem: vi.fn(),
   issue: vi.fn(),
   putGrant: vi.fn(),
+  groupRole: vi.fn(() => "member"),
 }));
 
 vi.mock("../../../api/identity", async (original) => {
@@ -56,7 +57,9 @@ vi.mock("../../../api/accounts", async (original) => {
         name: "前端组",
         ownerPrincipalId: OWNER,
         createdAtMs: 1,
-        members: [{ principalId: MEMBER, role: "member", joinedAtMs: 1 }],
+        members: [
+          { principalId: MEMBER, role: mocks.groupRole(), joinedAtMs: 1 },
+        ],
       },
     ],
     listInvitations: async () => [],
@@ -130,6 +133,7 @@ function mount() {
 beforeEach(() => {
   usePreferencesStore.setState({ locale: "zh-CN" });
   mocks.takeToken.mockReturnValue("");
+  mocks.groupRole.mockReturnValue("member");
 });
 
 afterEach(() => {
@@ -143,6 +147,56 @@ describe("设置 → 账号与共享", () => {
       visibleSettingsSections(server).map((section) => section.id);
     expect(ids(false)).not.toContain("accounts");
     expect(ids(true)).toContain("accounts");
+  });
+
+  it("成员看不到本机管理的那几页", () => {
+    const ids = (member: boolean) =>
+      visibleSettingsSections(true, member).map((section) => section.id);
+    for (const id of [
+      "agent",
+      "integration",
+      "terminal",
+      "workspace",
+      "github",
+      "ssh",
+      "executionHosts",
+      "data",
+      "account",
+      "keybindings",
+      "updates",
+    ]) {
+      expect(ids(false)).toContain(id);
+      expect(ids(true)).not.toContain(id);
+    }
+    // 只动本机偏好与自己账号的几页照旧。
+    expect(ids(true)).toEqual(
+      expect.arrayContaining([
+        "general",
+        "notifications",
+        "whiteboard",
+        "accounts",
+        "about",
+      ]),
+    );
+  });
+
+  it("组管理员只看得到自己管的组，不能建组删组，邀请只能指向组", async () => {
+    mocks.groupRole.mockReturnValue("admin");
+    mocks.resume.mockResolvedValue(
+      session(MEMBER, "member", ["identity:read"]),
+    );
+    mount();
+    expect(await screen.findByText("前端组")).toBeTruthy();
+    expect(screen.queryByText("新建组")).toBeNull();
+    expect(screen.queryByText("共享")).toBeNull();
+    fireEvent.click(screen.getByText("前端组"));
+    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.queryByText("删除组")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    fireEvent.click(await screen.findByText("生成邀请"));
+    // 对话框里选的是组，不是工作空间与角色。
+    expect(await screen.findByRole("combobox", { name: "组" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "工作空间" })).toBeNull();
   });
 
   it("管理员看得到成员、组、邀请与共享", async () => {

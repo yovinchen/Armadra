@@ -7,9 +7,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { runtimeApi } from "../api/client";
+import { useAccess } from "./use-access";
 
 /** Both usage surfaces read the same cache; only an explicit refresh hits providers. */
-export function useUsage(enabled = true) {
+export function useUsage(wanted = true) {
+  // 用量与成本是 owner 自己的账户：服务器壳上的成员一律 403，别去问。
+  const enabled = wanted && !useAccess().member;
   const queryClient = useQueryClient();
   const refreshing = useIsMutating({ mutationKey: ["usage-refresh"] }) > 0;
   const refreshStates = useMutationState({

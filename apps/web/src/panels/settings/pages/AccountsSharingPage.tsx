@@ -72,7 +72,8 @@ import {
  *
  * 只在服务器壳托管的页面上出现（`nav.ts` 的 `serverOnly`）。四块：自己的账号、
  * 成员、组、邀请与工作空间共享；后三块只给管理员（会话里有
- * `identity:manage`）。判定都在 core：这一页只是把「谁、在哪块画布上、是什么
+ * `identity:manage`）。组管理员（某个组里角色是 `admin` 的成员）另有一份收窄
+ * 的：只列他管的组（增删成员、改组内角色，不能建组删组），邀请只能指向这些组。判定都在 core：这一页只是把「谁、在哪块画布上、是什么
  * 角色」写进去，拦不拦由路由门与事件流决定。
  *
  * 邀请链接落在页面根的 `#invite=` 片段上；设置对话框看见它会自己打开到这一页，
@@ -126,6 +127,29 @@ export function AccountsSharingPage() {
           <Sharing />
         </>
       )}
+      {session && !canManage && (
+        <GroupAdmin self={session.device.principalId} />
+      )}
+    </>
+  );
+}
+
+/**
+ * 组管理员的那一份：没有管的组时什么都不画。能做什么由 core 判（组管理员只
+ * 管得到自己的组）；这里只是不把点了必然 403 的按钮摆出来。
+ */
+function GroupAdmin({ self }: { self: string }) {
+  const groups = useGroups();
+  const administered = (groups.data ?? []).filter((group) =>
+    group.members.some(
+      (member) => member.principalId === self && member.role === "admin",
+    ),
+  );
+  if (administered.length === 0) return null;
+  return (
+    <>
+      <Groups only={administered} />
+      <Invitations groupsOnly={administered} />
     </>
   );
 }
@@ -515,16 +539,18 @@ function Members({ self }: { self: string }) {
 
 /* ----------------------------------- 组 ----------------------------------- */
 
-function Groups() {
+/** `only`：组管理员只看得到、只改得了这几个组，也不能建组、删组。 */
+function Groups({ only }: { only?: Group[] }) {
   const t = useT();
   const act = useAct();
   const groups = useGroups();
   const [adding, setAdding] = React.useState(false);
   const [managing, setManaging] = React.useState<string | null>(null);
-  const current = groups.data?.find((group) => group.groupId === managing);
+  const listed = only ?? groups.data ?? [];
+  const current = listed.find((group) => group.groupId === managing);
   return (
     <SettingsGroup title={t("sharing.groups")}>
-      {(groups.data ?? []).map((group) => (
+      {listed.map((group) => (
         <SettingsRow
           key={group.groupId}
           label={group.name}
@@ -535,26 +561,34 @@ function Groups() {
           </span>
         </SettingsRow>
       ))}
-      <SettingsRow label={null}>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={() => setAdding(true)}
-        >
-          {t("sharing.groups.add")}
-        </Button>
-      </SettingsRow>
-      <FormDialog
-        open={adding}
-        title={t("sharing.groups.add")}
-        fields={[{ label: t("sharing.groups.name") }]}
-        submitLabel={t("sharing.save")}
-        onClose={() => setAdding(false)}
-        onSubmit={([name]) => act(() => createGroup((name ?? "").trim()))}
-      />
+      {!only && (
+        <>
+          <SettingsRow label={null}>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setAdding(true)}
+            >
+              {t("sharing.groups.add")}
+            </Button>
+          </SettingsRow>
+          <FormDialog
+            open={adding}
+            title={t("sharing.groups.add")}
+            fields={[{ label: t("sharing.groups.name") }]}
+            submitLabel={t("sharing.save")}
+            onClose={() => setAdding(false)}
+            onSubmit={([name]) => act(() => createGroup((name ?? "").trim()))}
+          />
+        </>
+      )}
       {current && (
-        <GroupDialog group={current} onClose={() => setManaging(null)} />
+        <GroupDialog
+          group={current}
+          restricted={only !== undefined}
+          onClose={() => setManaging(null)}
+        />
       )}
     </SettingsGroup>
   );
@@ -562,9 +596,12 @@ function Groups() {
 
 function GroupDialog({
   group,
+  restricted = false,
   onClose,
 }: {
   group: Group;
+  /** 组管理员：不能删组，也不能把管理员（owner）拉进来。 */
+  restricted?: boolean;
   onClose: () => void;
 }) {
   const t = useT();
@@ -580,6 +617,7 @@ function GroupDialog({
   const candidates = (principals.data ?? []).filter(
     (principal) =>
       principal.disabledAtMs === 0 &&
+      !(restricted && principal.kind === "owner") &&
       !group.members.some(
         (member) => member.principalId === principal.principalId,
       ),
@@ -682,18 +720,20 @@ function GroupDialog({
           </SettingsRow>
         </div>
         <DialogFooter>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() =>
-              void act(() => deleteGroup(group.groupId)).then((done) => {
-                if (done) onClose();
-              })
-            }
-          >
-            {t("sharing.groups.delete")}
-          </Button>
+          {!restricted && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() =>
+                void act(() => deleteGroup(group.groupId)).then((done) => {
+                  if (done) onClose();
+                })
+              }
+            >
+              {t("sharing.groups.delete")}
+            </Button>
+          )}
           <Button type="button" size="sm" onClick={onClose}>
             {t("sharing.save")}
           </Button>
@@ -734,16 +774,22 @@ function WorkspaceSelect({
   );
 }
 
-function Invitations() {
+/**
+ * `groupsOnly`：组管理员签的邀请只能指向他管的组（兑换即入组，拿到的是组上
+ * 的共享），所以对话框里选组而不是选工作空间与角色。
+ */
+function Invitations({ groupsOnly }: { groupsOnly?: Group[] }) {
   const t = useT();
   const act = useAct();
   const workspaces = useWorkspacesQuery();
+  const groups = useGroups();
   const invitations = useQuery({
     queryKey: ["accounts", "invitations"],
     queryFn: listInvitations,
   });
   const [open, setOpen] = React.useState(false);
   const [workspaceId, setWorkspaceId] = React.useState("");
+  const [groupId, setGroupId] = React.useState("");
   const [role, setRole] = React.useState<ShareRole>("viewer");
   const [link, setLink] = React.useState("");
   const now = Date.now();
@@ -753,6 +799,17 @@ function Invitations() {
   );
   const workspaceName = (id: string) =>
     workspaces.data?.find((workspace) => workspace.id === id)?.name ?? id;
+  const groupName = (id: string) =>
+    (groupsOnly ?? groups.data)?.find((group) => group.groupId === id)?.name ??
+    id;
+  const labelOf = (invitation: {
+    targetWorkspaceId: string;
+    targetGroupId: string;
+    role: ShareRole;
+  }) =>
+    invitation.targetWorkspaceId === ""
+      ? t("sharing.share.group", { name: groupName(invitation.targetGroupId) })
+      : `${workspaceName(invitation.targetWorkspaceId)} · ${t(`sharing.role.${invitation.role}`)}`;
   const format = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
   return (
@@ -760,7 +817,7 @@ function Invitations() {
       {pending.map((invitation) => (
         <SettingsRow
           key={invitation.invitationId}
-          label={`${workspaceName(invitation.targetWorkspaceId)} · ${t(`sharing.role.${invitation.role}`)}`}
+          label={labelOf(invitation)}
         >
           <span className="text-[12px] text-muted-foreground">
             {t("sharing.invites.expires", {
@@ -798,16 +855,42 @@ function Invitations() {
             <DialogTitle>{t("sharing.invites.create")}</DialogTitle>
           </DialogHeader>
           <div className="settings-group divide-y divide-border/60 rounded-lg border border-border/70 bg-card">
-            <SettingsRow label={t("sharing.workspace")}>
-              <WorkspaceSelect value={workspaceId} onChange={setWorkspaceId} />
-            </SettingsRow>
-            <SettingsRow label={t("sharing.role")}>
-              <RoleSelect
-                value={role}
-                onChange={setRole}
-                label={t("sharing.role")}
-              />
-            </SettingsRow>
+            {groupsOnly ? (
+              <SettingsRow label={t("sharing.groups")}>
+                <Select value={groupId} onValueChange={setGroupId}>
+                  <SelectTrigger
+                    size="sm"
+                    className={CONTROL_WIDTH}
+                    aria-label={t("sharing.groups")}
+                  >
+                    <SelectValue placeholder={t("sharing.groups")} />
+                  </SelectTrigger>
+                  <SelectContent className="z-[var(--z-dialog)]">
+                    {groupsOnly.map((group) => (
+                      <SelectItem key={group.groupId} value={group.groupId}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingsRow>
+            ) : (
+              <>
+                <SettingsRow label={t("sharing.workspace")}>
+                  <WorkspaceSelect
+                    value={workspaceId}
+                    onChange={setWorkspaceId}
+                  />
+                </SettingsRow>
+                <SettingsRow label={t("sharing.role")}>
+                  <RoleSelect
+                    value={role}
+                    onChange={setRole}
+                    label={t("sharing.role")}
+                  />
+                </SettingsRow>
+              </>
+            )}
           </div>
           {link && (
             <div className="flex items-center gap-2">
@@ -835,13 +918,16 @@ function Invitations() {
             <Button
               type="button"
               size="sm"
-              disabled={!workspaceId}
+              disabled={groupsOnly ? !groupId : !workspaceId}
               onClick={() =>
                 void act(async () => {
-                  const issued = await issueInvitation({
-                    role,
-                    targetWorkspaceId: workspaceId,
-                  });
+                  // 只指向组的邀请：角色不生效（兑换即以组成员入组），但接口
+                  // 要一个合法的值。
+                  const issued = await issueInvitation(
+                    groupsOnly
+                      ? { role: "viewer", targetGroupId: groupId }
+                      : { role, targetWorkspaceId: workspaceId },
+                  );
                   setLink(invitationLink(issued.token));
                 })
               }

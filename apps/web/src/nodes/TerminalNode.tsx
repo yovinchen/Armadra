@@ -22,6 +22,7 @@ import {
   DropdownMenuSubTrigger,
 } from "@/ui/dropdown-menu";
 import { useT } from "@/app/preferences-store";
+import { useAccess } from "@/app/use-access";
 import { useCanvasStore } from "@/store/canvas-store";
 import { AccountBindingBadge } from "@/agent/account/AccountBindingBadge";
 import { agentLabel } from "@/agent/launch";
@@ -173,8 +174,14 @@ export function TerminalNode({ id, node, selected, collapsed }: NodeBodyProps) {
   // 胶囊 / 光晕的映射表在 status-store：会话侧栏与子代理卡片读同一张表。
   const header = agent ? agentHeaderState(agentStatus) : {};
 
+  // 审批答复是替 Agent 代答（设计 S5）：服务器壳上只有这块画布的 driver 答得
+  // 了，别人看得见「在等审批」，但不给按钮。
+  const canAnswer = useAccess().can("approval:answer", workspaceId ?? "");
   const approval =
-    agent && agentStatus?.state === "blocked" && agentStatus.pendingId
+    agent &&
+    canAnswer &&
+    agentStatus?.state === "blocked" &&
+    agentStatus.pendingId
       ? {
           pendingId: agentStatus.pendingId,
           onAnswer: (decision: "allow" | "deny") => {

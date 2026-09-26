@@ -1,7 +1,9 @@
 import * as React from "react";
 import { ChevronLeft, X } from "lucide-react";
 
+import { RUNTIME_VIA_SERVER_SHELL } from "../api/request";
 import { usePreferencesStore, useT } from "../app/preferences-store";
+import { useAccess } from "../app/use-access";
 import { useCanvasStore } from "../store/canvas-store";
 import { AboutPage } from "./settings/pages/AboutPage";
 import { AccountsSharingPage } from "./settings/pages/AccountsSharingPage";
@@ -27,6 +29,7 @@ import {
   groupSections,
   isSettingsSectionId,
   settingsSection,
+  visibleSettingsSections,
   type SettingsSection,
 } from "./settings/nav";
 import { Dialog, DialogContent, DialogTitle } from "@/ui/dialog";
@@ -96,12 +99,19 @@ function SettingsBody({ onClose }: { onClose: () => void }) {
   const subpage = usePreferencesStore((state) => state.settingsSubpage);
   const setSubpage = usePreferencesStore((state) => state.setSettingsSubpage);
 
-  const active = isSettingsSectionId(stored)
+  // 成员看不到本机管理的那几页（`nav.ts` 的 `ownerOnly`）；上次停在其中一页
+  // 的，回到第一页。
+  const { member } = useAccess();
+  const active = isSettingsSectionId(stored, member)
     ? stored
     : DEFAULT_SETTINGS_SECTION;
   const section = settingsSection(active);
   const Page = SECTION_PAGES[active] ?? GeneralPage;
-  const groups = React.useMemo(() => groupSections(), []);
+  const groups = React.useMemo(
+    () =>
+      groupSections(visibleSettingsSections(RUNTIME_VIA_SERVER_SHELL, member)),
+    [member],
+  );
 
   return (
     <div className="settings-layout flex h-full min-h-0 flex-row">

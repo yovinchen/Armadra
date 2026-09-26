@@ -56,6 +56,15 @@ export interface SettingsSection {
    * 列一页没有人可管的设置比不列更糟。
    */
   serverOnly?: boolean;
+  /**
+   * 只给 owner。
+   *
+   * 这些页读写的是整台机器的设置（`/api/settings`、执行主机、SSH、数据与备份、
+   * 用量与账号、快捷键、更新），而共享只发工作空间上的授权：成员打开它们看到
+   * 的是缺省值，改了之后只会收到一句「保存失败」（设计
+   * `server-accounts-and-sharing.md` §6）。所以对成员直接不列。
+   */
+  ownerOnly?: boolean;
 }
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
@@ -83,6 +92,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.ai",
     labelKey: "settings.section.agent",
     icon: Bot,
+    ownerOnly: true,
   },
   {
     // 接入归一之后只有一页：注入方式、Hook、技能、旧残留都在同一行里
@@ -91,12 +101,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.ai",
     labelKey: "integration.nav",
     icon: Webhook,
+    ownerOnly: true,
   },
   {
     id: "terminal",
     groupKey: "settings.group.connection",
     labelKey: "settings.section.terminal",
     icon: SquareTerminal,
+    ownerOnly: true,
   },
   {
     // 浏览器节点的内存配置；和终端一样，说的是「这台机器怎么跑它」。
@@ -105,12 +117,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     labelKey: "settings.section.browser",
     icon: Globe,
     desktopOnly: true,
+    ownerOnly: true,
   },
   {
     id: "workspace",
     groupKey: "settings.group.connection",
     labelKey: "settings.section.workspace",
     icon: LayoutGrid,
+    ownerOnly: true,
   },
   {
     id: "host",
@@ -130,12 +144,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.connection",
     labelKey: "github.nav",
     icon: GitPullRequest,
+    ownerOnly: true,
   },
   {
     id: "ssh",
     groupKey: "settings.group.connection",
     labelKey: "ssh.nav",
     icon: Server,
+    ownerOnly: true,
   },
   {
     // SSH 那一页编辑的是「怎么连」；这一页回答「有哪些机器、现在能不能用、
@@ -144,24 +160,28 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.connection",
     labelKey: "executionHosts.nav",
     icon: Cpu,
+    ownerOnly: true,
   },
   {
     id: "data",
     groupKey: "settings.group.advanced",
     labelKey: "settings.section.data",
     icon: Database,
+    ownerOnly: true,
   },
   {
     id: "account",
     groupKey: "settings.group.advanced",
     labelKey: "settings.section.account",
     icon: Gauge,
+    ownerOnly: true,
   },
   {
     id: "keybindings",
     groupKey: "settings.group.advanced",
     labelKey: "settings.section.keybindings",
     icon: Keyboard,
+    ownerOnly: true,
   },
   {
     // 更新是「有没有新版本」，跟数据、账户一样属于高级设置（S03 / §3.12）。
@@ -169,6 +189,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     groupKey: "settings.group.advanced",
     labelKey: "updates.nav",
     icon: RefreshCw,
+    ownerOnly: true,
   },
   {
     id: "about",
@@ -183,18 +204,26 @@ export const DEFAULT_SETTINGS_SECTION = SETTINGS_SECTIONS[0]!.id;
 /** 这台机器上真正能进的分区。壳不在时少几行，而不是几行点不动的。 */
 export function visibleSettingsSections(
   server: boolean = RUNTIME_VIA_SERVER_SHELL,
+  member = false,
 ): SettingsSection[] {
   const desktop = isDesktop();
   return SETTINGS_SECTIONS.filter(
     (section) =>
-      (desktop || !section.desktopOnly) && (server || !section.serverOnly),
+      (desktop || !section.desktopOnly) &&
+      (server || !section.serverOnly) &&
+      (!member || !section.ownerOnly),
   );
 }
 
-export function isSettingsSectionId(value: unknown): value is string {
+export function isSettingsSectionId(
+  value: unknown,
+  member = false,
+): value is string {
   return (
     typeof value === "string" &&
-    visibleSettingsSections().some((section) => section.id === value)
+    visibleSettingsSections(RUNTIME_VIA_SERVER_SHELL, member).some(
+      (section) => section.id === value,
+    )
   );
 }
 
