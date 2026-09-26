@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  batchSafeWord,
+  isBatchProgram,
   quoteShellWord,
   shellCommandLine,
   shellDialect,
@@ -146,12 +148,17 @@ const DIALECTS: readonly ShellDialect[] = [
   "fish",
   "cmd",
   "powershell",
+  "windows-powershell",
 ];
+
+/** 单个词的写法 5.1 与 7 相同；两者只在整行上分开（`--%`）。 */
+const column = (dialect: ShellDialect) =>
+  dialect === "windows-powershell" ? "powershell" : dialect;
 
 describe("quoteShellWord", () => {
   for (const dialect of DIALECTS) {
     it.each(WORDS)(`${dialect}: %j`, (row) => {
-      expect(quoteShellWord(row.value, dialect)).toBe(row[dialect]);
+      expect(quoteShellWord(row.value, dialect)).toBe(row[column(dialect)]);
     });
   }
 
@@ -166,6 +173,7 @@ describe("shellEnvWord", () => {
     ["fish", '"hooks.Stop=$ARMADRA_CODEX_HOOK"'],
     ["cmd", '"hooks.Stop=%ARMADRA_CODEX_HOOK%"'],
     ["powershell", '"hooks.Stop=${env:ARMADRA_CODEX_HOOK}"'],
+    ["windows-powershell", '"hooks.Stop=${env:ARMADRA_CODEX_HOOK}"'],
   ] as const)("%s", (dialect, expected) => {
     expect(shellEnvWord("hooks.Stop=", "ARMADRA_CODEX_HOOK", dialect)).toBe(
       expected,
@@ -187,7 +195,11 @@ describe("shellDialect", () => {
     ["/opt/homebrew/bin/bash", "posix"],
     ["/usr/local/bin/fish", "fish"],
     ["C:\\Windows\\System32\\cmd.exe", "cmd"],
-    ["powershell.exe", "powershell"],
+    ["powershell.exe", "windows-powershell"],
+    [
+      "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\PowerShell.EXE",
+      "windows-powershell",
+    ],
     ["C:\\Program Files\\PowerShell\\7\\pwsh.exe", "powershell"],
     ["C:\\Program Files\\Git\\bin\\bash.exe", "posix"],
     ["nu", "posix"],
@@ -307,5 +319,183 @@ describe("cmd.exe reads it back (modelled)", () => {
   it("expands a variable reference into one argument", () => {
     const line = shellCommandLine("prog", [{ prefix: "k=", env: "V" }], "cmd");
     expect(readAsCmd(line, { V: "a b & c" }).slice(1)).toEqual(["k=a b & c"]);
+  });
+});
+
+/**
+ * Windows PowerShell 5.1 的读法，同样只模拟用得到的几步：`--%` 之前是
+ * PowerShell 的词（单引号串、`''` 是一个引号），交给原生程序时不转义——空串
+ * 丢掉，引号外有空白才整体套一层 `"`；`--%` 之后原样照交，只展开定义过的
+ * `%NAME%`。最后整行按 C 运行库的规则切开。
+ */
+function readAsWindowsPowerShell(
+  line: string,
+  env: Record<string, string>,
+): string[] {
+  const pieces: string[] = [];
+  let at = 0;
+  let program: string | undefined;
+  for (;;) {
+    while (line[at] === " ") at += 1;
+    if (at >= line.length) break;
+    if (line.startsWith("--% ", at)) {
+      pieces.push(expandEnvironment(line.slice(at + 4), env));
+      break;
+    }
+    if (program === undefined && line.startsWith("& ", at)) {
+      at += 2;
+      continue;
+    }
+    let word = "";
+    if (line[at] === "'") {
+      at += 1;
+      for (;;) {
+        const char = line[at];
+        if (char === undefined) throw new Error("unterminated string");
+        if (char === "'" && line[at + 1] === "'") {
+          word += "'";
+          at += 2;
+        } else if (char === "'") {
+          at += 1;
+          break;
+        } else {
+          word += char;
+          at += 1;
+        }
+      }
+    } else {
+      while (at < line.length && line[at] !== " ") word += line[at++];
+    }
+    if (program === undefined) {
+      program = word;
+      continue;
+    }
+    if (word === "") continue;
+    pieces.push(needQuotes(word) ? `"${word}"` : word);
+  }
+  return windowsArgv(pieces.join(" "));
+}
+
+function needQuotes(value: string): boolean {
+  let quotes = 0;
+  let afterBackslash = false;
+  let needed = false;
+  for (const char of value) {
+    if (char === '"' && !afterBackslash) quotes += 1;
+    else if (/\s/.test(char) && quotes % 2 === 0) needed = true;
+    afterBackslash = char === "\\";
+  }
+  return needed;
+}
+
+function expandEnvironment(text: string, env: Record<string, string>): string {
+  return text.replace(/%([^%]+)%/g, (whole, name: string) =>
+    name in env ? (env[name] as string) : whole,
+  );
+}
+
+describe("Windows PowerShell 5.1 reads it back (modelled)", () => {
+  const passable = WORDS.map((row) => row.value).filter(
+    (value) => !/[%|]/.test(value),
+  );
+
+  it("writes the words after --% so every value arrives", () => {
+    const line = shellCommandLine("prog", passable, "windows-powershell");
+    expect(line).toContain(" --% ");
+    expect(readAsWindowsPowerShell(line, {})).toEqual(passable);
+  });
+
+  it("would lose the quotes without it", () => {
+    const line = shellCommandLine("prog", ['say "hi"'], "powershell");
+    expect(readAsWindowsPowerShell(line, {})).toEqual(["say hi"]);
+    expect(
+      readAsWindowsPowerShell(
+        shellCommandLine("prog", ['say "hi"'], "windows-powershell"),
+        {},
+      ),
+    ).toEqual(['say "hi"']);
+  });
+
+  it("keeps an ordinary line ordinary, and the words before --% PowerShell's", () => {
+    expect(
+      shellCommandLine("prog", ["a b", "100%"], "windows-powershell"),
+    ).toBe("prog 'a b' '100%'");
+    const line = shellCommandLine(
+      "C:\\Program Files\\x.exe",
+      ["100%", "a|b", "", "a b"],
+      "windows-powershell",
+    );
+    expect(line).toBe(
+      "& 'C:\\Program Files\\x.exe' '100%' 'a|b' --% \"\" \"a b\"",
+    );
+    expect(readAsWindowsPowerShell(line, { PATH: "C:\\x" })).toEqual([
+      "100%",
+      "a|b",
+      "",
+      "a b",
+    ]);
+  });
+
+  it("expands a variable as %NAME% after --%", () => {
+    const line = shellCommandLine(
+      "prog",
+      ["-c", { prefix: "k=", env: "V" }],
+      "windows-powershell",
+    );
+    expect(line).toBe('prog -c --% "k=%V%"');
+    expect(readAsWindowsPowerShell(line, { V: 'a \\"b\\" | c' })).toEqual([
+      "-c",
+      'k=a "b" | c',
+    ]);
+  });
+
+  it("refuses what --% cannot carry", () => {
+    for (const value of ["100%", "a|b", "%PATH%"]) {
+      expect(() =>
+        shellCommandLine("prog", ['"', value], "windows-powershell"),
+      ).toThrow(/--%/);
+    }
+  });
+});
+
+describe("batch programs", () => {
+  it("knows a batch file by its extension", () => {
+    expect(isBatchProgram("C:\\npm\\claude.cmd")).toBe(true);
+    expect(isBatchProgram("C:\\tools\\RUN.BAT")).toBe(true);
+    expect(isBatchProgram("C:\\npm\\node.exe")).toBe(false);
+    expect(isBatchProgram("claude")).toBe(false);
+  });
+
+  it.each(['say "hi"', "100%", "a^b", "a&b", "a|b", "<in>", "(x)", "a\nb"])(
+    "refuses %j after a batch program in every dialect",
+    (value) => {
+      expect(batchSafeWord(value)).toBe(false);
+      for (const dialect of DIALECTS) {
+        expect(() =>
+          shellCommandLine("C:\\npm\\claude.cmd", [value], dialect),
+        ).toThrow(/batch/);
+      }
+    },
+  );
+
+  it("lets through what both reads leave alone", () => {
+    const safe = [
+      "plain",
+      "a b",
+      "it's",
+      "$HOME",
+      "!x!",
+      "画布",
+      "C:\\dir\\",
+      "",
+    ];
+    expect(safe.every((value) => batchSafeWord(value))).toBe(true);
+    const line = shellCommandLine(
+      "C:\\npm\\claude.cmd",
+      [...safe, { prefix: "k=", env: "V" }],
+      "cmd",
+    );
+    expect(readAsCmd(line, { V: "v" }).slice(1)).toEqual([...safe, "k=v"]);
+    expect(batchSafeWord({ prefix: "k&", env: "V" })).toBe(false);
   });
 });

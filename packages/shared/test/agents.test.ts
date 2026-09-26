@@ -560,7 +560,22 @@ describe("the typed canvas injection", () => {
   });
 });
 
-describe("Eco quitting", () => {
+describe("Windows npm wrappers and Eco quitting", () => {
+  it("puts the program's own words first, and only on the typed line", () => {
+    const input = {
+      agentId: "codex",
+      programOverride: "C:\\nodejs\\node.exe",
+      programArgs: ["C:\\npm\\node_modules\\@openai\\codex\\bin\\codex.js"],
+      resume: "t-1",
+      prompt: "go",
+      dialect: "cmd" as const,
+    };
+    expect(assembleLaunchCommand(input).command).toBe(
+      "C:\\nodejs\\node.exe C:\\npm\\node_modules\\@openai\\codex\\bin\\codex.js resume t-1 go",
+    );
+    expect(assembleLaunchArgv(input).args).toEqual(["resume", "t-1", "go"]);
+  });
+
   it("names every CLI's own quit command", () => {
     expect(
       Object.fromEntries(

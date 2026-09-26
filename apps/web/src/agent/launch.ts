@@ -197,8 +197,13 @@ export function buildAgentLaunchArgv(agent: TerminalAgent): LaunchArgv {
  * 一启动就被系统 SIGKILL）。探测过能用的那一份，就要原样启动它。
  */
 function launchInput(agent: TerminalAgent, prompt?: string) {
+  const override = usePreferencesStore.getState().launchOverrides[agent.id];
+  // Windows 上 npm 装的 CLI 是 `.cmd` 包装：批处理会让 cmd.exe 把参数再读一遍，
+  // 引用挡不住。Runtime 读出了包装背后的程序（`launchTarget`）时直接起它。
+  const target = override ? undefined : registryEntry(agent.id)?.launchTarget;
   const programOverride =
-    usePreferencesStore.getState().launchOverrides[agent.id] ||
+    override ||
+    target?.program ||
     registryEntry(agent.id)?.resolvedPath ||
     undefined;
   const custom = customAgentFor(agent.id);
@@ -217,6 +222,7 @@ function launchInput(agent: TerminalAgent, prompt?: string) {
     agentId: agent.id,
     ...(custom ? { custom } : {}),
     ...(programOverride ? { programOverride } : {}),
+    ...(target && target.args.length > 0 ? { programArgs: target.args } : {}),
     ...(agent.permissionMode ? { permissionMode: agent.permissionMode } : {}),
     ...(agent.model ? { model: agent.model } : {}),
     ...(agent.sessionId ? { sessionId: agent.sessionId } : {}),

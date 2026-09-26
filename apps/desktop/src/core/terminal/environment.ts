@@ -284,11 +284,53 @@ export function contextSessionEnvironment(
   ];
 }
 
-/** The shell a session runs when the caller named none. */
+/**
+ * The shell a session runs when the caller named none.
+ *
+ * On Windows that is `COMSPEC` (`cmd.exe`). Without one it is PowerShell, and
+ * PowerShell 7 (`pwsh.exe` on PATH) before Windows PowerShell 5.1: 5.1 hands
+ * an argument to a native program without escaping it, so a launch line
+ * there has to fall back on `--%` (`shell.ts`), which cannot carry `%` or
+ * `|`. 7.3+ passes every value intact.
+ */
 export function defaultShell(
   ambient: NodeJS.ProcessEnv = process.env,
   platform: string = process.platform,
+  isFile: (path: string) => boolean = isRegularFile,
 ): string {
-  if (platform === "win32") return ambient.COMSPEC ?? "powershell.exe";
+  if (platform === "win32") {
+    return (
+      ambient.COMSPEC ??
+      onWindowsPath("pwsh.exe", ambient, isFile) ??
+      "powershell.exe"
+    );
+  }
   return ambient.SHELL ?? "/bin/sh";
+}
+
+/** `name` in a directory of a Windows `PATH` (`Path` there, case aside). */
+function onWindowsPath(
+  name: string,
+  ambient: NodeJS.ProcessEnv,
+  isFile: (path: string) => boolean,
+): string | undefined {
+  const key = Object.keys(ambient).find(
+    (each) => each.toUpperCase() === "PATH",
+  );
+  const path = key === undefined ? undefined : ambient[key];
+  for (const directory of (path ?? "").split(";")) {
+    const trimmed = directory.trim().replace(/[\\/]+$/, "");
+    if (trimmed === "") continue;
+    const candidate = `${trimmed}\\${name}`;
+    if (isFile(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+function isRegularFile(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
 }

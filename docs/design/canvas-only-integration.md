@@ -21,7 +21,7 @@
 
 `canvasInjection` 答三样：`args`（字面 argv，给自己 exec CLI 的调用方，例如探针）、`words`（敲进节点 shell 的词，还没引用）、`env`（并进节点终端环境）。除 Codex 外 `words` 就是 `args`；Codex 见 §3 末尾。
 
-启动行是敲进节点终端的，按那个 shell 的方言引用：`packages/shared/src/shell.ts`（core 里逐字节同一份 `core/terminal/shell.ts`，用例比对两份）分 `posix`（sh/bash/zsh/dash）、`fish`、`cmd`、`powershell` 四种，管参数引用与环境变量引用（`"${VAR}"` / `"$VAR"` / `"%VAR%"` / `"${env:VAR}"`）。方言取节点终端实际跑的 shell：会话记录里的 `shell`，没有会话时是节点指定的，再没有是 core 的缺省 shell（Windows 上是 `COMSPEC`，页面从 `/api/health` 的 `defaultShell` 得知）；SSH 节点一律 POSIX。Codex 那两个由行展开的环境变量在 `cmd.exe` 下另有写法（`inject.ts::codexTomlString`），所以 `canvasEnvironment` 也按方言答。
+启动行是敲进节点终端的，按那个 shell 的方言引用：`packages/shared/src/shell.ts`（core 里逐字节同一份 `core/terminal/shell.ts`，用例比对两份）分 `posix`（sh/bash/zsh/dash）、`fish`、`cmd`、`powershell`（`pwsh` 7）、`windows-powershell`（`powershell.exe` 5.1）五种，管参数引用与环境变量引用（`"${VAR}"` / `"$VAR"` / `"%VAR%"` / `"${env:VAR}"`）。5.1 把参数交给原生程序时不转义，含 `"`、空串、带空格又以 `\` 结尾的词与环境变量引用写在停止解析符 `--%` 之后（C 运行库引用、`%VAR%`，带不了 `%` 与 `|`）。Windows 上 npm / pnpm 装的 CLI 是 `.cmd` 包装，批处理会让 `cmd.exe` 把参数再读一遍，所以启动行绕过包装：`core/agent/windows-shim.ts` 读出背后的 `node <脚本>` 或原生程序，`GET /api/agents` 以 `launchTarget` 答给页面；读不出来的包装留作程序，只放行两遍都读不坏的词（`shell.ts::batchSafeWord`），此时 Codex 的环境变量一律按 `cmd.exe` 的形状写。方言取节点终端实际跑的 shell：会话记录里的 `shell`，没有会话时是节点指定的，再没有是 core 的缺省 shell（Windows 上是 `COMSPEC`，页面从 `/api/health` 的 `defaultShell` 得知）；SSH 节点一律 POSIX。Codex 那两个由行展开的环境变量在 `cmd.exe` 下另有写法（`inject.ts::codexTomlString`），所以 `canvasEnvironment` 也按方言答。
 
 启动路径与各自的出口：
 

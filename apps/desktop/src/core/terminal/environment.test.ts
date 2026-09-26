@@ -180,6 +180,21 @@ describe("the default shell", () => {
       "C:\\cmd.exe",
     );
   });
+
+  it("prefers PowerShell 7 over Windows PowerShell 5.1 without COMSPEC", () => {
+    const path = "C:\\Windows\\System32;C:\\Program Files\\PowerShell\\7\\";
+    const pwsh = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+    expect(defaultShell({ Path: path }, "win32", (file) => file === pwsh)).toBe(
+      pwsh,
+    );
+    expect(defaultShell({ Path: path }, "win32", () => false)).toBe(
+      "powershell.exe",
+    );
+    // COMSPEC 仍然优先：它就是系统说的缺省 shell。
+    expect(
+      defaultShell({ COMSPEC: "C:\\cmd.exe", Path: path }, "win32", () => true),
+    ).toBe("C:\\cmd.exe");
+  });
 });
 
 describe("the process table", () => {

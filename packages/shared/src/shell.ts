@@ -24,16 +24,30 @@
  *     (`"` groups, `\"` is a literal quote). `%NAME%` is expanded before
  *     anything else, even inside quotes, and `& | < > ^ ( )` are live outside
  *     quotes. `^` escapes one character.
- *   * `powershell` — Windows PowerShell and PowerShell 7 (`pwsh`): single
- *     quotes are literal with `''` for a quote (the typographic single quotes
- *     count too), a quoted program needs the call operator `&`, and variables
- *     are `$env:NAME`. How the argument then reaches a native program is
- *     PowerShell 7.3+'s: an embedded `"` arrives intact. Windows PowerShell 5.1
- *     passes it unescaped and the program sees it stripped — a limit of that
- *     shell, not of the quoting.
+ *   * `powershell` — PowerShell 7 (`pwsh`): single quotes are literal with
+ *     `''` for a quote (the typographic single quotes count too), a quoted
+ *     program needs the call operator `&`, and variables are `$env:NAME`. How
+ *     the argument then reaches a native program is PowerShell 7.3+'s: an
+ *     embedded `"` arrives intact.
+ *   * `windows-powershell` — Windows PowerShell 5.1 (`powershell.exe`): the
+ *     same language, but it hands an argument to a native program without
+ *     escaping it — an embedded `"` is stripped by the program's C runtime, a
+ *     value with a space that ends in `\` escapes its own closing quote, and
+ *     an empty argument is dropped. A line with such a word is written after
+ *     the stop-parsing token `--%` instead ({@link shellCommandLine}).
+ *
+ * One more rule holds whatever the dialect, because it is about the program:
+ * a batch file (`.cmd` / `.bat`, what npm installs a CLI as on Windows) has
+ * `cmd.exe` read its arguments a second time through `%*`, which no quoting
+ * survives — see {@link batchSafeWord}.
  */
 
-export type ShellDialect = "posix" | "fish" | "cmd" | "powershell";
+export type ShellDialect =
+  | "posix"
+  | "fish"
+  | "cmd"
+  | "powershell"
+  | "windows-powershell";
 
 /**
  * A word of a launch line before it is quoted: a literal value, or a value the
@@ -69,6 +83,7 @@ export function shellDialect(shell: string | undefined): ShellDialect {
     case "cmd":
       return "cmd";
     case "powershell":
+      return "windows-powershell";
     case "pwsh":
     case "pwsh-preview":
       return "powershell";
@@ -141,6 +156,7 @@ export function quoteShellWord(value: string, dialect: ShellDialect): string {
     case "cmd":
       return cmdQuote(value);
     case "powershell":
+    case "windows-powershell":
       return powershellQuote(value);
   }
 }
@@ -181,6 +197,7 @@ export function shellEnvWord(
       }
       return `"${prefix}%${name}%"`;
     case "powershell":
+    case "windows-powershell":
       return `"${prefix.replace(/[`$"\u201c\u201d\u201e]/g, "`$&")}\${env:${name}}"`;
   }
 }
@@ -199,15 +216,99 @@ export function renderLaunchWord(
  * A whole command line: the program, then the words. PowerShell reads a
  * quoted first word as a string to print, so a quoted program there takes
  * the call operator.
+ *
+ * Windows PowerShell 5.1 gets the stop-parsing token `--%` in front of the
+ * first word that would not survive its argument passing
+ * ({@link needsVerbatim}): after it the rest
+ * of the line goes to the program as it is, so the words are written in the C
+ * runtime's quoting the program splits them with, and a variable is `%NAME%`
+ * — the one expansion `--%` still does. Moving the value into an environment
+ * variable instead would not help: 5.1 strips the quotes when it passes the
+ * argument on, wherever the string came from.
+ *
+ * After a batch program, a word {@link batchSafeWord} does not let through is
+ * refused: better no launch than a line `cmd.exe` takes apart.
  */
 export function shellCommandLine(
   program: string,
   words: readonly LaunchWord[],
   dialect: ShellDialect,
 ): string {
+  if (isBatchProgram(program) && !words.every(batchSafeWord)) {
+    throw new Error(
+      "A batch program has cmd.exe read its arguments again; this one would not survive",
+    );
+  }
   let head = quoteShellWord(program, dialect);
-  if (dialect === "powershell" && head !== program) head = `& ${head}`;
-  return [head, ...words.map((word) => renderLaunchWord(word, dialect))].join(
-    " ",
+  const powershell =
+    dialect === "powershell" || dialect === "windows-powershell";
+  if (powershell && head !== program) head = `& ${head}`;
+  // `--%` goes in front of the first word that needs it; the ones before it
+  // stay ordinary PowerShell words and may hold what `--%` cannot take.
+  const verbatim =
+    dialect === "windows-powershell" ? words.findIndex(needsVerbatim) : -1;
+  const plain = verbatim < 0 ? words : words.slice(0, verbatim);
+  return [
+    head,
+    ...plain.map((word) => renderLaunchWord(word, dialect)),
+    ...(verbatim < 0
+      ? []
+      : ["--%", ...words.slice(verbatim).map(verbatimWord)]),
+  ].join(" ");
+}
+
+/** `C:\npm\claude.cmd` — a program `cmd.exe` runs as a batch file. */
+export function isBatchProgram(program: string): boolean {
+  return /\.(cmd|bat)$/i.test(program.trim());
+}
+
+/**
+ * Whether a word may follow a batch program.
+ *
+ * A batch file hands its arguments on with `%*`, and `cmd.exe` reads that
+ * text once more: a `"` in a value turns the quoting inside out and what it
+ * guarded (`&`, `|`, `<`, `>`) runs as a command, `( )` end the block a shim
+ * runs in, `^` and `%` mean something again. Nothing written on the typed
+ * line reaches that second read, so a word holding any of them is refused,
+ * not quoted. The launch is meant to call the CLI past its shim
+ * (`agent/windows-shim.ts`); this is what is left when the shim could not be
+ * read.
+ *
+ * A variable's prefix is checked the same way; its value is the caller's and
+ * must hold nothing either read acts on (Codex's `codexTomlString` in its
+ * `cmd.exe` form).
+ */
+export function batchSafeWord(word: LaunchWord): boolean {
+  return !/["%^&|<>()\r\n]/.test(typeof word === "string" ? word : word.prefix);
+}
+
+/** A word Windows PowerShell 5.1 would not pass on intact. */
+function needsVerbatim(word: LaunchWord): boolean {
+  if (typeof word !== "string") return true;
+  return (
+    word === "" ||
+    word.includes('"') ||
+    (/\s/.test(word) && word.endsWith("\\"))
   );
+}
+
+/**
+ * One word after `--%`, in the C runtime's quoting. `--%` still expands
+ * `%NAME%` — a lone `%` would pair with the next one and swallow a variable
+ * — and it stops at a `|`, so a value holding either is refused.
+ */
+function verbatimWord(word: LaunchWord): string {
+  if (typeof word !== "string") {
+    if (!ENV_NAME.test(word.env)) {
+      throw new Error(`Not an environment variable name: ${word.env}`);
+    }
+    if (/["%|\r\n]/.test(word.prefix)) {
+      throw new Error("Windows PowerShell cannot pass this prefix after --%");
+    }
+    return `"${word.prefix}%${word.env}%"`;
+  }
+  if (/[%|\r\n]/.test(word)) {
+    throw new Error("Windows PowerShell cannot pass this value after --%");
+  }
+  return word.length > 0 && !/[\s"]/.test(word) ? word : argvQuote(word);
 }

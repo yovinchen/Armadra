@@ -1,5 +1,6 @@
 import {
   type ShellDialect,
+  isBatchProgram,
   shellCommandLine,
   shellDialect,
 } from "../terminal/shell";
@@ -11,7 +12,14 @@ import {
 } from "../hook/install/inject";
 import { defaultShell } from "../terminal/environment";
 import { planLaunch } from "./launch";
-import { type AgentSettings, baseAgent } from "./registry";
+import {
+  type AgentSettings,
+  baseAgent,
+  customAgent,
+  definition,
+  launchTargetOf,
+  resolveCommand,
+} from "./registry";
 
 /**
  * The one exit every canvas launch line leaves the core through
@@ -32,6 +40,11 @@ import { type AgentSettings, baseAgent } from "./registry";
  * Both halves are written for the node terminal's shell ({@link nodeDialect}):
  * the line is quoted in its dialect, and a Codex value the line expands from
  * the environment is written so that shell expands it intact.
+ *
+ * On Windows the program is what the npm / pnpm wrapper runs, not the wrapper
+ * (`windows-shim.ts`): a `.cmd` has `cmd.exe` read every argument a second
+ * time. A wrapper that cannot be read stays the program, and then only words
+ * that survive both reads go on the line (`shellCommandLine`).
  */
 
 export interface CanvasLaunchRequest {
@@ -45,7 +58,11 @@ export interface CanvasLaunchRequest {
   readonly model?: string;
   /** Continue this provider session. */
   readonly resume?: string;
-  /** The program resolved on this machine; the registry's name otherwise. */
+  /**
+   * The program resolved on this machine (`GET /api/agents`' `resolvedPath`);
+   * the registry's name otherwise — looked up on PATH here on Windows, where
+   * the shell would find the `.cmd` wrapper.
+   */
   readonly program?: string;
   /**
    * A frozen argv (a schedule's plan) used *instead of* the flags derived
@@ -122,13 +139,44 @@ export function canvasLaunch(request: CanvasLaunchRequest): CanvasLaunch {
     },
   );
   const flags = request.frozenArgs ?? plan.args;
-  const program = request.program ?? plan.program;
+  const resolved =
+    request.program ??
+    (process.platform === "win32" ? resolveCommand(plan.program) : undefined) ??
+    plan.program;
+  const target = launchTargetOf(resolved);
+  const program = target?.program ?? resolved;
+  const lead = target?.args ?? [];
   const dialect = request.dialect ?? nodeDialect(undefined);
   return {
     program,
-    args: [...flags, ...injection.args],
-    line: shellCommandLine(program, [...flags, ...injection.words], dialect),
+    args: [...lead, ...flags, ...injection.args],
+    line: shellCommandLine(
+      program,
+      [...lead, ...flags, ...injection.words],
+      dialect,
+    ),
   };
+}
+
+/**
+ * Whether this agent starts through a batch wrapper nothing could be read
+ * out of. Its line then reaches the CLI through `cmd.exe`'s second read, so
+ * a value the line expands from the environment has to be written for
+ * `cmd.exe` whatever shell types it.
+ */
+export function startsThroughBatch(
+  settings: AgentSettings,
+  agentId: string,
+): boolean {
+  const command =
+    customAgent(settings, agentId)?.launchCmd ?? definition(agentId)?.launchCmd;
+  if (command === undefined) return false;
+  const resolved = resolveCommand(command);
+  return (
+    resolved !== undefined &&
+    isBatchProgram(resolved) &&
+    launchTargetOf(resolved) === undefined
+  );
 }
 
 /** The same launch as one line of shell text, each word quoted only if needed. */
@@ -160,5 +208,8 @@ export function canvasEnvironment(
       error: error instanceof Error ? error.message : String(error),
     });
   }
-  return injectionFor(settings, dataDir, agentId, { nodeId, dialect }).env;
+  return injectionFor(settings, dataDir, agentId, {
+    nodeId,
+    dialect: startsThroughBatch(settings, agentId) ? "cmd" : dialect,
+  }).env;
 }

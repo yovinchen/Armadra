@@ -651,14 +651,18 @@ const CMD_TOML_PLAIN = /^(?:[A-Za-z0-9 _.,:;/=+@#~*?{}[\]'-]|[^\x00-\x7f])$/u;
  * that into a `"` — and everything between them either reader would act on
  * (`& | < > ^ ( ) % ! " \`, control characters) is a TOML `\uXXXX` escape.
  * What is left is plain on whichever side of `cmd.exe`'s quoting it falls.
- * POSIX shells and PowerShell expand a variable into one finished word, so
- * they get {@link tomlString} as it is.
+ * Windows PowerShell 5.1 gets the same form: its line expands the value as
+ * `%NAME%` after `--%` (`shellCommandLine`), and the program reads it with
+ * the same C runtime rules. POSIX shells and PowerShell 7 expand a variable
+ * into one finished word, so they get {@link tomlString} as it is.
  */
 export function codexTomlString(
   value: string,
   dialect: ShellDialect = "posix",
 ): string {
-  if (dialect !== "cmd") return tomlString(value);
+  if (dialect !== "cmd" && dialect !== "windows-powershell") {
+    return tomlString(value);
+  }
   let body = "";
   for (const char of value) {
     // Only ASCII is ever escaped, so one `\uXXXX` per character.

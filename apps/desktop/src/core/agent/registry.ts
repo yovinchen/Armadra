@@ -1,6 +1,7 @@
 import { accessSync, constants, statSync } from "node:fs";
 import { delimiter, isAbsolute, join, sep } from "node:path";
 import { agentPath } from "../terminal/environment";
+import { type ShimTarget, fileProbe, shimTarget } from "./windows-shim";
 
 /**
  * The six agent CLIs this build knows, and what each of them can do.
@@ -344,10 +345,29 @@ export interface AgentInfo {
   readonly baseAgent?: string;
   readonly resolvedPath: string | null;
   readonly installed: boolean;
+  /**
+   * What to start instead of {@link resolvedPath} when that is an npm / pnpm
+   * wrapper on Windows (`claude.cmd`): the program behind it and the words
+   * that go in front of the CLI's own (`node.exe <cli.js>`). Absent when the
+   * path is the program itself, or the wrapper could not be read.
+   */
+  readonly launchTarget?: ShimTarget;
+}
+
+/** The two detection fields plus the wrapper's target, for one command. */
+function located(
+  command: string,
+): Pick<AgentInfo, "resolvedPath" | "installed" | "launchTarget"> {
+  const resolved = resolveCommand(command);
+  const target = launchTargetOf(resolved);
+  return {
+    resolvedPath: resolved ?? null,
+    installed: resolved !== undefined,
+    ...(target === undefined ? {} : { launchTarget: target }),
+  };
 }
 
 function infoOf(agent: AgentDefinition): AgentInfo {
-  const resolved = resolveCommand(agent.launchCmd);
   return {
     id: agent.id,
     label: agent.label,
@@ -356,8 +376,7 @@ function infoOf(agent: AgentDefinition): AgentInfo {
     promptMode: agent.promptMode,
     capabilities: [...agent.capabilities],
     args: [],
-    resolvedPath: resolved ?? null,
-    installed: resolved !== undefined,
+    ...located(agent.launchCmd),
   };
 }
 
@@ -370,7 +389,6 @@ function infoOf(agent: AgentDefinition): AgentInfo {
  */
 export function customInfo(custom: CustomAgent): AgentInfo {
   const base = definition(custom.baseAgent);
-  const resolved = resolveCommand(custom.launchCmd);
   const disabled = custom.disabledCapabilities ?? [];
   const info: AgentInfo = {
     id: custom.id,
@@ -385,8 +403,7 @@ export function customInfo(custom: CustomAgent): AgentInfo {
             (capability) => !disabled.includes(capability),
           ),
     args: [...(custom.args ?? [])],
-    resolvedPath: resolved ?? null,
-    installed: resolved !== undefined,
+    ...located(custom.launchCmd),
   };
   return base === undefined ? info : { ...info, baseAgent: base.id };
 }
@@ -422,6 +439,22 @@ export function resolveCommand(
     if (suffixed !== undefined) return suffixed;
   }
   return undefined;
+}
+
+/**
+ * The program behind an npm / pnpm wrapper (`agent/windows-shim.ts`), or
+ * `undefined` when `resolved` is the program itself or the wrapper could not
+ * be read. `node` is looked up on the same PATH as the CLI.
+ */
+export function launchTargetOf(
+  resolved: string | undefined,
+  ambient: NodeJS.ProcessEnv = process.env,
+): ShimTarget | undefined {
+  if (resolved === undefined) return undefined;
+  return shimTarget(
+    resolved,
+    fileProbe((name) => resolveCommand(name, ambient)),
+  );
 }
 
 function isExecutable(path: string): boolean {

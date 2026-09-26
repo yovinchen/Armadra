@@ -1,4 +1,10 @@
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join, relative, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { installCollaborationSkill } from "../collab/skill";
@@ -11,6 +17,7 @@ import {
   canvasLaunch,
   canvasLaunchLine,
   nodeDialect,
+  startsThroughBatch,
 } from "./canvas-launch";
 import { quoteShellWord } from "../terminal/shell";
 import type { AgentSettings, CustomAgent } from "./registry";
@@ -130,6 +137,79 @@ describe("canvas launch lines", () => {
     expect(nodeDialect("pwsh.exe")).toBe("powershell");
     // An SSH node's line is read by the far host's shell.
     expect(nodeDialect("C:\\Windows\\system32\\cmd.exe", true)).toBe("posix");
+  });
+
+  /**
+   * Windows PowerShell 5.1 strips a `"` when it passes an argument on, so
+   * Codex's line goes after `--%` there and its variables are `%NAME%`,
+   * written in the same C-runtime form as for `cmd.exe`.
+   */
+  it("writes Codex's line after --% for Windows PowerShell 5.1", () => {
+    const line = canvasLaunchLine({
+      settings,
+      dataDir,
+      agentId: "codex",
+      program: "C:\\npm\\codex.exe",
+      dialect: nodeDialect("powershell.exe"),
+    });
+    expect(line.startsWith("C:\\npm\\codex.exe -c ")).toBe(true);
+    expect(line).toContain(' --% "hooks.SessionStart=%ARMADRA_CODEX_HOOK%"');
+    const env = canvasEnvironment(
+      settings,
+      dataDir,
+      "codex",
+      "node-1",
+      undefined,
+      "windows-powershell",
+    );
+    const hook = env.find(([key]) => key === "ARMADRA_CODEX_HOOK")?.[1];
+    expect(hook?.startsWith('[{hooks=[{type=\\"command\\"')).toBe(true);
+  });
+
+  /**
+   * A wrapper that could not be read stays the program: the line is written
+   * only when every word survives `cmd.exe`'s second read, and a value the
+   * line expands is written for `cmd.exe` whatever shell types it.
+   */
+  it("keeps an unreadable batch wrapper to the words it cannot break", () => {
+    const wrapper = join(tempDir("armadra-batch-"), "codex.cmd");
+    writeFileSync(wrapper, '@echo off\r\nset "P=x"\r\n"%P%" %*\r\n', "utf8");
+    chmodSync(wrapper, 0o755);
+    custom.push({
+      id: "custom:batch",
+      label: "Batch",
+      launchCmd: wrapper,
+      baseAgent: "codex",
+    });
+    expect(startsThroughBatch(settings, "custom:batch")).toBe(true);
+    expect(startsThroughBatch(settings, "codex")).toBe(false);
+    const line = canvasLaunchLine({
+      settings,
+      dataDir,
+      agentId: "custom:batch",
+      program: wrapper,
+      dialect: "powershell",
+    });
+    expect(line).toContain('"hooks.SessionStart=${env:ARMADRA_CODEX_HOOK}"');
+    const env = canvasEnvironment(
+      settings,
+      dataDir,
+      "custom:batch",
+      "node-1",
+      undefined,
+      "powershell",
+    );
+    const hook = env.find(([key]) => key === "ARMADRA_CODEX_HOOK")?.[1];
+    expect(hook).not.toMatch(/(^|[^\\])"/);
+    expect(() =>
+      canvasLaunchLine({
+        settings,
+        agentId: "custom:batch",
+        program: wrapper,
+        frozenArgs: ["--prompt", "fix a&b"],
+        dialect: "cmd",
+      }),
+    ).toThrow(/batch/);
   });
 
   it("injects a custom entry as its base", () => {

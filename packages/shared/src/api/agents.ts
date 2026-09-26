@@ -29,6 +29,16 @@ export const agentInfoSchema = z.object({
   resolvedPath: z.string().nullable().default(null),
   /** The launch program exists on the augmented PATH. */
   installed: z.boolean(),
+  /**
+   * What to start instead of `resolvedPath` when that is an npm / pnpm
+   * wrapper on Windows (`claude.cmd`): the program behind it and the words
+   * that go in front of the CLI's own (`node.exe <cli.js>`). A batch wrapper
+   * has `cmd.exe` read every argument again, which no quoting survives.
+   * Absent when the path is the program itself or the wrapper was not read.
+   */
+  launchTarget: z
+    .object({ program: z.string(), args: z.array(z.string()) })
+    .optional(),
   /** Revision of the installed hook client, absent when hooks are not installed. */
   clientRevision: z.number().int().nonnegative().nullish(),
   /**

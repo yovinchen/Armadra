@@ -385,6 +385,13 @@ export interface AssembleLaunchCommandInput {
   resume?: string;
   /** Absolute path or alternative program from settings; replaces `launchCmd`. */
   programOverride?: string;
+  /**
+   * Words the program itself needs in front of the CLI's argv — the script
+   * when an npm wrapper on Windows is started as `node.exe <cli.js>` (the
+   * row's `launchTarget`). Only on the typed line: a frozen plan names the
+   * agent, and its executor resolves the program on its own machine.
+   */
+  programArgs?: readonly string[];
   /** Extra argv appended after the flags (custom agents). */
   extraArgs?: readonly string[];
   /**
@@ -555,6 +562,7 @@ export function assembleLaunchCommand(
     : args.length;
   const words: LaunchWord[] = [...args];
   words.splice(withoutPrompt, 0, ...(input.shellWords ?? []));
+  words.unshift(...(input.programArgs ?? []));
   return {
     command: shellCommandLine(program, words, input.dialect ?? "posix"),
     ...(stdinPrompt ? { stdinPrompt } : {}),

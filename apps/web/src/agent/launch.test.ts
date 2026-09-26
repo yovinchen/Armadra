@@ -156,6 +156,36 @@ describe("启动行按节点终端的 shell 引用", () => {
       '"C:\\Users\\Ada Bell\\AppData\\Roaming\\npm\\codex.cmd" resume t-1 -c "hooks.Stop=%ARMADRA_CODEX_HOOK%"',
     );
   });
+
+  it("Windows PowerShell 5.1 的 Codex 行写在 --% 后面", () => {
+    setAgentRegistry([codex]);
+    expect(
+      buildAgentLaunch({ id: "codex" }, undefined, "windows-powershell")
+        .command,
+    ).toBe(
+      "& 'C:\\Users\\Ada Bell\\AppData\\Roaming\\npm\\codex.cmd' -c --% \"hooks.Stop=%ARMADRA_CODEX_HOOK%\"",
+    );
+  });
+
+  it("读出了 npm 包装背后的程序时绕过 .cmd 直接起它", () => {
+    const node = "C:\\Program Files\\nodejs\\node.exe";
+    const script =
+      "C:\\Users\\Ada Bell\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js";
+    setAgentRegistry([
+      { ...codex, launchTarget: { program: node, args: [script] } },
+    ]);
+    // 批处理挡不住的 `&` 与 `"`，直接起 node 时照常引用就能原样到达。
+    expect(
+      buildAgentLaunch({ id: "codex" }, 'fix "a" & b', "cmd").command,
+    ).toBe(
+      `"${node}" "${script}" -c "hooks.Stop=%ARMADRA_CODEX_HOOK%" ^"fix \\^"a\\^" ^& b^"`,
+    );
+    // 没读出来时 .cmd 就是程序：这样的提示词宁可不启动。
+    setAgentRegistry([codex]);
+    expect(() =>
+      buildAgentLaunch({ id: "codex" }, 'fix "a" & b', "cmd"),
+    ).toThrow(/batch/);
+  });
 });
 
 describe("建会话请求里的账号绑定（S02 预留）", () => {
