@@ -819,8 +819,9 @@ describe("wait", () => {
 
 describe("capture and pdf", () => {
   it("captures the viewport, the full page beyond it, and one element", async () => {
+    // 回答里是落盘后的绝对路径，按本机分隔符写。
     expect(await run("capture", { path: "s/view.png" })).toContain(
-      "s/view.png",
+      join("s", "view.png"),
     );
     await run("capture", { path: "s/full.png", fullPage: true });
     const full = page.sent

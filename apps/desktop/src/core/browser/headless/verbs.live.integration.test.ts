@@ -294,7 +294,7 @@ describe.skipIf(found.path === undefined)(
 
       // capture: viewport, full page, one element; pdf.
       const shot = await run("capture", { path: "shots/view.png" });
-      expect(shot).toContain("shots/view.png");
+      expect(shot).toContain(join("shots", "view.png"));
       const full = await run("capture", {
         path: "shots/full.png",
         "full-page": true,
@@ -318,10 +318,16 @@ describe.skipIf(found.path === undefined)(
         readFileSync(join(workspace, "page.pdf")).subarray(0, 5).toString(),
       ).toBe("%PDF-");
 
-      // resize.
-      expect(await run("resize", { width: 800, height: 600 })).toContain(
-        "800×600",
-      );
+      // resize. 回答的是布局视口的客户区（坐标就落在这里）：fixture 两个方向都
+      // 能滚，没有浮动滚动条的机器（CI 的 Linux 与 macOS runner）上要各减去
+      // 一条滚动条的厚度，答成 785×585；本机的浮动滚动条不占位，答 800×600。
+      const resized = await run("resize", { width: 800, height: 600 });
+      const [, viewWidth, viewHeight] =
+        /视口现在 (\d+)×(\d+)/.exec(resized) ?? [];
+      expect(Number(viewWidth)).toBeGreaterThan(800 - 24);
+      expect(Number(viewWidth)).toBeLessThanOrEqual(800);
+      expect(Number(viewHeight)).toBeGreaterThan(600 - 24);
+      expect(Number(viewHeight)).toBeLessThanOrEqual(600);
       expect(await run("resize", { reset: true })).toContain("视口已恢复");
 
       // upload through the file chooser.

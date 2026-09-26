@@ -71,9 +71,12 @@ function oldMachine(): { dataDir: string; homes: Record<string, string> } {
     }),
   );
   const source = realpathSync(codexHooksPath(codex));
+  // 键是 TOML 基本字符串，要像 Codex 写的那样转义：Windows 路径里的 `\U`、`\A`
+  // 原样写进去就成了转义序列，读回来已经不是这个路径。
+  const header = (key: string) => `[hooks.state.${JSON.stringify(key)}]`;
   put(
     codexConfigPath(codex),
-    `model = "gpt-5"\n\n[hooks.state."${source}:stop:0:0"]\ntrusted_hash = "sha256:mine"\n\n[hooks.state."${source}:stop:1:0"]\nenabled = true\ntrusted_hash = "sha256:ours"\n`,
+    `model = "gpt-5"\n\n${header(`${source}:stop:0:0`)}\ntrusted_hash = "sha256:mine"\n\n${header(`${source}:stop:1:0`)}\nenabled = true\ntrusted_hash = "sha256:ours"\n`,
   );
   put(
     copilotHooksPath(homes.copilot as string),
