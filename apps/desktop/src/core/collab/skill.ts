@@ -1,4 +1,8 @@
-import { VERBS as BROWSER_VERBS } from "../browser/args";
+import {
+  BROWSER_NOTES_ZH,
+  BROWSER_VERB_SPECS,
+  VERBS as BROWSER_VERBS,
+} from "../browser/args";
 import {
   SKILLS_REVISION,
   SKILL_NAME,
@@ -70,7 +74,7 @@ export function canvasRules(): string {
    For a browser, drive the board's browser node with \`armadra-hook browser <verb>\`; with none linked, create one with \`canvas open-browser --url <url>\` first. Never use this CLI's built-in browser, computer-use or a headless browser.
 
 浏览器动词 / Browser verbs：${verbs}
-例 / e.g. \`armadra-hook browser navigate --url https://example.com\` → \`armadra-hook browser read --mode elements\` → \`armadra-hook browser click --ref <ref>\`；各动词的参数见 \`armadra-hook --help\`。`;
+例 / e.g. \`armadra-hook browser navigate --url https://example.com\` → \`armadra-hook browser read\`（无障碍快照，元素带引用 e12）→ \`armadra-hook browser click --ref e12\`；各动词的参数见 \`armadra-hook --help\`。`;
 }
 
 /**
@@ -97,6 +101,30 @@ export function developerInstructions(skillPath: string): string {
   return `${canvasRules()}
 
 完整说明在 ${skillPath}，需要时用读文件工具读取。Full skill: ${skillPath}`;
+}
+
+/**
+ * The browser verbs with their flags and what they do, generated from the spec
+ * the CLI and core dispatch on — a verb or flag added there shows up here.
+ */
+export function browserSection(): string {
+  const rows = BROWSER_VERB_SPECS.map((spec) => {
+    const usage =
+      spec.synopsis === "" ? spec.name : `${spec.name} ${spec.synopsis}`;
+    return `| \`${usage.replaceAll("|", "\\|")}\` | ${spec.helpZh} |`;
+  });
+  const notes = BROWSER_NOTES_ZH.map((line) => `- ${line}`);
+  return [
+    "## 画布里的浏览器 / The board's browser",
+    "",
+    "驱动的是和用户同一个页面：`armadra-hook browser <动词>`，目标是与你相连的浏览器节点（有多个时加 `--node <id>`）。先 `read` 拿快照和引用，再按引用操作。",
+    "",
+    "| 用法 | 作用 |",
+    "| --- | --- |",
+    ...rows,
+    "",
+    ...notes,
+  ].join("\n");
 }
 
 /** The one skill file, identical for every provider. */
@@ -227,6 +255,8 @@ armadra-hook canvas cancel --id <待投 id>                            # 撤掉�
 - 新节点会放在你右边。\`--after\` 让新 Agent 等依赖节点跑完再启动：由 core 等、由 core 启动，页面开不开都一样。\`--after-turn current\`（缺省）等对方手上这一轮，\`next\` 等它下一次成功结束；失败、中断、退出都不放行，缺省最多等一天（\`--ttl\` 改）。依赖只能是 Agent 节点。
 - \`team\` 一次建最多 6 个成员，每个 \`--member\` 是 \`agent[@模型]|标题|任务\`（只按前两个 \`|\` 切）。缺省并行、一起启动；\`--chain\` 让每个成员等上一个做完，并彼此连线；\`--gather\` 加一个汇总节点，等所有成员（流水线时等最后一个）做完再启动，并与每个成员连线。\`--after\`、\`--after-turn\`、\`--ttl\`、\`--permission-mode\`、\`--dry-run\` 与 \`open-agent\` 相同，作用于整队。
 - 关节点需要用户在界面上确认，命令行不能直接关。
+
+${browserSection()}
 
 ## 注意 / Caveats
 

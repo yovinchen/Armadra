@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { VERBS as BROWSER_VERBS } from "../browser/args";
+import {
+  BROWSER_NOTES_ZH,
+  BROWSER_VERB_SPECS,
+  VERBS as BROWSER_VERBS,
+} from "../browser/args";
 import {
   SKILLS_REVISION,
   registerSkillContent,
@@ -77,6 +81,20 @@ describe("the collaboration skill", () => {
     );
     expect(examples.length).toBeGreaterThan(1);
     for (const verb of examples) expect(BROWSER_VERBS).toContain(verb);
+  });
+
+  /**
+   * 技能里的浏览器用法表从动词清单生成：加了动词或参数，技能跟着变，不会出现
+   * `--help` 那种和实现对不上的说明。
+   */
+  it("documents every browser verb with its flags and the notes", () => {
+    const body = skillBody();
+    for (const spec of BROWSER_VERB_SPECS) {
+      expect(body, spec.name).toContain(`| \`${spec.name}`);
+      expect(body, spec.name).toContain(spec.helpZh);
+    }
+    for (const note of BROWSER_NOTES_ZH) expect(body).toContain(note);
+    expect(body).not.toContain("--mode elements");
   });
 
   it("puts the rules and the skill path into both instruction forms", () => {
