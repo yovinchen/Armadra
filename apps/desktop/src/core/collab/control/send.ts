@@ -435,6 +435,26 @@ export async function attempt(
   try {
     live = await gate(context, item);
   } catch (error) {
+    // 休眠着或正在接回的目标（终端宿主设计 §7.2）：「没有会话」「前台还是
+    // shell」都只是还没起来。排队等它，接回来之后唤醒方会推出队泵；别的拒绝
+    // （没连线、没权限、节点没了）照旧。
+    const code = codeOf(error);
+    if (
+      (code === "TARGET_GONE" || code === "TARGET_NOT_AGENT_PANE") &&
+      context.terminals?.sleeping?.(item.targetNodeId) === true
+    ) {
+      const target = loadNode(context.database, item.targetNodeId);
+      if (target !== undefined) {
+        return queueOrRefuse(
+          context,
+          item,
+          target,
+          "TARGET_STARTING",
+          options,
+          now,
+        );
+      }
+    }
     // 「还没起来」对带任务启动与收件箱唤醒不是拒绝，是「还早」：`open-agent`
     // 建完节点到页面挂起 PTY 之间有一段真空，而那一条排队项的全部意义就是等过
     // 这一段。没有人在等它的回执，所以它退回队列，由 TTL 决定它什么时候死。

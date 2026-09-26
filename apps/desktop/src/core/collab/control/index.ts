@@ -210,7 +210,7 @@ export async function run(
     case "close":
       return close(context, caller, args);
     case "send":
-      await wakeTarget(context, caller, args);
+      wakeTarget(context, caller, args);
       return send(context, caller, args);
     case "outbox":
       return outbox(context, caller, args);
@@ -224,19 +224,21 @@ export async function run(
 }
 
 /**
- * 投给一个休眠节点（Eco 模式，终端宿主设计 §7.2）：先把它接回来，再走 `send`
- * 自己的整条门链。
+ * 投给一个休眠节点（Eco 模式，终端宿主设计 §7.2）：踢一下唤醒，**不等**它接回
+ * 来，直接走 `send` 自己的整条门链。
  *
- * 放在 `send` 外面而不是里面：`send` 的门链一个字都不改，接回来的节点在它看来
- * 就是一个刚起来、还没报过第一条状态的目标——排队等它报 idle，与
- * `open-agent --task` 同一条路。目标解析不出来、演练、接不回来，都交给 `send`
- * 自己如实拒绝，这里不另写一套理由。
+ * 不等：接回来要起 shell、等提示符、敲恢复行、等前台变成 CLI，秒级；而
+ * `armadra-hook canvas` 整个请求只有 1.5 秒。等下去的结果是客户端先超时、报「可
+ * 能已经生效」并以非零退出——发送方的 Agent 看到失败，消息却排上了、随后也投
+ * 了出去（2026-09-26 端到端实测）。门链在目标 `sleeping` 期间把「没有会话 /
+ * 前台不是 CLI」当成「还早」排队（`send.ts::attempt`），接回来之后唤醒方推一下
+ * 出队泵。
+ *
+ * 放在 `send` 外面而不是里面：`send` 的门链不为唤醒多一条分支。目标解析不出
+ * 来、演练，都交给 `send` 自己如实拒绝。接不回来的由唤醒方记日志、在节点上标
+ * 失败；排着的那条由队列的 TTL 决定死期。
  */
-async function wakeTarget(
-  context: CollabContext,
-  caller: Caller,
-  args: Args,
-): Promise<void> {
+function wakeTarget(context: CollabContext, caller: Caller, args: Args): void {
   const wake = context.terminals?.wakeNode;
   if (wake === undefined || args.flag("dry-run")) return;
   let targetId: string;
@@ -245,11 +247,9 @@ async function wakeTarget(
   } catch {
     return;
   }
-  try {
-    await wake(targetId);
-  } catch {
-    // 没接回来：`send` 会以「没有在运行的会话」拒绝，那正是实情。
-  }
+  void wake(targetId).catch(() => {
+    // 没接回来：唤醒方已经记了日志、发了 `failed`。
+  });
 }
 
 /**

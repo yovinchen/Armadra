@@ -617,6 +617,8 @@ export function install(
       await hibernator.wake(nodeId, "delivery");
       return true;
     },
+    // 休眠着或正在接回：`send` 的门链把这段时间的「没有会话」当「还早」排队。
+    sleeping: (nodeId) => hibernator.sleeping(nodeId),
     // 依赖编排在页面没开时替节点起终端（Agent 自动化设计 §6）。与
     // `POST /api/terminals` 同一套环境与令牌，只是请求来自 core 自己。
     spawnForNode: async (request) => {

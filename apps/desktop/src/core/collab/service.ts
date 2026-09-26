@@ -91,10 +91,15 @@ export interface TerminalBridge {
   }): Promise<{ readonly sessionId: string; readonly generation: number }>;
   /**
    * 这个节点休眠着（Eco 模式，终端宿主设计 §7.2）就把它接回来，答 `true`；
-   * 醒着答 `false`。`send` 在走门链之前问它一次：投给一个休眠节点的消息，本来
-   * 会因为「没有在运行的会话」被当场拒绝。
+   * 醒着答 `false`。`send` 在走门链之前踢它一下（不等）：投给一个休眠节点的
+   * 消息，本来会因为「没有在运行的会话」被当场拒绝。
    */
   wakeNode?(nodeId: string): Promise<boolean>;
+  /**
+   * 这个节点正休眠着或正在接回。这段时间里门链看到的是「没有会话」或「前台还
+   * 是 shell」，那不是拒绝的理由，是「还早」：投递排队等它起来。
+   */
+  sleeping?(nodeId: string): boolean;
 }
 
 /**
