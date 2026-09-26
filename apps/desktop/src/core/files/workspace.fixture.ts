@@ -21,6 +21,14 @@ export function temporary(prefix = "armadra-files-"): Temporary {
   const path = canonicalize(mkdtempSync(join(tmpdir(), prefix)));
   return {
     path,
-    remove: () => rmSync(path, { recursive: true, force: true }),
+    // Windows 不让删还被进程当 cwd 占着的目录；在本机跑的 Worker 被结束后，
+    // 它拉起的语言服务要读到 stdin 的 EOF 才退，重试等它这一下。
+    remove: () =>
+      rmSync(path, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 100,
+      }),
   };
 }

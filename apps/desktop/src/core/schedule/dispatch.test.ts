@@ -405,7 +405,11 @@ describe("冷启动", () => {
         nodeId: "node-1",
         agentId: "claude",
         cwd: "/tmp/ws",
-        line: `claude --model 'it'\\''s'`,
+        // 冷启动按平台缺省 shell 的方言引用：Windows 上是 cmd.exe。
+        line:
+          process.platform === "win32"
+            ? `claude --model "it's"`
+            : `claude --model 'it'\\''s'`,
       },
     ]);
   });
