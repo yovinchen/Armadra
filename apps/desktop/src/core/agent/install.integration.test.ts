@@ -94,7 +94,7 @@ describe("the assembled agent domain", () => {
   it("publishes the dispatcher the Hook surface will call", () => {
     const dispatcher = controlDispatcher();
     expect(dispatcher).toBeDefined();
-    expect(dispatcher?.verbs).toHaveLength(18);
+    expect(dispatcher?.verbs).toHaveLength(19);
     expect(dispatcher?.verbs).toContain("handoff-read");
     expect(dispatcher?.verbs).toContain("open-agent");
   });

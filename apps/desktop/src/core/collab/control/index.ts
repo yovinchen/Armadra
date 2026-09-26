@@ -3,6 +3,7 @@ import type { Caller } from "../nodes";
 import { HELP, PROTOCOL, runMailbox } from "../mailbox";
 import { Args, Refusal, Refused, asRefused } from "../refusals";
 import type { CollabContext } from "../service";
+import { openBrowser } from "./browser-node";
 import { cancel } from "./cancel";
 import { close } from "./close";
 import { color, link, rename } from "./edits";
@@ -44,6 +45,8 @@ export const VERBS = [
   "list",
   "open-terminal",
   "open-agent",
+  // 画布规则要 Agent 用画布里的浏览器节点；没有连着的就得能自己建一个。
+  "open-browser",
   "sticky",
   "link",
   "rename",
@@ -187,6 +190,8 @@ export async function run(
       return openTerminal(context, caller, args);
     case "open-agent":
       return openAgent(context, caller, args);
+    case "open-browser":
+      return openBrowser(context, caller, args);
     case "sticky":
       return sticky(context, caller, args);
     case "link":

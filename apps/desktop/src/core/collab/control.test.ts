@@ -62,10 +62,10 @@ afterEach(() => {
 });
 
 describe("the dispatcher", () => {
-  it("publishes exactly the seventeen verbs plus help, and derives help from them", async () => {
+  it("publishes exactly the eighteen verbs plus help, and derives help from them", async () => {
     const dispatcher = controlDispatcher();
     expect(dispatcher?.verbs).toEqual([...VERBS]);
-    expect(VERBS).toHaveLength(18);
+    expect(VERBS).toHaveLength(19);
     const body = ok(await run(me, "help"));
     expect(body.result).toMatchObject({ protocol: "armadra.mailbox.v1" });
     // Derived, not restated: a verb added without a help line would be
@@ -462,6 +462,41 @@ describe("team", () => {
 });
 
 describe("the verbs that edit the board", () => {
+  /**
+   * The canvas rules send agents to the board's browser; one with none linked
+   * has to be able to make it, and `armadra-hook browser` only finds a node
+   * the caller's own link document names.
+   */
+  it("opens a browser node and links it from the caller", async () => {
+    const body = ok(
+      await run(me, "open-browser", { url: "https://example.com/docs" }),
+    );
+    const id = (body.result as { id: string }).id;
+    const document = loadBoard(
+      fixture.database,
+      fixture.workspaceId,
+      fixture.boardId,
+    );
+    const node = document.nodes.find((entry) => entry.id === id);
+    expect(node?.type).toBe("browser");
+    expect(node?.data).toEqual({
+      kind: "browser",
+      url: "https://example.com/docs",
+    });
+    expect(
+      document.edges.some((edge) => edge.source === me && edge.target === id),
+    ).toBe(true);
+    expect(getContextLinks(fixture.database, me).links).toContainEqual(
+      expect.objectContaining({ id, kind: "browser" }),
+    );
+    expect(
+      refusal(await run(me, "open-browser", { url: "file:///etc" })).status,
+    ).toBe(400);
+    expect(
+      ok(await run(me, "open-browser", { "dry-run": true })).result,
+    ).toMatchObject({ dryRun: true, url: "" });
+  });
+
   it("moves the edge and both link documents in the same breath", async () => {
     const other = fixture.agentNode("Codex", "codex");
     ok(await run(me, "link", { to: "Codex" }));

@@ -95,6 +95,8 @@ CANVAS:
                                       open up to 6 agents at once; --chain
                                       makes each wait for the previous one,
                                       --gather adds one that waits for all
+  open-browser [--url URL] [--title T] open a browser node linked to this one;
+                                      drive it with \`browser <verb>\`
   rename --node ID --handle NAME       set this node's name on the board
   link --from ID --to ID [--role peer|supervises] [--name-from A --name-to B]
                                       link two nodes; supervises means --from
