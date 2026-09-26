@@ -462,7 +462,9 @@ export class CanvasPresence {
         lastSeenAt: stamp(client.lastSeenAt),
       }));
     const holder =
-      entry.lease === null ? undefined : entry.clients.get(entry.lease.clientId);
+      entry.lease === null
+        ? undefined
+        : entry.clients.get(entry.lease.clientId);
     const lease =
       entry.lease === null
         ? null

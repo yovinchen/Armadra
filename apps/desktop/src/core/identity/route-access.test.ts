@@ -300,7 +300,10 @@ describe("真库上的查询", () => {
           createRouteGuard({
             database: db,
             permits: (actor, required) =>
-              permits([...actor.scopes, ...granted(actor.principalId)], required),
+              permits(
+                [...actor.scopes, ...granted(actor.principalId)],
+                required,
+              ),
           })(
             { ...emptyRequest(method, path), json: <T>() => body as T },
             new Router().requiredScope(method, path),
@@ -310,9 +313,9 @@ describe("真库上的查询", () => {
       expect(as("operator", "POST", "/api/terminals/t1/paste").allowed).toBe(
         false,
       );
-      as("operator", "POST", "/api/terminals", { workspaceId: "w1" }).filter?.(
-        { id: "t1" },
-      );
+      as("operator", "POST", "/api/terminals", { workspaceId: "w1" }).filter?.({
+        id: "t1",
+      });
       expect(
         db.prepare("SELECT creator_principal_id FROM terminal_sessions").get(),
       ).toEqual({ creator_principal_id: "operator" });

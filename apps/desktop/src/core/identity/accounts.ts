@@ -333,16 +333,16 @@ export class AccountsService {
               administered.has(row.targetGroupId)),
         )
         .map((row) => ({
-        invitationId: row.invitationId,
-        issuedBy: row.issuedBy,
-        role: row.role,
-        targetGroupId: row.targetGroupId,
-        targetWorkspaceId: row.targetWorkspaceId,
-        createdAtMs: row.createdAtMs,
-        expiresAtMs: row.expiresAtMs,
-        consumedBy: row.consumedBy,
-        consumedAtMs: row.consumedAtMs,
-      }));
+          invitationId: row.invitationId,
+          issuedBy: row.issuedBy,
+          role: row.role,
+          targetGroupId: row.targetGroupId,
+          targetWorkspaceId: row.targetWorkspaceId,
+          createdAtMs: row.createdAtMs,
+          expiresAtMs: row.expiresAtMs,
+          consumedBy: row.consumedBy,
+          consumedAtMs: row.consumedAtMs,
+        }));
     });
   }
 

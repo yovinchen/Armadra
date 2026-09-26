@@ -94,7 +94,14 @@ const loadBoard = vi.fn(async () => JSON.parse(JSON.stringify(remote)));
 const presenceHeartbeat = vi.fn(
   async (_ws: string, boardId: string, body: { clientId: string }) => ({
     boardId,
-    clients: [{ clientId: body.clientId, deviceName: "", deviceKey: "", lastSeenAt: stamp }],
+    clients: [
+      {
+        clientId: body.clientId,
+        deviceName: "",
+        deviceKey: "",
+        lastSeenAt: stamp,
+      },
+    ],
     lease: { clientId: body.clientId, deviceName: "", acquiredAt: stamp },
   }),
 );
@@ -237,7 +244,12 @@ describe("useBoardSync", () => {
         type: "canvas.presence",
         boardId: board.id,
         clients: [
-          { clientId: presenceClientId(), deviceName: "", deviceKey: "", lastSeenAt: stamp },
+          {
+            clientId: presenceClientId(),
+            deviceName: "",
+            deviceKey: "",
+            lastSeenAt: stamp,
+          },
           {
             clientId: "other-client-01",
             deviceName: "iPad",
@@ -279,7 +291,12 @@ describe("useBoardSync", () => {
         type: "canvas.presence",
         boardId: board.id,
         clients: [
-          { clientId: presenceClientId(), deviceName: "", deviceKey: "", lastSeenAt: stamp },
+          {
+            clientId: presenceClientId(),
+            deviceName: "",
+            deviceKey: "",
+            lastSeenAt: stamp,
+          },
           {
             clientId: "other-client-01",
             deviceName: "iPad",

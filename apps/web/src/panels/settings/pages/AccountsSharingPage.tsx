@@ -815,10 +815,7 @@ function Invitations({ groupsOnly }: { groupsOnly?: Group[] }) {
   return (
     <SettingsGroup title={t("sharing.invites")}>
       {pending.map((invitation) => (
-        <SettingsRow
-          key={invitation.invitationId}
-          label={labelOf(invitation)}
-        >
+        <SettingsRow key={invitation.invitationId} label={labelOf(invitation)}>
           <span className="text-[12px] text-muted-foreground">
             {t("sharing.invites.expires", {
               time: format.format(invitation.expiresAtMs),

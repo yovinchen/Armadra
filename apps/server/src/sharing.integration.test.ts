@@ -476,9 +476,7 @@ describe("组管理员", () => {
         )
       ).status,
     ).toBe(200);
-    expect((await member(editor, mine, outsider.principalId)).status).toBe(
-      200,
-    );
+    expect((await member(editor, mine, outsider.principalId)).status).toBe(200);
     expect((await member(editor, other, outsider.principalId)).status).toBe(
       403,
     );

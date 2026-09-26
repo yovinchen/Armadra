@@ -57,7 +57,9 @@ export interface RouteAccessOptions {
    * 主体今天的全部授权（快照 ∪ 编译出来的授予）。「无害的全局读」要知道他
    * 是不是至少被共享了一块画布；不给时这一类对成员一律不放。
    */
-  readonly effectiveScopes?: (subject: AuthorizationSubject) => readonly Scope[];
+  readonly effectiveScopes?: (
+    subject: AuthorizationSubject,
+  ) => readonly Scope[];
   readonly lookups?: Partial<RouteAccessLookups>;
 }
 
@@ -89,7 +91,8 @@ const SHARED_READS: readonly RegExp[] = [
 ];
 
 const TERMINAL_SESSION = /^\/api\/terminals\/([^/]+)(\/[^/]+)?(\/[^/]+)?$/;
-const AGENT_STATUS = /^\/api\/agent-status\/([^/]+)\/(read|transcript|suggest-title)$/;
+const AGENT_STATUS =
+  /^\/api\/agent-status\/([^/]+)\/(read|transcript|suggest-title)$/;
 const CONTEXT_READS = /^\/api\/nodes\/([^/]+)\/context-reads$/;
 const APPROVAL = /^\/api\/approvals\/([^/]+)\/answer$/;
 const CONFIRM = /^\/api\/control\/confirm\/([^/]+)$/;
@@ -122,8 +125,7 @@ export function createRouteGuard(options: RouteAccessOptions): RouteGuard {
     subject: AuthorizationSubject,
     permission: string,
     workspaceId: string,
-  ): RouteVerdict =>
-    allowed(subject, permission, workspaceId) ? ALLOW : DENY;
+  ): RouteVerdict => (allowed(subject, permission, workspaceId) ? ALLOW : DENY);
 
   /** 至少在一块画布上有 `canvas:read`。 */
   const sharedSomewhere = (subject: AuthorizationSubject): boolean =>
