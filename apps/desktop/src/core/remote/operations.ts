@@ -69,6 +69,24 @@ import { trackOperation } from "./git-worker";
 import { readRemoteResources } from "./resources-worker";
 import { unwatchFiles, watchFiles } from "./watch-worker";
 import { capture as captureHandoff, captureArgs } from "../handoff/capture";
+import { writePngExport } from "../assets/exports";
+import {
+  assetExtension,
+  decodeAssetDataUrl,
+  importAssetAt,
+  readAsset,
+  storeAsset,
+} from "../assets/store";
+import { relativeToRoot } from "../files/paths";
+import { resolveInRoot } from "../workspaces/roots";
+import {
+  beginTransfer,
+  discardTransfer,
+  readChunk,
+  takeTransfer,
+  transferStatus,
+  writeChunk,
+} from "./transfer-worker";
 import {
   listenHooks,
   locate as locateIntegration,
@@ -159,10 +177,14 @@ function count(args: OperationArgs, name: string): number | undefined {
 }
 
 /** `[{ path, base64 }]`：随请求带过来的文件内容。 */
+/**
+ * 一批导入里的文件：字节要么在这一帧里（`base64`），要么是之前分块传过来的
+ * 暂存（`transfer`，见 `transfer-worker.ts`）。
+ */
 function blobs(
   args: OperationArgs,
   name: string,
-): { path: string; base64: string }[] {
+): { path: string; base64?: string; transfer?: string }[] {
   const value = args[name];
   if (value === undefined || value === null) return [];
   if (
@@ -172,12 +194,33 @@ function blobs(
         typeof item !== "object" ||
         item === null ||
         typeof (item as { path?: unknown }).path !== "string" ||
-        typeof (item as { base64?: unknown }).base64 !== "string",
+        (typeof (item as { base64?: unknown }).base64 !== "string" &&
+          typeof (item as { transfer?: unknown }).transfer !== "string"),
     )
   ) {
     throw badRequest(`${name} must be a list of files`);
   }
-  return value as { path: string; base64: string }[];
+  return value as { path: string; base64?: string; transfer?: string }[];
+}
+
+/** 一个文件的字节：帧里带的，或核对过长度与哈希的暂存。 */
+function blobBytes(
+  context: OperationContext,
+  file: { base64?: string; transfer?: string },
+): Buffer {
+  if (file.base64 !== undefined) return Buffer.from(file.base64, "base64");
+  return takeTransfer(context.stateDir, file.transfer, false);
+}
+
+/** 用过的暂存在批次发布之后删掉。 */
+function discardUsed(
+  context: OperationContext,
+  files: readonly { transfer?: string }[],
+): void {
+  for (const file of files) {
+    if (file.transfer === undefined) continue;
+    discardTransfer(context.stateDir, { transferId: file.transfer });
+  }
 }
 
 function path(args: OperationArgs): string {
@@ -318,23 +361,101 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
    * 机器上走与本机相同的暂存 → 原子发布。`copies` 里的按拖入时的文件名落地，
    * 同名就取下一个可用名字。
    */
-  "imports.write": write((_c, root, args) => {
+  "imports.write": write((context, root, args) => {
     const batch = ImportBatch.into(root);
+    const files = blobs(args, "files");
+    const copies = blobs(args, "copies");
     try {
       for (const directory of texts(args, "directories")) {
         batch.directory(directory);
       }
-      for (const file of blobs(args, "files")) {
-        batch.write(file.path, Buffer.from(file.base64, "base64"));
+      for (const file of files) {
+        batch.write(file.path, blobBytes(context, file));
       }
-      for (const file of blobs(args, "copies")) {
-        batch.writeCopy(file.path, Buffer.from(file.base64, "base64"));
+      for (const file of copies) {
+        batch.writeCopy(file.path, blobBytes(context, file));
       }
-      return batch.commit(root);
+      const committed = batch.commit(root);
+      discardUsed(context, [...files, ...copies]);
+      return committed;
     } catch (failure) {
       batch.discard();
       throw failure;
     }
+  }),
+
+  /* ---------------------------- 分块传输 ---------------------------- */
+  // 控制端自己取传输 id、块按位置覆盖，所以四个动作都可以重放。
+  "transfer.begin": read((context, _root, args) =>
+    beginTransfer(context.stateDir, args),
+  ),
+  "transfer.chunk": read((context, _root, args) =>
+    writeChunk(context.stateDir, args),
+  ),
+  "transfer.status": read((context, _root, args) =>
+    transferStatus(context.stateDir, args),
+  ),
+  "transfer.discard": read((context, _root, args) =>
+    discardTransfer(context.stateDir, args),
+  ),
+  /** 下载的一段：与文件当前的长度和修改时间一起答。 */
+  "files.downloadChunk": read((_c, root, args) => {
+    const base = canonicalDirectory(root);
+    const absolute = resolveInRoot(base, path(args));
+    return readChunk(
+      { absolute, relative: relativeToRoot(base, absolute) },
+      args,
+    );
+  }),
+
+  /* ---------------------------- 白板资产 ---------------------------- */
+  /** 上传：字节在帧里，或是分块传过来的暂存。 */
+  "assets.store": write((context, root, args) => {
+    const extension = assetExtension(text(args, "mimeType"));
+    if (extension === undefined) {
+      throw badRequest("Asset type is not an accepted image type");
+    }
+    const bytes = blobBytes(context, {
+      ...(typeof args.base64 === "string" ? { base64: args.base64 } : {}),
+      ...(typeof args.transfer === "string" ? { transfer: args.transfer } : {}),
+    });
+    const stored = storeAsset(
+      canonicalDirectory(root),
+      text(args, "workspaceId"),
+      extension,
+      bytes,
+    );
+    if (typeof args.transfer === "string") {
+      discardTransfer(context.stateDir, { transferId: args.transfer });
+    }
+    return stored;
+  }),
+  /** 从工作空间里的一个图片文件导入：路径是执行主机上的。 */
+  "assets.import": write((_c, root, args) =>
+    importAssetAt(
+      canonicalDirectory(root),
+      text(args, "workspaceId"),
+      path(args),
+    ),
+  ),
+  "assets.read": read((_c, root, args) => {
+    const { mime, bytes } = readAsset(
+      canonicalDirectory(root),
+      text(args, "assetId"),
+    );
+    return { mime, base64: bytes.toString("base64") };
+  }),
+  /** 画布导出的 PNG：数据 URL 在帧里，或是分块传过来的暂存。 */
+  "assets.exportPng": write((context, root, args) => {
+    const dataUrl =
+      typeof args.dataUrl === "string"
+        ? args.dataUrl
+        : takeTransfer(context.stateDir, args.transfer, true).toString("utf8");
+    return writePngExport(
+      canonicalDirectory(root),
+      text(args, "exportId"),
+      dataUrl,
+    );
   }),
 
   /* ------------------------------- git ------------------------------- */
@@ -679,11 +800,23 @@ const GIT_OPERATION_NAMES = new Set([
 /** 画布注入的产物同步与 Hook 中继。 */
 export const INTEGRATION_CAPABILITY = "remote.integration.v1";
 
+/** 比一帧大的字节：分块上传、续传与分块下载。 */
+export const TRANSFER_CAPABILITY = "remote.transfer.v1";
+/** 白板图片资产与画布导出落在执行主机上。 */
+export const ASSETS_CAPABILITY = "remote.assets.v1";
+
 /** 交接材料在执行主机上的采集。 */
 export const HANDOFF_CAPABILITY = "remote.handoff.v1";
 
 /** 一个操作属于哪个能力组。 */
 export function capabilityOf(operation: string): string | undefined {
+  if (
+    operation.startsWith("transfer.") ||
+    operation === "files.downloadChunk"
+  ) {
+    return TRANSFER_CAPABILITY;
+  }
+  if (operation.startsWith("assets.")) return ASSETS_CAPABILITY;
   if (operation === "files.watch" || operation === "files.unwatch") {
     return WATCH_CAPABILITY;
   }

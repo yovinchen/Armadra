@@ -11,13 +11,13 @@ export const MAX_BATCH_BYTES = 64 * 1024 * 1024;
 export const MAX_FILES = 256;
 
 /**
- * What one import into a **remote** workspace may weigh in total.
+ * What one import into a remote workspace may weigh when its Worker cannot
+ * take chunked transfers (no `remote.transfer.v1`).
  *
- * The bytes travel to the execution host inside one Worker frame, base64'd,
- * and a frame is at most 16 MiB; 11 MiB of content is what fits with room
- * for the envelope. A bigger import is refused by name rather than split:
- * the chunked upload the design describes does not exist in this build, and a
- * half-published batch is worse than a refusal.
+ * Then the bytes travel inside one Worker frame, base64'd, and a frame is at
+ * most 16 MiB; 11 MiB of content is what fits with room for the envelope. A
+ * current Worker takes the local limits, the big files chunked ahead of the
+ * publishing frame (`remote/transfer.ts`).
  */
 export const MAX_REMOTE_IMPORT_BYTES = 11 * 1024 * 1024;
 

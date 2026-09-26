@@ -1,4 +1,11 @@
 import type { CoreContext } from "../main";
+import { executeOn, isRemote } from "../remote/execute";
+import {
+  INLINE_FILE_BYTES,
+  INLINE_TOTAL_BYTES,
+  discard,
+  upload,
+} from "../remote/transfer";
 import { answered, workspaceId } from "../workspaces/routes";
 import { canonicalDirectory } from "../workspaces/roots";
 import {
@@ -11,6 +18,7 @@ import { getWorkspace } from "../workspaces/table";
 import { writePngExport } from "./exports";
 import {
   assetExtension,
+  assetMime,
   decodeAssetDataUrl,
   importAssetAt,
   readAsset,
@@ -26,9 +34,11 @@ import {
  * as `{"dataUrl": "…"}` with `Content-Type: application/json`. Both end in the
  * same content-addressed file.
  *
- * Remote workspaces are R5's: on this build the store follows the workspace,
- * and a workspace whose files are on an execution host has no local root to
- * put bytes in. That case refuses rather than writing to the wrong disk.
+ * The store follows the workspace. On a remote one every route runs on its
+ * execution host through the Worker (`assets.*`): the bytes go there — in the
+ * frame when small, as a chunked transfer (`remote/transfer.ts`) otherwise —
+ * and are read back from there. Nothing lands on this machine's disk at the
+ * same path.
  */
 
 export function install(context: CoreContext): void {
@@ -38,7 +48,7 @@ export function install(context: CoreContext): void {
   server.router.handle(
     "POST",
     "/api/workspaces/{workspaceId}/exports/{exportId}/png",
-    answered((match, request) => {
+    answered(async (match, request) => {
       const workspace = getWorkspace(database, workspaceId(match));
       if (!workspace.permissions.write) {
         throw new DomainError(
@@ -51,6 +61,24 @@ export function install(context: CoreContext): void {
       const dataUrl = optionalString(body, "dataUrl");
       if (dataUrl === undefined) {
         throw badRequest("Export body is not a JSON data URL");
+      }
+      if (isRemote(workspace)) {
+        const exportId = match.params.exportId ?? "";
+        return {
+          status: 200,
+          body: await withStaged(
+            workspace,
+            Buffer.from(dataUrl, "utf8"),
+            INLINE_TOTAL_BYTES,
+            (carried) =>
+              executeOn(workspace, "assets.exportPng", {
+                exportId,
+                ...(carried.transfer === undefined
+                  ? { dataUrl }
+                  : { transfer: carried.transfer }),
+              }),
+          ),
+        };
       }
       return {
         status: 200,
@@ -66,7 +94,7 @@ export function install(context: CoreContext): void {
   server.router.handle(
     "POST",
     "/api/workspaces/{workspaceId}/assets",
-    answered((match, request) => {
+    answered(async (match, request) => {
       const workspace = getWorkspace(database, workspaceId(match));
       if (!workspace.permissions.write) {
         throw new DomainError(
@@ -93,6 +121,25 @@ export function install(context: CoreContext): void {
         extension = known;
         bytes = request.body;
       }
+      if (isRemote(workspace)) {
+        const mimeType = assetMime(extension) ?? "application/octet-stream";
+        return {
+          status: 200,
+          body: await withStaged(
+            workspace,
+            bytes,
+            INLINE_FILE_BYTES,
+            (carried) =>
+              executeOn(workspace, "assets.store", {
+                workspaceId: workspace.id,
+                mimeType,
+                ...(carried.transfer === undefined
+                  ? { base64: bytes.toString("base64") }
+                  : { transfer: carried.transfer }),
+              }),
+          ),
+        };
+      }
       return {
         status: 200,
         body: storeAsset(localRoot(workspace), workspace.id, extension, bytes),
@@ -103,11 +150,21 @@ export function install(context: CoreContext): void {
   server.router.handle(
     "POST",
     "/api/workspaces/{workspaceId}/assets/import",
-    answered((match, request) => {
+    answered(async (match, request) => {
       const workspace = getWorkspace(database, workspaceId(match));
       const body = jsonObject(request.body);
       const path = optionalString(body, "path");
       if (path === undefined) throw badRequest("Requested path is invalid");
+      if (isRemote(workspace)) {
+        // The path names a file on the execution host, inside the workspace.
+        return {
+          status: 200,
+          body: await executeOn(workspace, "assets.import", {
+            workspaceId: workspace.id,
+            path,
+          }),
+        };
+      }
       return {
         status: 200,
         body: importAssetAt(localRoot(workspace), workspace.id, path),
@@ -118,10 +175,12 @@ export function install(context: CoreContext): void {
   server.router.handle(
     "GET",
     "/api/workspaces/{workspaceId}/assets/{assetId}",
-    answered((match) => {
+    answered(async (match) => {
       const workspace = getWorkspace(database, workspaceId(match));
       const assetId = match.params.assetId ?? "";
-      const { mime, bytes } = readAsset(localRoot(workspace), assetId);
+      const { mime, bytes } = isRemote(workspace)
+        ? await readRemoteAsset(workspace, assetId)
+        : readAsset(localRoot(workspace), assetId);
       return {
         status: 200,
         raw: bytes,
@@ -139,19 +198,53 @@ export function install(context: CoreContext): void {
   );
 }
 
+async function readRemoteAsset(
+  workspace: { readonly rootPath: string; readonly executionHostId?: string },
+  assetId: string,
+): Promise<{ readonly mime: string; readonly bytes: Buffer }> {
+  const answer = (await executeOn(workspace, "assets.read", { assetId })) as {
+    mime: string;
+    base64: string;
+  };
+  return { mime: answer.mime, bytes: Buffer.from(answer.base64, "base64") };
+}
+
 /**
- * The workspace's own directory, canonicalised.
- *
- * A remote workspace has no local root, and a picture must follow the project
- * rather than land on the controller's disk — so this refuses instead of
- * guessing. R5 brings the execution-host half back.
+ * Run `send` with `bytes` either in its frame or staged ahead as a chunked
+ * transfer, whichever their size calls for; a staged transfer the call did
+ * not consume is taken back.
+ */
+async function withStaged<T>(
+  workspace: { readonly rootPath: string; readonly executionHostId?: string },
+  bytes: Buffer,
+  inlineLimit: number,
+  send: (carried: { readonly transfer?: string }) => Promise<T>,
+): Promise<T> {
+  if (bytes.byteLength <= inlineLimit) return await send({});
+  const transfer = await upload(workspace, bytes);
+  try {
+    return await send({ transfer });
+  } catch (failure) {
+    await discard(workspace, transfer);
+    throw failure;
+  }
+}
+
+/**
+ * The workspace's own directory, canonicalised. Only for a local workspace:
+ * the remote one goes through the Worker above, so this refuses rather than
+ * guessing at a path on the wrong disk.
  */
 function localRoot(workspace: {
   readonly rootPath: string;
   readonly executionHostId?: string;
 }): string {
   if ((workspace.executionHostId ?? "") !== "") {
-    throw new DomainError(501, "unsupported", "执行主机上的画布资产（R5）");
+    throw new DomainError(
+      500,
+      "internal_error",
+      "A remote workspace's assets are on its execution host",
+    );
   }
   return canonicalDirectory(workspace.rootPath);
 }

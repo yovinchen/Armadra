@@ -3,6 +3,10 @@ import type { WorkspaceEvent } from "../bus";
 import type { CoreContext } from "../main";
 import type { CoreRequest, HandlerResult, RouteMatch } from "../http/router";
 import { executeOn, isRemote } from "../remote/execute";
+import {
+  download as downloadChunked,
+  transferUnsupported,
+} from "../remote/transfer";
 import { remoteWatches } from "../remote/watch";
 import { answered, workspaceId } from "../workspaces/routes";
 import {
@@ -85,9 +89,10 @@ export function install(context: CoreContext): void {
     "/api/workspaces/{workspaceId}/file-download",
     async (match, request) => {
       const workspace = workspaceOf(database, workspaceId(match));
-      const { path, base64 } = (await executeOn(workspace, "files.download", {
-        path: requestedPath(request),
-      })) as { path: string; base64: string };
+      const { path, bytes } = await downloadBytes(
+        workspace,
+        requestedPath(request),
+      );
       // Always an attachment, and never sniffed: an uploaded HTML or SVG file
       // must not be able to execute in the core's origin on the way out.
       const encoded = [...Buffer.from(baseName(path), "utf8")]
@@ -95,7 +100,7 @@ export function install(context: CoreContext): void {
         .join("");
       return {
         status: 200,
-        raw: Buffer.from(base64, "base64"),
+        raw: bytes,
         headers: {
           "content-type": "application/octet-stream",
           "content-disposition": `attachment; filename*=UTF-8''${encoded}`,
@@ -399,6 +404,28 @@ function optional<T>(name: string, value: T | undefined): Record<string, T> {
  * `permissions.read` gates the watching surfaces, which is where the Runtime
  * does ask. Changing it here would be a behaviour change smuggled into a port.
  */
+/**
+ * A download's bytes. A remote file comes in chunks (`remote/transfer.ts`): a
+ * 16 MiB file is 21 MiB of base64, more than one Worker frame carries. A
+ * Worker too old for chunks answers the one-frame read, as before.
+ */
+async function downloadBytes(
+  workspace: Workspace,
+  path: string,
+): Promise<{ path: string; bytes: Buffer }> {
+  if (isRemote(workspace)) {
+    try {
+      return await downloadChunked(workspace, path);
+    } catch (failure) {
+      if (!transferUnsupported(failure)) throw failure;
+    }
+  }
+  const { path: name, base64 } = (await executeOn(workspace, "files.download", {
+    path,
+  })) as { path: string; base64: string };
+  return { path: name, bytes: Buffer.from(base64, "base64") };
+}
+
 function workspaceOf(database: DatabaseSync, id: string): Workspace {
   return getWorkspace(database, id);
 }

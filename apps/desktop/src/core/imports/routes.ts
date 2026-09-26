@@ -3,6 +3,13 @@ import { basename, isAbsolute, join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { CoreContext } from "../main";
 import { executeOn, isRemote } from "../remote/execute";
+import {
+  INLINE_FILE_BYTES,
+  INLINE_TOTAL_BYTES,
+  discard,
+  transferUnsupported,
+  upload,
+} from "../remote/transfer";
 import { rejectSymlinkComponents } from "../workspaces/directory";
 import { resolveImportSource } from "../workspaces/roots";
 import { answered, workspaceId } from "../workspaces/routes";
@@ -103,12 +110,11 @@ export function install(context: CoreContext): void {
       if (isRemote(workspace)) {
         // The manifest and the parts are checked here, where they arrived;
         // the batch itself is staged and published on the execution host.
-        const files = remoteParts(fields, manifest);
         return {
           status: 200,
-          body: await executeOn(workspace, "imports.write", {
+          body: await writeRemote(workspace, {
             directories: manifest.directories,
-            files,
+            files: remoteParts(fields, manifest),
           }),
         };
       }
@@ -143,7 +149,7 @@ export function install(context: CoreContext): void {
         // read them here, publish them there.
         return {
           status: 200,
-          body: await executeOn(workspace, "imports.write", {
+          body: await writeRemote(workspace, {
             copies: localCopies(paths as string[]),
           }),
         };
@@ -174,11 +180,11 @@ function writable(database: DatabaseSync, id: string): Workspace {
   return workspace;
 }
 
-/** The parts of an upload, in manifest order, ready to travel in one frame. */
+/** The parts of an upload, in manifest order. */
 function remoteParts(
   fields: readonly MultipartField[],
   manifest: ImportManifest,
-): { path: string; base64: string }[] {
+): Blob[] {
   const parts = new Map<number, Buffer>();
   for (const field of fields.slice(1)) {
     const index = Number(field.name);
@@ -198,11 +204,10 @@ function remoteParts(
   if (parts.size !== manifest.paths.length) {
     throw badRequest("Some imported files are missing");
   }
-  const files = manifest.paths.map((path, index) => ({
+  return manifest.paths.map((path, index) => ({
     path,
     bytes: parts.get(index) as Buffer,
   }));
-  return encodeForRemote(files);
 }
 
 /**
@@ -212,10 +217,8 @@ function remoteParts(
  * workspace is on the execution host — reading it here would read the wrong
  * disk. The same resolver the local copy uses decides what may be read.
  */
-function localCopies(
-  paths: readonly string[],
-): { path: string; base64: string }[] {
-  const files = paths.map((requested) => {
+function localCopies(paths: readonly string[]): Blob[] {
+  return paths.map((requested) => {
     if (!isAbsolute(requested.trim())) {
       throw badRequest(
         "A remote workspace imports dropped files by absolute path only",
@@ -228,27 +231,88 @@ function localCopies(
     if (name === "") throw badRequest("Invalid file name");
     return { path: name, bytes: readFileSync(resolved) };
   });
-  return encodeForRemote(files);
 }
 
-function encodeForRemote(
-  files: readonly { path: string; bytes: Buffer }[],
-): { path: string; base64: string }[] {
-  if (files.length > MAX_FILES) {
+interface Blob {
+  readonly path: string;
+  readonly bytes: Buffer;
+}
+
+type Encoded =
+  | { path: string; base64: string }
+  | { path: string; transfer: string };
+
+/**
+ * Stage and publish a batch on the execution host.
+ *
+ * The limits are the local ones — 256 files, 64 MiB. Small files ride in the
+ * publishing frame itself; the rest go ahead as chunked transfers
+ * (`remote/transfer.ts`) and the frame names them. A Worker too old for
+ * chunks gets the whole batch in one frame, which is the 11 MiB that fits,
+ * and a bigger batch is refused by name rather than split into two
+ * half-published imports.
+ */
+async function writeRemote(
+  workspace: Workspace,
+  batch: {
+    readonly directories?: readonly string[];
+    readonly files?: readonly Blob[];
+    readonly copies?: readonly Blob[];
+  },
+): Promise<unknown> {
+  const all = [...(batch.files ?? []), ...(batch.copies ?? [])];
+  const total = all.reduce((sum, file) => sum + file.bytes.length, 0);
+  if (all.length > MAX_FILES || total > MAX_BATCH_BYTES) {
     throw badRequest("Import exceeds the file count or size limit");
   }
-  const total = files.reduce((sum, file) => sum + file.bytes.length, 0);
-  if (total > MAX_REMOTE_IMPORT_BYTES) {
-    throw new DomainError(
-      413,
-      "resource_exhausted",
-      "一次导入到远端工作空间的文件合计不能超过 11 MiB，请分批导入",
-    );
+  const staged: string[] = [];
+  let inline = 0;
+  let chunked = true;
+  const encode = async (file: Blob): Promise<Encoded> => {
+    const size = file.bytes.length;
+    if (
+      !chunked ||
+      (size <= INLINE_FILE_BYTES && inline + size <= INLINE_TOTAL_BYTES)
+    ) {
+      inline += size;
+      return { path: file.path, base64: file.bytes.toString("base64") };
+    }
+    try {
+      const transfer = await upload(workspace, file.bytes);
+      staged.push(transfer);
+      return { path: file.path, transfer };
+    } catch (failure) {
+      if (!transferUnsupported(failure) || staged.length > 0) throw failure;
+      // An older Worker: everything travels in the one frame, if it fits.
+      if (total > MAX_REMOTE_IMPORT_BYTES) {
+        throw new DomainError(
+          413,
+          "resource_exhausted",
+          "执行主机上的 Worker 不支持分块传输，一次导入到远端工作空间的文件合计不能超过 11 MiB；更新执行主机上的 Armadra 或分批导入",
+        );
+      }
+      chunked = false;
+      inline += size;
+      return { path: file.path, base64: file.bytes.toString("base64") };
+    }
+  };
+  try {
+    const files: Encoded[] = [];
+    for (const file of batch.files ?? []) files.push(await encode(file));
+    const copies: Encoded[] = [];
+    for (const file of batch.copies ?? []) copies.push(await encode(file));
+    return await executeOn(workspace, "imports.write", {
+      ...(batch.directories === undefined
+        ? {}
+        : { directories: [...batch.directories] }),
+      ...(files.length === 0 ? {} : { files }),
+      ...(copies.length === 0 ? {} : { copies }),
+    });
+  } catch (failure) {
+    // The batch was not published: take back what was staged for it.
+    for (const transfer of staged) await discard(workspace, transfer);
+    throw failure;
   }
-  return files.map((file) => ({
-    path: file.path,
-    base64: file.bytes.toString("base64"),
-  }));
 }
 
 function header(value: string | string[] | undefined): string | undefined {
