@@ -127,6 +127,8 @@ const zh = {
   "automation.wizard.loopBound": "完成后循环必须设置次数或截止时间之一",
   "automation.wizard.invalidCron": "Cron 表达式必须是五个字段",
   "automation.wizard.invalidTimezone": "请选择一个有效的 IANA 时区",
+  "automation.wizard.timezoneSearch": "搜索时区",
+  "automation.wizard.timezoneNone": "没有匹配的时区",
   "automation.wizard.invalidPath": "需要一个绝对路径",
   "automation.wizard.invalidTime": "请填写一个有效时间",
   "automation.wizard.invalidInterval": "间隔必须是正整数毫秒",
@@ -333,6 +335,8 @@ const en: Record<keyof typeof zh, string> = {
     "A loop needs either a run count or an expiry date",
   "automation.wizard.invalidCron": "A cron expression needs five fields",
   "automation.wizard.invalidTimezone": "Pick a valid IANA time zone",
+  "automation.wizard.timezoneSearch": "Search time zones",
+  "automation.wizard.timezoneNone": "No matching time zone",
   "automation.wizard.invalidPath": "An absolute path is required",
   "automation.wizard.invalidTime": "Enter a valid time",
   "automation.wizard.invalidInterval":

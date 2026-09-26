@@ -18,7 +18,8 @@ import { isAbsoluteHostPath } from "@/lib/host-path";
 import { runtimeApi } from "@/api/client";
 import { useCanvasStore } from "@/store/canvas-store";
 import { agentTargets, frozenLaunch } from "./agent-targets";
-import { timezoneOptions, validCron, validTimezone } from "./model";
+import { validCron, validTimezone } from "./model";
+import { TimezonePicker } from "./TimezonePicker";
 import { translateNativeRecurrence } from "./native-recurrence";
 import { allCommandSessions, automationKeys } from "./queries";
 import {
@@ -219,7 +220,6 @@ export function CreatePlanForm({
     field: string;
     messageKey: string;
   } | null>(null);
-  const zones = React.useMemo(timezoneOptions, []);
 
   const sessions = useQuery({
     queryKey: automationKeys.sessions(workspaceId),
@@ -683,22 +683,12 @@ export function CreatePlanForm({
                   : t("automation.wizard.invalidCron")),
             )}
             {field(
-              t("automation.wizard.timezone"),
-              <Select
+              t("automation.timezone"),
+              <TimezonePicker
                 value={state.timezone}
-                onValueChange={(value) => set("timezone", value)}
-              >
-                <SelectTrigger size="sm" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[var(--z-dialog)]">
-                  {zones.map((zone) => (
-                    <SelectItem key={zone} value={zone}>
-                      {zone}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>,
+                invalid={!validTimezone(state.timezone)}
+                onChange={(value) => set("timezone", value)}
+              />,
               problem("timezone") ??
                 (validTimezone(state.timezone)
                   ? undefined
