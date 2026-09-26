@@ -1,20 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import {
-  configPath,
-  eventKey,
-  hookHash,
-  hooksPath,
-  install,
-  trustEntries,
-  uninstall,
-} from "./codex";
-import { CODEX_HOOK_EVENTS } from "./events";
-import { isManagedCommand } from "./shared";
-import { stateKeys } from "./toml-state";
+import { configPath, hookHash, hooksPath, uninstall } from "./codex";
 import { tempDir } from "../../testing/temp-dir";
 
-const CLIENT = "/opt/armadra/armadra-hook";
 const DEFAULT_TIMEOUT_SEC = 600;
 const SESSION_END_TIMEOUT_SEC = 1;
 
@@ -23,32 +11,14 @@ function home(): string {
 }
 
 function readHooks(path: string): {
-  version?: unknown;
-  hooks: Record<string, { hooks: { command: string }[] }[]>;
+  hooks?: Record<string, { hooks: { command: string }[] }[]>;
 } {
   return JSON.parse(readFileSync(path, "utf8")) as {
-    version?: unknown;
-    hooks: Record<string, { hooks: { command: string }[] }[]>;
+    hooks?: Record<string, { hooks: { command: string }[] }[]>;
   };
 }
 
-/** The key source a fresh install will have written, resolved the same way. */
-function keySourceOf(config: string): string {
-  const key = stateKeys(config).find((one) => one.endsWith(":stop:0:0"));
-  return (key ?? "").slice(0, -":stop:0:0".length);
-}
-
-/**
- * A `hooks.state` key as it is *spelled in the file*: TOML basic strings
- * escape the backslash, so a Windows path is written `C:\\Users\\…`.
- * `stateKeys` answers with the logical key, which is the right answer for
- * every use except matching the document's own bytes.
- */
-function asWritten(key: string): string {
-  return key.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-describe("the Codex installer", () => {
+describe("Codex's hook trust", () => {
   /**
    * Locks the trust algorithm. It was verified byte-for-byte against the
    * hashes a real Codex 0.149.1 wrote into its own hooks.json (every handler
@@ -108,52 +78,32 @@ describe("the Codex installer", () => {
     );
   });
 
-  it("writes hooks.json and a trust entry per handler on a fresh install", () => {
-    const directory = home();
-    const report = install(directory, CLIENT);
-    expect(report.installed).toBe(true);
-    // The registry only contains supported Codex events.
-    expect(report.warning).toBeUndefined();
-
-    const hooks = readHooks(hooksPath(directory));
-    for (const event of CODEX_HOOK_EVENTS.filter(
-      (one) => eventKey(one) !== undefined,
-    )) {
-      expect(hooks.hooks[event]?.[0]?.hooks[0]?.command, event).toBe(
-        "/opt/armadra/armadra-hook codex",
-      );
-    }
-    expect(hooks.hooks.Notification).toBeUndefined();
-
-    const config = readFileSync(configPath(directory), "utf8");
-    const keySource = keySourceOf(config);
-    expect(keySource).not.toBe("");
-    expect(config).toContain(
-      `[hooks.state."${asWritten(`${keySource}:stop:0:0`)}"]`,
+  /**
+   * The same algorithm for hooks passed with `-c hooks.<Event>=…`: the
+   * `currentHash` that `codex app-server`'s `hooks/list` reported on Codex
+   * 0.155.1 (2026-09-26) for three session-flag hooks, one with a matcher and
+   * one with `SessionEnd`'s 1s timeout.
+   */
+  it("matches the session-flag hashes Codex 0.155.1 reports", () => {
+    const command = "/tmp/inj-data/bin/armadra-hook codex";
+    expect(hookHash("pre_tool_use", "*", command, DEFAULT_TIMEOUT_SEC)).toBe(
+      "sha256:f85777c8eeea904aa7682a18b449009d6839537cd84fe33a607ac6733da3dff3",
     );
-    expect(config).toContain("enabled = true");
-    // SessionEnd hashes with the 1s timeout, not the 600s default.
-    expect(config).toContain(
-      hookHash(
-        "session_end",
-        undefined,
-        "/opt/armadra/armadra-hook codex",
-        SESSION_END_TIMEOUT_SEC,
-      ),
+    expect(
+      hookHash("session_start", undefined, command, DEFAULT_TIMEOUT_SEC),
+    ).toBe(
+      "sha256:4ed3d9273f76ebab86355439f2683ef2010e26fe15187e05e887a0f84722b4db",
+    );
+    expect(
+      hookHash("session_end", undefined, command, SESSION_END_TIMEOUT_SEC),
+    ).toBe(
+      "sha256:18ac34824d1ac73a2043780af8339d5165f3eb4d3b6432dacd9ce608e708401d",
     );
   });
+});
 
-  it("produces identical files when installed twice", () => {
-    const directory = home();
-    install(directory, CLIENT);
-    const hooks = readFileSync(hooksPath(directory), "utf8");
-    const config = readFileSync(configPath(directory), "utf8");
-    install(directory, CLIENT);
-    expect(readFileSync(hooksPath(directory), "utf8")).toBe(hooks);
-    expect(readFileSync(configPath(directory), "utf8")).toBe(config);
-  });
-
-  it("lets foreign hooks and foreign config survive", () => {
+describe("removing the old global Codex install", () => {
+  it("takes out our handlers and their trust, and keeps the user's", () => {
     const directory = home();
     mkdirSync(directory, { recursive: true });
     writeFileSync(
@@ -165,85 +115,64 @@ describe("the Codex installer", () => {
             {
               hooks: [{ type: "command", command: "/usr/local/bin/theirs.sh" }],
             },
+            {
+              hooks: [
+                { type: "command", command: "/opt/armadra/armadra-hook codex" },
+              ],
+            },
+          ],
+          SessionStart: [
+            {
+              hooks: [
+                { type: "command", command: "/opt/armadra/armadra-hook codex" },
+              ],
+            },
           ],
         },
       }),
       "utf8",
     );
+    const source = realpathSync(hooksPath(directory));
     writeFileSync(
       configPath(directory),
-      '# my config\nmodel = "gpt-5"\n\n[hooks.state."other:stop:0:0"]\ntrusted_hash = "sha256:beef"\n',
+      [
+        "# my config",
+        'model = "gpt-5"',
+        "",
+        `[hooks.state."${source}:stop:0:0"]`,
+        'trusted_hash = "sha256:theirs"',
+        "",
+        `[hooks.state."${source}:stop:1:0"]`,
+        "enabled = true",
+        'trusted_hash = "sha256:ours"',
+        "",
+        `[hooks.state."${source}:session_start:0:0"]`,
+        "enabled = true",
+        'trusted_hash = "sha256:ours"',
+        "",
+      ].join("\n"),
       "utf8",
     );
 
-    install(directory, CLIENT);
-    const hooks = readHooks(hooksPath(directory));
-    expect(
-      hooks.version,
-      "a top-level key Codex would reject is dropped",
-    ).toBeUndefined();
-    expect(hooks.hooks.Stop?.[0]?.hooks[0]?.command).toBe(
-      "/usr/local/bin/theirs.sh",
-    );
-    expect(
-      hooks.hooks.Stop?.[1]?.hooks[0]?.command,
-      "ours is appended so their index 0 never moves",
-    ).toBe("/opt/armadra/armadra-hook codex");
-
-    let config = readFileSync(configPath(directory), "utf8");
-    expect(config).toContain("# my config");
-    expect(config).toContain('model = "gpt-5"');
-    expect(config).toContain('[hooks.state."other:stop:0:0"]');
-    const keySource = stateKeys(config)
-      .find((key) => key.endsWith(":stop:1:0"))
-      ?.slice(0, -":stop:1:0".length) as string;
-    // Their handler is at index 0 and we did not invent a hash for it.
-    expect(config).not.toContain(asWritten(`${keySource}:stop:0:0`));
-    expect(config).toContain(asWritten(`${keySource}:stop:1:0`));
-
     uninstall(directory);
-    const after = readHooks(hooksPath(directory));
-    expect(after.hooks.Stop).toHaveLength(1);
-    expect(after.hooks.Stop?.[0]?.hooks[0]?.command).toBe(
+
+    const hooks = readHooks(hooksPath(directory));
+    expect(Object.keys(hooks.hooks ?? {})).toEqual(["Stop"]);
+    expect(hooks.hooks?.Stop).toHaveLength(1);
+    expect(hooks.hooks?.Stop?.[0]?.hooks[0]?.command).toBe(
       "/usr/local/bin/theirs.sh",
     );
-    config = readFileSync(configPath(directory), "utf8");
-    expect(config, "foreign trust untouched").toContain(
-      '[hooks.state."other:stop:0:0"]',
-    );
-    expect(config, "our trust entry is gone").not.toContain(
-      `${keySource}:stop:1:0`,
-    );
-    expect(readFileSync(hooksPath(directory), "utf8")).not.toContain(
-      "armadra-hook",
-    );
+    // A top-level key Codex would reject is dropped on the way.
+    expect(readFileSync(hooksPath(directory), "utf8")).not.toContain("version");
+    const config = readFileSync(configPath(directory), "utf8");
+    expect(config).toContain("# my config");
+    expect(config).toContain(`${source}:stop:0:0`);
+    expect(config).not.toContain(`${source}:stop:1:0`);
+    expect(config).not.toContain(`${source}:session_start:0:0`);
   });
 
-  it("trusts only our own command", () => {
-    const events = {
-      Stop: [
-        { hooks: [{ type: "command", command: "/usr/local/bin/theirs.sh" }] },
-        {
-          hooks: [
-            { type: "command", command: "/opt/armadra/armadra-hook codex" },
-          ],
-        },
-      ],
-    };
-    const entries = trustEntries(
-      events,
-      "/home/dev/.codex/hooks.json",
-      "/opt/armadra/armadra-hook codex",
-    );
-    expect(entries).toHaveLength(1);
-    expect(entries[0]?.key).toBe("/home/dev/.codex/hooks.json:stop:1:0");
-    expect(isManagedCommand("/opt/armadra/armadra-hook codex")).toBe(true);
-  });
-
-  it("refuses a config.toml it would mangle rather than rewriting it", () => {
+  it("is not an error when there was never an install", () => {
     const directory = home();
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(configPath(directory), "this is [not toml\n", "utf8");
-    expect(() => install(directory, CLIENT)).toThrow(/not valid TOML/);
+    expect(() => uninstall(directory)).not.toThrow();
   });
 });

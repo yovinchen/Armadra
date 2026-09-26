@@ -54,38 +54,7 @@ export type JsonValue =
 
 export type JsonObject = { [key: string]: JsonValue };
 
-/**
- * How a provider's hook adapter reaches its CLI
- * (docs/design/agent-integration.md §3).
- *
- * The distinction the settings page shows is "does integrating me edit a file
- * you also edit": `launch` and `extension` never touch the CLI's own
- * configuration, `file` does — idempotently, marked, and repairable.
- */
-export type InjectionMode = "launch" | "file" | "extension";
-
-/**
- * Which mode a provider uses. An unknown id has no installer at all, so the
- * caller's own "no installer" error is the one worth showing; `file` is the
- * conservative answer for the read paths that only want a label.
- */
-export function injectionMode(agentId: string): InjectionMode {
-  switch (agentId) {
-    // `--settings <file>` — verified against Claude Code 2.1.x, see claude.ts.
-    case "claude":
-      return "launch";
-    // Generated modules the CLI discovers in its own extension directory.
-    case "opencode":
-    case "pi":
-    case "omp":
-      return "extension";
-    // Codex `hooks.json`, Copilot `hooks/armadra.json`.
-    default:
-      return "file";
-  }
-}
-
-/** What one half of an integration install did — the hook half. */
+/** What removing one CLI's old global hook install did. */
 export interface InstallReport {
   readonly agentId: string;
   /** The file we wrote (or removed our entries from). */
@@ -94,15 +63,6 @@ export interface InstallReport {
   readonly clientBin?: string;
   readonly clientRevision: number;
   readonly installed: boolean;
-  /**
-   * Argv this provider's launch line must carry for the adapter to load —
-   * empty unless {@link injectionMode} is `launch`.
-   *
-   * It is reported rather than stored because the path is this machine's and
-   * the flag is this CLI version's: a plan frozen yesterday must not be able
-   * to resurrect either.
-   */
-  readonly launchArgs: readonly string[];
   /** Something worked but deserves a sentence in the settings page. */
   readonly warning?: string;
 }
@@ -118,7 +78,6 @@ export function removedReport(
     configPath,
     clientRevision,
     installed: false,
-    launchArgs: [],
   };
 }
 

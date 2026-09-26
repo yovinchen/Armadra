@@ -134,6 +134,23 @@ export function buildAgentLaunch(
 }
 
 /**
+ * 恢复一条历史对话的启动行（`--resume` / `resume` 子命令）。
+ *
+ * 与新开的节点走同一条拼法：本机程序路径、画布注入的 argv 都照带——恢复时每
+ * 个 CLI 都要把 Hook、技能与画布说明重新传一遍，少了它们，恢复出来的会话在画
+ * 布上就不报状态、也不认画布规则。
+ */
+export function buildResumeLaunch(
+  agentId: string,
+  sessionId: string,
+): LaunchCommand {
+  return assembleLaunchCommand({
+    ...launchInput({ id: agentId }),
+    resume: sessionId,
+  });
+}
+
+/**
  * 冻结进后台计划的那份启动定义（自动化设计 §4）。
  *
  * 只带 argv：程序名由执行侧按 `agentId` 从自己的注册表解析，所以一份存下来的
@@ -162,11 +179,16 @@ function launchInput(agent: TerminalAgent, prompt?: string) {
     registryEntry(agent.id)?.resolvedPath ||
     undefined;
   const custom = customAgentFor(agent.id);
-  // Runtime 说这个 CLI 的适配器得靠启动行加载时，加上它给的 argv
-  // （设计 agent-integration §3）：Claude Code 是 `--settings <文件>`，
-  // 其余为空。路径与开关都是 Runtime 那台机器的，所以由它现答，不落进节点
-  // 数据，也不进后台计划——存下来的计划只认 agent id。
-  const injected = registryEntry(agent.id)?.launchArgs ?? [];
+  // 画布注入的 argv（设计 canvas-only-integration §2）：Hook、技能与画布说明
+  // 只在从画布启动时交给 CLI，由 Runtime 的 `GET /api/agents` 现答。路径是
+  // Runtime 那台机器的，所以不落进节点数据，也不进后台计划——存下来的计划只
+  // 认 agent id，冷启动时由 core 自己补上。
+  // 优先用 `launchWords`：同一份注入的「敲进 shell 的词」，Codex 的长值留在节
+  // 点终端的环境变量里只写变量名——几 KB 的一行敲进刚起的 shell 会被截断。旧
+  // Runtime 只给 `launchArgs`，照旧逐个引用。
+  const row = registryEntry(agent.id);
+  const words = row?.launchWords ?? [];
+  const injected = words.length > 0 ? [] : (row?.launchArgs ?? []);
   return {
     agentId: agent.id,
     ...(custom ? { custom } : {}),
@@ -175,6 +197,7 @@ function launchInput(agent: TerminalAgent, prompt?: string) {
     ...(agent.model ? { model: agent.model } : {}),
     ...(agent.sessionId ? { sessionId: agent.sessionId } : {}),
     ...(injected.length > 0 ? { extraArgs: injected } : {}),
+    ...(words.length > 0 ? { shellWords: words } : {}),
     ...(prompt ? { prompt } : {}),
   };
 }

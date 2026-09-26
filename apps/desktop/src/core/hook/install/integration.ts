@@ -1,102 +1,92 @@
-import { readFileSync, rmSync, rmdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { configPath as codexConfigPath } from "./codex";
 import {
   HOOK_CLIENT_REVISION,
   INTEGRATION_REVISION,
   SKILLS_REVISION,
 } from "./events";
 import {
-  adapterPath,
-  install as installHook,
-  integrationDir,
-  launchArgs,
-  uninstall as uninstallHook,
-} from "./index";
+  type InjectionOptions,
+  artifactLayout,
+  canvasInjection,
+  codexTrusted,
+  globalWritesDisabled,
+  isInjected,
+  prepareInjection,
+  readMarker,
+  removeInjection,
+} from "./inject";
+import {
+  type MigrationRecord,
+  migrateGlobalInstalls,
+  readMigration,
+} from "./migrate";
 import { type LegacyFinding, scanIn } from "./repair";
 import {
   type ClientEnvironment,
-  type InstallReport,
+  InstallError,
   configHome,
-  injectionMode,
-  isManagedCommand,
-  resolveClientBinary,
-  writeAtomically,
+  describe,
+  hookCommand,
 } from "./shared";
-import { installedRevision, skillFile, skillInstaller } from "./skills";
+import { revisionOf } from "./skills";
 
 /**
- * Hook and skill as **one** install unit
- * (docs/design/agent-integration.md §2, §5).
+ * What the settings page reads and does for one CLI's integration
+ * (docs/design/canvas-only-integration.md §5).
  *
- * Before this module a CLI had two switches and three states: hooks installed
- * but no skill, a skill with no hooks, and either of them stale. The user's
- * report that "installing failed" turned out to be several different things at
- * once, and no single screen could say which. So: one `install`, one
- * `uninstall`, one status, and one revision — {@link INTEGRATION_REVISION},
- * the hook revision and the skill revision folded together, so that either one
- * moving asks for one reinstall.
- *
- * ## What "installed" means
- *
- * The files on disk, never a row. An install writes two things — the adapter
- * (whose shape is each provider's own) and `skills/armadra/SKILL.md` — plus a
- * marker recording which revision wrote them. A user who deletes any of them
- * by hand sees that on the next read, with nothing having to notice.
- *
- * The marker exists because the adapter cannot carry a revision: Codex hashes
- * its hook entries, so a field only we read would break the hash. It lives
- * beside our own files in the data directory and is removed with them.
+ * There is no "install into the CLI" any more: hook, skill and canvas
+ * instructions are artifacts under our data directory that only a canvas
+ * launch hands over. So the state answers "are the artifacts current" and the
+ * one action is "regenerate them". Two things are still about the CLI's own
+ * configuration, and both are reported rather than hidden: Codex's trust
+ * records (the only global write, named in {@link IntegrationState.globalWrites})
+ * and what the one-time migration took out of the old global install.
  */
 
-/** Half of an install unit, as the settings page reads it. */
+/** Half of the integration, as the settings page reads it. */
 export interface IntegrationPart {
   readonly installed: boolean;
-  /**
-   * The file this half lives in. Present even when not installed, so the page
-   * can say *where* it would go.
-   */
+  /** The artifact this half lives in, present or not. */
   readonly path?: string;
-  /** The revision on disk; `0` when this half is not installed. */
+  /** The revision on disk; `0` when this half is missing. */
   readonly revision: number;
 }
 
-/** `GET /api/agents/{id}/integration` (设计 §5). */
+/** What the migration did for this CLI — the page's "cleaned up" badge. */
+export interface MigrationSummary {
+  readonly migratedAt: string;
+  readonly removed: readonly string[];
+  readonly backups: readonly string[];
+  readonly error?: string;
+}
+
+/** `GET /api/agents/{id}/integration`. */
 export interface IntegrationState {
   readonly agentId: string;
-  /**
-   * `launch` / `file` / `extension` — how the adapter reaches the CLI, and
-   * therefore whether integrating writes a file the user also edits.
-   */
+  /** Always `canvas`: injected into canvas launches only. */
   readonly mode: string;
   readonly hook: IntegrationPart;
   readonly skill: IntegrationPart;
   readonly legacy: { readonly found: readonly LegacyFinding[] };
-  /** The revision a fresh install writes — the one the page compares against. */
+  /** The revision a regeneration writes. */
   readonly revision: number;
-  /**
-   * The revision the files on disk were written by; absent when nothing is
-   * installed.
-   */
+  /** The revision the artifacts on disk were written by. */
   readonly installedRevision?: number;
-  /** Installed, but by an older Armadra. The page offers "reinstall". */
+  /** Written by an older Armadra; the next launch rewrites them anyway. */
   readonly stale: boolean;
-  /**
-   * Argv this provider's launch line must carry; empty for every mode but
-   * `launch`.
-   */
+  /** Argv a canvas launch of this CLI carries, literal. */
   readonly launchArgs: readonly string[];
-  /** Absolute path of the hook client the adapter invokes. */
+  /** The same as words for a typed launch line (see `inject.ts`). */
+  readonly launchWords: readonly string[];
+  /** Names of the environment variables a canvas launch sets. */
+  readonly launchEnv: readonly string[];
+  /** Files outside our data directory this integration writes. */
+  readonly globalWrites: readonly string[];
+  readonly migration?: MigrationSummary;
+  /** Absolute path of the hook client the artifacts name. */
   readonly clientBin?: string;
-  /** Something worked but deserves a sentence in the settings page. */
   readonly warning?: string;
-}
-
-interface Marker {
-  readonly revision: number;
-  readonly hookRevision: number;
-  readonly skillRevision: number;
-  readonly configPath: string;
-  readonly installedAt: string;
 }
 
 export interface IntegrationOptions {
@@ -108,157 +98,180 @@ export interface IntegrationOptions {
   readonly now?: () => Date;
 }
 
-function markerPath(dataDir: string, agentId: string): string {
-  return join(integrationDir(dataDir, agentId), "installed.json");
-}
-
-function readMarker(dataDir: string, agentId: string): Marker | undefined {
-  try {
-    return JSON.parse(
-      readFileSync(markerPath(dataDir, agentId), "utf8"),
-    ) as Marker;
-  } catch {
-    return undefined;
+function requireInjected(agentId: string): void {
+  if (!isInjected(agentId)) {
+    throw new InstallError(
+      400,
+      "bad_request",
+      `${agentId} has no canvas injection`,
+    );
   }
 }
 
-function adapterInstalled(path: string): boolean {
-  try {
-    return isManagedCommand(readFileSync(path, "utf8"));
-  } catch {
-    return false;
-  }
+function injectionOptions(
+  agentId: string,
+  options: IntegrationOptions,
+): InjectionOptions {
+  return {
+    dataDir: options.dataDir,
+    ...(options.env === undefined ? {} : { env: options.env }),
+    ...(options.client === undefined ? {} : { client: options.client }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+    ...(agentId === "codex" && options.home !== undefined
+      ? { codexHome: options.home }
+      : {}),
+  };
+}
+
+function migrationFor(
+  record: MigrationRecord | undefined,
+  agentId: string,
+): MigrationSummary | undefined {
+  const entry = record?.agents[agentId];
+  if (record === undefined || entry === undefined) return undefined;
+  return {
+    migratedAt: record.migratedAt,
+    removed: entry.removed,
+    backups: entry.backups,
+    ...(entry.error === undefined ? {} : { error: entry.error }),
+  };
+}
+
+function isPresent(path: string | undefined): boolean {
+  return path !== undefined && existsSync(path);
 }
 
 /* --------------------------------- reading -------------------------------- */
 
-/** The whole state of one provider's integration, read from disk. */
 export function state(
   agentId: string,
   options: IntegrationOptions,
   warning?: string,
 ): IntegrationState {
-  const home = options.home ?? configHome(agentId, options.env);
-  const adapter = adapterPath(agentId, home, options.dataDir);
-  const hookInstalled = adapterInstalled(adapter);
+  requireInjected(agentId);
+  const env = options.env ?? process.env;
+  const home = options.home ?? configHome(agentId, env);
+  const layout = artifactLayout(options.dataDir, agentId);
   const marker = readMarker(options.dataDir, agentId);
-  const skillRevision = installedRevision(home);
-
-  const installed =
-    marker !== undefined && hookInstalled && skillRevision !== undefined
-      ? marker.revision
-      : undefined;
-  let clientBin: string | undefined;
-  try {
-    clientBin = resolveClientBinary({
-      env: options.env,
-      launcher: { dataDir: options.dataDir },
-      ...options.client,
-    });
-  } catch {
-    clientBin = undefined;
-  }
+  const hookFile =
+    layout.settings ?? layout.module ?? layout.pluginHooks ?? layout.marker;
+  const trusted =
+    agentId !== "codex" ||
+    (marker !== undefined &&
+      codexTrusted(home, hookCommand(marker.clientBin, agentId)));
+  const hookInstalled = marker !== undefined && isPresent(hookFile) && trusted;
+  const skillRevision = revisionOf(layout.skill);
+  const injection = canvasInjection({ dataDir: options.dataDir, agentId });
+  const migration = migrationFor(readMigration(options.dataDir), agentId);
   return {
     agentId,
-    mode: injectionMode(agentId),
+    mode: "canvas",
     hook: {
       installed: hookInstalled,
-      path: adapter,
-      revision: hookInstalled ? (marker?.hookRevision ?? 0) : 0,
+      path: agentId === "codex" ? codexConfigPath(home) : hookFile,
+      revision: hookInstalled ? HOOK_CLIENT_REVISION : 0,
     },
     skill: {
       installed: skillRevision !== undefined,
-      path: skillFile(home),
+      path: layout.skill,
       revision: skillRevision ?? 0,
     },
     legacy: { found: scanIn(agentId, home) },
     revision: INTEGRATION_REVISION,
-    stale: installed !== undefined && installed !== INTEGRATION_REVISION,
-    ...(installed === undefined ? {} : { installedRevision: installed }),
-    launchArgs: launchArgs(agentId, options.dataDir),
-    ...(clientBin === undefined ? {} : { clientBin }),
+    stale: marker !== undefined && marker.revision !== INTEGRATION_REVISION,
+    ...(marker === undefined ? {} : { installedRevision: marker.revision }),
+    launchArgs: injection.args,
+    launchWords: injection.words,
+    launchEnv: injection.env.map(([name]) => name),
+    globalWrites: agentId === "codex" ? [codexConfigPath(home)] : [],
+    ...(migration === undefined ? {} : { migration }),
+    ...(marker === undefined ? {} : { clientBin: marker.clientBin }),
     ...(warning === undefined ? {} : { warning }),
   };
 }
 
-/* -------------------------------- installing ------------------------------ */
+/* -------------------------------- writing --------------------------------- */
 
 /**
- * Writes both halves, then the marker. Idempotent: reinstalling an unchanged
- * integration rewrites the same bytes and leaves the skill's mtime alone.
- *
- * The skill half is the collaboration domain's to write; until it registers a
- * writer the hook half installs alone and the state reports the skill as not
- * installed, which is what the settings page draws.
+ * `POST …/integration/install`: regenerate the artifacts (and Codex's trust
+ * records) now, whatever the marker says.
  */
 export function install(
   agentId: string,
   options: IntegrationOptions,
 ): IntegrationState {
-  const home = options.home ?? configHome(agentId, options.env);
-  const clientBin = resolveClientBinary({
-    env: options.env,
-    launcher: { dataDir: options.dataDir },
-    ...options.client,
+  requireInjected(agentId);
+  prepareInjection(agentId, {
+    ...injectionOptions(agentId, options),
+    force: true,
   });
-  const report: InstallReport = installHook(
-    agentId,
-    clientBin,
-    options.dataDir,
-    home,
-  );
-  skillInstaller()?.install(agentId, home);
-  writeMarker(agentId, report, options);
-  return state(agentId, { ...options, home }, report.warning);
+  return state(agentId, options);
 }
 
-/**
- * Removes both halves and the marker. A half that was never there is not an
- * error: the end state is what was asked for either way.
- */
+/** `POST …/integration/uninstall`: remove the artifacts and trust records. */
 export function uninstall(
   agentId: string,
   options: IntegrationOptions,
 ): IntegrationState {
-  const home = options.home ?? configHome(agentId, options.env);
-  const report = uninstallHook(agentId, options.dataDir, home);
-  skillInstaller()?.uninstall(agentId, home);
-  const marker = markerPath(options.dataDir, agentId);
-  if (isFile(marker)) {
-    rmSync(marker, { force: true });
+  requireInjected(agentId);
+  removeInjection(agentId, injectionOptions(agentId, options));
+  return state(agentId, options);
+}
+
+/* -------------------------------- start-up -------------------------------- */
+
+export interface StartupReport {
+  readonly migration?: MigrationRecord;
+  readonly prepared: readonly string[];
+  readonly failures: readonly { agentId: string; error: string }[];
+}
+
+/**
+ * What core start-up does: the one-time migration, then every CLI's artifacts
+ * made current. Codex's trust records are written only when Codex has a
+ * config home here — a machine that never ran Codex gets no `~/.codex`.
+ *
+ * Nothing global happens when {@link globalWritesDisabled}: the test suite's
+ * cores run with the developer's real `HOME`.
+ */
+export function prepareAtStartup(options: IntegrationOptions): StartupReport {
+  const env = options.env ?? process.env;
+  const global = !globalWritesDisabled(env);
+  const migration = global
+    ? migrateGlobalInstalls({
+        dataDir: options.dataDir,
+        env,
+        ...(options.now === undefined ? {} : { now: options.now }),
+      })
+    : undefined;
+  const prepared: string[] = [];
+  const failures: { agentId: string; error: string }[] = [];
+  for (const agentId of [
+    "claude",
+    "codex",
+    "opencode",
+    "pi",
+    "omp",
+    "copilot",
+  ]) {
     try {
-      rmdirSync(integrationDir(options.dataDir, agentId));
-    } catch {
-      // Something else of ours is still in there; leave it.
+      const codexHome = configHome("codex", env);
+      prepareInjection(agentId, {
+        ...injectionOptions(agentId, options),
+        ...(agentId === "codex" && !existsSync(codexHome)
+          ? { skipTrust: true }
+          : {}),
+      });
+      prepared.push(agentId);
+    } catch (error) {
+      failures.push({ agentId, error: describe(error) });
     }
   }
-  return state(agentId, { ...options, home }, report.warning);
-}
-
-function writeMarker(
-  agentId: string,
-  report: InstallReport,
-  options: IntegrationOptions,
-): void {
-  const marker: Marker = {
-    revision: INTEGRATION_REVISION,
-    hookRevision: report.clientRevision,
-    skillRevision: SKILLS_REVISION,
-    configPath: report.configPath,
-    installedAt: (options.now ?? (() => new Date()))().toISOString(),
+  return {
+    ...(migration === undefined ? {} : { migration }),
+    prepared,
+    failures,
   };
-  writeAtomically(
-    markerPath(options.dataDir, agentId),
-    `${JSON.stringify(marker, null, 2)}`,
-  );
 }
 
-function isFile(path: string): boolean {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
-}
-
-export { HOOK_CLIENT_REVISION, INTEGRATION_REVISION };
+export { HOOK_CLIENT_REVISION, INTEGRATION_REVISION, SKILLS_REVISION };

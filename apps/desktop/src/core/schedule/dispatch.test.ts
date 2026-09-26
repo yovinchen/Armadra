@@ -393,7 +393,7 @@ describe("冷启动", () => {
     expect(launches).toHaveLength(0);
   });
 
-  it("按冻结的定义起一个，程序由注册表解析、参数逐个引用，然后报忙", async () => {
+  it("按冻结的定义起一个，程序由注册表解析、参数按需引用，然后报忙", async () => {
     const { dispatcher, target, launches } = coldSetUp();
     expect(await dispatcher.supports(target, { coldStart: true })).toEqual({
       state: "busy",
@@ -405,7 +405,7 @@ describe("冷启动", () => {
         nodeId: "node-1",
         agentId: "claude",
         cwd: "/tmp/ws",
-        line: `claude '--model' 'it'\\''s'`,
+        line: `claude --model 'it'\\''s'`,
       },
     ]);
   });

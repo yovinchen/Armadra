@@ -7,6 +7,7 @@ import {
 import { runContextLink } from "../collab/context-link";
 import { SendPump } from "../collab/send-pump";
 import { installCollaborationSkill } from "../collab/skill";
+import { prepareAtStartup } from "../hook/install/integration";
 import type { Caller } from "../collab/nodes";
 import { Args } from "../collab/refusals";
 import {
@@ -150,6 +151,27 @@ export function install(context: CoreContext): CollabContext {
   // imported by the installer, so a build with no collaboration domain writes
   // no skill instead of writing one that promises verbs nobody answers.
   installCollaborationSkill();
+  // 画布内注入（docs/design/canvas-only-integration.md）：升级后第一次启动时
+  // 把旧的全局安装备份后清掉（只一次，结果记在数据目录里），再把六个 CLI 的
+  // 注入产物写成当前版本。放在技能正文注册之后：产物里有技能与画布说明。
+  try {
+    const startup = prepareAtStartup({ dataDir: context.dataDir });
+    const cleaned = Object.entries(startup.migration?.agents ?? {}).filter(
+      ([, entry]) => entry.removed.length > 0 || entry.error !== undefined,
+    );
+    if (cleaned.length > 0) {
+      context.log.info("旧的全局 CLI 集成已迁移为画布内注入", {
+        agents: Object.fromEntries(cleaned),
+      });
+    }
+    for (const failure of startup.failures) {
+      context.log.warn("画布注入产物没有写成", failure);
+    }
+  } catch (error) {
+    context.log.warn("画布注入的启动准备失败", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 
   // 出队挂在 `agent.status` 的发布点上，不轮询（§4.6）。同一条事件回答两个
   // 问题：谁的一轮结束了（扇出计数清零），以及谁空出来了（该出队了）。

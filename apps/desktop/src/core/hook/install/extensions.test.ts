@@ -1,11 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { HOOK_CLIENT_REVISION } from "./events";
-import { opencodePluginSource } from "./extension-template";
+import { OMP_HOOK_EVENTS, PI_HOOK_EVENTS } from "./events";
+import { opencodePluginSource, piExtensionSource } from "./extension-template";
 import {
-  installOpencode,
-  installPi,
+  modulePath,
   opencodePluginPath,
   piExtensionPath,
   uninstallModule,
@@ -19,16 +18,32 @@ function home(kind: string): string {
   return tempDir(`armadra-${kind}-`);
 }
 
+/**
+ * What the old global installer wrote into the directory the CLI scans. The
+ * same source is injected per launch now (`inject.ts`); the tests here cover
+ * the source itself and the removal of the old global copy.
+ */
+function writeOld(agentId: string, directory: string): string {
+  const path = modulePath(agentId, directory);
+  const source =
+    agentId === "opencode"
+      ? opencodePluginSource(agentId, CLIENT)
+      : piExtensionSource(
+          agentId,
+          CLIENT,
+          agentId === "omp" ? OMP_HOOK_EVENTS : PI_HOOK_EVENTS,
+        );
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, source, "utf8");
+  return path;
+}
+
 describe("the opencode plugin", () => {
-  it("is written, gated and idempotent", () => {
+  it("is gated on the node and names our client", () => {
     const directory = home("opencode");
-    const report = installOpencode(directory, CLIENT);
-    expect(report.installed).toBe(true);
-    expect(report.agentId).toBe("opencode");
-    expect(report.clientRevision).toBe(HOOK_CLIENT_REVISION);
-    const path = opencodePluginPath(directory);
+    const path = writeOld("opencode", directory);
+    expect(path).toBe(opencodePluginPath(directory));
     expect(path.endsWith(join("plugins", "armadra-status.js"))).toBe(true);
-    expect(report.configPath).toBe(path);
 
     const source = readFileSync(path, "utf8");
     expect(source).toContain("export const ArmadraStatus");
@@ -36,9 +51,8 @@ describe("the opencode plugin", () => {
     expect(source).toContain("/opt/armadra/armadra-hook");
     expect(source).toContain('const ARMADRA_AGENT = "opencode";');
     expect(isManagedCommand(source)).toBe(true);
-
-    installOpencode(directory, CLIENT);
-    expect(readFileSync(path, "utf8")).toBe(source);
+    // Deterministic: regenerating writes the same bytes.
+    expect(opencodePluginSource("opencode", CLIENT)).toBe(source);
   });
 
   /**
@@ -66,9 +80,9 @@ describe("the opencode plugin", () => {
     expect(source).not.toContain('"deny"');
   });
 
-  it("removes our plugin on uninstall and leaves a stranger alone", () => {
+  it("removes our plugin on removal and leaves a stranger alone", () => {
     const directory = home("opencode");
-    installOpencode(directory, CLIENT);
+    writeOld("opencode", directory);
     uninstallModule("opencode", directory);
     expect(existsSync(opencodePluginPath(directory))).toBe(false);
     // Uninstalling again is a no-op, not an error.
@@ -82,13 +96,13 @@ describe("the opencode plugin", () => {
     expect(existsSync(path)).toBe(true);
   });
 
-  it("leaves other plugins alone through install and uninstall", () => {
+  it("leaves other plugins alone through removal", () => {
     const directory = home("opencode");
     const theirs = join(directory, "plugins", "their-plugin.js");
     mkdirSync(dirname(theirs), { recursive: true });
     writeFileSync(theirs, "export const Theirs = () => ({});\n", "utf8");
 
-    installOpencode(directory, CLIENT);
+    writeOld("opencode", directory);
     expect(readFileSync(theirs, "utf8")).toBe(
       "export const Theirs = () => ({});\n",
     );
@@ -112,16 +126,11 @@ describe("the opencode plugin", () => {
 });
 
 describe("the Pi and Oh My Pi extension", () => {
-  it("is written, gated and byte-identical on reinstall", () => {
+  it("is gated on the node and names our client", () => {
     const directory = home("pi");
-    const report = installPi("pi", directory, CLIENT);
-    expect(report.installed).toBe(true);
-    expect(report.agentId).toBe("pi");
-    expect(report.clientRevision).toBe(HOOK_CLIENT_REVISION);
-
-    const path = piExtensionPath(directory);
+    const path = writeOld("pi", directory);
+    expect(path).toBe(piExtensionPath(directory));
     expect(path.endsWith(join("extensions", "armadra-status.ts"))).toBe(true);
-    expect(report.configPath).toBe(path);
 
     const source = readFileSync(path, "utf8");
     expect(source).toContain("export default function");
@@ -130,18 +139,16 @@ describe("the Pi and Oh My Pi extension", () => {
     expect(source).toContain('const ARMADRA_AGENT = "pi";');
     expect(source).toContain('"agent_settled"');
     expect(isManagedCommand(source)).toBe(true);
-
-    installPi("pi", directory, CLIENT);
-    expect(readFileSync(path, "utf8")).toBe(source);
+    expect(piExtensionSource("pi", CLIENT, PI_HOOK_EVENTS)).toBe(source);
   });
 
-  it("leaves other extensions alone through install and uninstall", () => {
+  it("leaves other extensions alone through removal", () => {
     const directory = home("pi");
     const theirs = join(directory, "extensions", "their-widget.ts");
     mkdirSync(dirname(theirs), { recursive: true });
     writeFileSync(theirs, "export default function () {}\n", "utf8");
 
-    installPi("pi", directory, CLIENT);
+    writeOld("pi", directory);
     expect(readFileSync(theirs, "utf8")).toBe(
       "export default function () {}\n",
     );
@@ -151,9 +158,9 @@ describe("the Pi and Oh My Pi extension", () => {
     expect(existsSync(theirs)).toBe(true);
   });
 
-  it("removes only our file on uninstall, idempotently", () => {
+  it("removes only our file on removal, idempotently", () => {
     const directory = home("pi");
-    installPi("pi", directory, CLIENT);
+    writeOld("pi", directory);
     uninstallModule("pi", directory);
     expect(existsSync(piExtensionPath(directory))).toBe(false);
     expect(() => uninstallModule("pi", directory)).not.toThrow();
@@ -165,13 +172,9 @@ describe("the Pi and Oh My Pi extension", () => {
     expect(existsSync(path)).toBe(true);
   });
 
-  it("reports as omp and reinstalls byte-identically", () => {
+  it("reports as omp and regenerates byte-identically", () => {
     const directory = home("omp");
-    const report = installPi("omp", directory, CLIENT);
-    expect(report.installed).toBe(true);
-    expect(report.agentId).toBe("omp");
-
-    const path = piExtensionPath(directory);
+    const path = writeOld("omp", directory);
     const source = readFileSync(path, "utf8");
     expect(source).toContain('const ARMADRA_AGENT = "omp";');
     // The settle event the idle gate reads on this fork, and the one Pi uses,
@@ -180,16 +183,14 @@ describe("the Pi and Oh My Pi extension", () => {
     expect(source).toContain('"agent_settled"');
     expect(source).toContain('"auto_compaction_end"');
     expect(isManagedCommand(source)).toBe(true);
-
-    installPi("omp", directory, CLIENT);
-    expect(readFileSync(path, "utf8")).toBe(source);
+    expect(piExtensionSource("omp", CLIENT, OMP_HOOK_EVENTS)).toBe(source);
   });
 
   it("writes different files into different homes for the two providers", () => {
     const piHome = home("pi");
     const ompHome = home("omp");
-    installPi("pi", piHome, CLIENT);
-    installPi("omp", ompHome, CLIENT);
+    writeOld("pi", piHome);
+    writeOld("omp", ompHome);
     const piSource = readFileSync(piExtensionPath(piHome), "utf8");
     const ompSource = readFileSync(piExtensionPath(ompHome), "utf8");
     expect(piSource).not.toBe(ompSource);

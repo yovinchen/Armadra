@@ -38,9 +38,10 @@ export const agentInfoSchema = z.object({
    */
   probe: agentProbeSchema.nullish(),
   /**
-   * Argv a session of this agent must carry for its adapter to load
-   * (docs/design/agent-integration.md §3) — `--settings <file>` for Claude
-   * Code, empty for everyone else and for an uninstalled integration.
+   * Argv a canvas launch of this agent carries — the canvas injection
+   * (docs/design/canvas-only-integration.md §2): Claude's `--settings` /
+   * `--plugin-dir` / `--append-system-prompt-file`, Codex's `-c` hooks and
+   * developer instructions, and so on. Empty when nothing is prepared.
    *
    * It is answered per request rather than frozen into a launch definition
    * because both halves are the runtime's: the path is that data directory's
@@ -51,6 +52,14 @@ export const agentInfoSchema = z.object({
    * field" are the same instruction to the caller — add nothing.
    */
   launchArgs: z.array(z.string()).optional(),
+  /**
+   * The same injection as shell words for a typed launch line, quoted where
+   * needed. Codex's words name environment variables the node's terminal
+   * carries (`$ARMADRA_CODEX_HOOK`) instead of spelling kilobytes out: a line
+   * that long is cut off while a fresh shell is still echoing it. The page
+   * appends these verbatim when present, and `launchArgs` otherwise.
+   */
+  launchWords: z.array(z.string()).optional(),
 });
 
 export const agentListSchema = z.array(agentInfoSchema);
@@ -84,15 +93,20 @@ export type AgentModel = z.infer<typeof agentModelSchema>;
 export const agentModelListSchema = z.array(agentModelSchema);
 
 /**
- * How a provider's hook adapter reaches its CLI
- * (docs/design/agent-integration.md §3).
+ * How a provider's integration reaches its CLI.
  *
- * The distinction the settings page shows is "does integrating me edit a file
- * you also edit": `launch` passes the adapter on the command line and `extension`
- * writes a generated module only we ever touch, so neither goes near the user's
- * own configuration; `file` merges into it, idempotently and repairably.
+ * `canvas` is the only mode a current core answers
+ * (docs/design/canvas-only-integration.md): hook, skill and canvas
+ * instructions are handed over on the launch line of a canvas node and nowhere
+ * else. The older three stay parseable so a page talking to an older core
+ * still draws its rows.
  */
-export const INJECTION_MODES = ["launch", "file", "extension"] as const;
+export const INJECTION_MODES = [
+  "canvas",
+  "launch",
+  "file",
+  "extension",
+] as const;
 
 /** One half of an install unit — the adapter, or the skill. */
 export const integrationHalfSchema = z.object({
@@ -143,6 +157,24 @@ export const integrationStateSchema = z.looseObject({
    * every mode but `launch`, and for an integration that is not installed.
    */
   launchArgs: z.array(z.string()).default([]),
+  /** The same as words for a typed launch line. */
+  launchWords: z.array(z.string()).default([]),
+  /** Names of the environment variables a canvas launch sets. */
+  launchEnv: z.array(z.string()).default([]),
+  /**
+   * Files outside the data directory this integration writes — Codex's
+   * `config.toml`, for its hook trust records, and nothing else.
+   */
+  globalWrites: z.array(z.string()).default([]),
+  /** What the one-time move away from the old global install did here. */
+  migration: z
+    .object({
+      migratedAt: z.string(),
+      removed: z.array(z.string()).default([]),
+      backups: z.array(z.string()).default([]),
+      error: z.string().optional(),
+    })
+    .optional(),
   clientBin: z.string().optional(),
   /** Something worked but deserves a sentence in the settings page. */
   warning: z.string().optional(),

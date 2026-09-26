@@ -1,99 +1,101 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { VERBS as BROWSER_VERBS } from "../browser/args";
 import {
   SKILLS_REVISION,
-  installedRevision,
-  skillFile,
-  skillInstaller,
-  registerSkillInstaller,
+  registerSkillContent,
+  skillContent,
 } from "../hook/install/skills";
 import {
+  canvasInstructions,
+  canvasRules,
   collaborationSkill,
+  developerInstructions,
   installCollaborationSkill,
   skillBody,
 } from "./skill";
 
 /**
- * The skill half of the install unit.
+ * The texts the canvas injection hands a CLI.
  *
- * What is asserted is the part the settings page and the model both depend on:
- * the file carries a revision the reader can find, reinstalling does not touch
- * a byte, and uninstalling takes the file without taking anything the user put
- * beside it.
+ * What is asserted is what the model depends on: the rules are there, early,
+ * in every text; the verbs they name exist; and the browser verb list is the
+ * browser domain's own list, not a copy that drifts.
  */
 
-let home: string;
 let release: (() => void) | undefined;
-
-beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), "armadra-skill-"));
-});
 
 afterEach(() => {
   release?.();
   release = undefined;
-  rmSync(home, { recursive: true, force: true });
 });
 
 describe("the collaboration skill", () => {
-  it("writes a body whose revision the integration can read back", () => {
-    const written = collaborationSkill.install("claude", home);
-    expect(written).toEqual([skillFile(home)]);
-    expect(installedRevision(home)).toBe(SKILLS_REVISION);
-    const body = readFileSync(skillFile(home), "utf8");
+  it("carries a revision the integration can read back", () => {
+    const body = skillBody();
+    expect(body).toContain(
+      `<!-- armadra:skill-revision ${SKILLS_REVISION} -->`,
+    );
     // The three things an agent cannot discover on its own.
     expect(body).toContain("armadra-hook context list");
     expect(body).toContain("armadra-hook canvas post");
     expect(body).toContain("ARMADRA_HOOK_BIN");
   });
 
-  it("leaves the file and its mtime alone when nothing changed", async () => {
-    collaborationSkill.install("claude", home);
-    const before = statSync(skillFile(home)).mtimeMs;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(collaborationSkill.install("claude", home)).toEqual([]);
-    expect(statSync(skillFile(home)).mtimeMs).toBe(before);
+  /**
+   * The sentence is only true now that the skill is injected per launch — and
+   * the rules come right after it, before any section a model might skim past.
+   */
+  it("opens with the node sentence and the canvas rules", () => {
+    const body = skillBody();
+    const node = body.indexOf("本终端跑在 Armadra 画布的一个节点里");
+    const rules = body.indexOf("## 画布规则");
+    const firstSection = body.indexOf("## 你的名字");
+    expect(node).toBeGreaterThan(0);
+    expect(rules).toBeGreaterThan(node);
+    expect(rules).toBeLessThan(firstSection);
   });
 
-  it("retires a revision-4 skill directory on install", () => {
-    const legacy = join(home, "skills", "armadra-canvas");
-    mkdirSync(legacy, { recursive: true });
-    writeFileSync(join(legacy, "SKILL.md"), "old", "utf8");
-    const written = collaborationSkill.install("claude", home);
-    expect(written).toContain(join(legacy, "SKILL.md"));
-    expect(existsSync(join(legacy, "SKILL.md"))).toBe(false);
+  it("states the three rules in so many words", () => {
+    const rules = canvasRules();
+    expect(rules).toContain("画布上的一个节点");
+    expect(rules).toContain("armadra-hook canvas open-agent");
+    expect(rules).toContain("armadra-hook canvas team");
+    expect(rules).toContain("子代理");
+    expect(rules).toContain("armadra-hook browser <动词>");
+    expect(rules).toContain("armadra-hook canvas open-browser --url");
+    expect(rules).toContain("computer-use");
   });
 
-  it("uninstalls the file but keeps a file the user put beside it", () => {
-    collaborationSkill.install("claude", home);
-    const mine = join(home, "skills", "armadra", "notes.md");
-    writeFileSync(mine, "mine", "utf8");
-    expect(collaborationSkill.uninstall("claude", home)).toEqual([
-      skillFile(home),
-    ]);
-    expect(existsSync(skillFile(home))).toBe(false);
-    expect(readFileSync(mine, "utf8")).toBe("mine");
+  /** One source: a verb the browser domain adds shows up here by itself. */
+  it("lists every browser verb the browser domain dispatches", () => {
+    const rules = canvasRules();
+    for (const verb of BROWSER_VERBS) {
+      expect(rules, verb).toContain(`\`${verb}\``);
+    }
+    const examples = [...rules.matchAll(/armadra-hook browser ([a-z-]+)/g)].map(
+      (match) => match[1] as string,
+    );
+    expect(examples.length).toBeGreaterThan(1);
+    for (const verb of examples) expect(BROWSER_VERBS).toContain(verb);
   });
 
-  it("uninstalling something that was never installed is not an error", () => {
-    expect(collaborationSkill.uninstall("claude", home)).toEqual([]);
+  it("puts the rules and the skill path into both instruction forms", () => {
+    const path = "/data/integration/codex/skills/armadra/SKILL.md";
+    for (const text of [
+      canvasInstructions(path),
+      developerInstructions(path),
+    ]) {
+      expect(text).toContain(canvasRules());
+      expect(text).toContain(path);
+    }
   });
 
-  it("registers itself as the installer the integration looks up", () => {
-    registerSkillInstaller(undefined);
-    expect(skillInstaller()).toBeUndefined();
+  it("registers itself as the content the injection writes", () => {
+    registerSkillContent(undefined);
+    expect(skillContent()).toBeUndefined();
     release = installCollaborationSkill();
-    expect(skillInstaller()).toBe(collaborationSkill);
+    expect(skillContent()).toBe(collaborationSkill);
+    expect(collaborationSkill.skill()).toBe(skillBody());
   });
 
   it("names only verbs the control dispatcher answers", async () => {
@@ -103,6 +105,7 @@ describe("the collaboration skill", () => {
       (match) => match[1] as string,
     );
     expect(named.length).toBeGreaterThan(4);
+    expect(named).toContain("open-browser");
     for (const verb of new Set(named)) {
       expect(VERBS as readonly string[]).toContain(verb);
     }

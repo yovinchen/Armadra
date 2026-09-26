@@ -74,6 +74,7 @@ export function install(context: CoreContext): ScheduleDomain | undefined {
     // 经同一条事件流告诉页面重读画布。启动器本身由终端域经接缝交回。
     settings: () => collab()?.settings,
     publish: () => collab()?.publish,
+    dataDir: context.dataDir,
   };
   const dispatcher = new TerminalDispatcher(dispatchContext);
   // 内核要一个授权方，而授权方是服务层——两者互相需要，所以先留一个转发。

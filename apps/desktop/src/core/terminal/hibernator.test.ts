@@ -1,3 +1,5 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { type AgentFixture, agentFixture } from "../agent/fixture";
@@ -27,6 +29,8 @@ import {
   scheduledFor,
 } from "./hibernate";
 import { Hibernator, resumeLine } from "./hibernator";
+import { artifactLayout, prepareInjection } from "../hook/install/inject";
+import { tempDir } from "../testing/temp-dir";
 import { TerminalManager } from "./manager";
 
 /**
@@ -111,6 +115,7 @@ let now: number;
 let policy: EcoPolicy;
 let events: WorkspaceEvent[];
 let nudged: string[];
+let injectionDir: string;
 let background: { shellChildren: string[]; agentDescendants: string[] };
 
 const MINUTE = 60_000;
@@ -118,6 +123,15 @@ const MINUTE = 60_000;
 beforeEach(() => {
   fixture = agentFixture();
   cli = new FakeCli();
+  injectionDir = tempDir("armadra-hibernator-injection-");
+  writeFileSync(join(injectionDir, "armadra-hook"), "#!/bin/sh\n", "utf8");
+  prepareInjection("claude", {
+    dataDir: injectionDir,
+    env: {
+      ...process.env,
+      ARMADRA_HOOK_BIN: join(injectionDir, "armadra-hook"),
+    },
+  });
   now = Date.parse("2026-09-26T08:00:00.000Z");
   policy = { enabled: true, idleMinutes: 30 };
   events = [];
@@ -136,10 +150,8 @@ beforeEach(() => {
     settings: () => fixture.collab.settings,
     policy: () => policy,
     environment: (nodeId) => [["ARMADRA_NODE_ID", nodeId]],
-    program: () => ({
-      path: "/opt/bin/claude",
-      args: ["--settings", "/d/s.json"],
-    }),
+    program: () => ({ path: "/opt/bin/claude" }),
+    dataDir: injectionDir,
     publish: (_workspaceId, event) => {
       events.push(event);
     },
@@ -391,10 +403,13 @@ describe("hibernated → resuming → running", () => {
     });
     expect(cli.created.map((spec) => spec.generation)).toEqual([1, 2]);
     // 同一段对话：`--resume` 后面是 hook 报过的那个 provider 会话 id，模型与
-    // 权限模式读节点现在的设置，集成要求的 argv 跟在最后。
-    expect(cli.typed).toEqual([
-      "/opt/bin/claude --resume prov-1 --permission-mode acceptEdits --model opus --settings /d/s.json\r",
-    ]);
+    // 权限模式读节点现在的设置，画布注入的 argv 跟在最后（恢复时要重带）。
+    expect(cli.typed).toHaveLength(1);
+    expect(
+      cli.typed[0]?.startsWith(
+        `/opt/bin/claude --resume prov-1 --permission-mode acceptEdits --model opus --settings ${artifactLayout(injectionDir, "claude").settings}`,
+      ),
+    ).toBe(true);
     // 旧的那条 idle 属于上一代：投递门链要等接回来的 CLI 自己再报一条。
     const restored = fixture.database
       .prepare("SELECT restored FROM agent_status WHERE node_id = ?")

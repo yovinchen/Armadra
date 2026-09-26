@@ -2,12 +2,12 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   agentDefinition,
-  assembleLaunchCommand,
   conversationsResponseSchema,
   suggestTitleResponseSchema,
   type Conversation,
 } from "@armadra/shared";
 
+import { buildResumeLaunch } from "../agent/launch";
 import { RUNTIME_URL, runtimeApi } from "../api/client";
 
 /**
@@ -69,9 +69,10 @@ export async function suggestTitle(nodeId: string): Promise<string> {
 /**
  * 恢复某条历史对话的启动行（§17）。
  *
- * 拼行规则全在 shared 的 `assembleLaunchCommand`（claude 是 `--resume`
- * flag，codex 是 `resume` 子命令，opencode 没有这个能力位）。这里只负责在
- * provider 不认识或不支持恢复时返回 `null`，让调用方把那一行禁掉。
+ * 拼行经 `agent/launch.ts` 的 `buildResumeLaunch`（claude 是 `--resume` flag，
+ * codex 是 `resume` 子命令，opencode 没有这个能力位），与新开的节点同一个出口
+ * ——画布注入的 argv 照带。这里只负责在 provider 不认识或不支持恢复时返回
+ * `null`，让调用方把那一行禁掉。
  */
 export function resumeLaunchCommand(
   provider: string,
@@ -79,8 +80,7 @@ export function resumeLaunchCommand(
 ): string | null {
   if (!agentDefinition(provider)?.resume) return null;
   try {
-    return assembleLaunchCommand({ agentId: provider, resume: sessionId })
-      .command;
+    return buildResumeLaunch(provider, sessionId).command;
   } catch {
     return null;
   }

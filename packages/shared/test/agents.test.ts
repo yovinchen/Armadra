@@ -499,3 +499,34 @@ describe("assembleLaunchArgv", () => {
     expect(argv.stdinPrompt).toBe("hello");
   });
 });
+
+describe("the typed canvas injection", () => {
+  it("appends the runtime's words verbatim, in front of a prompt", () => {
+    expect(
+      assembleLaunchCommand({
+        agentId: "codex",
+        shellWords: ["-c", '"hooks.Stop=$ARMADRA_CODEX_HOOK"'],
+      }).command,
+    ).toBe('codex -c "hooks.Stop=$ARMADRA_CODEX_HOOK"');
+    expect(
+      assembleLaunchCommand({
+        agentId: "claude",
+        shellWords: ["--settings", "/d/s.json"],
+        prompt: "hi there",
+      }).command,
+    ).toBe("claude --settings /d/s.json 'hi there'");
+    expect(
+      assembleLaunchCommand({
+        agentId: "copilot",
+        shellWords: ["--plugin-dir", "/d/p"],
+        prompt: "go",
+      }).command,
+    ).toBe("copilot --plugin-dir /d/p --interactive go");
+  });
+
+  it("never puts them into a frozen argv", () => {
+    expect(
+      assembleLaunchArgv({ agentId: "codex", shellWords: ["-c", "x"] }).args,
+    ).toEqual([]);
+  });
+});

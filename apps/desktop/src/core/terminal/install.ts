@@ -15,6 +15,7 @@ import { handleForNode } from "../canvas/handles";
 import { type EnvPairs, agentEnvironment, setHookClient } from "./environment";
 import { launcherClientBinary } from "../hook/install/shared";
 import { collab, setTerminalBridge } from "../agent";
+import { canvasEnvironment } from "../agent/canvas-launch";
 import { listAgents } from "../agent/list";
 import { parseCustomAgents } from "../settings/custom-agents";
 import {
@@ -249,6 +250,12 @@ export function install(
   // Shared by the route and the scheduler's cold start: a session the core
   // starts on its own has to report exactly like one the page started, or the
   // delivery gate would wait for a status that never comes.
+  // 自定义 Agent 的注册表每次现读：设置里刚加的条目下一次启动就认得。
+  const agentSettings = () =>
+    collab()?.settings ?? {
+      customAgents: () =>
+        parseCustomAgents(settingsDomain()?.settings.snapshot() ?? {}),
+    };
   const ownedEnvironment = (nodeId: string, agentId: string) => {
     try {
       issueNodeToken(context.dataDir, nodeId);
@@ -274,6 +281,15 @@ export function install(
         agentId,
         settingsDomain()?.settings.get("hooks.replyApprovals") !== false,
       ),
+      // 画布注入的环境半边（OpenCode 的配置目录、Copilot 的说明目录）；也是
+      // 注入产物确保为最新的时刻——这个终端就要起这个 CLI 了。
+      ...canvasEnvironment(
+        agentSettings(),
+        context.dataDir,
+        agentId,
+        nodeId,
+        (message, fields) => context.log.warn(message, fields),
+      ),
     ];
   };
 
@@ -282,11 +298,6 @@ export function install(
   // 终端宿主设计 §7.2。设置每次现读：开关与阈值改了下一轮巡检就生效。
   // 探针的秒级阈值（`hibernate.ts::ecoTestOverride`）：开关仍听设置的。
   const ecoOverride = ecoTestOverride();
-  const agentSettings = () =>
-    collab()?.settings ?? {
-      customAgents: () =>
-        parseCustomAgents(settingsDomain()?.settings.snapshot() ?? {}),
-    };
   const hibernator = new Hibernator({
     database: context.db.database,
     manager,
@@ -300,19 +311,20 @@ export function install(
         : { ...policy, idleMinutes: ecoOverride.idleMinutes };
     },
     environment: (nodeId, agentId) => ownedEnvironment(nodeId, agentId),
-    // 与依赖编排拼启动行时同一个来源：本机解析到的程序路径，与集成要求的
-    // argv（Claude 的 `--settings <文件>`，少了它 hook 不上报）。
+    // 与依赖编排拼启动行时同一个来源：本机解析到的程序路径；画布注入的 argv
+    // 由恢复行经 `agent/canvas-launch.ts` 从数据目录取。
     program: (agentId) => {
       try {
         const row = listAgents({
           dataDir: context.dataDir,
           settings: agentSettings(),
         }).find((entry) => entry.id === agentId);
-        return { path: row?.resolvedPath ?? undefined, args: row?.launchArgs };
+        return { path: row?.resolvedPath ?? undefined };
       } catch {
         return {};
       }
     },
+    dataDir: context.dataDir,
     publish: (workspaceId, event) => {
       context.bus.emit("workspace.event", { workspaceId, event });
     },

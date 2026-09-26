@@ -1,8 +1,8 @@
+import { canvasLaunchLine } from "../agent/canvas-launch";
 import {
   LaunchRefused,
   expectedProcesses,
   paneRunsAgent,
-  planLaunch,
 } from "../agent/launch";
 import { listAgents } from "../agent/list";
 import { loadBoard, saveBoard } from "../canvas/documents";
@@ -28,9 +28,9 @@ import type { LaunchRow } from "./store";
  *      出队泵等它报出第一条真正的 idle 再投——与不带依赖的 `open-agent --task`
  *      是同一条路，这里不写第二套往 PTY 里敲正文的逻辑。
  *
- * 启动行与页面拼的是同一份：`planLaunch` 给权限模式与模型的旗标，`GET
- * /api/agents` 那一行给本机解析到的程序路径与集成要求的额外 argv（Claude 的
- * `--settings <文件>`：少了它 hook 不上报，第一条任务就永远等不到 idle）。
+ * 启动行与页面拼的是同一份，经 `agent/canvas-launch.ts` 这一个出口：权限模式
+ * 与模型的旗标、`GET /api/agents` 那一行给的本机程序路径，加上画布注入的 argv
+ * （Hook、技能、画布说明——少了 Hook 不上报，第一条任务就永远等不到 idle）。
  */
 
 /** 提示符安静这么久就敲（与页面 `LAUNCH_QUIET_MS` 同一个数）。 */
@@ -235,7 +235,7 @@ function finish(
 
 /**
  * 与页面的 `buildAgentLaunch` 拼同一行：程序（本机解析到的路径优先）、权限
- * 模式与模型的旗标、自定义条目的 argv、集成要求的 argv。
+ * 模式与模型的旗标、自定义条目的 argv、画布注入的 argv。
  */
 export function launchLine(
   collab: CollabContext,
@@ -248,11 +248,6 @@ export function launchLine(
       : {};
   const permissionMode = stringField(agent, "permissionMode");
   const model = stringField(agent, "model");
-  const plan = planLaunch(collab.settings, {
-    agentId,
-    ...(permissionMode === undefined ? {} : { permissionMode }),
-    ...(model === undefined ? {} : { model }),
-  });
   let row: ReturnType<typeof listAgents>[number] | undefined;
   try {
     row = listAgents({
@@ -262,16 +257,14 @@ export function launchLine(
   } catch {
     row = undefined;
   }
-  const program = row?.resolvedPath ?? plan.program;
-  return [program, ...plan.args, ...(row?.launchArgs ?? [])]
-    .map(shellWord)
-    .join(" ");
-}
-
-/** 只在需要时加引号：启动行会进 `initialCommand`，也会出现在人的屏幕上。 */
-function shellWord(value: string): string {
-  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, "'\\''")}'`;
+  return canvasLaunchLine({
+    settings: collab.settings,
+    dataDir: collab.dataDir,
+    agentId,
+    ...(permissionMode === undefined ? {} : { permissionMode }),
+    ...(model === undefined ? {} : { model }),
+    ...(row?.resolvedPath == null ? {} : { program: row.resolvedPath }),
+  });
 }
 
 /**

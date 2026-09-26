@@ -368,6 +368,13 @@ export interface AssembleLaunchCommandInput {
   programOverride?: string;
   /** Extra argv appended after the flags (custom agents). */
   extraArgs?: readonly string[];
+  /**
+   * Words appended to the *typed* line as they are, after everything quoted:
+   * the canvas injection the runtime answers as `launchWords`, which may
+   * expand environment variables of the node's terminal. Not part of
+   * {@link assembleLaunchArgv} — a frozen plan never carries the injection.
+   */
+  shellWords?: readonly string[];
   /** Prompt/permission behaviour to use when `agentId` is a `custom:` id. */
   baseAgent?: BuiltinAgentId;
   /**
@@ -521,8 +528,16 @@ export function assembleLaunchCommand(
   input: AssembleLaunchCommandInput,
 ): LaunchCommand {
   const { program, args, stdinPrompt } = assembleLaunchArgv(input);
+  // The prompt, when it is on the line, stays last: the injected words go in
+  // front of it. How many words it took is what the same launch without it
+  // lacks — one positional, or a flag and its value.
+  const withoutPrompt = input.prompt
+    ? assembleLaunchArgv({ ...input, prompt: undefined }).args.length
+    : args.length;
+  const quoted = [program, ...args].map(shellQuote);
+  const tail = quoted.splice(1 + withoutPrompt);
   return {
-    command: [program, ...args].map(shellQuote).join(" "),
+    command: [...quoted, ...(input.shellWords ?? []), ...tail].join(" "),
     ...(stdinPrompt ? { stdinPrompt } : {}),
   };
 }

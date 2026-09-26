@@ -1,40 +1,35 @@
 import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
-import { CODEX_HOOK_EVENTS, HOOK_CLIENT_REVISION } from "./events";
+import { HOOK_CLIENT_REVISION } from "./events";
 import {
-  InstallError,
   type InstallReport,
   type JsonObject,
   type JsonValue,
-  appendManagedGroup,
-  hookCommand,
   readJsonObject,
   stripManagedHandlers,
   takeEvents,
   writeAtomically,
   writeJsonObject,
 } from "./shared";
-import {
-  type TrustEntry,
-  isEditable,
-  readDocument,
-  removeTrustState,
-  writeTrustState,
-} from "./toml-state";
+import { readDocument, removeTrustState } from "./toml-state";
 
 /**
- * Codex — `<CODEX_HOME>/hooks.json` plus the trust state in `config.toml`.
+ * Codex's hook identity and trust state — and the removal of the global
+ * `hooks.json` install an earlier Armadra wrote.
+ *
+ * The hooks themselves now travel on the launch line of a canvas node
+ * (`inject.ts`, `-c hooks.<Event>=…`). What is left here is what that needs
+ * from Codex's own rules:
  *
  * Codex refuses to run a hook it does not trust, and it does so **silently**:
- * without the right `trusted_hash` the entries in `hooks.json` simply never
- * fire, which would look exactly like a broken client. So the installer has to
- * reproduce Codex's own hash, not merely write a plausible one.
+ * without the right `trusted_hash` the hook simply never fires, which would
+ * look exactly like a broken client. So the hash has to be Codex's own, not a
+ * plausible one.
  *
  * The algorithm was read off Codex's source (`codex-rs/hooks/src/engine/
  * discovery.rs::hook_hash` → `codex-rs/config/src/fingerprint.rs::
- * version_for_toml`) and verified byte-for-byte against a Codex 0.149.1
- * installation:
+ * version_for_toml`):
  *
  * 1. Build the *normalized identity* of one handler:
  *    `{ event_name: <snake_case>, matcher?: <string>, hooks: [<handler>] }`,
@@ -46,28 +41,17 @@ import {
  *    recursively, and emit compact JSON.
  * 3. `sha256:` + lowercase hex of the SHA-256 of those bytes.
  *
- * The state key is `<absolute hooks.json path>:<snake_case event>:<group
- * index>:<handler index>`, which is why our group is always appended last:
- * moving a foreign group would invalidate the user's own trust entries.
+ * Re-verified on Codex 0.155.1 (2026-09-26) for hooks passed with `-c`: the
+ * `currentHash` `codex app-server`'s `hooks/list` reports for a session-flag
+ * hook equals {@link hookHash} for all three shapes tried (with a matcher,
+ * without, and `SessionEnd`'s 1s timeout), and with those hashes written into
+ * a temporary `CODEX_HOME/config.toml` the hooks report `trusted` and fire
+ * under `codex exec`.
  *
- * ## Known broken on Codex 0.153.4 (2026-09-13)
- *
- * The hash above no longer matches. After a clean install the TUI opens
- * "Hooks need review — 8 hooks are new or changed" and runs none of them until
- * a person presses `t`. The keys are right (they appear in that panel); the
- * identity Codex hashes has changed. One lead: in 0.153.4 the bundled
- * `chrome@openai-bundled` and `browser@openai-bundled` `stop` entries carry
- * the *same* `trusted_hash`, so the identity can no longer include the command
- * or the source path.
- *
- * Two things follow for anyone picking this up. There is no session-scoped
- * alternative to fall back on — `codex -c key=value` overrides `config.toml`,
- * and hooks live in `hooks.json` — and **`codex exec` runs no hooks at all**
- * (a trusted `session_start` entry does not fire under it on 0.153.4), so the
- * smoke test drives the interactive TUI the way a canvas node does.
- *
- * Nothing here writes a hash it cannot justify: an entry whose hash is stale
- * is one Codex refuses until a person approves it, which is the safe failure.
+ * A global `hooks.json` entry's key is `<absolute hooks.json path>:<snake_case
+ * event>:<group index>:<handler index>`, which is why the old installer always
+ * appended its group last; {@link uninstall} keeps that rule when it takes the
+ * entries back out.
  */
 
 const AGENT_ID = "codex";
@@ -102,7 +86,7 @@ export function eventKey(event: string): string | undefined {
   return keys[event];
 }
 
-function resolvedTimeout(event: string): number {
+export function resolvedTimeout(event: string): number {
   return event === "SessionEnd" || event === "Interrupt"
     ? SESSION_END_TIMEOUT_SEC
     : DEFAULT_TIMEOUT_SEC;
@@ -129,60 +113,11 @@ function dropUnknownTopLevelKeys(document: JsonObject): void {
   }
 }
 
-export function install(configHome: string, clientBin: string): InstallReport {
-  const hooksFile = hooksPath(configHome);
-  // Before anything is written: a `config.toml` this editor would mangle is
-  // refused outright rather than half-rewritten.
-  const existingConfig = readDocument(configPath(configHome));
-  if (!isEditable(existingConfig)) {
-    throw new InstallError(
-      409,
-      "conflict",
-      `${configPath(configHome)} is not valid TOML; refusing to rewrite it`,
-    );
-  }
-  const supported = CODEX_HOOK_EVENTS.filter(
-    (event) => eventKey(event) !== undefined,
-  );
-  const skipped = CODEX_HOOK_EVENTS.filter(
-    (event) => eventKey(event) === undefined,
-  );
-
-  const document = readJsonObject(hooksFile);
-  dropUnknownTopLevelKeys(document);
-  const events = takeEvents(document);
-  stripManagedHandlers(events);
-  const command = hookCommand(clientBin, AGENT_ID);
-  appendManagedGroup(events, supported, { type: "command", command });
-  document.hooks = events;
-  writeJsonObject(hooksFile, document);
-
-  // The trust key names the file Codex will discover, which is the resolved
-  // one: Codex canonicalizes CODEX_HOME before building the key.
-  const keySource = canonicalKeySource(hooksFile);
-  const entries = trustEntries(events, keySource, command);
-  if (entries.length > 0) {
-    writeAtomically(
-      configPath(configHome),
-      writeTrustState(existingConfig, entries),
-    );
-  }
-
-  const warning =
-    skipped.length > 0
-      ? `Codex 没有 ${skipped.join(" / ")} 事件，已跳过；其余 ${entries.length} 个事件已安装并写入 trusted_hash`
-      : undefined;
-  return {
-    agentId: AGENT_ID,
-    configPath: hooksFile,
-    clientBin,
-    clientRevision: HOOK_CLIENT_REVISION,
-    installed: true,
-    launchArgs: [],
-    ...(warning === undefined ? {} : { warning }),
-  };
-}
-
+/**
+ * Takes the global install an earlier Armadra wrote back out of `hooks.json`,
+ * and the trust records that named its handlers out of `config.toml`. The
+ * migration (`migrate.ts`) is its only caller.
+ */
 export function uninstall(configHome: string): InstallReport {
   const hooksFile = hooksPath(configHome);
   const document = readJsonObject(hooksFile);
@@ -212,7 +147,6 @@ export function uninstall(configHome: string): InstallReport {
     configPath: hooksFile,
     clientRevision: HOOK_CLIENT_REVISION,
     installed: false,
-    launchArgs: [],
   };
 }
 
@@ -245,41 +179,6 @@ function asObject(value: JsonValue): JsonObject | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? value
     : undefined;
-}
-
-/** `(state key, trusted hash)` for every managed handler in the merged file. */
-export function trustEntries(
-  events: JsonObject,
-  keySource: string,
-  command: string,
-): TrustEntry[] {
-  const entries: TrustEntry[] = [];
-  for (const event of Object.keys(events).sort()) {
-    const key = eventKey(event);
-    if (key === undefined) continue;
-    groupsOf(events, event).forEach((rawGroup, groupIndex) => {
-      const group = asObject(rawGroup);
-      if (group === undefined) return;
-      const matcher =
-        typeof group.matcher === "string" ? group.matcher : undefined;
-      const handlers = group.hooks;
-      if (!Array.isArray(handlers)) return;
-      handlers.forEach((rawHandler, handlerIndex) => {
-        const handler = asObject(rawHandler);
-        if (handler?.command !== command) {
-          // Only our own handlers get a hash from us; trusting a stranger's
-          // command on the user's behalf is not our call.
-          return;
-        }
-        entries.push({
-          key: `${keySource}:${key}:${groupIndex}:${handlerIndex}`,
-          hash: hookHash(key, matcher, command, resolvedTimeout(event)),
-        });
-      });
-    });
-  }
-  entries.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  return entries;
 }
 
 /** Keys that still name a handler after our entries were removed. */

@@ -9,7 +9,7 @@ export const conversationsApi = {
   /**
    * `GET /api/conversations`（§17）。Runtime 扫描本机各 CLI 的转录目录建的索引，
    * 跨项目、按 `updatedAt` 倒序；`q` 对标题与目录做大小写不敏感的子串匹配。
-   * 选中一条后用 `assembleLaunchCommand({ resume: sessionId })` 起新终端节点。
+   * 选中一条后用 `buildResumeLaunch(provider, sessionId)` 起新终端节点。
    */
   conversations: (q?: string, limit = 50) => {
     const params = new URLSearchParams({ limit: String(limit) });

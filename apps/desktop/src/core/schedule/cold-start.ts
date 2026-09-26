@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { launchCommand, quote } from "../agent/launch";
+import { canvasLaunchLine } from "../agent/canvas-launch";
 import type { AgentSettings } from "../agent/registry";
 import { loadBoard, saveBoard } from "../canvas/documents";
 import type { NodeRef } from "../collab/nodes";
@@ -67,13 +67,23 @@ export function agentLauncher(): AgentLauncher | undefined {
   return launcher;
 }
 
-/** 冻结定义 → 敲进 shell 的那一行。 */
+/**
+ * 冻结定义 → 敲进 shell 的那一行，经 `agent/canvas-launch.ts` 这一个出口：
+ * 冻结的 argv 原样照用（权限模式与模型已经在里面），后面加画布注入的 argv
+ * ——计划只认 agent id，注入的路径是这台机器此刻的，所以在执行时现取，不进
+ * 计划。`dataDir` 缺席（没有数据目录的装配）就不注入。
+ */
 export function launchLine(
   settings: AgentSettings,
   spec: AgentLaunchSpec,
+  dataDir?: string,
 ): string {
-  const program = launchCommand(settings, spec.agentId);
-  return [program, ...(spec.args ?? []).map(quote)].join(" ");
+  return canvasLaunchLine({
+    settings,
+    agentId: spec.agentId,
+    frozenArgs: spec.args ?? [],
+    ...(dataDir === undefined ? {} : { dataDir }),
+  });
 }
 
 /** 每个节点最近一次冷启动：什么时候、起的是哪个会话。 */

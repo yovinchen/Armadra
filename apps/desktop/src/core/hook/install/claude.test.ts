@@ -1,95 +1,33 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  install,
-  isInstalled,
-  launchArgs,
   managedContextCommand,
-  managedSettingsPath,
+  retireGlobalEntries,
   settingsPath,
-  uninstall,
 } from "./claude";
-import { CLAUDE_HOOK_EVENTS, HOOK_CLIENT_REVISION } from "./events";
 import { tempDir } from "../../testing/temp-dir";
 
-const CLIENT = "/opt/armadra/armadra-hook";
-
-/** `[the user's config home, our integration home]`. */
-function homes(): [string, string] {
-  return [
-    tempDir("armadra-claude-config-"),
-    tempDir("armadra-claude-integration-"),
-  ];
-}
-
-function managed(integration: string): Record<string, never> {
-  return JSON.parse(
-    readFileSync(managedSettingsPath(integration), "utf8"),
-  ) as Record<string, never>;
+function home(): string {
+  return tempDir("armadra-claude-config-");
 }
 
 function read(path: string): Record<string, unknown> {
   return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
 }
 
-describe("the Claude Code installer", () => {
-  it("writes our file on a fresh install and never the user's", () => {
-    const [config, integration] = homes();
-    const report = install(config, integration, CLIENT);
-    expect(report.installed).toBe(true);
-    expect(report.clientRevision).toBe(HOOK_CLIENT_REVISION);
-    // The one thing this whole shape is for.
-    expect(
-      existsSync(settingsPath(config)),
-      "install created a file in the user's config home",
-    ).toBe(false);
-
-    const settings = managed(integration) as unknown as {
-      hooks: Record<string, { hooks: Record<string, unknown>[] }[]>;
-      statusLine?: unknown;
-    };
-    for (const event of CLAUDE_HOOK_EVENTS) {
-      const handler = settings.hooks[event]?.[0]?.hooks[0];
-      expect(handler?.type, event).toBe("command");
-      expect(handler?.command, event).toBe("/opt/armadra/armadra-hook claude");
-      expect(handler?.timeout, event).toBe(5);
-    }
-    expect(Object.keys(settings.hooks)).toHaveLength(CLAUDE_HOOK_EVENTS.length);
-    // The context readout is gone; nothing writes a status line any more.
-    expect(settings.statusLine).toBeUndefined();
-  });
-
-  it("points the launch line at the file and says nothing when it is gone", () => {
-    const [config, integration] = homes();
-    const report = install(config, integration, CLIENT);
-    expect(report.launchArgs).toEqual([
-      "--settings",
-      managedSettingsPath(integration),
-    ]);
-    expect(isInstalled(integration)).toBe(true);
-
-    uninstall(config, integration);
-    expect(isInstalled(integration)).toBe(false);
-    // A flag pointing at a file that is not there is an error claude prints on
-    // every start, so there is no flag at all.
-    expect(launchArgs(managedSettingsPath(integration))).toHaveLength(0);
-  });
-
-  it("produces an identical file when installed twice", () => {
-    const [config, integration] = homes();
-    install(config, integration, CLIENT);
-    const first = readFileSync(managedSettingsPath(integration), "utf8");
-    install(config, integration, CLIENT);
-    expect(readFileSync(managedSettingsPath(integration), "utf8")).toBe(first);
-  });
-
+/**
+ * What an earlier Armadra left in `~/.claude/settings.json`, and its removal.
+ * Claude's own hooks now travel on the launch line (`inject.test.ts`); this
+ * file only covers the file we used to write into.
+ */
+describe("retiring Claude's global entries", () => {
   /**
    * The upgrade path: a machine integrated by the file-writing era has our
    * entries in `~/.claude/settings.json`, where they would keep firing for
    * every session the user starts outside Armadra.
    */
   it("retires entries an earlier Armadra left in the user's file", () => {
-    const [config, integration] = homes();
+    const config = home();
     const path = settingsPath(config);
     mkdirSync(config, { recursive: true });
     writeFileSync(
@@ -129,8 +67,7 @@ describe("the Claude Code installer", () => {
       "utf8",
     );
 
-    const report = install(config, integration, CLIENT);
-    expect(report.warning).toBe("legacy_global_hooks_removed");
+    expect(retireGlobalEntries(config)).toBe(true);
 
     const rendered = readFileSync(path, "utf8");
     expect(rendered, rendered).not.toContain("armadra-hook");
@@ -150,80 +87,66 @@ describe("the Claude Code installer", () => {
   });
 
   it("leaves a user file with nothing of ours in it byte for byte", () => {
-    const [config, integration] = homes();
+    const config = home();
     const path = settingsPath(config);
     mkdirSync(config, { recursive: true });
     const original =
       '{\n  "model":"opus",\n  "hooks":{"Stop":[{"hooks":[{"type":"command","command":"theirs.sh"}]}]}\n}\n';
     writeFileSync(path, original, "utf8");
 
-    install(config, integration, CLIENT);
-    expect(readFileSync(path, "utf8")).toBe(original);
-    uninstall(config, integration);
+    expect(retireGlobalEntries(config)).toBe(false);
     expect(readFileSync(path, "utf8")).toBe(original);
   });
 
   it("never touches a status line that is not recognisably ours", () => {
-    const [config, integration] = homes();
+    const config = home();
     const path = settingsPath(config);
     mkdirSync(config, { recursive: true });
     const foreign = { type: "command", command: "/my/statusline", padding: 3 };
     writeFileSync(path, JSON.stringify({ statusLine: foreign }), "utf8");
 
-    install(config, integration, CLIENT);
-    expect(
-      (managed(integration) as unknown as Record<string, unknown>).statusLine,
-    ).toBeUndefined();
-    expect(read(path).statusLine).toEqual(foreign);
-    uninstall(config, integration);
+    retireGlobalEntries(config);
     expect(read(path).statusLine).toEqual(foreign);
   });
 
   /**
-   * The upgrade this removal turns on: a machine that installed the era with
-   * the context readout has our `statusLine` in the user's own file, naming a
-   * subcommand that no longer does anything. Install takes it out, and so does
-   * uninstall for a machine that never reinstalls.
+   * The era with the context readout left our `statusLine` in the user's own
+   * file, naming a subcommand that no longer does anything.
    */
-  it("takes our own old status line back out, on install and on uninstall", () => {
-    for (const act of [install, uninstall] as const) {
-      const [config, integration] = homes();
-      const path = settingsPath(config);
-      mkdirSync(config, { recursive: true });
-      writeFileSync(
-        path,
-        JSON.stringify({
-          model: "opus",
-          statusLine: {
-            type: "command",
-            command: "/opt/armadra/armadra-hook context-usage",
-          },
-        }),
-        "utf8",
-      );
-      act(config, integration, CLIENT);
-      const settings = read(path) as { model: string; statusLine?: unknown };
-      expect(settings.statusLine).toBeUndefined();
-      expect(settings.model).toBe("opus");
-    }
+  it("takes our own old status line back out", () => {
+    const config = home();
+    const path = settingsPath(config);
+    mkdirSync(config, { recursive: true });
+    writeFileSync(
+      path,
+      JSON.stringify({
+        model: "opus",
+        statusLine: {
+          type: "command",
+          command: "/opt/armadra/armadra-hook context-usage",
+        },
+      }),
+      "utf8",
+    );
+    retireGlobalEntries(config);
+    const settings = read(path) as { model: string; statusLine?: unknown };
+    expect(settings.statusLine).toBeUndefined();
+    expect(settings.model).toBe("opus");
   });
 
   /** An unreadable `settings.json` must not read as "the status line is free". */
   it("counts an unparseable user file as claiming the status line", () => {
-    const [config, integration] = homes();
+    const config = home();
     mkdirSync(config, { recursive: true });
     writeFileSync(settingsPath(config), "{ not json", "utf8");
-    // The install itself refuses, because retiring old entries would mean
-    // rewriting a file we could not read.
-    expect(() => install(config, integration, CLIENT)).toThrow();
+    // Retiring old entries would mean rewriting a file we could not read.
+    expect(() => retireGlobalEntries(config)).toThrow();
   });
 
-  it("is not an error to uninstall when nothing was installed", () => {
-    const [config, integration] = homes();
-    const report = uninstall(config, integration);
-    expect(report.installed).toBe(false);
+  it("is not an error when there is no settings file", () => {
+    const config = home();
+    expect(retireGlobalEntries(config)).toBe(false);
     expect(existsSync(settingsPath(config))).toBe(false);
-    expect(() => uninstall(config, integration)).not.toThrow();
   });
 
   it("recognises the status line command only when it is plainly ours", () => {

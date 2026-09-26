@@ -97,6 +97,8 @@ export interface DispatchContext {
    */
   readonly settings?: () => AgentSettings | undefined;
   readonly launcher?: () => AgentLauncher | undefined;
+  /** 数据目录：冷启动的启动行带上画布注入（Hook、技能、说明）。 */
+  readonly dataDir?: string;
   readonly publish?: () =>
     | ((workspaceId: string, event: WorkspaceEvent) => void)
     | undefined;
@@ -256,7 +258,7 @@ export class TerminalDispatcher implements Dispatcher {
     }
     let line: string;
     try {
-      line = launchLine(settings, spec);
+      line = launchLine(settings, spec, this.context.dataDir);
     } catch {
       return { state: "unsupported", generation: 0 };
     }

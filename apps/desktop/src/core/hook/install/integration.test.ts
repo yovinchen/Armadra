@@ -1,147 +1,150 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { installCollaborationSkill } from "../../collab/skill";
+import { configPath as codexConfigPath } from "./codex";
 import {
   HOOK_CLIENT_REVISION,
   INTEGRATION_REVISION,
   SKILLS_REVISION,
 } from "./events";
-import { adapterPath, launchArgs } from "./index";
+import { INJECTED_AGENTS, artifactLayout } from "./inject";
 import {
   type IntegrationOptions,
   install,
+  prepareAtStartup,
   state,
   uninstall,
 } from "./integration";
-import { injectionMode } from "./shared";
-import { registerSkillInstaller, skillFile } from "./skills";
+import { readMigration } from "./migrate";
 import { tempDir } from "../../testing/temp-dir";
 
-const AGENT_IDS = ["claude", "codex", "opencode", "pi", "omp", "copilot"];
-
-/**
- * A config home that is absolute on the host running the test: a `/home/dev/…`
- * literal is a relative path on Windows, where every assertion below about an
- * absolute adapter path would then be vacuous.
- */
-function fakeHome(name: string): string {
-  return process.platform === "win32"
-    ? join("C:\\Users\\dev", name)
-    : join("/home/dev", name);
-}
-
-function temporary(prefix: string): string {
-  return tempDir(`armadra-${prefix}-`);
-}
-
+let root: string;
+let hookBin: string;
 let release: (() => void) | undefined;
+
+function env(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    ARMADRA_HOOK_BIN: hookBin,
+    HOME: join(root, "home"),
+    CLAUDE_CONFIG_DIR: join(root, "claude"),
+    CODEX_HOME: join(root, "codex"),
+    COPILOT_HOME: join(root, "copilot"),
+    XDG_CONFIG_HOME: join(root, "xdg"),
+    PI_CODING_AGENT_DIR: join(root, "pi"),
+    ARMADRA_NO_GLOBAL_WRITES: "",
+    ...extra,
+  };
+}
+
+function options(agentId: string): IntegrationOptions {
+  return {
+    dataDir: join(root, "data"),
+    env: env(),
+    ...(agentId === "codex" ? { home: join(root, "codex") } : {}),
+  };
+}
+
+beforeEach(() => {
+  root = tempDir("armadra-integration-");
+  hookBin = join(root, "bin", "armadra-hook");
+  mkdirSync(join(root, "bin"), { recursive: true });
+  writeFileSync(hookBin, "#!/bin/sh\n", "utf8");
+  release = installCollaborationSkill();
+});
 
 afterEach(() => {
   release?.();
   release = undefined;
 });
 
-describe("the integration unit", () => {
+describe("the canvas integration", () => {
   /**
    * The composed revision is what makes hook and skill one switch: a change to
-   * either half has to move it, or a stale install reads as current.
+   * either half has to move it, or a stale artifact reads as current.
    */
   it("carries both halves in the revision", () => {
     expect(INTEGRATION_REVISION).toBe(
       HOOK_CLIENT_REVISION * 100 + SKILLS_REVISION,
     );
-    expect(INTEGRATION_REVISION).toBeGreaterThan(SKILLS_REVISION);
   });
 
-  it("gives every built-in provider an adapter path and a mode", () => {
-    const home = fakeHome(".config");
-    const dataDir = fakeHome(".armadra");
-    for (const agentId of AGENT_IDS) {
-      const path = adapterPath(agentId, home, dataDir);
-      expect(isAbsolute(path), `${agentId}: ${path}`).toBe(true);
-      expect(["launch", "file", "extension"]).toContain(injectionMode(agentId));
+  it("reads as missing, then current after a regeneration, then gone", () => {
+    for (const agentId of INJECTED_AGENTS) {
+      const before = state(agentId, options(agentId));
+      expect(before.mode).toBe("canvas");
+      expect(before.hook.installed, agentId).toBe(false);
+      expect(before.skill.installed, agentId).toBe(false);
+      expect(before.launchArgs).toEqual([]);
+
+      const after = install(agentId, options(agentId));
+      expect(after.hook.installed, agentId).toBe(true);
+      expect(after.skill.installed, agentId).toBe(true);
+      expect(after.skill.revision).toBe(SKILLS_REVISION);
+      expect(after.installedRevision).toBe(INTEGRATION_REVISION);
+      expect(after.stale).toBe(false);
+      expect(after.launchArgs.length + after.launchEnv.length).toBeGreaterThan(
+        0,
+      );
+      expect(after.skill.path?.startsWith(join(root, "data"))).toBe(true);
+
+      const removed = uninstall(agentId, options(agentId));
+      expect(removed.hook.installed, agentId).toBe(false);
+      expect(existsSync(artifactLayout(join(root, "data"), agentId).dir)).toBe(
+        false,
+      );
     }
-    expect(() => adapterPath("nope", home, dataDir)).toThrow();
   });
 
-  /**
-   * Only claude is injected at launch today, and it is the only one whose
-   * adapter must sit outside the CLI's own config home.
-   */
-  it("keeps the launch-mode provider's adapter out of the user's config home", () => {
-    const home = fakeHome(".claude");
-    const dataDir = fakeHome(".armadra");
-    expect(adapterPath("claude", home, dataDir).startsWith(home)).toBe(false);
-    expect(injectionMode("claude")).toBe("launch");
-    for (const agentId of ["codex", "copilot", "opencode", "pi", "omp"]) {
-      expect(injectionMode(agentId)).not.toBe("launch");
-      expect(launchArgs(agentId, dataDir), agentId).toHaveLength(0);
+  /** The page names Codex's trust records as the one global write. */
+  it("names the only global write, and only for Codex", () => {
+    for (const agentId of INJECTED_AGENTS) {
+      const answer = state(agentId, options(agentId));
+      expect(answer.globalWrites).toEqual(
+        agentId === "codex" ? [codexConfigPath(join(root, "codex"))] : [],
+      );
     }
   });
 
-  it("reads an adapter as installed only when the file names our client", () => {
-    const home = temporary("adapter");
-    const dataDir = temporary("data");
-    const options: IntegrationOptions = { dataDir, home };
-    expect(state("codex", options).hook.installed).toBe(false);
-    writeFileSync(join(home, "hooks.json"), '{"hooks":{}}', "utf8");
-    expect(state("codex", options).hook.installed).toBe(false);
-    writeFileSync(
-      join(home, "hooks.json"),
-      '{"command":"/opt/armadra-hook codex"}',
-      "utf8",
+  it("refuses a CLI it has no injection for", () => {
+    expect(() => state("custom:thing", options("x"))).toThrow(
+      /no canvas injection/,
     );
-    expect(state("codex", options).hook.installed).toBe(true);
+  });
+});
+
+describe("start-up", () => {
+  it("migrates once and prepares every CLI", () => {
+    const dataDir = join(root, "data");
+    mkdirSync(join(root, "codex"), { recursive: true });
+    const report = prepareAtStartup({ dataDir, env: env() });
+    expect(report.failures).toEqual([]);
+    expect(report.prepared).toEqual([...INJECTED_AGENTS]);
+    expect(readMigration(dataDir)).toEqual(report.migration);
+    // Codex has a config home here, so its trust records went in.
+    expect(existsSync(codexConfigPath(join(root, "codex")))).toBe(true);
+    for (const agentId of INJECTED_AGENTS) {
+      expect(state(agentId, options(agentId)).hook.installed, agentId).toBe(
+        true,
+      );
+    }
   });
 
-  it("installs both halves, reports them and takes them back out", () => {
-    const home = temporary("copilot-home");
-    const dataDir = temporary("data");
-    const client = join(dataDir, "armadra-hook");
-    writeFileSync(client, "#!/bin/sh\n", "utf8");
-    const options: IntegrationOptions = {
+  it("creates no Codex home on a machine that never ran Codex", () => {
+    prepareAtStartup({ dataDir: join(root, "data"), env: env() });
+    expect(existsSync(join(root, "codex"))).toBe(false);
+  });
+
+  it("touches nothing global when global writes are off", () => {
+    const dataDir = join(root, "data");
+    mkdirSync(join(root, "codex"), { recursive: true });
+    const report = prepareAtStartup({
       dataDir,
-      home,
-      env: { ARMADRA_HOOK_BIN: client },
-    };
-
-    // The skill half belongs to the collaboration domain; without a writer
-    // registered the hook half installs alone and the state says so.
-    const before = install("copilot", options);
-    expect(before.hook.installed).toBe(true);
-    expect(before.skill.installed).toBe(false);
-    expect(before.skill.path).toBe(skillFile(home));
-    expect(before.installedRevision).toBeUndefined();
-    expect(before.clientBin).toBe(client);
-    expect(before.mode).toBe("file");
-
-    // With one registered, both halves are there and the unit reads current.
-    release = registerSkillInstaller({
-      install: (_agentId, configHome) => {
-        const path = skillFile(configHome);
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(
-          path,
-          `---\nname: armadra\n---\n\n<!-- armadra:skill-revision ${SKILLS_REVISION} -->\n`,
-          "utf8",
-        );
-        return [path];
-      },
-      uninstall: (_agentId, configHome) => {
-        rmSync(skillFile(configHome), { force: true });
-        return [];
-      },
+      env: env({ ARMADRA_NO_GLOBAL_WRITES: "1" }),
     });
-    const after = install("copilot", options);
-    expect(after.skill.installed).toBe(true);
-    expect(after.skill.revision).toBe(SKILLS_REVISION);
-    expect(after.installedRevision).toBe(INTEGRATION_REVISION);
-    expect(after.stale).toBe(false);
-
-    const removed = uninstall("copilot", options);
-    expect(removed.hook.installed).toBe(false);
-    expect(removed.skill.installed).toBe(false);
-    expect(removed.installedRevision).toBeUndefined();
-    expect(existsSync(join(dataDir, "integration", "copilot"))).toBe(false);
+    expect(report.migration).toBeUndefined();
+    expect(readMigration(dataDir)).toBeUndefined();
+    expect(existsSync(codexConfigPath(join(root, "codex")))).toBe(false);
   });
 });

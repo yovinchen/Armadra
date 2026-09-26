@@ -18,7 +18,7 @@
 export const HOOK_CLIENT_REVISION = 4;
 
 /** The revision of the skill half, mirroring `collab::skills::SKILLS_REVISION`. */
-export const SKILLS_REVISION = 11;
+export const SKILLS_REVISION = 12;
 
 /**
  * One number for "is this CLI integrated, and is it current" — the hook

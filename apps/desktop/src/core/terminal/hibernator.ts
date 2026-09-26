@@ -1,11 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import {
-  canResume,
-  expectedProcesses,
-  paneRunsAgent,
-  planLaunch,
-} from "../agent/launch";
+import { canvasLaunchLine } from "../agent/canvas-launch";
+import { canResume, expectedProcesses, paneRunsAgent } from "../agent/launch";
 import { type AgentSettings, baseAgent } from "../agent/registry";
 import { getAgentStatus } from "../agent/status";
 import type { WorkspaceEvent } from "../bus";
@@ -53,13 +49,14 @@ export interface HibernatorOptions {
   /** 节点令牌与地址变量——与 `POST /api/terminals` 起 Agent 终端时同一份。 */
   readonly environment: (nodeId: string, agentId: string) => EnvPairs;
   /**
-   * 本机解析到的程序路径与集成要求的额外 argv（`GET /api/agents` 那一行的
-   * `resolvedPath` / `launchArgs`）。缺席时用注册表里的程序名、不加 argv。
+   * 本机解析到的程序路径（`GET /api/agents` 那一行的 `resolvedPath`）。缺席时
+   * 用注册表里的程序名。
    */
   readonly program?: (agentId: string) => {
     readonly path?: string | undefined;
-    readonly args?: readonly string[] | undefined;
   };
+  /** 数据目录：恢复行带上的画布注入（Hook、技能、说明）从这里来。 */
+  readonly dataDir?: string;
   readonly publish?: (workspaceId: string, event: WorkspaceEvent) => void;
   /** 接回来之后推一下出队泵：「启动不上报」的 CLI 等不来第一条事件。 */
   readonly nudge?: (nodeId: string) => void;
@@ -364,13 +361,11 @@ export class Hibernator {
     const settings = this.options.settings();
     let line: string;
     try {
-      line = resumeLine(
-        settings,
-        agentId,
-        node.data,
-        providerSessionId,
-        this.options.program?.(agentId),
-      );
+      line = resumeLine(settings, agentId, node.data, providerSessionId, {
+        ...this.options.program?.(agentId),
+        dataDir: this.options.dataDir,
+        nodeId,
+      });
     } catch (error) {
       return fail("launchRefused", error);
     }
@@ -496,7 +491,7 @@ export class Hibernator {
 
 /**
  * 接回一个会话要敲的那一行：与页面、依赖编排拼的是同一份（程序、权限模式与模
- * 型的旗标、自定义条目的 argv、集成要求的 argv），只是多了 CLI 自己的 resume
+ * 型的旗标、自定义条目的 argv、画布注入的 argv——恢复时每个 CLI 都要重带），只是多了 CLI 自己的 resume
  * ——Claude 的 `--resume <id>`、Codex 的 `resume <id>`，由 `agent/launch.ts` 的
  * 注册表决定形状与位置。模型与权限模式读节点**现在**的设置：人在它睡着时改过
  * 模型，醒来就该用新的那个。
@@ -508,7 +503,8 @@ export function resumeLine(
   providerSessionId: string,
   program?: {
     readonly path?: string | undefined;
-    readonly args?: readonly string[] | undefined;
+    readonly dataDir?: string | undefined;
+    readonly nodeId?: string | undefined;
   },
 ): string {
   const agent =
@@ -517,25 +513,20 @@ export function resumeLine(
       : {};
   const permissionMode = text(agent.permissionMode);
   const model = text(agent.model);
-  const plan = planLaunch(settings, {
+  return canvasLaunchLine({
+    settings,
     agentId,
     resume: providerSessionId,
+    ...(program?.dataDir === undefined ? {} : { dataDir: program.dataDir }),
+    ...(program?.nodeId === undefined ? {} : { nodeId: program.nodeId }),
+    ...(program?.path === undefined ? {} : { program: program.path }),
     ...(permissionMode === undefined ? {} : { permissionMode }),
     ...(model === undefined ? {} : { model }),
   });
-  return [program?.path ?? plan.program, ...plan.args, ...(program?.args ?? [])]
-    .map(shellWord)
-    .join(" ");
 }
 
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
-}
-
-/** 只在需要时加引号：这一行会出现在人的屏幕上。 */
-function shellWord(value: string): string {
-  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 /* -------------------------------- 进程树 ---------------------------------- */

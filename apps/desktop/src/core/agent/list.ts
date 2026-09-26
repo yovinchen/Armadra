@@ -37,6 +37,11 @@ export interface AgentListRow extends AgentInfo {
   readonly skillsRevision?: number;
   readonly launchArgs?: readonly string[];
   /**
+   * The canvas injection as words for the typed launch line — what the page
+   * appends. Codex's name environment variables its node terminal carries.
+   */
+  readonly launchWords?: readonly string[];
+  /**
    * 缓存好的 `--version` 探测（`probe.ts`）。缺席表示这个 CLI 还没被探过，共享
    * 的求交集把它读成 unknown——**从不**读成「支持」。
    *
@@ -83,6 +88,7 @@ function withIntegration(
     ...(state.hook.installed ? { clientRevision: state.hook.revision } : {}),
     ...(state.skill.installed ? { skillsRevision: state.skill.revision } : {}),
     ...(state.launchArgs.length > 0 ? { launchArgs: state.launchArgs } : {}),
+    ...(state.launchWords.length > 0 ? { launchWords: state.launchWords } : {}),
     ...withProbe(row),
   };
 }
