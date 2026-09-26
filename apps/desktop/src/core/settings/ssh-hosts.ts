@@ -17,6 +17,7 @@
  *     far.
  */
 
+import * as path from "node:path";
 import { clone, isJsonObject, type JsonObject, type JsonValue } from "./local";
 
 /** Ceilings that keep a hand-edited file from producing an absurd command line. */
@@ -97,13 +98,14 @@ function isUser(value: string): boolean {
  * identity path and to every extra argument; the argv builder makes this belt
  * and braces, which is exactly the point.
  */
-function isClean(value: string): boolean {
+function isClean(value: string, allowBackslash = false): boolean {
   if (value.length === 0) return false;
   for (const character of value) {
     const code = character.codePointAt(0) ?? 0;
     const isControl = code < 0x20 || (code >= 0x7f && code <= 0x9f);
     if (isControl) return false;
     if (/\s/u.test(character)) return false;
+    if (character === "\\" && allowBackslash) continue;
     if (";&|$`<>(){}*?!\\'\"".includes(character)) return false;
   }
   return true;
@@ -121,7 +123,10 @@ function hasControl(value: string): boolean {
  * `null`, or the field that is wrong. The name is a stable key-ish string used
  * by tests and logs; the UI validates the same rules itself.
  */
-export function validateHost(host: SshHost): string | null {
+export function validateHost(
+  host: SshHost,
+  localPaths: Pick<typeof path, "isAbsolute" | "sep"> = path,
+): string | null {
   if (!isId(host.id)) return "id";
   if (
     host.name.trim().length === 0 ||
@@ -133,12 +138,16 @@ export function validateHost(host: SshHost): string | null {
   if (!isHostname(host.host)) return "host";
   if (host.user !== undefined && !isUser(host.user)) return "user";
   if (host.port !== undefined && host.port === 0) return "port";
+  // 私钥文件在**控制端**（`ssh -i` 由这台机器上的 `ssh` 读），所以按控制端的
+  // 规则认绝对路径：Windows 控制端的是 `C:\Users\…\.ssh\id_ed25519`，写死 `/`
+  // 再禁反斜杠，它就根本配不了私钥。这条路径只进本机 argv、不进远端 shell，
+  // 放开反斜杠不会变成注入；Worker 的两条路径在执行主机上，下面照旧按 POSIX 判。
   const identity = host.identityFile;
   if (
     identity !== undefined &&
-    (!identity.startsWith("/") ||
+    (!localPaths.isAbsolute(identity) ||
       identity.length > MAX_PATH ||
-      !isClean(identity))
+      !isClean(identity, localPaths.sep === "\\"))
   ) {
     return "identityFile";
   }

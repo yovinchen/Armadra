@@ -7,6 +7,7 @@
  * that is contractual.
  */
 
+import { posix, win32 } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -281,6 +282,26 @@ describe("ssh hosts", () => {
     expect(
       validateHost({ ...valid, identityFile: "/home/ada/.ssh/id" }),
     ).toBeNull();
+    // 私钥在控制端：Windows 控制端的绝对路径带盘符与反斜杠，照样收；
+    // Worker 的路径在 POSIX 执行主机上，Windows 写法仍然拒绝。
+    expect(
+      validateHost(
+        { ...valid, identityFile: "C:\\Users\\ada\\.ssh\\id_ed25519" },
+        win32,
+      ),
+    ).toBeNull();
+    expect(
+      validateHost(
+        { ...valid, identityFile: "C:\\Users\\ada\\.ssh\\id" },
+        posix,
+      ),
+    ).toBe("identityFile");
+    expect(validateHost({ ...valid, identityFile: "keys\\id" }, win32)).toBe(
+      "identityFile",
+    );
+    expect(
+      validateHost({ ...valid, worker: { path: "C:\\armadra\\core" } }, win32),
+    ).toBe("worker.path");
     expect(validateHost({ ...valid, extraArgs: ["bare"] })).toBe("extraArgs");
     expect(validateHost({ ...valid, extraArgs: ["-o", "-4"] })).toBeNull();
     expect(validateHost({ ...valid, worker: { path: "armadra" } })).toBe(
