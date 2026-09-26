@@ -242,3 +242,57 @@ describe("a stream that ended", () => {
     expect(socket.closed()).toBe(true);
   });
 });
+
+/**
+ * 页面在 attach 还没完成时就关了（刚挂上画布就关掉、切走）。`close` 事件发在
+ * 我们挂上监听之前，从来没有人去 `detached`：core 一直以为有人看着这个会话，
+ * 节能休眠被「attached」挡住永远不睡（2026-09-26 全量端到端：关掉页面四分钟后
+ * 三个会话仍是 attached）。
+ */
+describe("a socket that closes while it is still attaching", () => {
+  it("still releases the attachment", async () => {
+    const handlers = new Map<string, () => void>();
+    let release: (() => void) | undefined;
+    const detached: number[] = [];
+    const attachment: Attachment = {
+      attachmentId: 7,
+      generation: 1,
+      onData: () => {},
+      onExit: () => {},
+    };
+    const manager = {
+      attach: () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({
+              attachment,
+              record: { kind: "tmux" },
+              snapshot: undefined,
+            });
+        }),
+      acknowledgedInput: () => 0,
+      generation: () => 1,
+      noteOutput: () => {},
+      detached: async (_id: string, attachmentId: number) => {
+        detached.push(attachmentId);
+      },
+    } as unknown as TerminalManager;
+    const connection = {
+      send: () => {},
+      close: () => {},
+      on: (event: string, handler: () => void) => {
+        handlers.set(event, handler);
+      },
+    } as unknown as WebSocket;
+    const served = serveTerminalSocket(connection, {
+      manager,
+      sessionId: "s1",
+      writer: "w",
+    });
+    // 页面走了：attach 还没回来。
+    handlers.get("close")?.();
+    release?.();
+    await served;
+    expect(detached).toEqual([7]);
+  });
+});

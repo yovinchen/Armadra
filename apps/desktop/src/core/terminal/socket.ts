@@ -171,6 +171,14 @@ export async function serveTerminalSocket(
     }
   };
 
+  // 挂上 `close` 要早于 attach：attach 要等后端（tmux 起一个客户端），页面在
+  // 这期间关掉的话，`close` 发在我们监听之前，从此没人 `detached`，core 一直
+  // 以为有人看着这个会话（节能休眠永远被 `attached` 挡住）。
+  let closedWhileAttaching = false;
+  connection.on("close", () => {
+    closedWhileAttaching = true;
+  });
+
   let attached;
   try {
     attached = await manager.attach(sessionId, { cols, rows });
@@ -201,6 +209,14 @@ export async function serveTerminalSocket(
   }
 
   const { attachment, record, snapshot } = attached;
+  if (closedWhileAttaching) {
+    try {
+      await manager.detached(sessionId, attachment.attachmentId);
+    } catch (error) {
+      options.onError?.(error);
+    }
+    return;
+  }
   const generation = attachment.generation;
   send({
     type: "hello",
