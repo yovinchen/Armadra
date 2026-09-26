@@ -2465,3 +2465,58 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/web test`：284 文件 2782 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条通过。
 - `node tools/probes/browser-agent-e2e.mjs --electron`：headless 与桌面壳两段共 124 条全过。`node tools/probes/agent-e2e.mjs --only 6`：13 条全过，操作员配置未改动。
 - `pnpm check`、`pnpm format:check` 通过。
+
+## 58. 第三波界面收尾：抽屉、Dock、通知条、时区选择、终端租约广播与两处残留（2026-09-26）
+
+§49.3 看到但没改的三处界面问题、§47 的逐键租约广播、§52.4 的 `Invalid guestInstanceId`，外加自动化表单的时区下拉与两处残留。每个界面改动都在 1440×900 与 390×844 下用真页面截图目视检查过。
+
+### 58.1 手机上的右侧抽屉
+
+`panels/WorkPanelSheet.tsx`：窄屏（<768px，`platform/layout` 的同一个断点）上右侧抽屉铺满宽度、`height: auto`，底边停在底部导航上沿（`bottom = --mobile-nav-h + 安全区`）；单节点焦点页藏起导航时铺满整高。选的是「全宽、导航留着」而不是底部弹出：导航本来就是「一次只看一样东西」，点「画布」或别的去处就是返回，不用另做返回钮。底部停靠的 Git 窗口在手机上最大化时同样只铺到导航上沿。`shell/ControlsCluster.tsx` 在窄屏上不再按抽屉宽度往左让（以前被推到屏外只露半截），抽屉盖住它正是想要的。
+
+### 58.2 Dock 让开右侧抽屉
+
+`shell/Dock.tsx` + `styles/canvas.css`：开着右侧抽屉（或钉住的资源管理器 / 用量卡片）时，Dock 那一行的 `right` 让到面板左边，三格网格的右格不再给被盖住的缩略图留位置，Dock 在剩下那块看得见的画布里居中，`right` 带 150ms 过渡。面板占掉的宽度由 `WorkPanelSheet.tsx::rightPanelInset` 统一给出，钉住卡片的宽度收进 `PINNED_PANEL_WIDTH`，两张卡片改读它。选这种而不是调 z 序：抽屉在 Dock 之上是对的（它是当前的工作面），被挡住的是 Dock 的位置。
+
+### 58.3 顶部通知条
+
+`shell/Banners.tsx`：堆栈从窗口级 `fixed; top:46` 挪进画布面（`App` 把它放在 `.workspace-surface` 下，与工具簇同一层），第一条离顶 4px、高 36px，整个坐在 44px 标题带里——那一带在桌面壳里本来就是拖窗口的区域，右上工具簇也在这里。左右让出侧栏开关（侧栏收起或窄屏时它落在画布上）与工具簇，开着右侧抽屉时再让一个抽屉宽（`bannerBounds`），在剩下那一段里居中、放不下就截断（完整一句在 `title` 里）。外框 `pointer-events: none`，只有每条本体接指针；本体写回 `no-drag`。多设备时右上多一条宽度会变的设备条，标题带放不下两样，通知条退到它下面一行（`canvas/PresenceBar.tsx::usePresenceBarVisible`，判据与设备条自己的提前返回一致）。
+
+### 58.4 自动化表单的时区
+
+`panels/automation/TimezonePicker.tsx`：`Popover` + `Command`（`apps/web/src/ui` 里现成的两个组件）。关着只有一个按钮，字就是值本身；列表只在弹层打开时挂载，自己过滤（下划线当空格、不分大小写，`shouldFilter={false}`），一次最多 60 行，没有关键字时当前值排第一。没有做虚拟化：限量之后一次最多 60 个 DOM 行，再往下的人会继续打字。顺手修掉一个原来就有的问题：字段标签用的是不存在的键 `automation.wizard.timezone`，界面上显示的是键名本身，改用已有的「时区」。`AutomationDrawer.test.tsx` 里为了绕开「关着也渲染四百项」而 mock 的 `timezoneOptions` 删掉。新增两个键 `automation.wizard.timezoneSearch` / `timezoneNone`（中英两份）。
+
+### 58.5 终端逐键租约广播
+
+`core/drive/lease.ts` 加 `sameHolding`（同 `sameLease`，只是不看 `expiresAt`），`core/terminal/drive.ts::announce` 改按它判：只有状态、持有者或代次变了才落代次并广播 `terminal.lease`。续期本身照旧每一键都做，所以「停手十秒自动恢复」「Agent 一轮 120 秒」逐毫秒不变。没有照建议写成「剩余时间大于一半时不续」：那会让最后一键之后的空闲窗口变成 5–10 秒，Agent 的门链提前放行；续期只是给一个 `Date` 赋值，真正贵的是每一键向每个客户端发一帧、每台设备上的徽标跟着重渲。
+
+实测（一次性脚本：真 core + 真 Vite + 无头 Chrome，在终端节点里逐键 `Input.insertText` 100 次，数页面事件流 WebSocket 收到的 `terminal.lease` 帧）：改前 100 帧（每键一帧 `human`）+ 停手后 1 帧 `free`；改后 0 帧 + 1 帧 `free`（租约在 xterm 回答 shell 的终端查询时已经拿到，打字期间一帧都没有）。单测：`manager.test.ts` 两条（连续 100 键只在拿到租约时广播一帧、最后一键之后仍要整整十秒才放开且期间 Agent 收 `LEASE_HELD_BY_HUMAN`；Agent 持有时人敲一键仍然抢回、只广播换手那一帧），`drive/lease.test.ts` 一条（续期对 `sameLease` 是变化、对 `sameHolding` 不是；Agent 排队不改持有；接管是变化）。
+
+### 58.6 关标签页时的 `Invalid guestInstanceId`
+
+来源不是前端的卸载顺序。用一个只有「建 `<webview>`、等 `dom-ready`、移除」三步的最小 Electron 42 页面复现：每一次移除都报，先 `display:none` 再删也一样。原因在 Electron 自己的元素实现：`<webview>` 离开文档时影子根里的 iframe 跟着分离，主进程随之销毁 guest 并在 `destroyed` 里删掉登记，紧接着元素的 `disconnectedCallback` 又同步发 `GUEST_VIEW_MANAGER_DETACH_GUEST`，主进程按 id 找不到，抛回这句话；那个 id 存在元素的私有状态里，页面够不着。
+
+修法（`nodes/browser/guest-teardown.ts`）：`WebviewGuest` 的 ref 改成稳定的回调，摘下（`null`，React 在同一次提交里、把元素移出文档之前调用）时打开一个到下一个微任务为止的窗口；`disconnectedCallback` 的异常同步派发成 `window` 的 `error` 事件，落在窗口里、消息逐字是这一句的才 `preventDefault()`，于是控制台与 CDP 的 `Runtime.exceptionThrown` 都不再看到它。窗口外的同一句话、窗口里的别的错误照常报。最小页面上在 `window` 的 `error` 事件里拦这一句后，5 次移除 0 条 error。用例 `guest-teardown.test.tsx`（jsdom 里 `webview` 不是合法的自定义元素名，用例在 `removeChild` 上按真机的顺序补出那次同步抛错）：关标签时那一句被拦下、窗口外照常报、窗口里的别的错误照常报；去掉修复时第一条失败。`tools/probes/browser-agent-electron.mjs` 不再把这句单列放过，任何 error 都算失败。
+
+### 58.7 残留清理
+
+- 删掉壳里没有页面调用的 `dialog:pick-files`：`shared/ipc.ts` 的通道与实现清单、`main/index.ts` 的处理器、`main/dialogs.ts::pickFiles`、preload 的桥与类型、`PickOptions.multiple`、页面侧 `desktop-bridge-shell.d.ts` 里那行悬空的注释与 `multiple`；`ipc.test.ts` 的实现清单、`dialogs.test.ts` 跟着改。文件进画布走页面自己的 `<input type="file">`（`pickFilesForCanvas`），浏览器节点的文件选择框由 core 经 CDP 回答。`apps/desktop/README.md` 与迁移设计 §2.2 的 IPC 表同步。
+- `docs/design/terminal-host-design.md` §8.1 从 Rust 时期的追溯段落改写成 core 资源域的现状（采样、压力与电源、会话追踪、订阅、远端执行主机、孤立会话、前端）。
+
+### 58.8 截图与探针
+
+- `tools/probes/ui-features/layout.mjs`（`node tools/probes/ui-features-e2e.mjs --only=layout`，20 项全过）：1440 下提示条在 4–40px、不压侧栏开关 / 工具簇 / 设备条，它原来位置（视口中线、y=64）上的节点标题栏按得到、拖得动；开资源管理器时 Dock 右端 938 < 抽屉左缘 1080、「100%」按得到；开 460px 的自动化抽屉时提示条右端 746 < 工具簇 928。390 下有设备条时提示条退到 60–96px；「文件」与「自动化」抽屉都是 0–390 × 0–788，导航上沿 787（重叠的 1px 是导航自己的上边框），五个去处都按得到，工具簇在 338–376 没被推出屏幕，点「画布」收起；控制台 0 条 error。截图 `target/ui-features-e2e/layout-1-banner.png`、`layout-2-drawer-dock.png`、`layout-3-wide-drawer.png`、`mobile-layout-1-banner.png`、`mobile-layout-2-drawer.png`、`mobile-layout-3-automation.png`。
+- `tools/probes/timezone-picker.mjs`（服务器壳配对后才进得了自动化表单，11 项全过）：1440 与 390 下时区关着 0 个 `role=option`，打开 60 行、当前值第一行，`new_y` 筛出 America/New_York、`shang` 筛出 Asia/Shanghai，选中回写并收起，渲染页 0 条 error。截图 `target/timezone-picker/timezone-closed.png`、`timezone-open.png`、`timezone-chosen.png`、`mobile-timezone-closed.png`、`mobile-timezone-open.png`。
+- `ELECTRON_OVERRIDE_DIST_PATH=… node tools/probes/browser-agent-e2e.mjs --electron`：「electron 渲染页没有 error（含关标签页）」通过，`rendererErrors` 为空。同一次里 headless 与 electron 两段的「resize 改视口」没过（回显不是 800×600），与本节改动无关，没查。
+
+### 58.9 验证
+
+- `pnpm --filter @armadra/web test`：286 文件 2797 条通过；`typecheck` 通过。
+- `pnpm --filter @armadra/desktop test`：268 文件通过、2 跳过（3157 条通过、8 跳过），脚本用例 38 条通过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
+- `pnpm --filter @armadra/server test`：10 文件 82 条通过。
+- `pnpm check`（两边 typecheck、`repo:check`、workflow 与版本校验）与 `pnpm format:check` 通过。
+
+### 58.10 没做 / 已知
+
+- 设备条本身不随右侧抽屉让位（开着抽屉时被盖住），不在本节范围。
+- 通知条一次有两条以上时，第二条起仍在标题带下面，会压住画布顶端的内容。
