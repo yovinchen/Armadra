@@ -217,10 +217,19 @@ export const answerApprovalRequestSchema = z.object({
   decision: z.enum(["allow", "deny"]),
 });
 
-export const answerApprovalResponseSchema = z.object({
-  pendingId: z.string(),
-  decision: z.enum(["allow", "deny"]),
+/**
+ * `POST /api/approvals/{pendingId}/answer` — the approval row as recorded
+ * (`core/agent/approvals.ts::AgentApproval`) plus how the decision reached the
+ * CLI: `file` (the waiting hook client read it), `keys` (typed into the PTY) or
+ * `none`.
+ */
+export const answerApprovalResponseSchema = z.looseObject({
+  id: z.string(),
+  nodeId: z.string(),
+  answer: z.enum(["allow", "deny"]),
   answeredAt: z.string().datetime({ offset: true }),
+  revision: z.number(),
+  route: z.enum(["file", "keys", "none"]),
 });
 
 /**

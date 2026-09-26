@@ -271,9 +271,12 @@ describe("会话、Agent 与审批", () => {
 
   it("回答审批时只发 decision", async () => {
     const fetchMock = stubJson({
-      pendingId: "p1",
-      decision: "allow",
+      id: "p1",
+      nodeId: "node-1",
+      answer: "allow",
       answeredAt: timestamp,
+      revision: 1,
+      route: "file",
     });
 
     await runtimeApi.answerApproval("p1", "allow");
@@ -282,6 +285,29 @@ describe("会话、Agent 与审批", () => {
       "http://127.0.0.1:43120/api/approvals/p1/answer",
     );
     expect(bodyOf(fetchMock)).toEqual({ decision: "allow" });
+  });
+
+  // core 答的是审批那一行本身加 `route`（`core/agent/routes.ts`）。页面照旧的
+  // `{ pendingId, decision }` 去校验，决定已经记下、答案文件也写了，页面却抛
+  // 一个没人接的 ZodError——2026-09-26 端到端里每点一次「允许 / 拒绝」控制台
+  // 就多一条。
+  it("审批答复按 core 真正答的形状读", async () => {
+    stubJson({
+      id: "p1",
+      nodeId: "node-1",
+      workspaceId,
+      request: { tool: "Bash" },
+      answer: "allow",
+      answeredBy: "user",
+      createdAt: timestamp,
+      answeredAt: timestamp,
+      revision: 1,
+      route: "file",
+    });
+
+    await expect(
+      runtimeApi.answerApproval("p1", "allow"),
+    ).resolves.toMatchObject({ id: "p1", answer: "allow", route: "file" });
   });
 
   it("写上下文链接是整表替换", async () => {
