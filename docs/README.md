@@ -57,6 +57,7 @@
 | [桌面壳迁移到 Electron](design/electron-migration.md)           | 换壳、`<webview>` 浏览器节点、画布性能前置与六条工作流         |
 | [TypeScript Core](design/typescript-core.md)                    | Go Host 与 Rust Runtime 合一为一个 TS core，两种壳、R0–R7      |
 | [画板导入 Mermaid 图](design/mermaid-import.md)                 | flowchart → 原生白板对象，其余图种 → 图片回退                  |
+| [浏览器节点的 Agent 工具](design/browser-agent-tools.md)        | 无障碍快照与引用、动词清单、开发者能力与白名单                 |
 
 ## status/ 已验证进度
 

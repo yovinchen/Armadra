@@ -178,6 +178,8 @@ URL 只允许 http/https；开发项目可以显式声明 loopback 服务。访�
 | Upload / Download               | 明确文件引用/下载 ID                                | 状态、目标路径、大小                |
 | Back / Forward / Reload / Close | session、navigationEpoch                            | 操作结果与新 epoch                  |
 
+> 现行实现以 [浏览器节点的 Agent 工具](browser-agent-tools.md) 为准：引用是无障碍快照给出的 `e12`，失效时按角色与名称在同源页面上重找一次、不唯一即以 `browser_stale_ref` 拒绝；对话框阻塞的错误码是 `browser_dialog_pending`；动作表以 `core/browser/verb-spec.ts` 为唯一来源。下面一段是最初的目标设计。
+
 DOM 元素引用绑定 session/tab/frame/navigationEpoch；页面导航或元素失效后返回 STALE_TARGET，重新 Read，禁止猜测旧选择器继续点击。Iframe 操作同时绑定 frameId。截图与页面动作依靠 CDP 的 [Page](https://chromedevtools.github.io/devtools-protocol/tot/Page/) 和 [Input](https://chromedevtools.github.io/devtools-protocol/tot/Input/) 等域在执行端转换，协议版本在 M0 锁定并测试。
 
 动作身份包含真实 Agent Session 和项目授权；开始时获取 BrowserControlLease。人类点击“接管”立即撤销 Agent 输入租约，已经派发但结果未明的动作显示 unknown，不重复执行。读页面可以多读者，输入默认单写者。

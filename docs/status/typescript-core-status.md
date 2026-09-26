@@ -2178,3 +2178,48 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：265 文件通过、1 跳过（3054 条通过、6 跳过；worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
 - `pnpm --filter @armadra/web test`：283 文件 2761 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条；`pnpm --filter @armadra/shared test`：28 文件 157 条。
 - `pnpm check`、`pnpm format:check` 通过。
+
+## 52. 浏览器节点的 Agent 工具补强（2026-09-26）
+
+设计见 [浏览器节点的 Agent 工具](../design/browser-agent-tools.md)。
+
+### 52.1 做了什么
+
+- **快照。** `read` 缺省给无障碍快照（`Accessibility.getFullAXTree` 逐文档读，同源 iframe 按 frameId、跨源 iframe 经 `Target.setAutoAttach` 的子会话读，在 `<iframe>` 处拼起来）；可交互元素带稳定引用 `e12`，编号只增不复用；`--interactive` / `--depth` / `--max-bytes` 控量；可编辑字段只写 `[filled]` / `[empty]`。探针 fixture 的整页快照 26 行、899 字节。旧的 `elements` / `map` 读法改为 `snapshot --interactive`，CSS 枚举与按下标解析的五段脚本删掉。
+- **引用失效**按角色与名称在同源页面重找一次，恰好一个才用并在回答里写明，否则 `browser_stale_ref` 并说明是零个还是多个；换了站点一律拒绝。
+- **新动词与参数**：`hover`、`drag`（HTML5 拖放经拖拽拦截把页面自己的数据投回，从不带文件）、`fill`、自绘下拉的 `select`、组合键 `press`、`wait --text / --text-gone / --idle`、元素截图与真正的整页截图（原来 `captureBeyondViewport` 传的是 undefined）、`pdf`、`resize`、`--tab`、`--role --name`、`--snapshot` 差异快照、`navigate --action stop`。
+- **开发者能力**（默认开放）：`read --mode console`（console API、Log、未捕获异常，按级别与文字过滤）与 `--mode network`（方法、地址、类型、状态、大小、耗时、失败原因；没有头、没有正文，地址里像凭据的参数值被抹掉）。白名单只加 `Log.enable/disable`、`Network.enable`（固定 `maxPostDataSize: 0`）/`disable`，取正文、Cookie、证书与改流量的 Network 方法逐个写进禁止表；`sole-call-site.test.ts` 改为钉住 Network 域恰好这两个方法、读请求事件的只有 `devlog.ts` 且不读任何头。执行任意 JS 仍不开放。
+- **动词清单单一来源** `core/browser/verb-spec.ts`：`--help` 的浏览器段由它生成，core / 桌面壳 / hook 的动词表都从它派生，技能正文可直接读 `BROWSER_VERB_SPECS`、`BROWSER_NOTES_ZH`。`verb-spec.test.ts` 逐条核对参数转发、错误码、按键、读法 / 动作 / 方向，旧 help 的八处不一致全部修掉（`@N` 与 `e3-12@t1/…` → `e12`；`STALE_TARGET` / `DIALOG_PENDING` → 真实存在的 `browser_stale_ref` / `browser_dialog_pending`；console / network 已实现；F5 与组合键进白名单；`--tab` 转发、`--frame` 去掉；`--to-ref` 转发；`stop` 走 `Page.stopLoading`；左右滚改用 deltaX）。
+- **对话框**：页面弹着对话框时其余动词立即以 `browser_dialog_pending` 拒绝并带上文字；引起对话框的点击不再在对话框后面等 45 秒。
+- **before-input-event 自抢租约**：核实不存在。Electron 42 下 CDP 的键鼠不触发 guest 的 `before-input-event` 与 `focus`，只触发壳里没人监听的 `before-mouse-event`；探针桌面一段整批动词之后租约仍是「Agent 正在操作」。顺手修掉桌面壳每次重新接上调试器都多挂一个 message 监听、事件重复投递的问题。
+- **原生下拉**：macOS 上方向键打开的是系统菜单，合成按键够不着，原来的实现在这里选不中。改为 `DOM.focus` + 逐字 `char` 事件的键入跳转，跳转不认 CJK 或选项重名时用冻结脚本表里唯一的写入脚本 `chooseOption`（只对已启用的 SELECT、只按下标、触发 input 与 change），源码测试钉住它。白名单为此放行「只带一个字符、没有键名与修饰键」的 char 事件。
+
+### 52.2 端到端发现并修掉的
+
+| 现象                                                                                 | 原因                                                                                                                                   | 修复                                                                      |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 桌面壳 `pdf` 报「没有这个接口」404；超过 1.5 秒的 `wait` 同样                        | hook 客户端对浏览器动词也用 hook 事件的 1.5 秒预算，超时后换下一个候选端点**重发同一个动词**（点击会点两次），落到不认 hook 路由的端口 | 浏览器请求预算 70 秒（`4fb4f1a7`），单测 + 探针「3 秒的 wait 如实超时」   |
+| 桌面壳对含跨源 iframe 的页面 `pdf` 挂死                                              | Electron 42 给这种 `<webview>` 的 `printToPDF` 永远不返回，与调试器无关（最小复现里退出时 SIGTRAP）                                    | 先拒绝并指向 `capture --full-page`，其余加 20 秒上限（`e981065c`）        |
+| 上传完成后画布上一直挂着「页面要选择文件」                                           | 两个后端回答选择框时都没有发关闭事件                                                                                                   | `fileChooserClosed` 事件（`fedafc8e`）                                    |
+| `read --mode network` 里跨源 iframe 的文档请求永远「进行中」，`wait --idle` 等满超时 | 它从页面发出、在 iframe 进程里结束                                                                                                     | iframe 会话导航到该地址时记为结束，另有 5 / 10 秒的陈旧规则（`bff46d4c`） |
+| 悬停之后点击或拖动落在错误位置                                                       | 指针离开原悬停处，菜单收起，下面的元素上移                                                                                             | 指针移过去之后再量一次（随主提交）                                        |
+| 点击触发 alert 时动词挂 60 秒                                                        | 鼠标事件在对话框关闭前不返回，后续的读脚本也被挡住                                                                                     | 输入事件与「对话框打开」赛跑，打开后脚本调用立即拒绝（随主提交）          |
+
+### 52.3 实测
+
+`node tools/probes/browser-agent-e2e.mjs --electron`：111 项全部通过。headless 一段 59 次 hook 调用 14.2 s，Electron `<webview>` 一段 56 次 14.3 s；最慢的单个动词是连续第二次原生下拉选择（1.1 s，等上一次的键入跳转缓冲过期）。产物在 `target/browser-agent-e2e/`：`headless-snapshot.txt` / `electron-snapshot.txt`、两份请求与控制台输出、视口 / 整页（3212×3044）/ 元素截图、`headless-page.pdf`、`electron-next.pdf`、`electron-canvas.png` 与 `electron-canvas-after.png`。渲染页唯一的 error 是关标签页时 Electron 自己的 `Invalid guestInstanceId`（guest 已先销毁），单列未计入失败。
+
+### 52.4 没做 / 已知
+
+- 整页截图里跨源 iframe 在视口以外的部分是空白（Chromium 的 `captureBeyondViewport` 不重绘 OOPIF）。
+- 桌面壳在 Agent 第一次驱动时才接调试器，之前的控制台与请求不在缓冲里。
+- 多选 `<select>` 只选一个；Shadow DOM 里的元素靠无障碍树能读能点，`--selector` 穿不进去。
+- hook 客户端在一个候选端点写出请求后失败仍会试下一个候选：浏览器动词靠 70 秒预算基本避开，`canvas` 动词没动（不在本任务范围）。
+- Windows / Linux 没跑；关标签页时 `Invalid guestInstanceId` 的来源在前端的 `<webview>` 卸载顺序，没改。
+- `core/collab/skill.ts` 的浏览器动词表属于另一个任务，未改；可直接从 `core/browser/args.ts` 读 `BROWSER_VERB_SPECS`（`name` / `synopsis` / `helpZh` / `flags[].helpZh`）与 `BROWSER_NOTES_ZH`。
+
+### 52.5 验证
+
+- `pnpm --filter @armadra/desktop test`：264 文件通过、1 跳过（3120 条通过、6 跳过），live 配置 2 文件 2 条（含新的 `verbs.live.integration.test.ts`，真 Chromium 跑全部动词），脚本 38 条通过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
+- `pnpm --filter @armadra/server test`：10 文件 82 条通过。
+- `pnpm check`：format、typecheck、ci:workflows、release:check 通过；repo:check 报 `tools/probes/agent-e2e.mjs` 1675 行超限，基线 5017db32 上即如此，未改动。
