@@ -2331,3 +2331,38 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `core/agent/canvas-launch.test.ts`：5.1 下 Codex 行的 `--%` 与环境变量形状；读不出来的包装（真文件）下 `startsThroughBatch`、环境变量按 `cmd.exe` 写、危险词拒绝。`web/agent/launch.test.ts`：有 `launchTarget` 时绕过 `.cmd`、带 `&` 与 `"` 的提示词照常引用，没有时拒绝；5.1 的 `--%`。
 - `core/agent/windows-launch.test.ts`（`it.runIf(win32)`）新增三条：真 `powershell.exe` 5.1 跑 `--%` 行；照 cmd-shim 格式造一个包装指向回显 argv 的 node 脚本，`launchTargetOf` 读出 `node <脚本>`，整行交给 `cmd.exe`，§54 那十八个值与两个环境变量原样到达；读不出来的包装只放行安全词并真的经批处理到达。macOS 上跳过、能编译，待 Windows CI 确认。
 - `core/terminal/hibernator.test.ts`：收到 `/exit` 自己退的假 CLI 不等满宽限期就结束、不退的等满 5 秒后被结束、Codex 敲 `/quit`；`hibernator.pty.test.ts`：真 PTY 上读输入的假 `claude` 收到 `/exit` 先写「saved」再退、5 秒内结束，原来那个不读输入的等满宽限期后被结束，接回照旧 `--resume`。`terminal/environment.test.ts` 补缺省 shell。
+
+## 56. 成员的全局权限表、组管理员、终端创建者落库与多设备画布的收尾（2026-09-26）
+
+接 §42.2 与 §41.2 留下的五件事：成员在全局路由上一律 403、组角色只存不判、终端创建者只记在内存里、撤销共享后租约要等 TTL、在线表不认身份域的设备。设计 `design/server-accounts-and-sharing.md` 新增 §6（权限表），契约 `contracts/core-json-api.md` §9、§10 同步。
+
+### 56.1 做了什么
+
+- **全局路由逐条归类**（`core/identity/route-access.ts` 重写）：三类——按对象落到工作空间（`agent-status/{nodeId}/read|transcript|suggest-title`、`nodes/{nodeId}/context-reads` 按节点所在画布；`approvals/{id}/answer` 与 `control/confirm/{id}` 按那条请求所在画布要 `approval:answer`）、无害的全局读（Agent 目录、模型、模型目录、终端后端、公开状态页，被共享过任意一块画布即放行）、本机管理（设置、执行主机、SSH、数据、用量、对话索引、集成、克隆、电源、浏览器、GitHub、自动化，只给 owner）。节点 → 画布依次查 `agent_status`、`terminal_sessions.owner_node_id`、`node_handles` + `boards`；关闭确认只在内存里，`collab/control/close.ts` 给待确认的请求记下工作空间并导出 `confirmWorkspace`。`route-scopes.ts` 删掉 `/api/ownership` 那条死规则（路由 2026-09-20 就删了）。
+- **组管理员**（`core/identity/accounts.ts`）：组内 `admin` 能增删本组成员、改本组组内角色、签发与作废只指向本组的邀请，`GET invitations` 只列这些；建组、改名、删组、动 owner、带工作空间的邀请、别的组仍要 `identity:manage` 或 `workspace:share`。组角色不编译成 scope，判定仍只有 `permits` 一条路（设计 S3）。
+- **终端创建者落库**：迁移 `0028_terminal_creator.sql` 给 `terminal_sessions` 加 `creator_principal_id`（缺省空串 = 本机 owner 或 core 自己）。路由门在成员 `POST /api/terminals` 成功后写这一列，判「自己开的」读这一列；终端域本身没改。休眠唤醒走 `revive`，同一行，创建者随行保留。
+- **撤销即释放**（`core/canvas/presence.ts`、`routes.ts`）：每个客户端记下它最近一次请求的「来源」——设备与一个复判函数（重新认证会话，再判 `canvas:read` / `canvas:write`）。`onAccessChanged` 触发 `presence.recheck()`：看不见的摘掉、只能看的交出租约，变了就广播；只剩一个能写的直接交给它。心跳里 `writable` 变假时也当拍交出租约。
+- **同一台设备**：`RequestIdentity` 多一个 `device`（服务器壳从会话的 `Principal` 取 `deviceId` / `deviceName`）；桌面壳没有请求身份，一律算「本机」。快照里每个客户端与租约多一个 `deviceKey`（设备标识的 sha256 摘要前 16 位），心跳与拿租约的回答另带自己的 `deviceKey`；设备名优先取身份域登记的。页面 `PresenceBar` 在持有者与自己同 `deviceKey` 时写「本机另一个窗口正在编辑」、接管不弹确认，悬停的圆点写「本机另一个窗口」。
+- **接管审计**：`POST …/lease` 从别的客户端手里接过来时写 `canvas.lease.takeover`（`detail: { from, to, sameDevice }`）。审计的写入口在调用方没写 principal / 设备时用这次请求的，所以审批答复那条也补上了「是谁答的」。
+- **页面对成员的可见性**：`app/use-access.ts` 按 `GET /api/identity/session`（快照 ∪ 现编）回答「是不是成员、在这块画布上能不能做某事」，桌面壳恒为全权且不发请求。设置导航按 `nav.ts` 的 `ownerOnly` 对成员隐去 Agent、集成、终端、工作区、GitHub、SSH、执行主机、数据、账号与用量、快捷键、更新（剩通用、通知、白板、后台服务、账号与共享、关于）；审批按钮与关闭确认只对 driver 出现；用量、成本、SSH 提示、键位与主机表的设置查询、旧版接入残留横幅对成员不发。「账号与共享」对组管理员给一份收窄的：只列他管的组（没有新建与删除），邀请对话框选组而不是工作空间与角色。
+
+### 56.2 取舍
+
+- 审批答复要的是 `approval:answer`（driver），不是 `canvas:write`：它替 Agent 回答权限提示，和写别人的终端同一档（设计 S5）。editor、operator 看得见「在等审批」，没有按钮。
+- 无害的全局读的门槛是「被共享了任意一块画布」而不是「任何登录的人」：一个没有任何共享的账号没有理由知道这台机器装了哪些 CLI。
+- 设置只读（`GET /api/settings`）对成员也不开：文档里有 SSH 主机与 Agent 配置，逐字段筛一份给成员不值，页面对成员用内置默认（键位是默认 + 本设备覆盖）。
+- 创建者写在路由门而不是终端管理器：终端的建会话路径还被 core 自己（依赖编排、冷启动）走，它们没有请求身份；路由门本来就是唯一知道「这次是哪个成员开的」的地方。代价是没经过 `POST /api/terminals` 开的终端创建者一律为空，对成员就是「别人的」。
+- 复判用的是客户端最近一次请求的会话。每次心跳都换成最新的，而访问密钥 15 分钟过期、页面按时刷新，所以不会拿一把过期的钥匙误判；万一误摘，下一拍心跳（≤10 秒）就回来了，只是租约要重新拿。
+- `deviceKey` 是摘要而不是设备标识：页面只需要比较，而设备标识出现在撤销设备的接口上。
+- 同一浏览器的两个标签页共享 Cookie、是同一个会话设备；两个不同的浏览器在同一台电脑上是两台设备（各自配对或登录），不会被当成「本机另一个窗口」。
+- 迁移只用了 0028。
+
+### 56.3 验证
+
+- `pnpm --filter @armadra/desktop test`：268 文件通过、2 跳过（3204 条通过、8 跳过），live 2 条通过。新增：`route-access.test.ts` 的「全局路由的权限表」39 行（每条路由对 owner / driver / operator / editor / viewer / 非成员）、没被共享的成员连无害读也没有、路由门重建后创建者照旧、真库上的查询（创建者落进会话行，节点与审批按库找画布）；`accounts.test.ts` 的组管理员 2 条（能做的与越不了的）；`presence.test.ts` 3 条（同设备同 `deviceKey` 且身份域设备名优先、撤销即摘除并交给剩下的、降为只读交出租约）；`canvas/routes.test.ts` 2 条（桌面窗口都算本机、接管记审计而自己拿回不记；授权一变被撤销成员的租约当场释放并广播）。
+- `pnpm --filter @armadra/server test`：10 文件 85 条通过。`sharing.integration.test.ts` 新增 3 条：成员的全局读放行、本机管理 403、不存在的审批 403；组管理员经 HTTP 管自己的组、签本组邀请、碰不到别的组也删不了组；撤销编辑者之后管理员的事件流上当场收到租约归自己的 `canvas.presence`，设备名是配对时登记的「管理员的电脑」。
+- `pnpm --filter @armadra/web test`：285 文件 2786 条通过；`typecheck` 通过。新增 `use-access.test.ts` 3 条，`AccountsSharingPage.test.tsx` 2 条（成员的设置导航、组管理员的收窄视图），`PresenceBar.test.tsx` 1 条（本机另一个窗口的文案与一次点击接管）。
+- `node tools/probes/server-e2e.mjs`：31 项全部通过。相比 §50 新增：成员打开共享画布零个 403（§50.3 记下的 `/api/agents`、`/api/terminals/backend`、`/api/settings`、`/api/usage`、`/api/ssh/prompts`，以及第一轮新暴露的 `/api/agents/{id}/integration` 都没了）、设置导航只剩六页且逐页零个 403；撤销共享后管理员打开画布时租约已经释放（§50.4 实测要 19.5 秒）；同一浏览器第二个管理员窗口写「本机另一个窗口正在编辑」、接管不弹确认、一次拿到，第一个窗口转只读，审计 `detail` 为 `{"from":"服务器配对","to":"服务器配对","sameDevice":true}`。
+- `pnpm check`、`pnpm format:check` 通过。
+
+没做：core 重启后创建者生效只在单测（真库、重建路由门）与路由门层面验证，探针没有真的重启服务器壳再写终端；成员自己改名、停用自己（§42.2 的遗留，不在这次范围）。

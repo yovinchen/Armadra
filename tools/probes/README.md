@@ -149,9 +149,9 @@ node tools/probes/server-e2e.mjs [输出目录]
 
 ````
 
-`apps/server/out/main.js serve` 用临时数据目录启动并托管 `apps/web/dist`（自签名 HTTPS，Chrome 带 `--ignore-certificate-errors`）。无头 Chrome 开两个互不共享 Cookie 的浏览器上下文：管理员打开启动日志里的配对链接完成配对，在「账号与共享」生成只读邀请；成员在另一个上下文打开 `#invite=` 链接注册。之后依次验证：成员打开共享画布时全局路由的 403 逐条记下（`memberForbidden`、`memberSettings`），界面没有报错横幅与控制台错误；只读时右上角写「只读」、便签拖不动、不发被拒的保存，直接写接口是 403；管理员改成「编辑」后下一拍心跳解除只读、拖动落盘；撤销共享后成员的事件流以 4403 关闭、下一个请求 403、页面离开那块工作空间；最后管理员在服务器壳上新建浏览器节点，起始页是探针自己的回环页面，取画面流上的像素确认第一帧到了。
+`apps/server/out/main.js serve` 用临时数据目录启动并托管 `apps/web/dist`（自签名 HTTPS，Chrome 带 `--ignore-certificate-errors`）。无头 Chrome 开两个互不共享 Cookie 的浏览器上下文：管理员打开启动日志里的配对链接完成配对，在「账号与共享」生成只读邀请；成员在另一个上下文打开 `#invite=` 链接注册。之后依次验证：成员打开共享画布与逐页打开设置都没有任何 403（逐条记在 `memberForbidden`、`memberSettings`），设置导航里没有本机管理的那几页（`memberSettingsNav`），界面没有报错横幅与控制台错误；只读时右上角写「只读」、便签拖不动、不发被拒的保存，直接写接口是 403；管理员改成「编辑」后下一拍心跳解除只读、拖动落盘；撤销共享后成员的事件流以 4403 关闭、下一个请求 403、页面离开那块工作空间，他手里的写租约当场释放（管理员打开画布时没有「正在编辑」）；同一浏览器上下文再开一个管理员窗口，它写「本机另一个窗口正在编辑」，点「接管」不弹确认、一次拿到租约，先开的窗口转只读，审计里有一条 `canvas.lease.takeover`（`takeoverAudit`）；最后管理员在服务器壳上新建浏览器节点，起始页是探针自己的回环页面，取画面流上的像素确认第一帧到了。
 
-产物默认在 `target/server-e2e/`：`result.json` 与 `01-admin-paired.png` … `11-admin-browser-stream.png`。端口随机，数据目录、项目目录与浏览器 profile 都是 `mktemp`，服务器壳先 SIGTERM（让它收掉自己起的 headless Chromium）再删目录、停 tmux。没有验证：`--public-origin` 与真证书、passkey / OAuth、多于一个成员、手机布局。
+产物默认在 `target/server-e2e/`：`result.json` 与 `01-admin-paired.png` … `13-second-window-took-over.png`。端口随机，数据目录、项目目录与浏览器 profile 都是 `mktemp`，服务器壳先 SIGTERM（让它收掉自己起的 headless Chromium）再删目录、停 tmux。没有验证：`--public-origin` 与真证书、passkey / OAuth、多于一个成员、手机布局。
 
 ## 远端执行主机端到端（假 ssh）
 
