@@ -43,8 +43,10 @@ export interface RateVerdict {
 export class SendLimits {
   /** `source>target` → 上一次真的投出去的时刻。 */
   private readonly edges = new Map<string, number>();
-  /** 发起者 → 这一轮已经投过的目标。 */
+  /** 发起者 → 这一轮已经投过的目标。只记报过状态的发起者。 */
   private readonly turns = new Map<string, Set<string>>();
+  /** 报过状态的发起者：只有它们的一轮有边界。 */
+  private readonly reporters = new Set<string>();
   /** 节点 → 最近一条投进它的消息的来源链，以及记下的时刻。 */
   private readonly trails = new Map<
     string,
@@ -78,6 +80,8 @@ export class SendLimits {
   /** 真的投出去了：速率窗口与扇出集合在这一刻才动。 */
   noteDelivered(source: string, target: string, nowMs: number): void {
     this.edges.set(edgeKey(source, target), nowMs);
+    // 从不上报的发起者不记：它的一轮永远不会结束，记下去第五个新目标就永远被拒。
+    if (!this.reporters.has(source)) return;
     const seen = this.turns.get(source) ?? new Set<string>();
     seen.add(target);
     this.turns.set(source, seen);
@@ -86,10 +90,12 @@ export class SendLimits {
   /**
    * 发起者报了一条状态。非 `working` 就是它那一轮结束了，扇出集合清空。
    *
-   * 一个从没报过状态的发起者永远走不到这里，所以它的 `turns` 永远是空的，
-   * {@link fanout} 对它恒真——这正是「不知道一轮多长就不设这道闸」。
+   * 一个从没报过状态的发起者永远走不到这里，{@link noteDelivered} 也就不给它
+   * 记账，它的 `turns` 永远是空的，{@link fanout} 对它恒真——这正是「不知道一
+   * 轮多长就不设这道闸」。
    */
   noteSourceState(nodeId: string, state: string | undefined): void {
+    this.reporters.add(nodeId);
     if (state === "working") return;
     this.turns.delete(nodeId);
   }
@@ -114,6 +120,7 @@ export class SendLimits {
   reset(): void {
     this.edges.clear();
     this.turns.clear();
+    this.reporters.clear();
     this.trails.clear();
   }
 }
