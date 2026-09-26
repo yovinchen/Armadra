@@ -456,10 +456,15 @@ export async function attempt(
       }
     }
     // 「还没起来」对带任务启动与收件箱唤醒不是拒绝，是「还早」：`open-agent`
-    // 建完节点到页面挂起 PTY 之间有一段真空，而那一条排队项的全部意义就是等过
-    // 这一段。没有人在等它的回执，所以它退回队列，由 TTL 决定它什么时候死。
-    if (item.origin !== "send" && codeOf(error) === "TARGET_GONE") {
-      requeue(context.database, item.id, "TARGET_GONE");
+    // 建完节点到页面挂起 PTY 之间有一段真空，PTY 起来之后启动行把 CLI 带起来
+    // 之前前台还是 shell，而那一条排队项的全部意义就是等过这两段。没有人在等
+    // 它的回执，所以它退回队列，由 TTL 决定它什么时候死。
+    const early = codeOf(error);
+    if (
+      item.origin !== "send" &&
+      (early === "TARGET_GONE" || early === "TARGET_NOT_AGENT_PANE")
+    ) {
+      requeue(context.database, item.id, early);
       throw error;
     }
     // 门链上的硬拒绝：这一条再等也不会变好，从队列里拿掉。

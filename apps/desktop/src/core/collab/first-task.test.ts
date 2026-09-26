@@ -113,6 +113,30 @@ describe("open-agent --task", () => {
     expect(fixture.terminal.submits).toHaveLength(0);
   });
 
+  /**
+   * PTY 起来了、启动行还没把 CLI 带起来的那一两秒，前台是 shell。对第一条任务
+   * 那不是拒绝，是「还早」——与还没有 PTY 同一回事。当成硬拒绝会把它当场取
+   * 消：2026-09-26 全量端到端里 `team` 的第一棒（Codex）因此一直没收到任务，
+   * 队列里那一条 `cancelled / TARGET_NOT_AGENT_PANE`、`attempts = 0`。
+   */
+  it("前台还是 shell：第一条任务留在队里，不取消", async () => {
+    const created = result(
+      await run(me, "open-agent", { agent: "codex", task: "做这件事" }),
+    ).id as string;
+    const pump = new SendPump(() => fixture.collab);
+    bring(created, "starting");
+    fixture.terminal.foreground = { command: "zsh" };
+    await pump.drain(created);
+    const queued = pendingFor(fixture.database, created, 0);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.state).toBe("queued");
+
+    fixture.terminal.foreground = { command: "codex" };
+    bring(created, "idle");
+    await pump.drain(created);
+    expect(fixture.terminal.submits).toHaveLength(1);
+  });
+
   it("等的是第一条真正的 idle，不是一个定时器", async () => {
     const created = result(
       await run(me, "open-agent", { agent: "codex", task: "做这件事" }),
