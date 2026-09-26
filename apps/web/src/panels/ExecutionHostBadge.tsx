@@ -10,16 +10,19 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { runtimeApi } from "../api/client";
+import { useAccess } from "../app/use-access";
 import { useCanvasStore } from "../store/canvas-store";
 import { Badge } from "../ui/badge";
 
 export function ExecutionHostBadge() {
   const workspace = useCanvasStore((state) => state.workspace);
   const executionHostId = workspace?.executionHostId ?? "";
+  // 成员读不了主机表（本机管理，403）：徽标退回主机 id。
+  const member = useAccess().member;
   const settings = useQuery({
     queryKey: ["settings"],
     queryFn: runtimeApi.settings,
-    enabled: executionHostId.length > 0,
+    enabled: executionHostId.length > 0 && !member,
     retry: false,
   });
   if (executionHostId.length === 0) return null;

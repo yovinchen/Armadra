@@ -12,6 +12,7 @@ import { runtimeApi } from "../api/client";
 import { useDeliveryStore } from "../agent/delivery-store";
 import { requestCenterOnNode } from "../canvas/flow/flow-context";
 import { usePreferencesStore, useT } from "../app/preferences-store";
+import { useAccess } from "../app/use-access";
 import { useEnabledAgents } from "../app/use-agents";
 import { useCanvasStore } from "../store/canvas-store";
 import { Button } from "@/ui/button";
@@ -35,6 +36,7 @@ export function Banners() {
     (state) => state.setLastSettingsSection,
   );
   const agents = useEnabledAgents();
+  const member = useAccess().member;
   const [dismissed, setDismissed] = useState<string[]>([]);
   const notices = useDeliveryStore((state) => state.notices);
   const dismissNotice = useDeliveryStore((state) => state.dismissNotice);
@@ -79,7 +81,8 @@ export function Banners() {
       );
       return names.filter((name): name is string => name !== null);
     },
-    enabled: agents.length > 0,
+    // 修复在「集成」页，那是本机管理：服务器壳上的成员既读不到（403）也修不了。
+    enabled: agents.length > 0 && !member,
     retry: false,
     staleTime: Infinity,
   });

@@ -16,6 +16,7 @@ import { useDeviceKeymapStore } from "../panels/settings/device-keymap-store";
 import { keymapMigrationPatch, resolveKeymap } from "../panels/settings/keymap";
 import { activeGlobalLayer } from "../panels/settings/keymap-profiles";
 import type { CommandDispatch } from "./commands";
+import { useAccess } from "./use-access";
 
 /**
  * 全应用唯一的一处 `useKeybindings`（§13.5）。
@@ -28,11 +29,14 @@ import type { CommandDispatch } from "./commands";
  */
 export function useAppKeybindings(dispatch: CommandDispatch): void {
   const client = useQueryClient();
+  // 服务器壳上的成员读不了整台机器的设置（403）：只用内置默认与本设备覆盖。
+  const member = useAccess().member;
   const settings = useQuery({
     queryKey: ["settings"],
     queryFn: runtimeApi.settings,
     retry: false,
     staleTime: 30_000,
+    enabled: !member,
   });
   // 全局那一层装的是当前配置档：预设 + 用户在这个档里的修改
   // （`keymap-profiles.ts`）。换档之后下一帧就生效，因为这份查询变了。
