@@ -123,18 +123,19 @@ node tools/probes/ui-features-e2e.mjs [输出目录] [--only=presence,editor,fil
 
 一切都是临时的、回环的：随机端口（不用 1420 / 1421 / 43120-43125）、`mktemp` 的数据目录、HOME、`CLAUDE_CONFIG_DIR` / `CODEX_HOME`、替身脚本与浏览器 profile，结束时全部删除并停掉自己起的 tmux 服务器；不读写操作员自己的数据目录与 CLI 配置，不联网。
 
-node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4]
+node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4,5,6]
 
 ```
 
 入口只装配与收尾；各场景在 `agent-e2e/scenario-*.mjs`，共用的临时环境、core / Vite / Chrome 装配与断言工具在 `agent-e2e/lib.mjs`。
 
-四个场景：
+场景：
 
 1. **Codex 首投**：普通终端节点当发送方（探针以它的节点身份跑 `armadra-hook canvas`，令牌经 `POST /api/terminals/{id}/node-token/refresh` 签发），`send` 投给两个互相连线的 Codex，再 `open-agent --task` 建第三个；断言投递 `delivered` + `targetState = observed-quiet`，且 hook 随后报了一轮。
 2. **Claude 投递**：hook 状态通道那条路（`targetState = idle`）；半截输入门——经页面在 Claude 输入框里打半行不回车，等人的租约过期后 `send` 排队 `TARGET_INPUT_PENDING`，回车后投出去。
 3. **依赖编排与组队**：`open-agent --after <上游> --after-turn next`、`team --member … --chain`；再关掉页面触发一次，断言由 core 自己起进程并投出任务。
 4. **节能休眠**：`ARMADRA_TEST_ECO_IDLE_SECONDS=20`（`core/terminal/hibernate.ts::ecoTestOverride`，只有启动 core 的进程能给，设置的 5 分钟下限不变），关掉页面让 Claude 与 Codex 都睡着、确认 CLI 进程退出；重开页面点节点唤醒，断言同一会话 id 起下一代、恢复行带同一个 provider 会话 id、还记得之前让它记的数。
+6. **组队带 worktree**（§59）：不用真 CLI，自己另起一套 core（临时 git 仓库当工作区，假 CLI 是一段记下自己工作目录再停在 shell 里的 sh），`--only 6` 单跑时不检查 CLI 登录、不起 Vite 与 Chrome。`team --member "…|worktree=名字"` 与按路径的成员各建出一条检出与绑定的 Frame、同名的两个成员共用一个 Frame、成员终端从节点 `cwd` 起在检出里；`open-agent --worktree` 按分支名进同一个 Frame；`--dry-run` 不建，Git 拒绝时画布不多一个节点。
 
 隔离：数据目录、工作空间、浏览器 profile 与 CODEX_HOME 全部 `mktemp`，结束删除并停掉自己的 tmux 服务器。Codex 用临时 CODEX_HOME（只复制 `~/.codex/auth.json`，关掉启动时的升级检查，预先信任工作目录；token 超过 7 天没刷新就拒跑）。Claude 的登录在钥匙串里，临时 `CLAUDE_CONFIG_DIR` 认证不上，所以 Claude 进程用真实配置目录——前提是 Armadra 对 Claude 走启动时注入（`--settings` 指向数据目录里的文件），探针启动前就检查这一点；core 自己的 `CLAUDE_CONFIG_DIR` 指向临时目录，技能文件只写在那里。终端子进程的环境按白名单建，于是 `SHELL` 换成一个临时包装脚本（导出临时 CODEX_HOME、去掉 CLAUDE_CONFIG_DIR、`exec zsh -f`）。跑前跑后比对 `~/.claude/settings.json`、`~/.codex` 的 `config.toml` / `hooks.json` / `auth.json` 与两个 CLI 的版本；Claude 仍会像平常一样在 `~/.claude.json` 与 `~/.claude/projects/` 里记下这个临时目录的会话。
 
@@ -176,6 +177,6 @@ node tools/probes/browser-agent-e2e.mjs              # 真 core 的 headless 后
 node tools/probes/browser-agent-e2e.mjs --electron   # 再跑一遍桌面壳的 <webview>
 ```
 
-真链路：`apps/desktop/out/cli/armadra-hook.js browser <动词>` → 真 core（没有桌面壳时用自己起的 headless Chromium，与服务器壳同一个后端）→ 节点令牌、连线、同工作空间三条授权 → 控制租约 → 动词 → CDP 白名单 → 页面。画布由接口建：一个终端节点连到一个浏览器节点，另有一个没连线的浏览器节点；终端节点起一个 `/bin/sh` 会话换来 core 签发的节点令牌。fixture 是本机随机端口上的一页表单，含同源 iframe 与 `localhost` 那个端口上的跨源 iframe（真 OOPIF）、原生与自绘下拉、HTML5 拖放、悬停菜单、confirm、文件输入、下载、延时文字、一个 200 与一个 404 的 fetch。每个动词都跑：快照（缺省、`--interactive`、`--max-bytes`）、按引用 / 角色名称 / 选择器点击（含两种 iframe 里的元素）、`--snapshot` 差异、`type` / `fill` / `select`、组合键与被拒的按键、`hover` / `drag`、`wait --text / --text-gone / --idle` 与一次 3 秒的超时、控制台与请求元数据（核对 token、Cookie 不出现）、左右滚与滚到元素、视口 / 整页 / 元素截图、PDF、`resize`、上传与下载、对话框阻塞与处理、`--action stop`、导航后旧引用重找、没发过的引用被拒、`back` / `forward`、`tabs --new` 与 `--tab` 读后台标签、`close`、租约查看与交还，外加 `--help` 的浏览器段。`--electron` 起开发构建的 Electron（临时数据目录与 profile，`ARMADRA_DESKTOP_OWNS_RUNTIME=1`、随机 `ARMADRA_RUNTIME_PORT`），在它的渲染页里调接口并打开画布，让浏览器节点挂成真的 `<webview>`，再跑同一批动词；另查上传后画布上的选择框提示消失、渲染页没有意料之外的 error。整批动词结束时租约仍是「Agent 正在操作」，即 Agent 自己的 CDP 输入没有被当成人在操作。
+真链路：`apps/desktop/out/cli/armadra-hook.js browser <动词>` → 真 core（没有桌面壳时用自己起的 headless Chromium，与服务器壳同一个后端）→ 节点令牌、连线、同工作空间三条授权 → 控制租约 → 动词 → CDP 白名单 → 页面。画布由接口建：一个终端节点连到一个浏览器节点，另有一个没连线的浏览器节点；终端节点起一个 `/bin/sh` 会话换来 core 签发的节点令牌。fixture 是本机随机端口上的一页表单，含同源 iframe 与 `localhost` 那个端口上的跨源 iframe（真 OOPIF）、原生与自绘下拉、HTML5 拖放、悬停菜单、confirm、文件输入、下载、延时文字、一个 200 与一个 404 的 fetch。每个动词都跑（fixture 还有开放与闭合的 shadow root、`<select multiple>`、页底一整块红色的跨源 iframe）：`select` 多选与非 multiple 被拒、`--selector 宿主 >>> 里面` 与闭合 shadow root 的拒绝、整页截图逐屏拼接后页底 iframe 确实是红的；快照（缺省、`--interactive`、`--max-bytes`）、按引用 / 角色名称 / 选择器点击（含两种 iframe 里的元素）、`--snapshot` 差异、`type` / `fill` / `select`、组合键与被拒的按键、`hover` / `drag`、`wait --text / --text-gone / --idle` 与一次 3 秒的超时、控制台与请求元数据（核对 token、Cookie 不出现）、左右滚与滚到元素、视口 / 整页 / 元素截图、PDF、`resize`、上传与下载、对话框阻塞与处理、`--action stop`、导航后旧引用重找、没发过的引用被拒、`back` / `forward`、`tabs --new` 与 `--tab` 读后台标签、`close`、租约查看与交还，外加 `--help` 的浏览器段。`--electron` 起开发构建的 Electron（临时数据目录与 profile，`ARMADRA_DESKTOP_OWNS_RUNTIME=1`、随机 `ARMADRA_RUNTIME_PORT`），在它的渲染页里调接口并打开画布，让浏览器节点挂成真的 `<webview>`，再跑同一批动词；另查第一次驱动之前页面打出的控制台已经读得到（节点一连线就被动旁听）、上传后画布上的选择框提示消失、渲染页没有意料之外的 error。整批动词结束时租约仍是「Agent 正在操作」，即 Agent 自己的 CDP 输入没有被当成人在操作。
 
 产物默认在 `target/browser-agent-e2e/`：`result.json`（每个场景与每次 hook 调用的耗时）、两个后端各自的快照文本、请求与控制台输出、视口 / 整页 / 元素截图、PDF，以及 Electron 画布前后两张截图。没有验证：Windows 与 Linux（原生下拉在那两处走同一条输入路径，但没跑过）、真实站点（登录、反自动化脚本）、非 macOS 上 Electron 的打印、人与 Agent 同时抢一个页面的交互（租约本身由单测覆盖）。

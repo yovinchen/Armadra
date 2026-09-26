@@ -194,6 +194,20 @@ export async function runElectron(ctx) {
   }
 
   const { hook, calls } = hookOf(data, seeded.agent.id, home);
+  // 浏览器节点一被连线，桌面壳就被动接上调试器：页面加载后 1.2 秒打出的那条
+  // 日志在任何动词之前就进了缓冲。以前调试器等第一个动词才接，这条读不到。
+  const early = await hook(
+    "read",
+    "--mode",
+    "console",
+    "--filter",
+    "连线后驱动前",
+  );
+  check(
+    "electron 第一次驱动之前的控制台也读得到（被动旁听）",
+    early.out.includes("连线后驱动前的日志"),
+    { out: early.out || early.err },
+  );
   const ms = await everyVerb({
     hook,
     base,

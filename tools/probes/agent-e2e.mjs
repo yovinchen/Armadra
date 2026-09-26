@@ -19,6 +19,9 @@
 //      醒后 resume 同一个会话、还记得之前说过的话。Claude 与 Codex 各一遍。
 //   5. 画布内注入：同样的环境，只差启动行上的注入参数——画布外启动的 Codex /
 //      Claude 看不到画布说明与我们的技能、Hook 不打到 core；带上注入参数后都生效。
+//   6. 组队带 worktree：`team --member "…|worktree=名字"` 建出检出与绑定的
+//      Frame，成员的终端起在检出里。用假 CLI、自己一套 core，`--only 6` 单跑
+//      时不需要真 CLI 的登录。
 //
 // 认证与隔离：
 //   * Codex 用临时 CODEX_HOME，只**复制** ~/.codex/auth.json 进去。token 超过 7
@@ -37,15 +40,23 @@
 //
 // 用法（仓库根目录）：
 //   pnpm libs:build && pnpm --filter @armadra/desktop build
-//   node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4,5]
+//   node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4,5,6]
 //
 // 产物：<输出目录>/result.json、每个场景的截图、core.log。
-import { finalize, only, report, setup, state } from "./agent-e2e/lib.mjs";
+import {
+  fingerprint,
+  finalize,
+  only,
+  report,
+  setup,
+  state,
+} from "./agent-e2e/lib.mjs";
 import scenario1 from "./agent-e2e/scenario-1-codex-first-delivery.mjs";
 import scenario2 from "./agent-e2e/scenario-2-claude-delivery.mjs";
 import scenario3 from "./agent-e2e/scenario-3-dependencies-team.mjs";
 import scenario4 from "./agent-e2e/scenario-4-eco-hibernate.mjs";
 import scenario5 from "./agent-e2e/scenario-5-canvas-only.mjs";
+import scenario6 from "./agent-e2e/scenario-6-team-worktree.mjs";
 
 const SCENARIOS = [
   ["1", scenario1],
@@ -56,6 +67,12 @@ const SCENARIOS = [
 ];
 
 async function main() {
+  // 场景 6 用假 CLI、自己起一套 core：单跑它时不要真 CLI 的登录，也不起页面。
+  if (only.has("6")) {
+    report.safety.before ??= fingerprint();
+    await scenario6();
+  }
+  if (![...only].some((id) => id !== "6")) return;
   const ctx = await setup();
   for (const [id, run] of SCENARIOS) if (only.has(id)) await run(ctx);
 

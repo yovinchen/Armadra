@@ -28,7 +28,7 @@ const onlyFlag = argv.indexOf("--only");
 export const only =
   onlyFlag >= 0
     ? new Set(argv[onlyFlag + 1].split(",").map((part) => part.trim()))
-    : new Set(["1", "2", "3", "4", "5"]);
+    : new Set(["1", "2", "3", "4", "5", "6"]);
 const positional = argv.filter(
   (value, index) =>
     !value.startsWith("--") && (onlyFlag < 0 || index !== onlyFlag + 1),

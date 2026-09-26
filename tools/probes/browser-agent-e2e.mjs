@@ -38,6 +38,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { child, harness, killTmux, sleep } from "./shell-e2e-lib.mjs";
+import { decodePng } from "./ui-features/fixtures.mjs";
 
 const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const argv = process.argv.slice(2);
@@ -104,16 +105,25 @@ function pages(port) {
       <button id="later" onclick="setTimeout(function(){ document.getElementById('late').textContent='加载完成'; document.getElementById('spinner').remove(); }, 500)">加载</button>
       <span id="spinner">加载中</span><span id="late"></span>
       <button id="fetch" onclick="console.warn('开始请求'); fetch('/api/data?access_token=s3cret').then(function(){ return fetch('/api/missing'); }).then(function(){ console.error('请求失败了一个'); })">请求</button>
+      <div id="host"></div><div id="shut"></div><span id="shadowed"></span>
+      <label>标签 <select id="tags" multiple size="3"><option value="a">甲</option><option value="b">乙</option><option value="c">丙</option></select></label>
       <iframe id="same" title="同源框" src="/inner" style="width:320px;height:70px"></iframe>
       <iframe id="cross" title="跨源框" src="${other}/cross" style="width:320px;height:110px"></iframe>
       <div class="wide"></div>
       <div class="tall"></div>
       <button id="bottom">页底按钮</button>
-      <script>function pick(el){ var c=document.getElementById('combo'); c.textContent=el.textContent; document.getElementById('lb').hidden=true; c.setAttribute('aria-expanded','false'); }</script>
+      <iframe id="red" title="红框" src="${other}/red" style="display:block;width:300px;height:200px;border:0"></iframe>
+      <script>function pick(el){ var c=document.getElementById('combo'); c.textContent=el.textContent; document.getElementById('lb').hidden=true; c.setAttribute('aria-expanded','false'); }
+        document.getElementById('host').attachShadow({ mode: 'open' }).innerHTML = '<button onclick="document.getElementById(\\'shadowed\\').textContent=\\'影子已点\\'">影子按钮</button>';
+        document.getElementById('shut').attachShadow({ mode: 'closed' }).innerHTML = '<button>关着的按钮</button>';
+        // 页面开着、还没有任何动词时打出的一条：桌面壳被动旁听才记得到。
+        setTimeout(function () { console.warn('连线后驱动前的日志'); }, 1200);</script>
     </body></html>`,
     "/inner": `<!doctype html><meta charset="utf-8"><body style="margin:0"><button onclick="this.textContent='同源已点'">同源按钮</button></body>`,
     "/cross": `<!doctype html><meta charset="utf-8"><body style="margin:0"><button onclick="this.textContent='跨源已点'; console.log('来自跨源 iframe')">跨源按钮</button><input aria-label="跨源输入"></body>`,
     "/next": `<!doctype html><meta charset="utf-8"><title>第二页</title><body><h1>第二页</h1><button>提交</button></body>`,
+    // 页底那个整块红色的跨源 iframe：整页截图拼接之后它应当是红的。
+    "/red": `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#ff0000"></body>`,
   };
 }
 
@@ -446,6 +456,48 @@ async function everyVerb({ hook, base, cross, project, backend, tag }) {
       out: r.out || r.err,
     },
   );
+  // 多选下拉：一次选中多项；不是 multiple 的给多个直接拒。
+  r = await hook(
+    "select",
+    "--selector",
+    "#tags",
+    "--value",
+    "a",
+    "--value",
+    "c",
+  );
+  check(at("select 多选下拉一次选中多项"), r.out.includes("已选中：甲、丙"), {
+    out: r.out || r.err,
+  });
+  r = await hook(
+    "select",
+    "--ref",
+    refOf(snapshot, '"城市"'),
+    "--value",
+    "bj",
+    "--value",
+    "sh",
+  );
+  check(
+    at("select 给非 multiple 的下拉多个值被拒"),
+    r.code !== 0 && r.err.includes("multiple"),
+    { err: r.err },
+  );
+
+  // Shadow DOM：>>> 进开放的 shadow root；闭合的如实说进不去。
+  r = await hook("click", "--selector", "#host >>> button");
+  check(at("--selector 用 >>> 点到开放 shadow root 里的按钮"), r.code === 0, {
+    out: r.out || r.err,
+  });
+  r = await hook("wait", "--text", "影子已点", "--timeout", "3000");
+  check(at("影子里的按钮真的被点了"), r.out.includes("内满足"), { out: r.out });
+  r = await hook("click", "--selector", "#shut >>> button");
+  check(
+    at("闭合的 shadow root 如实说进不去"),
+    r.code !== 0 && r.err.includes("没有开放的 shadow root"),
+    { err: r.err },
+  );
+
   r = await hook("click", "--role", "button", "--name", "提交", "--snapshot");
   check(
     at("提交表单，状态行出现在差异快照里，邮箱内容不外泄"),
@@ -555,6 +607,26 @@ async function everyVerb({ hook, base, cross, project, backend, tag }) {
   check(at("capture --full-page 真的截到视口以下"), fullHeight > 2000, {
     height: fullHeight,
   });
+  // 页底的跨源 iframe 整块红色：一次撑开视口截的话它是空白，逐屏拼接才是红的。
+  let red = 0;
+  let sampled = 0;
+  if (existsSync(join(project, "shots/full.png"))) {
+    const image = decodePng(readFileSync(join(project, "shots/full.png")));
+    for (let y = Math.floor(image.height * 0.6); y < image.height; y += 4)
+      for (let x = 0; x < image.width; x += 4) {
+        const at4 = (y * image.width + x) * 4;
+        sampled += 1;
+        // 前面按过 Control+a，整页处在选中态，红块上蒙着一层选区色：
+        // 按「红明显多于绿」认，白底与蓝色选区都不算。
+        const [pr, pg] = [image.pixels[at4], image.pixels[at4 + 1]];
+        if (pr > 150 && pr - pg > 25 && pr > image.pixels[at4 + 2]) red += 1;
+      }
+  }
+  check(
+    at("整页截图里视口以下的跨源 iframe 不是空白（逐屏拼接）"),
+    r.out.includes("屏截取后拼接") && red * 16 > 300 * 200 * 0.8,
+    { out: r.out || r.err, red, sampled },
+  );
   r = await hook(
     "capture",
     "--role",
@@ -600,9 +672,17 @@ async function everyVerb({ hook, base, cross, project, backend, tag }) {
   }
   report.shots.push(`${tag}-view.png`, `${tag}-full.png`, `${tag}-element.png`);
   r = await hook("resize", "--width", "800", "--height", "600");
-  check(at("resize 改视口"), r.out.includes("800×600"), {
-    out: r.out || r.err,
-  });
+  // 回答的是布局视口的客户区：两个方向都能滚的页面，在滚动条占位的机器上
+  // （接了鼠标的 macOS、CI）各减一条滚动条的厚度，与真浏览器用例同一个口径。
+  const [, viewW, viewH] = /视口现在 (\d+)×(\d+)/.exec(r.out) ?? [];
+  check(
+    at("resize 改视口"),
+    Number(viewW) > 800 - 24 &&
+      Number(viewW) <= 800 &&
+      Number(viewH) > 600 - 24 &&
+      Number(viewH) <= 600,
+    { out: r.out || r.err },
+  );
   r = await hook("resize", "--reset");
   check(at("resize --reset"), r.out.includes("视口已恢复"), {
     out: r.out || r.err,
