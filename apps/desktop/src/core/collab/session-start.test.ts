@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type AgentFixture, agentFixture, callerFor } from "../agent/fixture";
 import { sessionStartIdle } from "../agent/target-state";
 import { putContextLinks } from "../canvas/context-links";
@@ -142,6 +142,53 @@ describe("a CLI that has only reported its session start", () => {
       reason: "TARGET_STARTING",
     });
     expect(fixture.terminal.submits).toHaveLength(0);
+  });
+
+  /**
+   * 投给休眠节点时，排队那一刻状态行是 `restored`（上一代的），不算「只报过
+   * 开场」，快探不转；接回来的 CLI 报了开场，出队泵按事件试一次，这时这一代
+   * 还不够老，又排回去——此后没有任何事件，只能等一分钟一次的清扫（端到端实
+   * 测投递晚了 48 秒）。开场事件之后还留在队里的，要把快探转起来。
+   */
+  it("接回来报了开场、还不够老：快探接着转，够老了就投", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const claude = claudeNode();
+      opened(claude.id, { restored: 1 });
+      fixture.terminal.activity.set(claude.sessionId, {
+        pending: false,
+        lastInputAt: undefined,
+        lastOutputAt: Date.now() - 500,
+        startedAt: Date.now() - 1_000,
+      });
+      const pump = new SendPump(() => fixture.collab);
+      (fixture.collab as { nudge?: (nodeId: string) => void }).nudge = (
+        nodeId,
+      ) => pump.noteQueued(nodeId);
+      const queued = await run("send", { to: claude.id, body: "做这件事" });
+      expect(queued).toMatchObject({ outcome: "queued" });
+
+      // 新进程报了开场：restored 清掉，泵按事件试一次——还不够老。
+      fixture.database
+        .prepare("UPDATE agent_status SET restored = 0 WHERE node_id = ?")
+        .run(claude.id);
+      pump.noteStatus(claude.id, undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fixture.terminal.submits).toHaveLength(0);
+
+      // 够老了：下一拍快探投出去，不用等清扫。
+      fixture.terminal.activity.set(claude.sessionId, {
+        pending: false,
+        lastInputAt: undefined,
+        lastOutputAt: Date.now() - 500,
+        startedAt: Date.now() - 10_000,
+      });
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(fixture.terminal.submits).toHaveLength(1);
+      pump.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("会话刚起来先排队，由快探在够老之后投出去", async () => {

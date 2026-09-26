@@ -63,7 +63,27 @@ export class SendPump {
   noteStatus(nodeId: string, state: string | undefined): void {
     if (nodeId === "") return;
     sendLimits().noteSourceState(nodeId, state);
-    void this.drain(nodeId);
+    // 这条事件若是一个刚接回来的 CLI 的开场，这一代往往还不够老，试一次会排
+    // 回去；此后不会再有事件，快探得接着转，否则要等一分钟一次的清扫。
+    void this.drain(nodeId).then(() => this.probeIfSilent(nodeId));
+  }
+
+  /** 还有东西排着、而下一次空闲不会以事件到来的目标：把快探转起来。 */
+  private probeIfSilent(nodeId: string): void {
+    const context = this.context();
+    if (context === undefined) return;
+    try {
+      if (
+        this.silentStarter(context, nodeId) &&
+        pendingFor(context.database, nodeId, nowSeconds(context)).some(
+          (item) => item.state === "queued",
+        )
+      ) {
+        this.armProbe();
+      }
+    } catch (error) {
+      this.onError(error);
+    }
   }
 
   /**
