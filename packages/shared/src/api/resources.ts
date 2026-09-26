@@ -174,12 +174,17 @@ export const platformComponentSchema = z.object({
   ]),
   /**
    * Which machine the process is on. A language server for a remote workspace
-   * runs on the execution host, so its row is `remote` and carries no numbers:
-   * this machine cannot measure another host's memory, and the local `ssh`
+   * runs on the execution host, so its row is `remote`: its numbers are the
+   * ones that host's Worker measured, never this machine's — the local `ssh`
    * client's few megabytes are not the server's footprint (language service
-   * design §3.3).
+   * design §3.3). A row nobody could measure carries none.
    */
   location: resourceLocationSchema.default("local"),
+  /**
+   * A remote row's execution host. The numbers are that host's, measured by
+   * its Worker in the same round as the host overview.
+   */
+  executionHostId: z.string().optional(),
   process: processSampleSchema,
   tree: z.boolean(),
   childCount: z.number().int().nonnegative().nullable(),

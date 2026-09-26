@@ -26,6 +26,11 @@ import {
   sessionResources,
 } from "../resources/sample";
 import { ownConnections } from "../resources/sockets";
+import {
+  type PlatformComponent,
+  type TrackedProcess,
+  components as platformComponents,
+} from "../resources/platform";
 import type { WorkerSession } from "./session";
 
 /** 控制端要测的一个会话。 */
@@ -51,6 +56,28 @@ export type RemoteSessionMetrics = Pick<
 export interface RemoteResourceRead {
   readonly host: HostResources;
   readonly sessions: readonly RemoteSessionMetrics[];
+  /**
+   * 控制端点名要测的语言服务器（语言连接的 `language.processes` 答的
+   * `(pid, 启动时间)`），在这台机器上按树量出来的行。
+   */
+  readonly components?: readonly PlatformComponent[];
+}
+
+function parseProcesses(raw: readonly unknown[]): TrackedProcess[] {
+  const tracked: TrackedProcess[] = [];
+  for (const entry of raw.slice(0, 64)) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const value = entry as Record<string, unknown>;
+    if (typeof value.pid !== "number" || !Number.isInteger(value.pid)) continue;
+    tracked.push({
+      pid: value.pid,
+      startTimeUnixMs:
+        typeof value.startTimeUnixMs === "number"
+          ? value.startTimeUnixMs
+          : null,
+    });
+  }
+  return tracked;
 }
 
 function parseQueries(raw: readonly unknown[]): RemoteSessionQuery[] {
@@ -121,6 +148,7 @@ function leaderFor(
 export function readRemoteResources(
   session: WorkerSession,
   raw: readonly unknown[],
+  languageProcesses: readonly unknown[] = [],
 ): RemoteResourceRead {
   const sampler = session.slot("resources.sampler", () => new Sampler());
   const queries = parseQueries(raw);
@@ -199,5 +227,21 @@ export function readRemoteResources(
       unknownReason: measured.unknownReason,
     };
   });
-  return { host, sessions };
+  // 语言服务器按本机同一套规矩量：记下来的 `(pid, 启动时间)`、按树算。只取
+  // 语言服务器那几行——这台机器上的 Worker 不是 core，没有「平台自己」可言。
+  const language = parseProcesses(languageProcesses);
+  const components =
+    language.length === 0
+      ? []
+      : platformComponents({
+          table: refresh.table,
+          previousTable: refresh.previousTable,
+          elapsedMs: refresh.elapsedMs,
+          selfPid: -1,
+          language,
+          browsers: [],
+        })
+          .filter((component) => component.kind === "languageServer")
+          .map((component) => ({ ...component, location: "remote" as const }));
+  return { host, sessions, components };
 }

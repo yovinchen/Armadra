@@ -24,6 +24,7 @@ import { PowerSection } from "./resources/PowerSection";
 import { SessionTable } from "./resources/SessionTable";
 import {
   LOCAL_HOST,
+  componentsOnHost,
   hostOverviews,
   type SessionSort,
 } from "./resources/metrics";
@@ -116,7 +117,9 @@ export function ResourceDrawer() {
                 <h3 className="mb-1 text-[13px] font-semibold">
                   {t("resources.components")}
                 </h3>
-                <ComponentList components={snapshot.components} />
+                <ComponentList
+                  components={componentsOnHost(snapshot.components, host)}
+                />
               </section>
 
               <section>

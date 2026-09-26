@@ -739,6 +739,9 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
     readRemoteResources(
       session(context),
       Array.isArray(args.sessions) ? (args.sessions as unknown[]) : [],
+      Array.isArray(args.languageProcesses)
+        ? (args.languageProcesses as unknown[])
+        : [],
     ),
   ),
 

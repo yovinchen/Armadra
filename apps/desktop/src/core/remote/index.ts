@@ -284,6 +284,18 @@ export function install(context: CoreContext): RemoteDomain {
   setRemoteCaller(call);
   // SSH 会话与远端进程树按连接端口对上；设置里写了端口就按它筛。
   remoteResources.setHostPort((hostId) => host(hostId)?.port);
+  // 资源读取只问已经连着的语言连接，不为它新建一条。
+  remoteResources.setLanguageLive((hostId) => {
+    try {
+      return (
+        languageLinks
+          .get(host(hostId), hostId)
+          .capability(LANGUAGE_CAPABILITY) === true
+      );
+    } catch {
+      return false;
+    }
+  });
 
   const callLanguage: Parameters<typeof setLanguageCaller>[0] = async (
     hostId,

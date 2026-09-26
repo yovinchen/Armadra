@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type {
   CanvasNode,
   HostResources,
+  PlatformComponent,
   SessionResources,
 } from "@armadra/shared";
 
@@ -9,6 +10,7 @@ import { usePreferencesStore } from "@/app/preferences-store";
 import {
   LOCAL_HOST,
   UNKNOWN,
+  componentsOnHost,
   diskUsedPercent,
   executionHostOf,
   executionHosts,
@@ -300,6 +302,35 @@ describe("执行主机", () => {
     expect(hostOverviews(local, [far], LOCAL_HOST)).toEqual([local]);
     expect(hostOverviews(local, [far], "far")).toEqual([far]);
     expect(hostOverviews(local, [far], null)).toEqual([]);
+  });
+
+  it("平台组件跟着同一个主机筛选：远端语言服务器只在它那台主机下", () => {
+    const row = (
+      pid: number,
+      extra: Partial<PlatformComponent> = {},
+    ): PlatformComponent => ({
+      kind: "languageServer",
+      location: "local",
+      process: {
+        pid,
+        startTimeUnixMs: null,
+        name: "server",
+        parentPid: null,
+        memoryBytes: 1,
+        cpuPercent: 0,
+      },
+      tree: true,
+      childCount: 0,
+      children: [],
+      unknownReason: null,
+      ...extra,
+    });
+    const mine = row(1);
+    const far = row(2, { location: "remote", executionHostId: "far" });
+    const near = row(3, { location: "remote", executionHostId: "near" });
+    expect(componentsOnHost([mine, far, near], "all")).toHaveLength(3);
+    expect(componentsOnHost([mine, far, near], LOCAL_HOST)).toEqual([mine]);
+    expect(componentsOnHost([mine, far, near], "far")).toEqual([far]);
   });
 
   it("远端会话说不出是哪台机器时是 null，而不是被算成本机", () => {

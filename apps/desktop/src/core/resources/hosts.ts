@@ -72,12 +72,17 @@ export class HostAwareResourceService extends ResourceService {
         hostIds.add(session.executionHostId);
       }
     }
-    const executionHosts = [...hostIds]
-      .sort()
-      .map(
-        (hostId) =>
-          remoteResources.host(hostId) ?? unknownHost(hostId, base.sampledAt),
-      );
-    return { ...base, executionHosts };
+    const sorted = [...hostIds].sort();
+    const executionHosts = sorted.map(
+      (hostId) =>
+        remoteResources.host(hostId) ?? unknownHost(hostId, base.sampledAt),
+    );
+    // 远端语言服务器也是 Armadra 起的进程：进平台组件那一组，带着主机 id，
+    // 数字是那台机器上一轮量的。
+    const components = [
+      ...base.components,
+      ...sorted.flatMap((hostId) => remoteResources.components(hostId)),
+    ];
+    return { ...base, components, executionHosts };
   }
 }

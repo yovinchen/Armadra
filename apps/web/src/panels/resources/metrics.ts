@@ -12,6 +12,7 @@ import { formatBytes } from "@/lib/format";
 import type {
   CanvasNode,
   HostResources,
+  PlatformComponent,
   ResourceUnknownReason,
   SessionResources,
 } from "@armadra/shared";
@@ -221,6 +222,21 @@ export function hostOverviews(
   if (host === LOCAL_HOST) return [local];
   if (host === null) return [];
   return remote.filter((entry) => entry.hostId === host);
+}
+
+/** 平台组件按执行主机过滤：本机的行没有主机 id，远端的带着。 */
+export function componentsOnHost(
+  components: readonly PlatformComponent[],
+  host: string | null | "all",
+): PlatformComponent[] {
+  if (host === "all") return [...components];
+  if (host === LOCAL_HOST) {
+    return components.filter((component) => component.location !== "remote");
+  }
+  return components.filter(
+    (component) =>
+      component.location === "remote" && component.executionHostId === host,
+  );
 }
 
 /** 按执行主机过滤；`"all"` 不过滤。 */

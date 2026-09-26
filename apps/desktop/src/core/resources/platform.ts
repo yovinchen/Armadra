@@ -82,8 +82,10 @@ export interface TrackedProcess {
 
 export interface PlatformComponent {
   readonly kind: ComponentKind;
-  /** 这个进程在哪台机器上。远端的行不带数字。 */
+  /** 这个进程在哪台机器上。 */
   readonly location: Location;
+  /** 远端的行：它在哪台执行主机上。 */
+  readonly executionHostId?: string;
   readonly process: ProcessSample;
   /** 数字覆盖后代。core 是 `false`：它的子进程是用户的会话，各自有自己的行。 */
   readonly tree: boolean;

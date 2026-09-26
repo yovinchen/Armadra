@@ -516,6 +516,57 @@ describe("remote resources", () => {
     now += 5_000;
     expect(later.host(HOST.id)).toBeUndefined();
   }, 60_000);
+
+  it("measures the host's language servers as platform rows, only over a live link", async () => {
+    // 替身语言服务器：执行主机（这里就是本机）上的一个子进程，带一个孙进程。
+    const server = spawn(
+      process.execPath,
+      [
+        "-e",
+        "require('node:child_process').spawn(process.execPath, ['-e', 'setTimeout(()=>{}, 60000)'], { stdio: 'ignore' }); setTimeout(()=>{}, 60000)",
+      ],
+      { stdio: "ignore" },
+    );
+    try {
+      let live = false;
+      setLanguageCaller(async (_hostId, action) => {
+        expect(action).toBe("language.processes");
+        return [{ pid: server.pid, startTimeUnixMs: null }];
+      });
+      let now = Date.now();
+      const cache = new RemoteResources(
+        () => now,
+        () => undefined,
+        () => live,
+      );
+      // 语言连接没连着：不为一行资源去问它，也就没有这一行。
+      cache.host(HOST.id);
+      await cache.settled();
+      expect(cache.components(HOST.id)).toEqual([]);
+
+      live = true;
+      const row = await until(async () => {
+        now += 2_000;
+        cache.host(HOST.id);
+        await cache.settled();
+        const found = cache.components(HOST.id)[0];
+        return found !== undefined && found.childCount === 1
+          ? found
+          : undefined;
+      });
+      expect(row).toMatchObject({
+        kind: "languageServer",
+        location: "remote",
+        executionHostId: HOST.id,
+        tree: true,
+      });
+      expect(row.process.pid).toBe(server.pid);
+      expect(row.process.memoryBytes).toBeGreaterThan(0);
+    } finally {
+      server.kill();
+      setLanguageCaller(undefined);
+    }
+  }, 60_000);
 });
 
 /** 只用到 `send` / `close` / 事件的替身 socket。 */

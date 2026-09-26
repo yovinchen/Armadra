@@ -15,7 +15,8 @@
  */
 
 import type { RemoteResourceRead } from "../remote/resources-worker";
-import { executeRemote } from "../remote/execute";
+import { executeLanguage, executeRemote } from "../remote/execute";
+import type { PlatformComponent } from "./platform";
 import type { HostResources, RemoteTreeMetrics } from "./sample";
 import { executableName, readProcessTable } from "./sample";
 import { connectionsOf } from "./sockets";
@@ -45,13 +46,40 @@ interface HostCache {
 /** 本机 `ssh` 客户端连的是远端的哪个端口；取不到就不筛。 */
 export type HostPort = (hostId: string) => number | undefined;
 
+/**
+ * 这台主机的语言连接是不是连着。资源读取只问连着的那一条：为了一行资源数字
+ * 去建一条 ssh 连接、再起一个 Worker，比那几个数字贵得多。
+ */
+export type LanguageLive = (hostId: string) => boolean;
+
 export class RemoteResources {
   private readonly hosts = new Map<string, HostCache>();
 
   constructor(
     private readonly now: () => number = () => Date.now(),
     private hostPort: HostPort = () => undefined,
+    private languageLive: LanguageLive = () => false,
   ) {}
+
+  /** 远端域装配时告诉这里怎么判断一台主机的语言连接连着没有。 */
+  setLanguageLive(lookup: LanguageLive): void {
+    this.languageLive = lookup;
+  }
+
+  /**
+   * 这台主机上编辑器起的语言服务器，上一轮在那边按树量出来的行。读不到、太旧
+   * 或语言连接没连着就是空的。
+   */
+  components(hostId: string): PlatformComponent[] {
+    const cache = this.hosts.get(hostId);
+    if (cache?.read === undefined) return [];
+    if (this.now() - cache.readAt > STALE_MS) return [];
+    return (cache.read.components ?? []).map((component) => ({
+      ...component,
+      location: "remote",
+      executionHostId: hostId,
+    }));
+  }
 
   /** 远端域装配时告诉这里每台主机的 SSH 端口。 */
   setHostPort(lookup: HostPort): void {
@@ -138,9 +166,26 @@ export class RemoteResources {
       return;
     }
     const sessions = this.clientPorts(hostId, cache);
+    let languageProcesses: unknown[] = [];
+    if (this.languageLive(hostId)) {
+      try {
+        languageProcesses = (await executeLanguage(
+          hostId,
+          "language.processes",
+          "/",
+          {},
+          true,
+        )) as unknown[];
+      } catch {
+        // 语言连接这时断了：这一轮没有语言服务器的行。
+      }
+    }
     try {
       const read = (await executeRemote(hostId, "resources.read", "/", {
         sessions,
+        ...(Array.isArray(languageProcesses) && languageProcesses.length > 0
+          ? { languageProcesses }
+          : {}),
       })) as RemoteResourceRead;
       cache.read = read;
     } catch {
