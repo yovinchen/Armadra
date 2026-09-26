@@ -8,7 +8,7 @@
  * 和它说话，不需要 sshd。推送帧经 `remotePushed` 进各域，与远端域装配时一样。
  */
 
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { chmodSync, writeFileSync } from "node:fs";
 import { type Socket, connect } from "node:net";
@@ -535,10 +535,15 @@ describe("the language link", () => {
   let language: RemoteLanguage;
   let root: Temporary;
   const published: Record<string, unknown>[] = [];
+  const children: ChildProcess[] = [];
 
   beforeEach(() => {
     root = temporary("armadra-far-language-");
-    link = worker(startLanguage, "language");
+    link = worker(() => {
+      const child = startLanguage();
+      children.push(child);
+      return child;
+    }, "language");
     setLanguageCaller(async (_hostId, action, payload, replay) =>
       link.request(action, payload, replay),
     );
@@ -552,6 +557,18 @@ describe("the language link", () => {
   afterEach(() => {
     language.dispose();
     setLanguageCaller(undefined);
+    // 这里的 Worker 跑在本机。Windows 上结束它不会带走它拉起的语言服务，
+    // 那个进程以工作区为 cwd，目录于是删不掉；线上的 Worker 只跑在 POSIX
+    // 执行主机上，没有这件事。按进程树收掉。
+    if (process.platform === "win32") {
+      for (const child of children) {
+        if (child.pid === undefined) continue;
+        spawnSync("taskkill", ["/T", "/F", "/PID", String(child.pid)], {
+          stdio: "ignore",
+        });
+      }
+    }
+    children.length = 0;
     link.close();
     root.remove();
   });
