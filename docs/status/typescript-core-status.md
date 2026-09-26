@@ -2556,3 +2556,76 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 
 - C# 启动器本机（macOS）编不了，只在 Windows CI 上真正编译与运行；首次跑前没有实机结果。
 - Git Bash 会把形如 `/c/...` 的参数改写成 Windows 路径，这是 MSYS 自己的行为，正文以 `/` 开头时同样建议走文件或标准输入；技能里没单独写。
+
+## 60. 真实环境复验：另外四个 CLI 的画布内注入、Claude 的 direct / 审批 / 投递唤醒、打包版与画布压力（2026-09-26）
+
+基线 `492c31fc`，没有迁移。§51 的注入对 OpenCode / Pi / OMP / Copilot 只有单测，§48 记下了没走过的 Claude 路径（direct 后端、权限审批、休眠后经 `send` 唤醒）与打包版，§47 的画布压力是在负载 20 以上量的。这一节把它们在本机真跑一遍；走的过程中修了 9 处产品问题（每处先有复现用例）与 2 处探针问题。
+
+### 60.1 验证矩阵
+
+| 项                                        | 结果         | 实测 / 证据                                                                                                                                                                                                                                                        |
+| ----------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| OpenCode 画布内注入                       | 通过         | 场景 6：画布外 `debug skill` 没有 armadra、模型答 `SKILLS=customize-opencode; RULE=bash`；画布内 `debug skill` 列出 armadra、`debug config` 带着 `integration/opencode` 的说明文件，模型答 `SKILLS=armadra,…; RULE=armadra-hook canvas`，状态行 `done / extension` |
+| Pi 画布内注入                             | 通过         | 画布外 `SKILLS=none`；画布内 `SKILLS=armadra; RULE=armadra-hook canvas`，`done / extension`                                                                                                                                                                        |
+| OMP 画布内注入                            | 通过         | 画布外 `SKILLS=none; RULE=none`；画布内 `SKILLS=armadra; RULE=armadra-hook`，`done / extension`                                                                                                                                                                    |
+| Copilot 画布内注入                        | 通过         | 画布外只有它自带的两个技能；画布内多出 armadra、答得出 `armadra-hook canvas`，`done / hook`；终端环境里有 `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`                                                                                                                       |
+| Claude：direct 后端下的投递               | 已修，通过   | 见 60.2 第 2、3 条；首投 `idle` 投出、半行门 `TARGET_INPUT_PENDING`                                                                                                                                                                                                |
+| Claude / Codex：direct 后端下的休眠与唤醒 | 已修，通过   | 两者都进入休眠、进程退出，点节点起第 2 代、带同一个 provider 会话 id，答出 418                                                                                                                                                                                     |
+| Claude：权限请求在画布里答复              | 已修，通过   | 场景 7：blocked + pendingId、`pending/` 里有请求文件，节点头「允许 / 拒绝」没被遮住；允许后命令真的跑了，拒绝后没跑，终端里不残留 Claude 自己的对话框；每点一次按钮控制台多一条 ZodError，见 60.2 第 7 条                                                          |
+| Claude：休眠后经 `send` 唤醒并投递        | 已修，通过   | 见 60.2 第 1、4、5、9 条；tmux 与 direct 各一遍，唤醒后投递 7.7 s（修前 48.8 s），接回原对话答出 524                                                                                                                                                               |
+| 打包版：升级后自动迁移全局安装            | 通过         | 临时 HOME 的 9 处旧安装：6 个只属于我们的文件清掉并备份进数据目录，Claude `settings.json` 与 Codex `hooks.json` 只摘我们的条目、旁边留改前备份，用户的 Hook / model / 技能原样；Codex 信任记录写进临时 HOME                                                        |
+| 打包版：编辑器的 PDF 与视频               | 通过         | `packaged-media.png`：PDF 区域 41 种颜色、亮像素 69%；打包版 MediaRecorder 录出的 H.264 MP4 读得出 320×240、无解码错误，播放后画面 102 种颜色                                                                                                                      |
+| 打包版：休眠与唤醒                        | 通过         | 真 Codex，阈值 20 s：离开画布后休眠、进程退出，回画布显示「休眠中」，点节点起第 2 代、`codex resume <同一 id>`，答出 418；控制台 0 条错误                                                                                                                          |
+| 打包版：Claude                            | 未能验证     | 登录在钥匙串里，临时 HOME 认证不上；按要求不回退到真实目录                                                                                                                                                                                                         |
+| 画布压力复测                              | 通过，无回退 | 见 60.3                                                                                                                                                                                                                                                            |
+| 本机其他会话                              | 记录         | 见 60.5                                                                                                                                                                                                                                                            |
+
+### 60.2 修掉的问题（都先有失败的用例）
+
+1. **`canvas send` 投给休眠节点，发送方看到失败**（`68ac4921`）。`send` 先等唤醒做完再排队，而唤醒要起 shell、等提示符、敲恢复行、等前台变成 CLI，秒级；`armadra-hook canvas` 一次请求的预算是 1.5 秒，客户端先超时、报「请求到了但没等到回答，可能已经生效」并以非零退出——消息其实排上了、随后也投了。改为只踢一下唤醒、当场答排队（`TARGET_STARTING`）；终端桥加 `sleeping(nodeId)`，唤醒途中门链看到的「没有会话 / 前台还是 shell」按「还早」排队，不再被当成硬拒绝取消。用例 `collab/send-wake.test.ts`。
+2. **direct 后端的 capture 读不出全屏界面**（`a9a3b8d8`）。direct 没有屏幕，capture 是回放缓冲去掉转义：Claude 用跳列（`CSI n G`）代替空格、用下移与定位代替换行，读出来是「Isthisaprojectyoucreated」粘成一行；Codex 的输入框只画一次，之后每一拍重画一小块动画，几秒后就被挤出 128 批的回放环。Agent 读邻居终端（`context terminal`）与探针认提示符都认不出来。新增 `terminal/replay-screen.ts`：只管字形与位置的小终端（光标移动、定位、擦除、滚动区、主 / 备屏、自动折行、宽字符两列），每个 direct 会话从第一个字节喂到结束、随 PTY 改尺寸，capture 读它；`stripEscapes` 也把右移与跳列换成空格（会话宿主后端仍走它）。用例 `replay-screen.test.ts`、`direct.test.ts` 两条真 PTY。
+3. **焦点与鼠标上报被当成半截输入**（`3110fb9e`）。Claude 打开焦点上报与鼠标跟踪；tmux 后端里这些模式停在 tmux，direct 与会话宿主后端里页面的 xterm 真的会发——点一下节点是 `CSI I`，鼠标划过是 `CSI < … M`。`InputSafety` 把它们算作人打了半行：Claude 的第一条任务永远排着（`sessionStartIdle` 要求没有半截的行），节能休眠被 `inputPending` 挡住。焦点、SGR / urxvt / X10 鼠标上报都按终端应答处理。用例 `input.test.ts`。
+4. **唤醒后的第一条投递打进了还没铺开的输入框**（`2a431bd3`）。首投放行门的「会话满 6 秒」按行的 `created_at` 算，而回收与节能唤醒在同一行上起下一代：接回来的 Claude 一报开场就被当成空闲，正文打进去、回车丢了（投递记 `delivered`，正文停在输入框里，截图可见）。终端域的观测带上这一代进程的起点（`ObservedActivity.startedAt`），年龄从它算。用例 `session-start.test.ts`。
+5. **唤醒后的投递要等一分钟一次的清扫**（`4dd95bfb`）。排队那一刻状态行是上一代的（`restored`），快探不转；新进程报开场后泵按事件试一次，这一代还不够老又排回去，之后再没有事件。开场事件之后还排着的，把快探转起来。修后唤醒到投出 7.7 s。用例同上。
+6. **`open-agent` / `team` 的第一条任务被当场取消**（`02905cfc`）。PTY 起来之后、启动行把 CLI 带起来之前有一两秒前台是 shell；快探正好落在这里，门链答 `TARGET_NOT_AGENT_PANE`，对 `first-task` 这是硬拒绝——全量端到端里 `team` 的第一棒一直没收到任务（`cancelled`、`attempts = 0`）。与「还没有 PTY」一样按还早退回队列，由 TTL 决定死期。用例 `first-task.test.ts`。
+7. **点「允许 / 拒绝」页面抛 ZodError**（`c144b54f`）。core 答的是审批那一行加 `route`，`packages/shared` 的 `answerApprovalResponseSchema` 还是旧的 `{ pendingId, decision }`：决定已记下、答案文件已写，页面却抛一个没人接的异常。按 core 真正的形状校验。用例 `api/client.test.ts`。
+8. **普通终端当发送方，第五个新目标永远被拒**（`dc1d20b2`）。「单回合最多四个不同目标」按发起者的一轮算，一轮的边界是它自己报的非 `working`；设计写明没有状态上报的发起者不设这道闸，实现却对谁都记账——人自己的普通终端从不报状态，这一轮永远不结束。只对报过状态的发起者记账。用例 `send-limits.test.ts`。
+9. **页面在 attach 完成前关掉，附着永远不释放**（`ec30da6a`）。终端 socket 的 `close` 监听挂在 `await manager.attach()` 之后；页面刚挂上画布就关掉或切走，`close` 发在监听之前，从此没人 `detached`，core 一直以为有人看着：节能休眠被 `attached` 挡住（全量端到端里关页面四分钟后三个会话仍是 attached，场景 8 因此时过时不过）。监听提到 attach 之前。用例 `socket.test.ts`。
+10. **探针自身**：`core-terminal-packaged.mjs` 用真实 HOME 起打包版——打包版的 core 启动时会迁走各 CLI 的旧全局安装、写 `~/.codex/config.toml`，跑一次这个探针就是替操作员做了这件事；改为临时 HOME + `--use-mock-keychain`。`agent-e2e` 收尾只杀 pnpm，真正的 Vite 成了挂在 launchd 下的孤儿（本机清掉 7 个）；改为按进程组杀，并在 SIGINT / SIGTERM 时也收尾。
+
+### 60.3 画布压力（负载 3.3 时开跑）
+
+开工时 1 分钟负载 14，之后一边做别的项一边看，17:17 降到 3.24 时开跑，连跑两次（`target/canvas-stress-60/`、`-60b/`）：
+
+| 指标                                  | §5（P1–P3 后） | §47（负载 20+） | 本次                     |
+| ------------------------------------- | -------------- | --------------- | ------------------------ |
+| 平移最慢一帧 / >33.4 ms 帧数          | 33.4 ms / 1    | 100 ms / 4      | 33.4 ms / 0、33.4 ms / 2 |
+| 拖节点最慢一帧                        | 50.0 ms        | 33.4 ms         | 33.4 ms、50.1 ms         |
+| 空闲、输入最慢一帧                    | 16.8 ms        | 16.8 ms         | 16.8 ms                  |
+| 一次会话状态跳动：commit / 重渲组件数 | 31 / 7,894     | 18 / 7,985      | 17 / 7,140               |
+| 便签输入 100 字：commit / 保存        | —              | 107 / 0         | 113 / 0                  |
+| 撤销栈深度                            | 1              | 2               | 2                        |
+
+§47 的 100 ms 是负载造成的，不是回退；不需要剖析。第一次跑在便签一步报「没有进入编辑态」（点在正文上没切成 textarea），紧接着第二次通过，没有复现，记为偶发。
+
+### 60.4 取舍与认证
+
+- 场景 6 用各 CLI 的非交互模式（`run` / `-p`），「看得到技能与说明」靠一行问答（模型答技能名与协作命令）加 OpenCode 自己的 `debug skill` / `debug config`；画布内的那次由 core 在节点终端里起（环境是 `ownedEnvironment` 给的那份），不经页面敲启动行——四个 TUI 各有首启提示，这里验的是注入。
+- 凭据只复制、不写真实目录：Pi 只复制 `auth.json` 里 API key 形式的那一条（OAuth 那条刷新会轮换真实那份）；操作员的缺省提供商 key 放在钥匙串，临时 HOME 取不到，改用这一条的 kimi-k2.6。OMP 用同一把 key 经环境变量交给临时 `models.yml`（OMP 自带的 moonshot 指国际站，这把 key 在那边无效）。OpenCode 用包里的原生二进制；操作员配置的四家提供商在本机都认证失败（令牌无效 / 不可用 / 没有渠道），用 OpenCode 自带的免费模型（每次先刷新在线目录再挑，新 HOME 里内置的名单已过期）。Copilot 登录在钥匙串，`gh auth token` 取出的令牌经 `COPILOT_GITHUB_TOKEN` 只交给这一个进程。
+- Claude 仍只能用真实配置目录（逐次注入，§48 的做法）。操作员设置是 `bypassPermissions`，审批场景的节点用画布的「自动编辑」权限模式（`--permission-mode acceptEdits`）让命令需要审批，命令用 `node -e` 写文件——`touch` 与重定向在 acceptEdits 下也会被自动放行。
+- 打包版的迁移用临时 HOME 里造的旧安装验证，没有碰操作员的真实目录；示例里用户自己的 Codex Hook 没有信任记录，Codex 会先问要不要审查，所以断言做完就拿掉它——之后 Codex 若还问，问的只能是我们的 Hook（没问，说明信任记录写对了）。
+
+### 60.5 发现但没有处理
+
+- 自定义 Agent（`custom:`，底层是 Claude）拿不到画布审批：`terminal/install.ts` 给 `permissionWaitEnvironment` 传的是原始 id，只认 `claude`。本节没有走这条路径，已另开任务。
+- 本机操作员真实 HOME 里各 CLI 的旧全局安装在 16:12 已被迁走（`~/.copilot/hooks/armadra.json.armadra-backup-20260926081202` 等，`~/.claude/skills/armadra`、`~/.codex/skills/armadra` 已不在，`~/.codex/hooks.json` 为空）。复查过：本节的探针环境不会碰真实 HOME（同一环境起 core、假 HOME 里造旧安装，一个都没动），打包版冒烟与改过的 `core-terminal-packaged` 都用临时 HOME；迁移出自本机上别的进程（其他任务或操作员自己的 Armadra），记在这里。
+- 会话宿主后端（Windows）的 capture 仍是回放去转义，只多了右移与跳列的空格；要读成屏幕得接上 `replay-screen.ts`，留给 Windows 那一侧。
+
+### 60.6 验证
+
+- `node tools/probes/agent-e2e.mjs`（tmux，八个场景）：修第 9 条之前的最后一次全量 1–7 全过、8 失败于「没睡着」（诊断日志：`attached`）；修后 `--only 6,7,8` 51 项全过（282 秒），唤醒到投出 7.7 s。`--backend direct --only 2,4,8`：36 项全过。每次控制台错误 0、操作员配置未改动、CLI 版本未变。产物 `target/agent-e2e*/`。
+- `node tools/probes/packaged-smoke.mjs`（最终代码重新 `dist` 之后）：26 项全过，截图在 `target/packaged-smoke/`；`node tools/probes/core-terminal-packaged.mjs`（临时 HOME）通过，会话 `tmux`、资源采样有 pid。
+- `node tools/probes/canvas-stress.mjs`：见 60.3。
+- `pnpm --filter @armadra/desktop test`：271 文件通过、2 跳过（3181 条通过、8 跳过），scripts 的 node:test 38 条全过；`typecheck` 通过。
+- `pnpm --filter @armadra/web test`：284 文件 2781 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条；`pnpm --filter @armadra/shared test`：29 文件 247 条。
+- `pnpm check`、`pnpm format:check` 通过。跑完后 `$TMPDIR` 下没有本节探针的残留目录，没有遗留的 Vite、Armadra 打包版或 tmux 进程。
