@@ -51,6 +51,8 @@ class FakeCli implements TerminalBackend {
   readonly terminated: string[] = [];
   foreground: ForegroundInfo = { pid: 4242, command: "claude", children: [] };
   failTerminate = false;
+  /** 每一次写入之后调用：用例在这里扮演「收到退出命令就自己退」的 CLI。 */
+  onInput: ((text: string) => void) | undefined;
   private readonly alive = new Set<SessionKey>();
   private attachments = 1;
 
@@ -75,6 +77,7 @@ class FakeCli implements TerminalBackend {
   async detach(): Promise<void> {}
   async input(_key: SessionKey, bytes: Buffer): Promise<void> {
     this.typed.push(bytes.toString("utf8"));
+    this.onInput?.(bytes.toString("utf8"));
   }
   async paste(): Promise<void> {}
   async resize(): Promise<void> {}
@@ -256,6 +259,50 @@ describe("running → idle → hibernated", () => {
     ]);
   });
 
+  it("先敲 CLI 自己的退出命令，它自己退了就结束会话", async () => {
+    const { nodeId, sessionId } = await idleAgent();
+    await hibernator.tick();
+    now += 31 * MINUTE;
+    // 假 CLI：收到回车时输入框里是 `/exit`，就退回 shell。
+    let line = "";
+    cli.onInput = (text) => {
+      if (text !== "\r") line += text;
+      else if (line === "/exit") {
+        cli.foreground = { pid: 4242, command: "zsh", children: [] };
+      }
+    };
+    const before = now;
+    expect(await hibernator.tick()).toEqual([sessionId]);
+    // 命令与回车分两次写：一口气写进去的回车，有的 TUI 当成粘贴里的换行。
+    expect(cli.typed).toEqual(["/exit", "\r"]);
+    expect(cli.terminated).toEqual([`${nodeId}:session`]);
+    expect(manager.session(sessionId).hibernation).toBe("hibernated");
+    // 没有等满宽限期：前台一变回 shell 就结束。
+    expect(now - before).toBeLessThan(1_000);
+  });
+
+  it("收到退出命令不退的 CLI，等满宽限期后照旧结束", async () => {
+    const { nodeId, sessionId } = await idleAgent();
+    await hibernator.tick();
+    now += 31 * MINUTE;
+    const before = now;
+    expect(await hibernator.tick()).toEqual([sessionId]);
+    expect(cli.typed).toEqual(["/exit", "\r"]);
+    expect(cli.terminated).toEqual([`${nodeId}:session`]);
+    expect(now - before).toBeGreaterThanOrEqual(5_000);
+    expect(now - before).toBeLessThan(6_000);
+  });
+
+  it("退出命令按 CLI 配：Codex 是 /quit", async () => {
+    const { sessionId } = await idleAgent("codex");
+    cli.foreground = { pid: 4242, command: "codex", children: [] };
+    background = { shellChildren: ["codex"], agentDescendants: [] };
+    await hibernator.tick();
+    now += 31 * MINUTE;
+    expect(await hibernator.tick()).toEqual([sessionId]);
+    expect(cli.typed).toEqual(["/quit", "\r"]);
+  });
+
   it("后端没确认退出就还是 running", async () => {
     const { nodeId, sessionId } = await idleAgent();
     cli.failTerminate = true;
@@ -394,6 +441,8 @@ describe("hibernated → resuming → running", () => {
     });
     await idleFor(31);
     events.length = 0;
+    // 睡下时敲过的退出命令不算，这里只看接回时敲的。
+    cli.typed.length = 0;
 
     const woken = await hibernator.wake(nodeId, "focus");
     expect(woken).toEqual({ sessionId, generation: 2 });
@@ -442,6 +491,7 @@ describe("hibernated → resuming → running", () => {
   it("被新会话取代的休眠不再接回", async () => {
     const { nodeId } = await idleAgent();
     await idleFor(31);
+    cli.typed.length = 0;
     const fresh = await manager.spawn({
       workspaceId: fixture.workspaceId,
       cwd: fixture.directory,
@@ -475,6 +525,7 @@ describe("hibernated → resuming → running", () => {
   it("投给休眠节点的东西让巡检先把它叫醒", async () => {
     const { nodeId, sessionId } = await idleAgent();
     await idleFor(31);
+    cli.typed.length = 0;
     policy = { enabled: false, idleMinutes: 30 };
     queueFor(nodeId);
     await hibernator.tick();

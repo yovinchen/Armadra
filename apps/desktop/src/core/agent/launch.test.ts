@@ -8,6 +8,7 @@ import {
   PERMISSION_MODES,
   canResume,
   canSelectModel,
+  exitCommand,
   expectedProcesses,
   launchCommand,
   paneRunsAgent,
@@ -206,6 +207,31 @@ describe("launch parameters", () => {
     expect(paneRunsAgent({ children: ["codex"] }, ["codex"])).toBe(true);
     // An empty expectation never grants: the gate only ever refuses.
     expect(paneRunsAgent({ command: "claude" }, [])).toBe(false);
+  });
+
+  /** The page's registry says the same (`packages/shared` agents test). */
+  it("knows each CLI's own quit command, a custom entry its base's", () => {
+    expect(
+      Object.fromEntries(
+        AGENT_REGISTRY.map((agent) => [
+          agent.id,
+          exitCommand(NO_CUSTOM, agent.id),
+        ]),
+      ),
+    ).toEqual({
+      claude: "/exit",
+      codex: "/quit",
+      opencode: "/exit",
+      pi: "/quit",
+      omp: "/exit",
+      copilot: "/exit",
+    });
+    expect(
+      exitCommand(
+        withCustom({ id: "custom:c", launchCmd: "x", baseAgent: "codex" }),
+        "custom:c",
+      ),
+    ).toBe("/quit");
   });
 });
 

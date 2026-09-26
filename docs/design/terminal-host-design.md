@@ -134,13 +134,13 @@ Eco 模式与状态机见 §7.4。
 起因是实测：tmux 后端下，应用退出后闲置的 Claude / Codex 会话仍然常驻，7 个闲置 5–9 天的会话占了约 800 MB。
 
 - **判据**（`core/terminal/hibernate.ts`，纯函数）：节点上是 Agent、这个 CLI 能续接（注册表的 `resume` 形状且自定义条目没关掉这项能力）、报过 provider 会话 id、不是 SSH 会话、最后一条状态是 hook / extension 上报的 `idle` / `done` / `error`、没有 socket 附着、输入行没有半截、驱动租约空闲、投递队列里没有它的东西、没有会因休眠而落空的计划（没授权冷启动的激活计划一律挡；授权了的只在 10 分钟内到期时挡）、前台仍是这个 Agent、pane shell 下没有别的作业且 Agent 下面没有挂着 shell（CLI 放到后台的命令）、空闲满阈值。空闲的起点取「最后一条上报 / 最后一次输入输出 / 这个进程第一次看见这一代会话 / 最后一次看见有人附着」四者最晚的一个，所以重启后接管的会话不会因为九天前那条上报在第一分钟就被结束。
-- **状态机**（`core/terminal/hibernator.ts`）：巡检每 60 秒一轮。`idle` 是判据全过、只差时间；`hibernate-requested` 时调 `manager.hibernate`，后端 `terminate` 返回之后才把行记成 `status = 'terminated'`、`termination_intent = 'hibernate'` 并发 `terminal.hibernation`，抛了就退回 `running`。不另开表：恢复要的其余几样（cwd、shell、Agent、`agent_status.session_id`、节点数据里的权限模式与模型）都在库里，进程不在时没有东西会改写它们。
+- **状态机**（`core/terminal/hibernator.ts`）：巡检每 60 秒一轮。`idle` 是判据全过、只差时间；`hibernate-requested` 时先礼后兵：在 CLI 的输入框里敲它自己的退出命令（注册表的 `exitCommand`：Claude、OpenCode、Oh My Pi、Copilot 是 `/exit`，Codex、Pi 是 `/quit`；命令与回车分两次写，免得被当成粘贴），前台变回 shell 就接着往下走，最多等 5 秒；然后调 `manager.hibernate`，后端 `terminate` 返回之后才把行记成 `status = 'terminated'`、`termination_intent = 'hibernate'` 并发 `terminal.hibernation`，抛了就退回 `running`。不另开表：恢复要的其余几样（cwd、shell、Agent、`agent_status.session_id`、节点数据里的权限模式与模型）都在库里，进程不在时没有东西会改写它们。
 - **接回**：`manager.revive` 在同一个会话 id、同一个 `session_key` 上起下一代 shell，环境与 `POST /api/terminals` 同一份（节点令牌与地址变量）；然后把 `agent_status` 标成 `restored`（投递门链因此把它当 `starting`，等 CLI 自己报一条再投），等提示符安静，敲恢复行（`planLaunch` 的 `resume` + 本机解析路径 + 集成 argv），等前台变成这个 Agent。同一节点同时只接一次，第二个调用拿到同一个 promise；节点已经被新会话取代就答那个活会话。接不回来记 `failed`，节点头给出「重新运行」。
 - **三个唤醒者**：页面点击或聚焦节点（`POST /api/terminals/{id}/wake`）；投递——`send` 在门链之前经终端桥的 `wakeNode` 叫醒目标（`collab/control/index.ts`，`send.ts` 本身未改），出队泵的排队项由巡检发现并叫醒；计划——授权了 `LAUNCH_FROZEN` 的目标休眠着时用 resume 接回而不是按冻结定义另起一个，没授权的照旧答离线、这一次运行被跳过。依赖编排与人手动「重新运行」起的是新会话，新的活行排在前面，休眠自然被取代，不会有两个 CLI。
 - **页面**：`render-state.ts` 多一档 `hibernated`（压过其余五档）；`use-session` 读到 `hibernation: "hibernated"` 不再新建会话，`use-hibernation` 管唤醒与 `terminal.hibernation` 帧，传输在休眠时不连 socket；节点头显示「休眠中 / 正在唤醒 / 唤醒失败」，终端体上一个「唤醒」按钮，点任何位置或聚焦都会唤醒。设置 → 终端有「节能休眠」开关（缺省开，与 §7.2「首版默认只回收视图」不同，理由是上面那次实测）与「空闲多久后休眠」（15 分钟到 4 小时，缺省 30 分钟）。
 - **资源面板**：休眠的会话照列为「已休眠，不占内存」，数字为空，没有「结束」按钮。
 
-没做：「友好退出」只是结束会话（tmux `kill-session` / 进程树 SIGTERM→SIGKILL），没有先给 CLI 发它自己的退出命令——Claude 与 Codex 的转录都是逐条落盘的，续接不依赖退出时的收尾；无原生循环与浏览器控制依赖两条判据没有可观测的信号，没有实现；Windows 上进程树为空，后台作业判据如实答「没看到」。
+没做：无原生循环与浏览器控制依赖两条判据没有可观测的信号，没有实现；Windows 上进程树为空，后台作业判据如实答「没看到」。
 
 ## 8. 主机与会话资源面板
 

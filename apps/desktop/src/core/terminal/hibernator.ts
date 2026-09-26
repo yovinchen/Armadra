@@ -2,7 +2,12 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { canvasLaunchLine, nodeDialect } from "../agent/canvas-launch";
 import type { ShellDialect } from "./shell";
-import { canResume, expectedProcesses, paneRunsAgent } from "../agent/launch";
+import {
+  canResume,
+  exitCommand,
+  expectedProcesses,
+  paneRunsAgent,
+} from "../agent/launch";
 import { type AgentSettings, baseAgent } from "../agent/registry";
 import { getAgentStatus } from "../agent/status";
 import type { WorkspaceEvent } from "../bus";
@@ -38,7 +43,10 @@ import { processTable } from "./process";
  *      按节点数据里的会话 id 重新附着即可，画布不用改一笔。起来之后先把
  *      `agent_status` 记成 `restored`，于是投递门链把它当 `starting`——等 CLI
  *      自己报一条新的空闲再投，而不是把正文打进一个还在铺界面的 shell。
- *   3. **同一节点同时只接一次。** 页面聚焦、投递、计划三条路可能同时叫醒同一个
+ *   3. **先礼后兵。** 结束之前先在 CLI 的输入框里敲它自己的退出命令（注册表的
+ *      `exitCommand`：Claude `/exit`、Codex `/quit`……），等它自己退——CLI 自己
+ *      退出时会把会话状态写完，resume 才接得全。等不到就照旧结束进程。
+ *   4. **同一节点同时只接一次。** 页面聚焦、投递、计划三条路可能同时叫醒同一个
  *      节点，第二个调用拿到的是第一个的那个 promise，而不是第二个 CLI。
  */
 
@@ -85,6 +93,13 @@ const PROMPT_QUIET_MS = 400;
 const PROMPT_COLD_MS = 3_000;
 /** 恢复行敲进去之后，等前台变成这个 Agent 最多这么久。 */
 const AGENT_UP_MS = 15_000;
+/**
+ * 退出命令敲完、按回车之前停这么久：一口气写进去的一串字，有的 TUI 当成粘贴，
+ * 里面的回车只是换行。
+ */
+const EXIT_ENTER_GAP_MS = 150;
+/** 敲了退出命令之后，等 CLI 自己退最多这么久；过了就结束进程。 */
+const EXIT_GRACE_MS = 5_000;
 const POLL_MS = 100;
 
 export class Hibernator {
@@ -268,6 +283,7 @@ export class Hibernator {
     // 判完到动手之间隔着一次 `ps`：这期间有人附着了就不动它。
     if (this.manager.attachedSockets(record.id) > 0) return false;
     this.states.set(nodeId, "hibernate-requested");
+    const quit = await this.askToQuit(record, nodeId);
     try {
       await this.manager.hibernate(record.id);
     } catch (error) {
@@ -285,9 +301,65 @@ export class Hibernator {
     this.log("Eco 休眠：空闲的 Agent 会话已结束，恢复信息留在库里", {
       nodeId,
       sessionId: record.id,
+      quit,
     });
     this.announce(record.workspaceId, record.id, nodeId, "hibernated");
     return true;
+  }
+
+  /**
+   * 先请 CLI 自己退：敲它的退出命令，等前台不再是它。答 CLI 是不是自己退的
+   * （`quit`）、没等到（`timeout`），还是没有可敲的命令（`none`）——不管哪种，
+   * 调用方都接着结束会话：自己退了剩下的是空 shell，没退的照旧结束。
+   *
+   * 看不到前台（后端答不上来）时等满宽限期：宁可多等几秒，不在 CLI 写会话的
+   * 半截结束它。
+   */
+  private async askToQuit(
+    record: SessionRecord,
+    nodeId: string,
+  ): Promise<"quit" | "timeout" | "none"> {
+    const settings = this.options.settings();
+    const agentId =
+      loadNode(this.database, nodeId)?.agentId ??
+      rowAgent(this.database, record.id);
+    if (agentId === null) return "none";
+    const command = exitCommand(settings, agentId);
+    if (command === undefined) return "none";
+    try {
+      await this.manager.input(record.id, record.generation, command);
+      await this.delay(EXIT_ENTER_GAP_MS);
+      await this.manager.input(record.id, record.generation, "\r");
+    } catch (error) {
+      this.log("Eco 休眠：退出命令没能敲进去，直接结束会话", {
+        nodeId,
+        sessionId: record.id,
+        error: describe(error),
+      });
+      return "none";
+    }
+    const names = expectedProcesses(baseAgent(settings, agentId));
+    const started = this.clock();
+    for (;;) {
+      await this.delay(POLL_MS * 2);
+      if (!this.manager.isAlive(record.id)) return "quit";
+      try {
+        const foreground = await this.manager.foreground(record.id);
+        const running = paneRunsAgent(
+          {
+            ...(foreground.command === undefined
+              ? {}
+              : { command: foreground.command }),
+            children: [...foreground.children],
+          },
+          names,
+        );
+        if (!running) return "quit";
+      } catch {
+        // 后端一时答不上来：接着等，等满为止。
+      }
+      if (this.clock() - started >= EXIT_GRACE_MS) return "timeout";
+    }
   }
 
   /* --------------------------------- 接回 --------------------------------- */

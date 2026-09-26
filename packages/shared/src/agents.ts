@@ -102,6 +102,13 @@ export interface AgentDefinition {
   readonly resume?:
     | { readonly style: "flag"; readonly flag: string }
     | { readonly style: "positional"; readonly verb: string };
+  /**
+   * The CLI's own quit command, typed into its prompt before an Eco sleep ends
+   * the session (terminal host design §7.2): a CLI that quits itself writes
+   * its session state out, which is what `resume` reads back. Absent = the
+   * process is simply ended.
+   */
+  readonly exitCommand?: string;
   readonly capabilities: readonly AgentCapability[];
   /** argv[0] basenames accepted when checking that a PTY still runs this agent. */
   readonly expectedProcess: readonly string[];
@@ -124,6 +131,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       modelFlag: "--model",
       sessionIdFlag: "--session-id",
       resume: { style: "flag", flag: "--resume" },
+      exitCommand: "/exit",
       capabilities: [
         "hooks",
         "resume",
@@ -150,6 +158,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "positional", verb: "resume" },
+      exitCommand: "/quit",
       capabilities: [
         "hooks",
         "resume",
@@ -176,6 +185,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--session" },
+      exitCommand: "/exit",
       capabilities: [
         "hooks",
         "resume",
@@ -201,6 +211,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--session" },
+      exitCommand: "/quit",
       // Pi has no command hooks; its status source is an in-process TS
       // extension on the same `hook.sock`, which is the same three layers of
       // authentication over a different transport
@@ -233,6 +244,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
+      exitCommand: "/exit",
       // Same extension API as Pi, under `~/.omp/agent/extensions/`.
       capabilities: [
         "hooks",
@@ -259,6 +271,7 @@ export const AGENT_REGISTRY: Readonly<Record<BuiltinAgentId, AgentDefinition>> =
       },
       modelFlag: "--model",
       resume: { style: "flag", flag: "--resume" },
+      exitCommand: "/exit",
       // Copilot's status source is a command hook like Claude's, written to
       // `~/.copilot/hooks/armadra.json`.
       capabilities: [

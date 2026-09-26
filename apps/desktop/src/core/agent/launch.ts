@@ -72,6 +72,11 @@ interface LaunchProfile {
   readonly resume?: ResumeStyle;
   /** `flag-prompt` CLIs take the first prompt behind a flag. */
   readonly promptFlag?: string;
+  /**
+   * The CLI's own quit command. Eco types it before ending a session, so the
+   * CLI writes its session state out itself and `resume` finds it whole.
+   */
+  readonly exitCommand?: string;
 }
 
 /**
@@ -92,6 +97,7 @@ const PROFILES: Readonly<Record<string, LaunchProfile>> = {
     modelFlag: "--model",
     sessionIdFlag: "--session-id",
     resume: { style: "flag", flag: "--resume" },
+    exitCommand: "/exit",
   },
   codex: {
     permissionFlag: {
@@ -102,6 +108,7 @@ const PROFILES: Readonly<Record<string, LaunchProfile>> = {
     },
     modelFlag: "--model",
     resume: { style: "positional", verb: "resume" },
+    exitCommand: "/quit",
   },
   opencode: {
     permissionFlag: {
@@ -112,6 +119,7 @@ const PROFILES: Readonly<Record<string, LaunchProfile>> = {
     },
     modelFlag: "--model",
     resume: { style: "flag", flag: "--session" },
+    exitCommand: "/exit",
     promptFlag: "--prompt",
   },
   // Pi has no built-in approval or plan flag; its own tool policy is preserved.
@@ -124,6 +132,7 @@ const PROFILES: Readonly<Record<string, LaunchProfile>> = {
     },
     modelFlag: "--model",
     resume: { style: "flag", flag: "--session" },
+    exitCommand: "/quit",
   },
   omp: {
     permissionFlag: {
@@ -136,6 +145,7 @@ const PROFILES: Readonly<Record<string, LaunchProfile>> = {
     },
     modelFlag: "--model",
     resume: { style: "flag", flag: "--resume" },
+    exitCommand: "/exit",
   },
   copilot: {
     permissionFlag: {
@@ -146,6 +156,7 @@ const PROFILES: Readonly<Record<string, LaunchProfile>> = {
     },
     modelFlag: "--model",
     resume: { style: "flag", flag: "--resume" },
+    exitCommand: "/exit",
     promptFlag: "--interactive",
   },
 };
@@ -170,6 +181,17 @@ export function supportedPermissionModes(
   return PERMISSION_MODES.filter(
     (mode) => mode === "default" || profile.permissionFlag[mode].length > 0,
   );
+}
+
+/**
+ * The quit command to type into this agent before an Eco sleep ends it; a
+ * `custom:` entry answers its base's. `undefined` when the CLI has none.
+ */
+export function exitCommand(
+  settings: AgentSettings,
+  agentId: string,
+): string | undefined {
+  return PROFILES[baseAgent(settings, agentId)]?.exitCommand;
 }
 
 /** Whether this id may be resumed at all, capabilities included. */

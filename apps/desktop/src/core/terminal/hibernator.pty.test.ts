@@ -107,7 +107,10 @@ describeUnix("假 CLI 上的休眠与接回", () => {
       program: () => ({ path: "claude" }),
     });
     const pidBefore = manager.pid(session.id);
+    // 这个假 CLI 不理会 `/exit`：等满宽限期之后被结束。
+    const started = Date.now();
     expect(await hibernator.tick()).toEqual([session.id]);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(5_000);
     expect(manager.session(session.id).hibernation).toBe("hibernated");
     expect(manager.isAlive(session.id)).toBe(false);
     // 进程真的没了（收尸可能晚一拍，等它一下）。
@@ -132,5 +135,70 @@ describeUnix("假 CLI 上的休眠与接回", () => {
       generation: 2,
       hibernation: null,
     });
+  }, 30_000);
+
+  it("收到 /exit 的 CLI 自己退出，不等满宽限期", async () => {
+    const bin = join(fixture.directory, "bin");
+    const log = join(fixture.directory, "quit.log");
+    mkdirSync(bin);
+    // 像真 CLI 那样：读输入框，收到退出命令先把会话写完再退。
+    writeFileSync(
+      join(bin, "claude"),
+      [
+        "#!/bin/sh",
+        `echo started >> '${log}'`,
+        "while IFS= read -r line; do",
+        '  case "$line" in',
+        `    /exit) echo saved >> '${log}'; exit 0 ;;`,
+        "  esac",
+        "done",
+        "",
+      ].join("\n"),
+    );
+    chmodSync(join(bin, "claude"), 0o755);
+    const env: EnvPairs = [["PATH", `${bin}:${process.env.PATH ?? ""}`]];
+    const nodeId = fixture.agentNode("Agent", "claude");
+    const session = await manager.spawn({
+      workspaceId: fixture.workspaceId,
+      cwd: fixture.directory,
+      shell: "/bin/sh",
+      ownerNodeId: nodeId,
+      agentId: "claude",
+      env,
+    });
+    await manager.input(session.id, 1, "claude\r");
+    await until(() => existsSync(log));
+    upsertAgentStatus(fixture.database, {
+      nodeId,
+      workspaceId: fixture.workspaceId,
+      agentId: "claude",
+      state: "done",
+      stateSource: "hook",
+      unread: false,
+      sessionId: "prov-8",
+      pendingId: undefined,
+      verified: true,
+      transcriptPath: undefined,
+      sessionPhase: undefined,
+      errored: undefined,
+      interrupted: undefined,
+      lastEventAt: new Date().toISOString(),
+    });
+    const hibernator = new Hibernator({
+      database: fixture.database,
+      manager,
+      settings: () => fixture.collab.settings,
+      policy: () => ({ enabled: true, idleMinutes: 0 }),
+      environment: () => env,
+      program: () => ({ path: "claude" }),
+    });
+    const started = Date.now();
+    expect(await hibernator.tick()).toEqual([session.id]);
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([
+      "started",
+      "saved",
+    ]);
+    expect(manager.session(session.id).hibernation).toBe("hibernated");
   }, 30_000);
 });

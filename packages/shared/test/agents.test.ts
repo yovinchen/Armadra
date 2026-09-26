@@ -559,3 +559,20 @@ describe("the typed canvas injection", () => {
     ).toEqual([]);
   });
 });
+
+describe("Eco quitting", () => {
+  it("names every CLI's own quit command", () => {
+    expect(
+      Object.fromEntries(
+        AGENT_LIST.map((agent) => [agent.id, agent.exitCommand]),
+      ),
+    ).toEqual({
+      claude: "/exit",
+      codex: "/quit",
+      opencode: "/exit",
+      pi: "/quit",
+      omp: "/exit",
+      copilot: "/exit",
+    });
+  });
+});
