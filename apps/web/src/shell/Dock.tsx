@@ -12,6 +12,8 @@ import { fitView, zoomToLevel } from "../canvas/flow/use-flow-viewport";
 import { useCanUndo, useCanRedo, useCanvasStore } from "../store/canvas-store";
 import { useEnabledAgents } from "../app/use-agents";
 import { useT } from "../app/preferences-store";
+import { rightPanelInset } from "../panels/WorkPanelSheet";
+import { useCompactLayout } from "../platform/layout";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +52,12 @@ export function Dock() {
   // provider 包着整棵树（§2.9），所以这里读得到。
   const { zoom } = useViewport();
   const workspace = useCanvasStore((state) => state.workspace);
+  // 右侧抽屉是窗口级的固定层，盖在这一行的右端上（§58）。这一行让开它，Dock
+  // 就在剩下那块看得见的画布里居中；手机上抽屉铺满整屏，没有可让的。
+  const compact = useCompactLayout();
+  const inset = useCanvasStore((state) =>
+    compact ? null : rightPanelInset(state.panels),
+  );
   const addNode = useCanvasStore((state) => state.addNode);
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
@@ -64,7 +72,11 @@ export function Dock() {
     // 外层是一条贯穿画布底部的网格行（`styles/canvas.css`）：中间那格装
     // Dock，两侧留白相等时 Dock 就在画布正中；右侧留白有下限（缩略图的
     // 宽度加边距），画布不够宽时 Dock 向左让，缩略图永远留在右下角。
-    <div className="canvas-dock-row">
+    <div
+      className="canvas-dock-row"
+      data-panel-inset={inset ? "true" : undefined}
+      style={inset ? { right: `calc(14px + ${inset})` } : undefined}
+    >
       <div
         data-slot="dock"
         className="canvas-dock z-[var(--z-dock)] flex h-[var(--dock-h)] items-center gap-1 rounded-[var(--r-panel)] border border-border bg-[var(--panel)]/90 px-1.5 shadow-[var(--shadow-pill)] backdrop-blur-[12px]"

@@ -7,10 +7,11 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { commandKeysLabel, type CommandId } from "../keybindings";
-import { useCanvasStore, type PanelState } from "../store/canvas-store";
+import { useCanvasStore } from "../store/canvas-store";
 import { useT } from "../app/preferences-store";
 import { CanvasPreferencesMenu } from "../canvas/menus/CanvasPreferencesMenu";
-import { WORK_PANEL_WIDTH, type RightPanelKey } from "../panels/WorkPanelSheet";
+import { WORK_PANEL_WIDTH, openRightDrawer } from "../panels/WorkPanelSheet";
+import { useCompactLayout } from "../platform/layout";
 import { cn } from "@/lib/cn";
 import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
 import { IconButton } from "@/ui/icon-button";
@@ -42,17 +43,14 @@ import type { ReactNode } from "react";
 const BAR =
   "flex flex-col gap-2 rounded-[var(--r-card)] border border-border bg-[var(--panel)]/90 p-1 shadow-[var(--shadow-pill)] backdrop-blur-[12px]";
 
-/**
+/*
  * 开着的那块右侧工作面板（`panels/WorkPanelSheet`）。抽屉是窗口级的固定层，
  * 正好盖在这条工具簇上；不让开的话开着抽屉时这几个按钮一个都按不到——
  * 用户点「资源管理器」以为没反应，其实点在抽屉上。
+ *
+ * 手机上不让：抽屉在那里铺满整个宽度（§58），往左让只会把工具簇推到屏幕外、
+ * 露出半截图标。窄屏的去处在底部导航，抽屉盖住工具簇正是想要的。
  */
-function openWorkPanel(panels: PanelState): RightPanelKey | null {
-  for (const key of Object.keys(WORK_PANEL_WIDTH) as RightPanelKey[]) {
-    if (panels[key] === "drawer") return key;
-  }
-  return null;
-}
 
 export function ControlsCluster() {
   const t = useT();
@@ -61,7 +59,8 @@ export function ControlsCluster() {
   const setPanel = useCanvasStore((state) => state.setPanel);
   const focusNodeId = useCanvasStore((state) => state.focusNodeId);
   const setFocusNode = useCanvasStore((state) => state.setFocusNode);
-  const drawer = openWorkPanel(panels);
+  const compact = useCompactLayout();
+  const drawer = compact ? null : openRightDrawer(panels);
 
   return (
     <>

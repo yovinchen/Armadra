@@ -15,7 +15,7 @@ import { useT } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { ScrollArea } from "../ui/scroll-area";
 import { SheetTitle } from "../ui/sheet";
-import { WorkPanelSheet } from "./WorkPanelSheet";
+import { PINNED_PANEL_WIDTH, WorkPanelSheet } from "./WorkPanelSheet";
 import { IconButton } from "../ui/icon-button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { ExecutionHostBadge } from "./ExecutionHostBadge";
@@ -96,7 +96,8 @@ export function ExplorerDrawer() {
     return (
       <aside
         aria-label={t("explorer.title")}
-        className="fixed top-[96px] right-[14px] bottom-[14px] z-[var(--z-cluster)] flex w-[320px] max-w-[calc(100vw-28px)] flex-col overflow-hidden rounded-xl border border-border bg-[color-mix(in_srgb,var(--card)_96%,transparent)] shadow-[var(--shadow-overlay)] backdrop-blur-md"
+        style={{ width: PINNED_PANEL_WIDTH.explorer }}
+        className="fixed top-[96px] right-[14px] bottom-[14px] z-[var(--z-cluster)] flex max-w-[calc(100vw-28px)] flex-col overflow-hidden rounded-xl border border-border bg-[color-mix(in_srgb,var(--card)_96%,transparent)] shadow-[var(--shadow-overlay)] backdrop-blur-md"
       >
         {renderHeader("h2")}
         {body}

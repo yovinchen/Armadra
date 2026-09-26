@@ -170,6 +170,22 @@
     );
   pointer-events: none;
 }
+/*
+ * 右侧开着工作面板时（`shell/Dock` 写 `data-panel-inset` 与 `right`），这一行
+ * 的右端已经让到面板左边。缩略图被面板盖着，右格不用再给它留位置，Dock 在
+ * 剩下那块画布里居中。
+ */
+.canvas-dock-row {
+  transition: right 150ms ease-out;
+}
+.canvas-dock-row[data-panel-inset="true"] {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+@media (prefers-reduced-motion: reduce) {
+  .canvas-dock-row {
+    transition: none;
+  }
+}
 .canvas-dock {
   grid-column: 2;
   width: max-content;

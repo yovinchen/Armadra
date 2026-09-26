@@ -10,6 +10,7 @@ vi.mock("../api/client", () => ({
 import { installDomPolyfills, TestProviders } from "../app/test-harness";
 import { usePreferencesStore } from "../app/preferences-store";
 import { useCanvasStore } from "../store/canvas-store";
+import { initialPanels } from "../store/canvas/internal";
 import { Dock } from "./Dock";
 
 installDomPolyfills();
@@ -99,5 +100,45 @@ describe("Dock", () => {
     );
     const dot = container.querySelector("[data-slot='save-dot']");
     expect(dot?.getAttribute("data-state")).toBe("dirty");
+  });
+});
+
+/** §58：右侧抽屉盖住 Dock 右端，底部那一行要让开它。 */
+describe("Dock 让开右侧工作面板", () => {
+  beforeEach(() => {
+    fetchAgents.mockReset().mockResolvedValue([claude]);
+    useCanvasStore.setState({ workspace, saveState: "saved" });
+  });
+  afterEach(() => {
+    useCanvasStore.setState({ panels: initialPanels });
+  });
+
+  const row = (container: HTMLElement) =>
+    container.querySelector<HTMLElement>(".canvas-dock-row");
+
+  it("没有面板时不改位置", () => {
+    useCanvasStore.setState({ panels: initialPanels });
+    const { container } = render(
+      <TestProviders>
+        <Dock />
+      </TestProviders>,
+    );
+    expect(row(container)?.style.right).toBe("");
+    expect(row(container)?.hasAttribute("data-panel-inset")).toBe(false);
+  });
+
+  it("开着抽屉时右端让到抽屉左边", () => {
+    useCanvasStore.setState({
+      panels: { ...initialPanels, explorer: "drawer" },
+    });
+    const { container } = render(
+      <TestProviders>
+        <Dock />
+      </TestProviders>,
+    );
+    expect(row(container)?.style.right).toBe(
+      "calc(14px + min(100vw, var(--drawer-w)))",
+    );
+    expect(row(container)?.getAttribute("data-panel-inset")).toBe("true");
   });
 });

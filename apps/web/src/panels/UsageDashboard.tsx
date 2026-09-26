@@ -22,7 +22,7 @@ import { IconButton } from "../ui/icon-button";
 import { ScrollArea } from "../ui/scroll-area";
 import { Separator } from "../ui/separator";
 import { SheetTitle } from "../ui/sheet";
-import { WorkPanelSheet } from "./WorkPanelSheet";
+import { PINNED_PANEL_WIDTH, WorkPanelSheet } from "./WorkPanelSheet";
 
 export function UsageDashboard() {
   const mode = useCanvasStore((state) => state.panels.usage);
@@ -68,7 +68,8 @@ export function UsageDashboard() {
     return (
       <aside
         aria-label={t("usage.dashboard.title")}
-        className="fixed top-[96px] right-[14px] bottom-[14px] z-[var(--z-cluster)] flex w-[360px] max-w-[calc(100vw-28px)] flex-col overflow-hidden rounded-xl border border-border bg-[color-mix(in_srgb,var(--card)_96%,transparent)] shadow-[var(--shadow-overlay)] backdrop-blur-md"
+        style={{ width: PINNED_PANEL_WIDTH.usage }}
+        className="fixed top-[96px] right-[14px] bottom-[14px] z-[var(--z-cluster)] flex max-w-[calc(100vw-28px)] flex-col overflow-hidden rounded-xl border border-border bg-[color-mix(in_srgb,var(--card)_96%,transparent)] shadow-[var(--shadow-overlay)] backdrop-blur-md"
       >
         {header("h2")}
         {body}

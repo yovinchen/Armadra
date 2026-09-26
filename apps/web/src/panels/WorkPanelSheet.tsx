@@ -7,6 +7,8 @@ import {
 } from "react";
 
 import { Sheet, SheetContent } from "@/ui/sheet";
+import { useCompactLayout } from "../platform/layout";
+import { useCanvasStore, type PanelState } from "../store/canvas-store";
 import { noDragProps } from "../shell/window-region";
 
 /**
@@ -54,6 +56,54 @@ export const WORK_PANEL_WIDTH = {
 
 /** 右侧停靠的那几块。 */
 export type RightPanelKey = keyof typeof WORK_PANEL_WIDTH;
+
+/**
+ * 钉住（`pinned`）的两块不是抽屉，是离右边 14px、从 96px 到底边 14px 的浮动
+ * 卡片（`ExplorerDrawer`、`UsageDashboard`）。宽度写在这里，让 Dock 与卡片读
+ * 同一个数。
+ */
+export const PINNED_PANEL_WIDTH = {
+  explorer: "320px",
+  usage: "360px",
+} as const;
+
+/** 开着的那块右侧抽屉；没有就 `null`。「一次只开一个」由 `setPanel` 保证。 */
+export function openRightDrawer(panels: PanelState): RightPanelKey | null {
+  for (const key of Object.keys(WORK_PANEL_WIDTH) as RightPanelKey[]) {
+    if (panels[key] === "drawer") return key;
+  }
+  return null;
+}
+
+/**
+ * 右侧工作面板从窗口右边占掉多宽（一个 CSS 长度），画布底部那一行要让开的
+ * 就是它（§58：1440 宽开着资源管理器时 Dock 右端被抽屉盖住，缩放百分比只
+ * 露出「10」）。抽屉贴边，宽度就是抽屉宽；钉住的卡片再加它自己离右边的
+ * 14px。没有开着的就是 `null`。
+ */
+export function rightPanelInset(panels: PanelState): string | null {
+  const drawer = openRightDrawer(panels);
+  if (drawer) return `min(100vw, ${WORK_PANEL_WIDTH[drawer]})`;
+  for (const key of Object.keys(PINNED_PANEL_WIDTH) as Array<
+    keyof typeof PINNED_PANEL_WIDTH
+  >) {
+    if (panels[key] === "pinned")
+      return `calc(${PINNED_PANEL_WIDTH[key]} + 14px)`;
+  }
+  return null;
+}
+
+/**
+ * 手机上底部导航（`shell/MobileBottomNav`）占掉的高度；导航不在时为 `null`。
+ * 与导航自己的显示条件一致：窄屏，且不在单节点焦点页上。
+ */
+function useMobileNavInset(): string | null {
+  const compact = useCompactLayout();
+  const focusNodeId = useCanvasStore((state) => state.focusNodeId);
+  return compact && !focusNodeId
+    ? "calc(var(--mobile-nav-h) + env(safe-area-inset-bottom))"
+    : null;
+}
 /** 全部工作面板：右侧那几块，加上底部停靠的 Git 工具窗口。 */
 export type WorkPanelKey = RightPanelKey | "scm";
 
@@ -102,6 +152,8 @@ export function WorkPanelSheet({
   resizeLabel,
 }: WorkPanelSheetProps) {
   const bottom = side === "bottom";
+  const compact = useCompactLayout();
+  const navInset = useMobileNavInset();
   const dragging = useRef<{ startY: number; startHeight: number } | null>(null);
   const surface = useRef<HTMLDivElement | null>(null);
 
@@ -177,18 +229,32 @@ export function WorkPanelSheet({
         {...noDragProps()}
         aria-describedby={undefined}
         onInteractOutside={(event) => event.preventDefault()}
+        //
+        // 手机上（§58）：右侧抽屉按 `min(100vw, 360px)` 开，390 宽时左边留一条
+        // 30px 的缝，底部导航也被盖住。窄屏改为铺满宽度、底边停在导航上方——
+        // 与导航「一次只看一样东西」的约定一致：切到别的去处或点「画布」就是
+        // 返回。底部停靠的窗口同理，最大化也只铺到导航上沿。
         style={
           bottom
             ? {
                 height: maximized
-                  ? "100dvh"
+                  ? navInset
+                    ? `calc(100dvh - ${navInset})`
+                    : "100dvh"
                   : height !== null
                     ? `${height}px`
                     : "var(--git-window-h)",
-                maxHeight: "100dvh",
+                maxHeight: navInset ? `calc(100dvh - ${navInset})` : "100dvh",
+                ...(navInset ? { bottom: navInset } : {}),
               }
             : rightDocked(panel)
-              ? { width: `min(100vw, ${WORK_PANEL_WIDTH[panel]})` }
+              ? compact
+                ? {
+                    width: "100vw",
+                    height: "auto",
+                    ...(navInset ? { bottom: navInset } : {}),
+                  }
+                : { width: `min(100vw, ${WORK_PANEL_WIDTH[panel]})` }
               : undefined
         }
         // `data-[side=right]:sm:max-w-none` 必须照抄这个变体：生成组件里的
