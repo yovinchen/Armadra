@@ -142,6 +142,28 @@ describe("the half-typed-line detector", () => {
     expect(safety.pending).toBe(true);
   });
 
+  /**
+   * Claude 打开了焦点上报（?1004）与鼠标跟踪（?1003 + ?1006）。tmux 后端里这
+   * 些模式停在 tmux 那一层；direct 与会话宿主后端里页面的 xterm 真的会发——
+   * 点一下节点就是一个 `CSI I`，鼠标划过就是一串 `CSI < … M`。当成人打了半行，
+   * 首投放行与节能休眠都卡在「输入行上有东西」上（2026-09-26 direct 后端端到
+   * 端实测：Claude 的第一条任务一直排着，休眠也不发生）。
+   */
+  it("does not count focus or mouse reports as typing", () => {
+    const safety = new InputSafety();
+    safety.consume(bytes("\x1b[I\x1b[O"));
+    expect(safety.pending).toBe(false);
+    safety.consume(bytes("\x1b[<35;12;7M\x1b[<0;12;7M\x1b[<0;12;7m"));
+    expect(safety.pending).toBe(false);
+    // urxvt 形式，与老式 X10：`CSI M` 后面跟三个原始字节。
+    safety.consume(bytes("\x1b[32;12;7M"));
+    safety.consume(bytes("\x1b[M #!"));
+    expect(safety.pending).toBe(false);
+    // 之后真打字照样算。
+    safety.consume(bytes("a"));
+    expect(safety.pending).toBe(true);
+  });
+
   it("still counts a keyboard-protocol key press as typing", () => {
     const safety = new InputSafety();
     safety.consume(bytes("\x1b[97u"));

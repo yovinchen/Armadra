@@ -94,6 +94,11 @@ export class InputLedger {
  *     numeric/`;?>` body — a device attributes or cursor-position reply the
  *     CLI asked for; `?…u`, the keyboard-protocol flags reply; `?…$y`, a mode
  *     report) is not the user typing, and must not count as pending.
+ *     Neither is a focus report (`CSI I` / `CSI O`) or a mouse report (SGR
+ *     `CSI < b;x;y M|m`, urxvt `CSI b;x;y M`, X10 `CSI M` plus three raw
+ *     bytes): a CLI that turns those modes on gets them from the page's xterm
+ *     whenever a person clicks the node or moves across it — on the direct and
+ *     session-host backends, where no tmux sits in between to absorb them.
  *     Everything else that looks like an escape does.
  *   * An OSC / DCS / APC / PM string (`ESC ]`, `ESC P`, `ESC _`, `ESC ^`,
  *     through BEL or `ESC \`) is always a reply: a keyboard cannot produce
@@ -112,6 +117,8 @@ export class InputSafety {
   private inString = false;
   private stringLength = 0;
   private stringEscape = false;
+  /** Raw bytes still owed to an X10 mouse report (`CSI M` + three bytes). */
+  private mouseBytes = 0;
 
   /**
    * Feeds bytes through. Returns whether anything changed (`edited`, which
@@ -124,6 +131,10 @@ export class InputSafety {
     let edited = false;
     let submitted = false;
     for (const byte of data) {
+      if (this.mouseBytes > 0) {
+        this.mouseBytes -= 1;
+        continue;
+      }
       if (this.inString) {
         if (byte === 0x07 || (this.stringEscape && byte === 0x5c)) {
           this.inString = false;
@@ -176,7 +187,10 @@ export class InputSafety {
           byte <= 0x7e
         ) {
           const body = this.escape.slice(2, this.escape.length - 1);
-          if (!isTerminalReply(body, byte)) {
+          if (byte === 0x4d /* M */ && body.length === 0) {
+            // X10 mouse report: button, column and row follow as raw bytes.
+            this.mouseBytes = 3;
+          } else if (!isTerminalReply(body, byte)) {
             this.pending = true;
             edited = true;
           }
@@ -251,6 +265,18 @@ function isTerminalReply(body: readonly number[], final: number): boolean {
         body[0] === 0x3f &&
         body[body.length - 1] === 0x24 &&
         body.slice(0, -1).every(numeric)
+      );
+    case 0x49: // I — focus in (mode 1004)
+    case 0x4f: // O — focus out
+      return body.length === 0;
+    case 0x4d: // M — mouse report: SGR `CSI < b;x;y M` or urxvt `CSI b;x;y M`
+    case 0x6d: // m — SGR release
+      return (
+        body.length > 0 &&
+        (body[0] === 0x3c || final === 0x4d) &&
+        body
+          .slice(body[0] === 0x3c ? 1 : 0)
+          .every((value) => (value >= 0x30 && value <= 0x39) || value === 0x3b)
       );
     default:
       return false;
