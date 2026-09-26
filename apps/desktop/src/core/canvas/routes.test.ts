@@ -3,6 +3,20 @@ import type { WorkspaceEvent } from "../bus";
 import { type Fixture, fixture } from "../workspaces/fixture";
 import { uuidV7 } from "../workspaces/support";
 import { install as installWorkspaces } from "../workspaces/routes";
+import {
+  type AuditEvent,
+  installAuditSink,
+  resetAuditSink,
+} from "../identity/audit";
+import {
+  type RequestIdentity,
+  accessChanged,
+  currentSubject,
+  installAccessGate,
+  resetAccessGate,
+  runAs,
+} from "../identity/gate";
+import { LOCAL_DEVICE, deviceKey } from "./presence";
 import { install } from "./routes";
 
 /**
@@ -314,6 +328,96 @@ describe("the board routes", () => {
 
       expect((await save(B)).status).toBe(200);
       expect((await save(A)).status).toBe(423);
+    });
+
+    it("counts every desktop window as this device and audits a takeover", async () => {
+      const audited: AuditEvent[] = [];
+      installAuditSink((event) => audited.push(event));
+      try {
+        const first = await core.call("POST", presenceUri, {
+          clientId: A,
+          deviceName: "Mac",
+        });
+        const second = await core.call("POST", presenceUri, {
+          clientId: B,
+          deviceName: "Mac",
+        });
+        const local = deviceKey(LOCAL_DEVICE);
+        expect(first.body).toMatchObject({ deviceKey: local });
+        expect(second.body).toMatchObject({
+          deviceKey: local,
+          lease: { clientId: A, deviceKey: local },
+        });
+        // 自己拿回自己的租约不算接管，不记。
+        await core.call("POST", leaseUri, { clientId: A });
+        expect(audited).toHaveLength(0);
+        const taken = await core.call("POST", leaseUri, {
+          clientId: B,
+          takeover: true,
+        });
+        expect(taken.body).toMatchObject({
+          deviceKey: local,
+          lease: { clientId: B },
+        });
+        expect(audited).toEqual([
+          {
+            action: "canvas.lease.takeover",
+            target: boardId,
+            workspaceId,
+            detail: { from: "Mac", to: "Mac", sameDevice: true },
+          },
+        ]);
+      } finally {
+        resetAuditSink();
+      }
+    });
+
+    it("releases a revoked member's lease as soon as access changes", async () => {
+      let canWrite = true;
+      const member: RequestIdentity = {
+        subject: { principalId: "m1", kind: "member", scopes: [] },
+        device: { deviceId: "phone", deviceName: "我的手机" },
+      };
+      installAccessGate({
+        subject: currentSubject,
+        permits: (subject, required) =>
+          subject.kind === "owner" ||
+          (canWrite &&
+            required.every(
+              (value) =>
+                value.Permission === "canvas:read" ||
+                value.Permission === "canvas:write",
+            )),
+      });
+      try {
+        const held = await runAs(member, () =>
+          core.call("POST", presenceUri, {
+            clientId: A,
+            deviceName: "Android",
+            active: true,
+          }),
+        );
+        expect(held.body).toMatchObject({
+          deviceKey: deviceKey("phone"),
+          lease: { clientId: A, deviceName: "我的手机" },
+        });
+        await core.call("POST", presenceUri, { clientId: B });
+        const frames: { event: WorkspaceEvent }[] = [];
+        core.bus.on("workspace.event", (frame) => frames.push(frame));
+        canWrite = false;
+        accessChanged();
+        const presenceFrames = frames.filter(
+          (frame) => frame.event.type === "canvas.presence",
+        );
+        expect(presenceFrames).toHaveLength(1);
+        expect(presenceFrames[0]?.event).toMatchObject({
+          clients: [{ clientId: B }],
+          lease: { clientId: B },
+        });
+        expect((await save(B)).status).toBe(200);
+      } finally {
+        resetAccessGate();
+      }
     });
 
     it("still answers a stale revision with 409 for the lease holder", async () => {

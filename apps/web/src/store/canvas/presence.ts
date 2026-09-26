@@ -116,6 +116,34 @@ export function currentPresence(
 }
 
 /**
+ * 这个客户端所在设备的 `deviceKey`（心跳回答里带，事件帧里没有）。空串是说不
+ * 出来——旧的 core、或者还没有心跳回来过。
+ */
+export function selfDeviceKey(
+  state: Pick<CanvasState, "boardId" | "presence">,
+): string {
+  return currentPresence(state)?.deviceKey ?? "";
+}
+
+/**
+ * 租约持有者是不是同一台设备上的另一个窗口。那是同一个人：文案说「本机另一个
+ * 窗口」，接管也不必再问一次。
+ */
+export function leaseOnThisDevice(
+  state: Pick<CanvasState, "boardId" | "presence">,
+): boolean {
+  const current = currentPresence(state);
+  const lease = current?.lease;
+  const self = current?.deviceKey ?? "";
+  return Boolean(
+    lease &&
+      lease.clientId !== presenceClientId() &&
+      self !== "" &&
+      lease.deviceKey === self,
+  );
+}
+
+/**
  * 编辑动作一律不落：租约在别人手里，或者这个人对这块工作空间没有写权限
  * （服务器壳上的只读共享，心跳回答 `writable: false`）。
  */
@@ -146,14 +174,17 @@ export function applyPresence(presence: BoardPresence): {
   const state = useCanvasStore.getState();
   if (presence.boardId !== state.boardId) return { lost: false, gained: false };
   const before = isReadOnly(state);
-  // `writable` 只在心跳的回答里；事件帧没有它，沿用这块画布上一拍的判定，
-  // 否则别人来了的那一帧会把只读冲掉。
-  const writable = presence.writable ?? currentPresence(state)?.writable;
+  // `writable` 与 `deviceKey` 只在心跳的回答里；事件帧没有它们，沿用这块
+  // 画布上一拍的，否则别人来了的那一帧会把只读、把「本机」冲掉。
+  const previous = currentPresence(state);
+  const writable = presence.writable ?? previous?.writable;
+  const deviceKey = presence.deviceKey ?? previous?.deviceKey;
   const snapshot: BoardPresence = {
     boardId: presence.boardId,
     clients: presence.clients,
     lease: presence.lease,
     ...(writable === undefined ? {} : { writable }),
+    ...(deviceKey === undefined ? {} : { deviceKey }),
   };
   state.setPresence(snapshot);
   const after = isReadOnly(useCanvasStore.getState());

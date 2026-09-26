@@ -1,7 +1,13 @@
 import type { EventBus } from "../bus";
 import type { RouteMatch } from "../http/router";
 import type { CoreContext } from "../main";
-import { allows } from "../identity/gate";
+import { audit } from "../identity/audit";
+import {
+  accessGate,
+  allows,
+  onAccessChanged,
+  requestIdentity,
+} from "../identity/gate";
 import { scope } from "../identity/scopes";
 import { answered, workspaceId } from "../workspaces/routes";
 import {
@@ -29,7 +35,10 @@ import type {
 import { loadBoard, saveBoard } from "./documents";
 import {
   CanvasPresence,
+  LOCAL_DEVICE,
   type PresenceSnapshot,
+  type PresenceSource,
+  deviceKey,
   parseClientId,
   parseDeviceName,
 } from "./presence";
@@ -45,6 +54,7 @@ import {
  */
 
 let assembled: CanvasPresence | undefined;
+let unsubscribe: (() => void) | undefined;
 
 /** 运行中的 core 的在线表；测试与别的域用它看「谁在看这块画布」。 */
 export function canvasPresence(): CanvasPresence | undefined {
@@ -59,7 +69,11 @@ export function install(context: CoreContext): void {
   });
   presence.start();
   assembled?.stop();
+  unsubscribe?.();
   assembled = presence;
+  // 撤销共享、改成只读、停用账号、登出：在线表马上复判，被收权的那一方手里
+  // 的租约当场释放并广播，而不是等它的心跳过期。
+  unsubscribe = onAccessChanged(() => presence.recheck());
 
   server.router.handle(
     "GET",
@@ -143,6 +157,7 @@ export function install(context: CoreContext): void {
         workspaceId(match),
         boardId(match),
         save.clientId,
+        presenceSource(),
       );
       const document = saveBoard(
         database,
@@ -176,6 +191,7 @@ export function install(context: CoreContext): void {
       // 回答里的 `writable` 让页面把只读共享的画布当只读画（契约 §9.1）。
       // 每次心跳都现判，改角色、撤销共享在下一拍就反映出来。
       const writable = allows([scope("canvas:write", id)]);
+      const source = presenceSource();
       return {
         status: 200,
         body: {
@@ -184,8 +200,13 @@ export function install(context: CoreContext): void {
             deviceName: parseDeviceName(body.deviceName),
             active: body.active === true,
             writer: writable,
+            source,
           }),
           writable,
+          // 发心跳的这台设备的标识：页面拿它和租约持有者的比，同一台就是
+          // 「本机另一个窗口」（契约 §9.1）。和 `writable` 一样因人而异，
+          // 所以只在回答里、不在事件帧里。
+          deviceKey: deviceKey(source.deviceId),
         },
       };
     }),
@@ -217,13 +238,34 @@ export function install(context: CoreContext): void {
       if (body.takeover !== undefined && typeof body.takeover !== "boolean") {
         throw badRequest("takeover must be a boolean");
       }
+      const clientId = parseClientId(body.clientId);
+      const source = presenceSource();
+      const before = presence.snapshot(board).lease;
+      const snapshot = presence.acquire(id, board, {
+        clientId,
+        deviceName: parseDeviceName(body.deviceName),
+        takeover: body.takeover === true,
+        source,
+      });
+      // 从别人手里接过来的才记：那一刻对方没保存的改动会被丢掉，事后要查得到
+      // 是谁、从哪台设备、在什么时候接的手（审计写入点「接管」）。
+      if (before !== null && before.clientId !== clientId) {
+        audit({
+          action: "canvas.lease.takeover",
+          target: board,
+          workspaceId: id,
+          detail: {
+            from: before.deviceName,
+            to: snapshot.lease?.deviceName ?? "",
+            sameDevice:
+              before.deviceKey !== "" &&
+              before.deviceKey === deviceKey(source.deviceId),
+          },
+        });
+      }
       return {
         status: 200,
-        body: presence.acquire(id, board, {
-          clientId: parseClientId(body.clientId),
-          deviceName: parseDeviceName(body.deviceName),
-          takeover: body.takeover === true,
-        }),
+        body: { ...snapshot, deviceKey: deviceKey(source.deviceId) },
       };
     }),
   );
@@ -246,6 +288,38 @@ export function install(context: CoreContext): void {
       };
     }),
   );
+}
+
+/**
+ * 这次请求来自哪台设备、授权变了之后怎么再问一次。
+ *
+ * 桌面壳没有请求身份：它的每个窗口都在本机，算同一台设备，也不需要复判。
+ * 服务器壳上是会话绑着的身份域设备；复判先重新认证会话（登出、撤销设备、
+ * 停用账号都在这一步失效），再按那块画布上的授权判能看、能写还是都不能。
+ */
+function presenceSource(): PresenceSource {
+  const identity = requestIdentity();
+  if (identity === undefined) {
+    return { deviceId: LOCAL_DEVICE, deviceName: "" };
+  }
+  return {
+    deviceId: identity.device?.deviceId ?? "",
+    deviceName: identity.device?.deviceName ?? "",
+    recheck: (workspace) => {
+      const subject =
+        identity.revalidate === undefined
+          ? identity.subject
+          : identity.revalidate();
+      if (subject === undefined) return "none";
+      const gate = accessGate();
+      if (!gate.permits(subject, [scope("canvas:read", workspace)])) {
+        return "none";
+      }
+      return gate.permits(subject, [scope("canvas:write", workspace)])
+        ? "write"
+        : "read";
+    },
+  };
 }
 
 /** `board.changed` — the frame every other window rebases its unsaved edits on. */

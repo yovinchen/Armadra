@@ -415,3 +415,144 @@ describe("事件流与撤销", () => {
     if ("socket" in other) other.socket.close();
   });
 });
+
+describe("全局路由对成员（设计 §6 的权限表）", () => {
+  it("无害的全局读放行，本机管理 403", async () => {
+    const status = async (who: Person, path: string, method = "GET") =>
+      (await call(path, { person: who, method })).status;
+    expect(await status(editor, "/api/agents")).toBe(200);
+    expect(await status(editor, "/api/terminals/backend")).toBe(200);
+    for (const path of [
+      "/api/settings",
+      "/api/settings/local",
+      "/api/execution-hosts",
+      "/api/data/info",
+      "/api/usage",
+      "/api/conversations",
+    ]) {
+      expect([path, await status(editor, path)]).toEqual([path, 403]);
+      expect([path, await status(admin, path)]).not.toEqual([path, 403]);
+    }
+    // 不存在的审批：落不到任何一块画布上，成员一律 403。
+    expect(
+      (
+        await call("/api/approvals/nope/answer", {
+          method: "POST",
+          person: editor,
+          body: { decision: "allow" },
+        })
+      ).status,
+    ).toBe(403);
+  });
+});
+
+describe("组管理员", () => {
+  it("管得了自己的组、签得了本组邀请，碰不到别的组", async () => {
+    const created = async (name: string) =>
+      (
+        JSON.parse(
+          (
+            await call("/api/identity/groups", {
+              method: "POST",
+              person: admin,
+              body: { name },
+            })
+          ).body,
+        ) as { groupId: string }
+      ).groupId;
+    const mine = await created("前端组");
+    const other = await created("后端组");
+    const member = (who: Person, groupId: string, principalId: string) =>
+      call(`/api/identity/groups/${groupId}/members/${principalId}`, {
+        method: "PUT",
+        person: who,
+        body: { role: "member" },
+      });
+    expect(
+      (
+        await call(
+          `/api/identity/groups/${mine}/members/${editor.principalId}`,
+          { method: "PUT", person: admin, body: { role: "admin" } },
+        )
+      ).status,
+    ).toBe(200);
+    expect((await member(editor, mine, outsider.principalId)).status).toBe(
+      200,
+    );
+    expect((await member(editor, other, outsider.principalId)).status).toBe(
+      403,
+    );
+    const invite = (groupId: string) =>
+      call("/api/identity/invitations", {
+        method: "POST",
+        person: editor,
+        body: { role: "viewer", targetGroupId: groupId },
+      });
+    expect((await invite(mine)).status).toBe(201);
+    expect((await invite(other)).status).toBe(403);
+    expect(
+      (
+        await call(`/api/identity/groups/${mine}`, {
+          method: "DELETE",
+          person: editor,
+        })
+      ).status,
+    ).toBe(403);
+  });
+});
+
+describe("撤销共享释放写租约", () => {
+  it("被撤销者手里的租约当场释放并广播，不等心跳过期", async () => {
+    const boards = JSON.parse(
+      (await call(`/api/workspaces/${w1}/boards`, { person: admin })).body,
+    ) as { id: string }[];
+    const uri = `/api/workspaces/${w1}/boards/${boards[0]?.id}/presence`;
+    const beat = async (who: Person, clientId: string, active = false) =>
+      JSON.parse(
+        (
+          await call(uri, {
+            method: "POST",
+            person: who,
+            body: { clientId, deviceName: clientId, active },
+          })
+        ).body,
+      ) as {
+        lease: { clientId: string } | null;
+        deviceKey: string;
+        clients: { clientId: string; deviceKey: string; deviceName: string }[];
+      };
+    await beat(editor, "editor-client-2", true);
+    const watching = await beat(admin, "admin-client-1");
+    expect(watching.lease?.clientId).not.toBe("admin-client-1");
+    // 设备名取身份域的（配对时登记的那台），不取客户端报的。
+    const self = watching.clients.find(
+      (client) => client.clientId === "admin-client-1",
+    );
+    expect(self?.deviceName).toBe("管理员的电脑");
+    expect(self?.deviceKey).toBe(watching.deviceKey);
+
+    const opened = await subscribe(admin, w1);
+    if (!("socket" in opened)) throw new Error("admin could not subscribe");
+    const revoked = await call("/api/identity/grants", {
+      method: "DELETE",
+      person: admin,
+      body: {
+        workspaceId: w1,
+        subjectKind: "principal",
+        subjectId: editor.principalId,
+      },
+    });
+    expect(revoked.status).toBe(200);
+    await expect
+      .poll(() =>
+        opened.frames.some(
+          (frame) =>
+            frame.includes("canvas.presence") &&
+            !frame.includes("editor-client") &&
+            frame.includes('"lease":{"clientId":"admin-client-1"'),
+        ),
+      )
+      .toBe(true);
+    opened.socket.close();
+  });
+});

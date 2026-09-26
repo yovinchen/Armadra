@@ -18,15 +18,23 @@ export const presenceClientIdSchema = z
   .string()
   .regex(/^[A-Za-z0-9_-]{8,128}$/);
 
+/**
+ * 设备的不透明标识（契约 §9.1）：两个客户端相同就是同一台设备上的两个窗口。
+ * 空串是说不出来自哪台设备；旧的 core 不发，缺省为空串。
+ */
+const deviceKeySchema = z.string().default("");
+
 export const presenceClientSchema = z.object({
   clientId: z.string(),
   deviceName: z.string(),
+  deviceKey: deviceKeySchema,
   lastSeenAt: z.string(),
 });
 
 export const boardLeaseSchema = z.object({
   clientId: z.string(),
   deviceName: z.string(),
+  deviceKey: deviceKeySchema,
   acquiredAt: z.string(),
 });
 
@@ -40,6 +48,8 @@ export const boardPresenceSchema = z.object({
    * 没有——同一帧发给所有人，而能不能写因人而异。
    */
   writable: z.boolean().optional(),
+  /** 只在心跳与拿租约的回答里：发这次请求的设备的 `deviceKey`。 */
+  deviceKey: z.string().optional(),
 });
 
 export const presenceHeartbeatRequestSchema = z.object({

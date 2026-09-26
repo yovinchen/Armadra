@@ -48,12 +48,22 @@ const board: Board = {
 };
 const document: BoardDocument = { board, nodes: [], edges: [] };
 
-function presence(holder: string | null, clients: string[]): BoardPresence {
+/** `sameDevice`：别的客户端是同一台设备上的另一个窗口（同一个 deviceKey）。 */
+function presence(
+  holder: string | null,
+  clients: string[],
+  sameDevice = false,
+): BoardPresence {
+  const keyOf = (clientId: string) =>
+    clientId === ME || sameDevice ? "key-mine" : "key-ipad";
+  const nameOf = (clientId: string) =>
+    clientId === ME || sameDevice ? "macOS" : "iPad";
   return {
     boardId: board.id,
     clients: clients.map((clientId) => ({
       clientId,
-      deviceName: clientId === ME ? "macOS" : "iPad",
+      deviceName: nameOf(clientId),
+      deviceKey: keyOf(clientId),
       lastSeenAt: stamp,
     })),
     lease:
@@ -61,7 +71,8 @@ function presence(holder: string | null, clients: string[]): BoardPresence {
         ? null
         : {
             clientId: holder,
-            deviceName: holder === ME ? "macOS" : "iPad",
+            deviceName: nameOf(holder),
+            deviceKey: keyOf(holder),
             acquiredAt: stamp,
           },
   };
@@ -135,6 +146,28 @@ describe("presence", () => {
   it("ignores a snapshot of another board", () => {
     applyPresence({ ...presence(OTHER, [ME, OTHER]), boardId: "elsewhere" });
     expect(isReadOnly(useCanvasStore.getState())).toBe(false);
+  });
+
+  it("names another window on this device and takes over without asking", async () => {
+    // 心跳回答带着自己的 deviceKey；之后的事件帧没有，沿用上一拍的。
+    applyPresence({ ...presence(ME, [ME]), deviceKey: "key-mine" });
+    applyPresence(presence(OTHER, [ME, OTHER], true));
+    expect(isReadOnly(useCanvasStore.getState())).toBe(true);
+    acquireLease.mockResolvedValue(presence(ME, [ME, OTHER], true));
+    mount();
+    expect(screen.getByText("本机另一个窗口正在编辑")).toBeTruthy();
+    expect(screen.getByLabelText("本机另一个窗口")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "接管" }));
+    // 没有确认框：一次点击就接过来。
+    expect(screen.queryByText("接管编辑？")).toBeNull();
+    expect(acquireLease).toHaveBeenCalledWith(board.workspaceId, board.id, {
+      clientId: ME,
+      deviceName: expect.any(String),
+      takeover: true,
+    });
+    await vi.waitFor(() =>
+      expect(isReadOnly(useCanvasStore.getState())).toBe(false),
+    );
   });
 
   it("asks before taking over, then takes the lease", async () => {

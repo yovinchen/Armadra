@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { DomainError, badRequest } from "../workspaces/support";
 
 /**
@@ -22,6 +23,15 @@ import { DomainError, badRequest } from "../workspaces/support";
  *  - **接管**：显式的 `takeover` 无条件转给请求者；确认是页面的事（二次
  *    确认对话框），core 只负责让它一步到位。
  *
+ * **同一台设备**：每个客户端带着它来自哪台设备（服务器壳上是会话绑着的
+ * 身份域设备，桌面壳上一律是「本机」）。同一台设备的两个窗口仍是两个客户端、
+ * 仍然只有一个能写，但页面据此说「本机另一个窗口正在编辑」，接管时也不必再问
+ * 一次——那是同一个人。设备名同样优先取身份域的，客户端报上来的只作兜底。
+ *
+ * **授权变化**：撤销共享、改成只读、停用账号之后，{@link CanvasPresence.recheck}
+ * 按每个客户端记下的复判函数重新判一遍：看不见了就摘掉，不能写了就交出租约，
+ * 变了就广播——而不是等它 30 秒没心跳自己过期。
+ *
  * 与 revision CAS 的关系：租约先判，CAS 后判。租约拦下的是「别人正在写」，
  * CAS 拦下的仍然是「你手里那份旧了」——前者 423，后者照旧 409，页面对两者
  * 的反应完全不同（前者转只读，后者变基重放）。
@@ -45,14 +55,41 @@ const MAX_DEVICE_NAME = 64;
 export interface PresenceClientView {
   readonly clientId: string;
   readonly deviceName: string;
+  /**
+   * 设备的不透明标识：两个客户端这一项相同就是同一台设备上的两个窗口。
+   * 是身份域设备标识的摘要而不是标识本身；空串表示说不出来自哪台设备。
+   */
+  readonly deviceKey: string;
   readonly lastSeenAt: string;
 }
 
 export interface LeaseView {
   readonly clientId: string;
   readonly deviceName: string;
+  readonly deviceKey: string;
   readonly acquiredAt: string;
 }
+
+/** 复判的结果：还能写、只能看、看不见了。 */
+export type PresenceAccess = "write" | "read" | "none";
+
+/**
+ * 一个客户端背后的设备与人，由路由从请求身份里取出来交给在线表。
+ *
+ * 在线表不认识身份域：它只记下「来自哪台设备、叫什么、授权变了之后怎么再问
+ * 一次」，判定本身留在路由里。
+ */
+export interface PresenceSource {
+  /** 身份域的设备标识；桌面壳是 {@link LOCAL_DEVICE}，说不出来是空串。 */
+  readonly deviceId: string;
+  /** 身份域登记的设备名；空串时用客户端上报的。 */
+  readonly deviceName: string;
+  /** 授权变化之后复判；不给就不复判（桌面壳只有本机 owner）。 */
+  readonly recheck?: (workspaceId: string) => PresenceAccess;
+}
+
+/** 桌面壳没有会话设备：它服务的每个窗口都在这台机器上。 */
+export const LOCAL_DEVICE = "local";
 
 /** 心跳的回答，也是 `canvas.presence` 事件除 `type` 以外的全部字段。 */
 export interface PresenceSnapshot {
@@ -72,11 +109,14 @@ export interface HeartbeatInput {
    * 查看者独自开着画布，真正能写的人来了反而只读。
    */
   readonly writer?: boolean;
+  readonly source?: PresenceSource;
 }
 
 interface Client {
   clientId: string;
+  /** 客户端自己报的设备名；显示时身份域的优先（{@link displayName}）。 */
   deviceName: string;
+  source: PresenceSource | undefined;
   lastSeenAt: number;
   lastActiveAt: number;
   /** 见 {@link HeartbeatInput.writer}；租约只在能写的人之间分。 */
@@ -142,6 +182,7 @@ export class CanvasPresence {
       entry.clients.set(input.clientId, {
         clientId: input.clientId,
         deviceName: input.deviceName,
+        source: input.source,
         lastSeenAt: at,
         lastActiveAt: at,
         writer,
@@ -152,10 +193,16 @@ export class CanvasPresence {
       // 授权随时会变（改角色、撤销共享），每次心跳按这一次的判定记。
       existing.writer = writer;
       if (input.active) existing.lastActiveAt = at;
-      if (input.deviceName !== "" && existing.deviceName !== input.deviceName) {
-        existing.deviceName = input.deviceName;
-        changed = true;
-      }
+      const before = displayName(existing);
+      if (input.deviceName !== "") existing.deviceName = input.deviceName;
+      // 复判函数带着这次请求的会话；换成最新的，免得它拿一把过期的钥匙去问。
+      if (input.source !== undefined) existing.source = input.source;
+      if (displayName(existing) !== before) changed = true;
+    }
+    // 不能写的人手里不该有租约：改成只读之后的第一拍就交出去。
+    if (!writer && entry.lease?.clientId === input.clientId) {
+      entry.lease = null;
+      changed = true;
     }
     // 先放空闲的，再分：一个动了手的人不该等下一次心跳才接到别人放下的租约。
     if (this.releaseIdle(entry)) changed = true;
@@ -202,12 +249,23 @@ export class CanvasPresence {
   acquire(
     workspaceId: string,
     boardId: string,
-    input: { clientId: string; deviceName: string; takeover: boolean },
+    input: {
+      clientId: string;
+      deviceName: string;
+      takeover: boolean;
+      source?: PresenceSource;
+    },
   ): PresenceSnapshot {
     const entry = this.entry(workspaceId, boardId);
     this.expire(entry);
     const at = this.now();
-    const client = this.touch(entry, input.clientId, input.deviceName, at);
+    const client = this.touch(
+      entry,
+      input.clientId,
+      input.deviceName,
+      at,
+      input.source,
+    );
     client.lastActiveAt = at;
     const holder = entry.lease?.clientId;
     if (holder !== undefined && holder !== input.clientId && !input.takeover) {
@@ -232,13 +290,14 @@ export class CanvasPresence {
     workspaceId: string,
     boardId: string,
     clientId: string | undefined,
+    source?: PresenceSource,
   ): void {
     const entry = this.boards.get(boardId);
     if (entry === undefined || entry.workspaceId !== workspaceId) {
       if (clientId === undefined) return;
       const fresh = this.entry(workspaceId, boardId);
       const at = this.now();
-      this.touch(fresh, clientId, "", at);
+      this.touch(fresh, clientId, "", at, source);
       fresh.lease = { clientId, acquiredAt: at };
       this.publish(boardId, fresh);
       return;
@@ -251,7 +310,7 @@ export class CanvasPresence {
     }
     if (clientId !== undefined) {
       const at = this.now();
-      const client = this.touch(entry, clientId, "", at);
+      const client = this.touch(entry, clientId, "", at, source);
       client.lastActiveAt = at;
       if (entry.lease === null) {
         entry.lease = { clientId, acquiredAt: at };
@@ -265,6 +324,38 @@ export class CanvasPresence {
     const entry = this.boards.get(boardId);
     if (entry === undefined) return { boardId, clients: [], lease: null };
     return this.view(boardId, entry);
+  }
+
+  /**
+   * 授权变了：按每个客户端记下的复判函数重新判一遍。
+   *
+   * 看不见这块画布了（撤销共享、停用账号、登出）的摘掉，只剩读权限的交出
+   * 租约；变了的画布各发一帧 `canvas.presence`。被撤销的那一方拿着的租约由此
+   * 立即释放，留下的人不必等 30 秒的心跳过期，也不必点「接管」。
+   */
+  recheck(): void {
+    for (const [boardId, entry] of this.boards) {
+      let changed = false;
+      for (const [id, client] of entry.clients) {
+        const access = client.source?.recheck?.(entry.workspaceId);
+        if (access === undefined) continue;
+        if (access === "none") {
+          entry.clients.delete(id);
+          if (entry.lease?.clientId === id) entry.lease = null;
+          changed = true;
+          continue;
+        }
+        const writer = access === "write";
+        if (client.writer !== writer) client.writer = writer;
+        if (!writer && entry.lease?.clientId === id) {
+          entry.lease = null;
+          changed = true;
+        }
+      }
+      if (this.handToSole(entry)) changed = true;
+      if (changed) this.publish(boardId, entry);
+      if (entry.clients.size === 0) this.boards.delete(boardId);
+    }
   }
 
   /** 摘掉断开的客户端、释放空闲的租约；变了的画布各发一帧。 */
@@ -296,6 +387,7 @@ export class CanvasPresence {
     clientId: string,
     deviceName: string,
     at: number,
+    source: PresenceSource | undefined,
   ): Client {
     // 走到这里的是写入与拿租约，两者的路由都要求写权限。
     const existing = entry.clients.get(clientId);
@@ -303,11 +395,13 @@ export class CanvasPresence {
       existing.lastSeenAt = at;
       existing.writer = true;
       if (deviceName !== "") existing.deviceName = deviceName;
+      if (source !== undefined) existing.source = source;
       return existing;
     }
     const created: Client = {
       clientId,
       deviceName,
+      source,
       lastSeenAt: at,
       lastActiveAt: at,
       writer: true,
@@ -354,7 +448,8 @@ export class CanvasPresence {
   }
 
   private deviceOf(entry: BoardEntry, clientId: string): string {
-    return entry.clients.get(clientId)?.deviceName ?? "";
+    const client = entry.clients.get(clientId);
+    return client === undefined ? "" : displayName(client);
   }
 
   private view(boardId: string, entry: BoardEntry): PresenceSnapshot {
@@ -362,15 +457,19 @@ export class CanvasPresence {
       .sort((a, b) => a.clientId.localeCompare(b.clientId))
       .map((client) => ({
         clientId: client.clientId,
-        deviceName: client.deviceName,
+        deviceName: displayName(client),
+        deviceKey: deviceKey(client.source?.deviceId ?? ""),
         lastSeenAt: stamp(client.lastSeenAt),
       }));
+    const holder =
+      entry.lease === null ? undefined : entry.clients.get(entry.lease.clientId);
     const lease =
       entry.lease === null
         ? null
         : {
             clientId: entry.lease.clientId,
             deviceName: this.deviceOf(entry, entry.lease.clientId),
+            deviceKey: deviceKey(holder?.source?.deviceId ?? ""),
             acquiredAt: stamp(entry.lease.acquiredAt),
           };
     return { boardId, clients, lease };
@@ -379,6 +478,24 @@ export class CanvasPresence {
   private publish(boardId: string, entry: BoardEntry): void {
     this.options.publish(entry.workspaceId, this.view(boardId, entry));
   }
+}
+
+/** 显示用的设备名：身份域登记的优先，客户端报的兜底。 */
+function displayName(client: Client): string {
+  const registered = client.source?.deviceName ?? "";
+  return registered !== "" ? parseDeviceName(registered) : client.deviceName;
+}
+
+/**
+ * 设备标识的摘要。页面只需要比较「是不是同一台」，不需要、也不该拿到身份域
+ * 的设备标识本身——它出现在撤销设备的接口上。
+ */
+export function deviceKey(deviceId: string): string {
+  if (deviceId === "") return "";
+  return createHash("sha256")
+    .update(`armadra-presence-device:${deviceId}`)
+    .digest("hex")
+    .slice(0, 16);
 }
 
 /**

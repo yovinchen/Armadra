@@ -3,7 +3,10 @@ import { DomainError } from "../workspaces/support";
 import {
   CanvasPresence,
   LEASE_HELD,
+  type PresenceAccess,
   type PresenceSnapshot,
+  type PresenceSource,
+  deviceKey,
   parseClientId,
   parseDeviceName,
 } from "./presence";
@@ -217,5 +220,81 @@ describe("canvas presence and the edit lease", () => {
     expect(parseDeviceName(undefined)).toBe("");
     expect(parseDeviceName("  Mac\u0007 ")).toBe("Mac");
     expect([...parseDeviceName("名".repeat(100))]).toHaveLength(64);
+  });
+
+  it("marks two windows on one device with the same device key, and prefers the registered name", () => {
+    const laptop: PresenceSource = {
+      deviceId: "device-1",
+      deviceName: "工作本",
+    };
+    presence.heartbeat(WS, BOARD, {
+      clientId: A,
+      deviceName: "macOS · Chrome",
+      active: false,
+      source: laptop,
+    });
+    const both = presence.heartbeat(WS, BOARD, {
+      clientId: B,
+      deviceName: "macOS · Safari",
+      active: false,
+      source: laptop,
+    });
+    const [first, second] = both.clients;
+    expect(first?.deviceKey).toBe(deviceKey("device-1"));
+    expect(second?.deviceKey).toBe(first?.deviceKey);
+    expect(both.lease?.deviceKey).toBe(first?.deviceKey);
+    // 身份域的设备名优先；取不到才用客户端报的。
+    expect(both.clients.map((client) => client.deviceName)).toEqual([
+      "工作本",
+      "工作本",
+    ]);
+    const bare = presence.heartbeat(WS, "other", {
+      clientId: A,
+      deviceName: "macOS · Chrome",
+      active: false,
+    });
+    expect(bare.clients[0]?.deviceName).toBe("macOS · Chrome");
+    expect(bare.clients[0]?.deviceKey).toBe("");
+    // 摘要不是标识本身。
+    expect(deviceKey("device-1")).not.toContain("device-1");
+  });
+
+  it("drops a revoked client and frees its lease at once when access changes", () => {
+    let access: PresenceAccess = "write";
+    presence.heartbeat(WS, BOARD, {
+      clientId: A,
+      deviceName: "member",
+      active: true,
+      source: { deviceId: "d-a", deviceName: "", recheck: () => access },
+    });
+    beat(B);
+    expect(presence.snapshot(BOARD).lease?.clientId).toBe(A);
+    frames = [];
+    // 没变的时候复判不发帧。
+    presence.recheck();
+    expect(frames).toHaveLength(0);
+    access = "none";
+    presence.recheck();
+    expect(frames).toHaveLength(1);
+    const after = presence.snapshot(BOARD);
+    expect(after.clients.map((client) => client.clientId)).toEqual([B]);
+    // 剩下的那个能写，直接拿到租约，不必接管。
+    expect(after.lease?.clientId).toBe(B);
+  });
+
+  it("takes the lease away from a client demoted to read-only", () => {
+    let access: PresenceAccess = "write";
+    presence.heartbeat(WS, BOARD, {
+      clientId: A,
+      deviceName: "member",
+      active: true,
+      source: { deviceId: "d-a", deviceName: "", recheck: () => access },
+    });
+    expect(presence.snapshot(BOARD).lease?.clientId).toBe(A);
+    access = "read";
+    presence.recheck();
+    const after = presence.snapshot(BOARD);
+    expect(after.clients.map((client) => client.clientId)).toEqual([A]);
+    expect(after.lease).toBeNull();
   });
 });

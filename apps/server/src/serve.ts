@@ -402,6 +402,7 @@ function requestIdentityOf(
   const origin = admission.origin ?? "";
   return {
     subject: subjectOf(principal),
+    device: { deviceId: principal.deviceId, deviceName: principal.deviceName },
     // 长连接的复核：会话还在就给出当前主体。访问密钥过期（页面会刷新出一把
     // 新的）也算失效——被关掉的 socket 由页面带着新 Cookie 重连，门在升级前。
     revalidate: () => {

@@ -313,6 +313,7 @@ describe("autosave", () => {
       lease: {
         clientId: "someone-else-entirely",
         deviceName: "iPad",
+        deviceKey: "",
         acquiredAt: timestamp,
       },
     });

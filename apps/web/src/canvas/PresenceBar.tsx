@@ -9,6 +9,7 @@ import {
   applyPresence,
   currentPresence,
   isReadOnly,
+  leaseOnThisDevice,
   presenceClientId,
   presenceDeviceName,
 } from "@/store/canvas/presence";
@@ -32,6 +33,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
  * **只有自己时什么都不画**：单设备、单窗口是最常见的用法，那时这里一个像素
  * 都不占。有别的设备在看时每台一个小圆点，持有写租约的那台是主色；租约在
  * 别人手里时多一句「某设备正在编辑」和一个「接管」，接管要二次确认。
+ * 持有者是同一台设备上的另一个窗口时说「本机另一个窗口正在编辑」，接管不再
+ * 确认——那是同一个人，没有谁的改动需要替别人担心。
  * 这个人对这块工作空间没有写权限（服务器壳上的只读共享）时，哪怕只有自己
  * 也要画出来，写一句「只读」，不给「接管」——接管了也存不进去。
  */
@@ -44,6 +47,7 @@ export function PresenceBar() {
   const queryClient = useQueryClient();
   const presence = useCanvasStore(currentPresence);
   const readOnly = useCanvasStore(isReadOnly);
+  const sameDevice = useCanvasStore(leaseOnThisDevice);
   const workspaceId = useCanvasStore((state) => state.workspace?.id);
   const [confirming, setConfirming] = React.useState(false);
   const me = presenceClientId();
@@ -56,6 +60,7 @@ export function PresenceBar() {
   const nameOf = (deviceName: string) =>
     deviceName === "" ? t("presence.unnamed") : deviceName;
   const holder = lease ? nameOf(lease.deviceName) : "";
+  const selfKey = presence.deviceKey ?? "";
   const self = presence.clients.find((client) => client.clientId === me);
   const clients = self ? [self, ...others] : others;
 
@@ -92,7 +97,9 @@ export function PresenceBar() {
             const label =
               client.clientId === me
                 ? t("presence.thisDevice")
-                : nameOf(client.deviceName);
+                : selfKey !== "" && client.deviceKey === selfKey
+                  ? t("presence.otherWindow")
+                  : nameOf(client.deviceName);
             return (
               <Tooltip key={client.clientId} delayDuration={300}>
                 <TooltipTrigger asChild>
@@ -120,12 +127,14 @@ export function PresenceBar() {
         ) : readOnly && lease ? (
           <>
             <span className="text-xs text-muted-foreground whitespace-nowrap">
-              {t("presence.editing", { device: holder })}
+              {sameDevice
+                ? t("presence.otherWindowEditing")
+                : t("presence.editing", { device: holder })}
             </span>
             <Button
               size="xs"
               variant="ghost"
-              onClick={() => setConfirming(true)}
+              onClick={() => (sameDevice ? takeOver() : setConfirming(true))}
             >
               {t("presence.takeover")}
             </Button>
