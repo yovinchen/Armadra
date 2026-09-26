@@ -104,7 +104,7 @@ node tools/probes/core-terminal-packaged.mjs              # 打包版，从页�
 ```sh
 pnpm libs:build
 pnpm --filter @armadra/desktop build
-node tools/probes/ui-features-e2e.mjs [输出目录] [--only=presence,editor,fileTree,search,keybindings,integration,resources]
+node tools/probes/ui-features-e2e.mjs [输出目录] [--only=presence,editor,fileTree,search,keybindings,integration,resources,layout]
 ```
 
 产物默认在 `target/ui-features-e2e/`：`result.json`（每个场景的检查项、实测数字、截图路径与控制台错误）与截图；窄屏 390×844 的截图以 `mobile-` 开头，场景失败时每个截过图的页面补一张 `failure-<场景>-N.png`。每个场景都收集 `Runtime.consoleAPICalled` 的 error 与 `Runtime.exceptionThrown`，有未预期的就算失败。
@@ -117,6 +117,7 @@ node tools/probes/ui-features-e2e.mjs [输出目录] [--only=presence,editor,fil
 - **search**：先直接问 core 量一次整轮扫描（约 3.6 万个文件），再在页面上中途换关键词、点「停止」；core 的 debug 日志「文件搜索随连接断开中止」带着 `visited`，断言它明显小于整轮文件数。
 - **keybindings**：设为无、追加第二组键、`when` 的语法错与未知键提示且不能保存；回到画布用真实键盘事件确认改动生效，最后全部重置。
 - **integration**：临时 HOME 的 `.claude/settings.json` 里 11 条相同的旧 Hook；行布局、「旧残留 11」弹层在设置对话框之上、同一命令合并为 ×11；「修复」只清残留、保留用户自己的命令并留备份。
+- **layout**（§58）：顶部提示条（临时 HOME 里有旧版接入残留，所以总有一条）坐在 44px 标题带里、不压侧栏开关 / 工具簇 / 设备条，多设备时退到设备条下面；它原来位置上的节点标题栏按得到、拖得动；外框里本体之外的点不命中。1440 宽开资源管理器时 Dock 整个在抽屉左边、缩放百分比按得到，开 460px 的自动化抽屉时提示条也让开。390 宽开「文件」与「自动化」时抽屉铺满宽度、底边停在底部导航上沿，导航五个去处都按得到，工具簇没被推出屏幕，点「画布」收起。
 - **resources**：`ARMADRA_REMOTE_WORKER_LAUNCHER` 指向探针写的替身 ssh，远端命令是本仓库的 `main.js worker --stdio`，所以「构建机」的总览是 Worker 真读出来的；主机筛选（全部 / 本机 / 构建机）；休眠会话在节点与面板上的显示；`ARMADRA_STATUS_PAGE_BASE` 指向本机 fixture 时用量卡的状态徽标。
 
 没验证什么：休眠的**判据与接回**（休眠状态是经 API 结束会话后在数据库里把结束原因置成 `hibernate`，与 `Manager.hibernate` 写的同形；真正走到休眠要一个空闲 5 分钟以上的 Agent CLI）；真实 SSH 与另一台机器；打包应用里的 PDF 查看器与视频解码（这里是无头 Chrome）；触屏手势（窄屏只按视口宽度截图）。
@@ -179,4 +180,18 @@ node tools/probes/browser-agent-e2e.mjs --electron   # 再跑一遍桌面壳的 
 
 真链路：`apps/desktop/out/cli/armadra-hook.js browser <动词>` → 真 core（没有桌面壳时用自己起的 headless Chromium，与服务器壳同一个后端）→ 节点令牌、连线、同工作空间三条授权 → 控制租约 → 动词 → CDP 白名单 → 页面。画布由接口建：一个终端节点连到一个浏览器节点，另有一个没连线的浏览器节点；终端节点起一个 `/bin/sh` 会话换来 core 签发的节点令牌。fixture 是本机随机端口上的一页表单，含同源 iframe 与 `localhost` 那个端口上的跨源 iframe（真 OOPIF）、原生与自绘下拉、HTML5 拖放、悬停菜单、confirm、文件输入、下载、延时文字、一个 200 与一个 404 的 fetch。每个动词都跑（fixture 还有开放与闭合的 shadow root、`<select multiple>`、页底一整块红色的跨源 iframe）：`select` 多选与非 multiple 被拒、`--selector 宿主 >>> 里面` 与闭合 shadow root 的拒绝、整页截图逐屏拼接后页底 iframe 确实是红的；快照（缺省、`--interactive`、`--max-bytes`）、按引用 / 角色名称 / 选择器点击（含两种 iframe 里的元素）、`--snapshot` 差异、`type` / `fill` / `select`、组合键与被拒的按键、`hover` / `drag`、`wait --text / --text-gone / --idle` 与一次 3 秒的超时、控制台与请求元数据（核对 token、Cookie 不出现）、左右滚与滚到元素、视口 / 整页 / 元素截图、PDF、`resize`、上传与下载、对话框阻塞与处理、`--action stop`、导航后旧引用重找、没发过的引用被拒、`back` / `forward`、`tabs --new` 与 `--tab` 读后台标签、`close`、租约查看与交还，外加 `--help` 的浏览器段。`--electron` 起开发构建的 Electron（临时数据目录与 profile，`ARMADRA_DESKTOP_OWNS_RUNTIME=1`、随机 `ARMADRA_RUNTIME_PORT`），在它的渲染页里调接口并打开画布，让浏览器节点挂成真的 `<webview>`，再跑同一批动词；另查第一次驱动之前页面打出的控制台已经读得到（节点一连线就被动旁听）、上传后画布上的选择框提示消失、渲染页没有意料之外的 error。整批动词结束时租约仍是「Agent 正在操作」，即 Agent 自己的 CDP 输入没有被当成人在操作。
 
+真链路：`apps/desktop/out/cli/armadra-hook.js browser <动词>` → 真 core（没有桌面壳时用自己起的 headless Chromium，与服务器壳同一个后端）→ 节点令牌、连线、同工作空间三条授权 → 控制租约 → 动词 → CDP 白名单 → 页面。画布由接口建：一个终端节点连到一个浏览器节点，另有一个没连线的浏览器节点；终端节点起一个 `/bin/sh` 会话换来 core 签发的节点令牌。fixture 是本机随机端口上的一页表单，含同源 iframe 与 `localhost` 那个端口上的跨源 iframe（真 OOPIF）、原生与自绘下拉、HTML5 拖放、悬停菜单、confirm、文件输入、下载、延时文字、一个 200 与一个 404 的 fetch。每个动词都跑：快照（缺省、`--interactive`、`--max-bytes`）、按引用 / 角色名称 / 选择器点击（含两种 iframe 里的元素）、`--snapshot` 差异、`type` / `fill` / `select`、组合键与被拒的按键、`hover` / `drag`、`wait --text / --text-gone / --idle` 与一次 3 秒的超时、控制台与请求元数据（核对 token、Cookie 不出现）、左右滚与滚到元素、视口 / 整页 / 元素截图、PDF、`resize`、上传与下载、对话框阻塞与处理、`--action stop`、导航后旧引用重找、没发过的引用被拒、`back` / `forward`、`tabs --new` 与 `--tab` 读后台标签、`close`、租约查看与交还，外加 `--help` 的浏览器段。`--electron` 起开发构建的 Electron（临时数据目录与 profile，`ARMADRA_DESKTOP_OWNS_RUNTIME=1`、随机 `ARMADRA_RUNTIME_PORT`），在它的渲染页里调接口并打开画布，让浏览器节点挂成真的 `<webview>`，再跑同一批动词；另查上传后画布上的选择框提示消失、渲染页没有任何 error（关标签页时 Electron 自己那句 `Invalid guestInstanceId` 由页面在卸载那一刻拦下，§58）。整批动词结束时租约仍是「Agent 正在操作」，即 Agent 自己的 CDP 输入没有被当成人在操作。
+
 产物默认在 `target/browser-agent-e2e/`：`result.json`（每个场景与每次 hook 调用的耗时）、两个后端各自的快照文本、请求与控制台输出、视口 / 整页 / 元素截图、PDF，以及 Electron 画布前后两张截图。没有验证：Windows 与 Linux（原生下拉在那两处走同一条输入路径，但没跑过）、真实站点（登录、反自动化脚本）、非 macOS 上 Electron 的打印、人与 Agent 同时抢一个页面的交互（租约本身由单测覆盖）。
+
+## 自动化表单的时区选择（服务器壳）
+
+```sh
+pnpm libs:build
+pnpm --filter @armadra/desktop build
+pnpm --filter @armadra/server build
+pnpm --filter @armadra/web build
+node tools/probes/timezone-picker.mjs [输出目录]
+```
+
+自动化抽屉要一个已配对的会话（裸浏览器连桌面 core 只显示「连不上 Host」），所以用服务器壳：打开启动日志里的配对链接，建一个工作空间，自动化 →「新建计划」→ 计划类型选 Cron，在 1440×900 与 390×844 下各看一次时区（§58）：关着时页面上没有任何 `role=option`；打开后最多 60 行、当前值在第一行；输入 `new_y` / `shang` 筛出目标并选中，按钮回写、弹层收起；渲染页没有 error。产物默认在 `target/timezone-picker/`：`result.json` 与 `timezone-closed` / `timezone-open` / `timezone-chosen` / `mobile-timezone-*.png`。端口随机，数据目录、项目目录与浏览器 profile 都是 `mktemp`，结束删除并停 tmux。没有验证：保存计划之后编辑表单里带回的时区（单测覆盖）、键盘上下选择。

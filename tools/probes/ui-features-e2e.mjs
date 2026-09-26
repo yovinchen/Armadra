@@ -28,6 +28,7 @@ import integration, {
   prepareIntegrationHome,
 } from "./ui-features/integration.mjs";
 import keybindings from "./ui-features/keybindings.mjs";
+import layout from "./ui-features/layout.mjs";
 import presence from "./ui-features/presence.mjs";
 import resources, {
   startStatusFixture,
@@ -43,6 +44,7 @@ const SCENARIOS = {
   keybindings,
   integration,
   resources,
+  layout,
 };
 
 const args = process.argv.slice(2);
