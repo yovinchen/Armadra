@@ -132,7 +132,7 @@ async function fillOne(
   ) {
     if (!state.editable) {
       const chosen = await choose(session, target, [value]);
-      return { ref, what: label(target), outcome: `选了 ${chosen}` };
+      return { ref, what: label(target), outcome: `选了 ${chosen.join("、")}` };
     }
   }
   if (
@@ -180,45 +180,122 @@ async function fillOne(
  * CLOSED element — a native dropdown's popup is an OS control that swallows
  * synthesized input. Anything else that calls itself a combobox or a listbox
  * is opened with a click and its option clicked like any other element.
+ *
+ * Several `--value` / `--label` are several options at once, and only a
+ * `<select multiple>` takes that: it ends with exactly those selected. The
+ * same option named twice (by value and by text) is one option. Anything
+ * else given several is refused rather than left on the last one named.
  */
 export async function choose(
   session: CdpSession,
   target: Target,
   wanted: readonly string[],
-): Promise<string> {
+): Promise<string[]> {
   if (wanted.length === 0)
     refuse(DRIVE_CODES.badArgument, "select 需要 --value 或 --label");
   const point = await pointOf(session, target);
   const state = await actionable(session, target);
-  if (state.isSelect) return chooseNative(session, target, state, wanted);
+  if (state.isSelect) {
+    const goals = optionIndexes(target, state, wanted);
+    if (state.multiple) return chooseMultiple(session, target, state, goals);
+    if (goals.length > 1)
+      refuse(
+        DRIVE_CODES.refused,
+        `${label(target)} 不是多选下拉（没有 multiple），一次只能选一个`,
+      );
+    return [await chooseNative(session, target, state, goals[0]!)];
+  }
   if (!["combobox", "listbox", "button"].includes(target.role))
     refuse(DRIVE_CODES.refused, `${label(target)} 不是下拉框`);
-  return chooseCustom(session, target, point, state, wanted);
+  if (new Set(wanted).size > 1)
+    refuse(
+      DRIVE_CODES.refused,
+      `${label(target)} 不是带 multiple 的原生 <select>；同时选多个只对它生效`,
+    );
+  return [await chooseCustom(session, target, point, state, wanted)];
+}
+
+/** Each wanted value or text as an option index, in the page's order. */
+function optionIndexes(
+  target: Target,
+  state: ElementState,
+  wanted: readonly string[],
+): number[] {
+  const goals = new Set<number>();
+  for (const each of wanted) {
+    const at = state.options.findIndex(
+      (option) => option.value === each || option.label === each,
+    );
+    if (at < 0)
+      refuse(DRIVE_CODES.notFound, `${label(target)} 没有选项 ${each}`);
+    goals.add(at);
+  }
+  return [...goals].sort((a, b) => a - b);
+}
+
+function optionName(option: { value: string; label: string }): string {
+  return option.label || option.value;
+}
+
+/**
+ * A `<select multiple>`: straight to the one writer. Type-ahead on a list
+ * box replaces the selection with the one option it lands on, so there is no
+ * sequence of synthesized keys that ends with two selected.
+ */
+async function chooseMultiple(
+  session: CdpSession,
+  target: Target,
+  state: ElementState,
+  goals: readonly number[],
+): Promise<string[]> {
+  const already = state.options
+    .map((option, at) => (option.selected ? at : -1))
+    .filter((at) => at >= 0);
+  const same =
+    already.length === goals.length &&
+    already.every((at, index) => at === goals[index]);
+  if (!same) {
+    const chosen = await session.runOn<{ ok: boolean }>(
+      target.node!,
+      "chooseOption",
+      goals.join(","),
+      target.session,
+    );
+    const now = await stateOf(session, target);
+    const selected = now.options
+      .map((option, at) => (option.selected ? at : -1))
+      .filter((at) => at >= 0);
+    if (
+      chosen?.ok !== true ||
+      selected.length !== goals.length ||
+      !selected.every((at, index) => at === goals[index])
+    )
+      refuse(
+        DRIVE_CODES.refused,
+        `${label(target)} 没有停在这些选项上（可能有禁用的选项）`,
+      );
+  }
+  return goals.map((at) => optionName(state.options[at]!));
 }
 
 async function chooseNative(
   session: CdpSession,
   target: Target,
   state: ElementState,
-  wanted: readonly string[],
+  goal: number,
 ): Promise<string> {
-  const matches = (option: { value: string; label: string }) =>
-    wanted.includes(option.value) || wanted.includes(option.label);
-  const goal = state.options.findIndex(matches);
-  if (goal < 0) refuse(DRIVE_CODES.notFound, `${label(target)} 没有这个选项`);
   const current = state.options.findIndex((option) => option.selected);
-  if (current === goal)
-    return state.options[goal]!.label || state.options[goal]!.value;
+  if (current === goal) return optionName(state.options[goal]!);
   // Focus without opening: a click opens the native popup, and in a headed
   // browser that popup would then take the keys.
   if (!state.focused && target.node !== undefined)
     await session.send("DOM.focus", { ...target.node }, target.session);
+  // By index: type-ahead on two options with the same text lands on the
+  // first, which is the right text and the wrong option.
   const picked = async (): Promise<string | undefined> => {
     const now = await stateOf(session, target);
-    const selected = now.options.find((option) => option.selected);
-    return selected && matches(selected)
-      ? selected.label || selected.value
-      : undefined;
+    const at = now.options.findIndex((option) => option.selected);
+    return at === goal ? optionName(now.options[at]!) : undefined;
   };
   // Type-ahead first: the option's own text, one character event at a time,
   // selects it on a CLOSED dropdown on every platform. (Arrow keys do not:

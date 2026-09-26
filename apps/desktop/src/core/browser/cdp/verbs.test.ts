@@ -694,6 +694,83 @@ describe("type, fill, select, press", () => {
     ).toContain("不是下拉框");
   });
 
+  it("select picks several options of a multiple select, and only of one", async () => {
+    page.elements.push(
+      el(80, "listbox", "标签", {
+        box: { x: 400, y: 100, w: 80, h: 60 },
+        options: ["甲", "乙", "丙"],
+        state: {
+          tag: "select",
+          isSelect: true,
+          multiple: true,
+          options: [
+            { value: "a", label: "甲", selected: true },
+            { value: "b", label: "乙", selected: false },
+            { value: "c", label: "丙", selected: false },
+          ],
+        },
+      }),
+    );
+    const text = await run("select", {
+      role: "listbox",
+      name: "标签",
+      values: ["c"],
+      labels: ["乙", "丙"],
+    });
+    expect(text).toContain("已选中：乙、丙");
+    // Straight to the writer, with both indexes; no type-ahead, which would
+    // replace the selection with one option.
+    const call = page.sent.find(
+      (each) =>
+        each.method === "Runtime.callFunctionOn" &&
+        (each.params.arguments as Array<{ value: unknown }> | undefined)?.[0]
+          ?.value === "1,2",
+    );
+    expect(call).toBeDefined();
+    expect(page.sent.some((each) => each.params.type === "char")).toBe(false);
+    expect(page.element(80)!.state!.options).toEqual([
+      { value: "甲", label: "甲", selected: false },
+      { value: "乙", label: "乙", selected: true },
+      { value: "丙", label: "丙", selected: true },
+    ]);
+    // Several for a select without `multiple`: refused, nothing written.
+    const before = page.sent.length;
+    const single = await refused("select", {
+      role: "combobox",
+      name: "地区",
+      values: ["bj", "sh"],
+    });
+    expect(single.code).toBe("browser_refused");
+    expect(single.message).toContain("multiple");
+    expect(
+      page.sent
+        .slice(before)
+        .some(
+          (each) =>
+            each.method === "Runtime.callFunctionOn" &&
+            each.params.arguments !== undefined,
+        ),
+    ).toBe(false);
+    // The same option named by value and by text is one option.
+    expect(
+      await run("select", {
+        role: "combobox",
+        name: "地区",
+        values: ["sh"],
+        labels: ["上海"],
+      }),
+    ).toContain("已选中：上海");
+    expect(
+      (
+        await refused("select", {
+          role: "listbox",
+          name: "标签",
+          labels: ["甲", "丁"],
+        })
+      ).code,
+    ).toBe("browser_not_found");
+  });
+
   it("select opens a custom combobox and clicks the option", async () => {
     page.elements.push(
       el(70, "combobox", "水果", {

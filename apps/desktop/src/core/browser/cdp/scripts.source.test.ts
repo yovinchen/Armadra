@@ -81,16 +81,32 @@ describe("the frozen script table", () => {
   it("writes in exactly one member, and that one only picks an option", () => {
     const writers = Object.entries(SCRIPTS)
       .filter(([, body]) =>
-        /selectedIndex =|dispatchEvent|\.checked =/.test(body),
+        /selectedIndex =|\.selected =|dispatchEvent|\.checked =/.test(body),
       )
       .map(([name]) => name);
     expect(writers).toEqual(["chooseOption"]);
     const body = SCRIPTS.chooseOption;
-    // Only on an enabled SELECT, only an enabled option of its own, by index.
+    // Only on an enabled SELECT, only enabled options of its own, by index.
     expect(body).toContain('el.tagName !== "SELECT" || el.disabled');
     expect(body).toContain("!option || option.disabled");
-    expect(body.match(/ = /g)?.length).toBe(3);
-    expect(body).toContain("el.selectedIndex = index;");
+    // Several indexes only for a `multiple` select.
+    expect(body).toContain("parts.length > 1 && !el.multiple");
+    // The assignments, every one of them: four locals and loop counters that
+    // are the script's own, and exactly two writes to the page — the one
+    // index of a single select, or the selected flags of a multiple one.
+    const assignments = body.match(/[\w.[\]]+ = /g) ?? [];
+    expect(assignments).toEqual([
+      "el = ",
+      "parts = ",
+      "picks = ",
+      "i = ",
+      "option = ",
+      "j = ",
+      "el.options[j].selected = ",
+      "el.selectedIndex = ",
+    ]);
+    expect(body).toContain("el.options[j].selected = picks.indexOf(j) >= 0;");
+    expect(body).toContain("el.selectedIndex = picks[0];");
   });
 
   it("the element reader reports whether a field is filled, never its value", () => {

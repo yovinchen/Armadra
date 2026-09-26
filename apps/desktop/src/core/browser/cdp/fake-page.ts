@@ -209,15 +209,19 @@ export class FakePage {
       const node = this.element(Number(objectId.replace("node-", "")));
       if (node === undefined) return { found: false };
       if (name === "chooseOption") {
-        const index = Number(
+        const picks = String(
           (params.arguments as Array<{ value: unknown }>)[0]?.value,
-        );
+        )
+          .split(",")
+          .map(Number);
+        if (picks.length > 1 && node.state?.multiple !== true)
+          return { ok: false };
         node.state = {
           ...node.state,
           options: (node.options ?? []).map((label, at) => ({
             value: label,
             label,
-            selected: at === index,
+            selected: picks.includes(at),
           })),
         };
         return { ok: true };

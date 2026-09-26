@@ -325,8 +325,9 @@ export const BROWSER_VERB_SPECS: readonly BrowserVerbSpec[] = [
   {
     name: "select",
     synopsis: "<target> --value V | --label L",
-    help: "choose an option in a native dropdown, a combobox or a listbox",
-    helpZh: "在原生下拉、combobox 或 listbox 里选一个选项",
+    help: "choose an option in a native dropdown, a combobox or a listbox; repeat --value / --label to select several in a <select multiple> (refused for any other element)",
+    helpZh:
+      "在原生下拉、combobox 或 listbox 里选一个选项；重复 --value / --label 可在带 multiple 的 <select> 里同时选中多个（别的元素拒绝）",
     lease: "always",
     changesPage: true,
     targets: true,

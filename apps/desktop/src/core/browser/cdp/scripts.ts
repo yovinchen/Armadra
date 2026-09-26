@@ -79,10 +79,16 @@ const HAS_TEXT =
  * CJK text. So select, after type-ahead has failed, calls this ON the select
  * element it resolved: it refuses anything that is not an enabled SELECT or
  * an enabled option of it, sets that one option, and fires the input and
- * change events a person's choice fires. It takes an index, not a value, so
- * it can only pick among what the page itself offers. */
+ * change events a person's choice fires. It takes indexes, not values, so
+ * it can only pick among what the page itself offers.
+ *
+ * A multiple select takes several indexes, comma separated, and ends with
+ * exactly those options selected: a person picks them one ctrl-click at a
+ * time, which is not an input a closed list answers. Several indexes for a
+ * select without the multiple attribute are refused here as well as by the
+ * verb, so the one writer cannot be talked into a second shape. */
 const CHOOSE_OPTION =
-  'function (index) { var el = this; if (!el || el.tagName !== "SELECT" || el.disabled) return { ok: false }; var option = el.options[index]; if (!option || option.disabled) return { ok: false }; el.selectedIndex = index; el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); return { ok: true }; }';
+  'function (wanted) { var el = this; if (!el || el.tagName !== "SELECT" || el.disabled) return { ok: false }; var parts = String(wanted).split(","); if (parts.length > 1 && !el.multiple) return { ok: false }; var picks = []; for (var i = 0; i < parts.length; i++) { var option = el.options[Number(parts[i])]; if (parts[i] === "" || !option || option.disabled) return { ok: false }; picks.push(Number(parts[i])); } if (el.multiple) { for (var j = 0; j < el.options.length; j++) { el.options[j].selected = picks.indexOf(j) >= 0; } } else { el.selectedIndex = picks[0]; } el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); return { ok: true }; }';
 
 /* eslint-enable no-useless-escape */
 

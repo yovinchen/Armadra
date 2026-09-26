@@ -335,7 +335,7 @@ const HANDLERS: Record<string, Handler> = {
     const wanted = [...list(args, "values"), ...list(args, "labels")];
     const chosen = await choose(session, target, wanted);
     await settle(session);
-    return { chosen: [chosen], ...aimed(target) };
+    return { chosen, ...aimed(target) };
   },
 
   press: async ({ session }, args) => {
