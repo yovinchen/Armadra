@@ -30,7 +30,7 @@
  *   node tools/probes/core-terminal-packaged.mjs --app <path to Armadra.app>
  */
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -52,7 +52,7 @@ const { DatabaseSync } = require("node:sqlite");
  * core. It fails looking exactly like a packaging bug, which is the worst way
  * for it to look.
  */
-async function freePort() {
+export async function freePort() {
   const { createServer } = await import("node:net");
   return await new Promise((done, fail) => {
     const server = createServer();
@@ -65,10 +65,10 @@ async function freePort() {
 }
 
 /** What launchd hands an app opened from Finder or the Dock. */
-const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+export const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 /** tmux where a Mac usually has it — none of these is on LAUNCHD_PATH. */
-function installedTmux() {
+export function installedTmux() {
   return [
     "/opt/homebrew/bin/tmux",
     "/usr/local/bin/tmux",
@@ -78,7 +78,7 @@ function installedTmux() {
 
 const WORKSPACE = "00000000-0000-0000-0000-0000000000cc";
 
-function defaultApp() {
+export function defaultApp() {
   const release = join(repo, "apps/desktop/release");
   for (const name of ["mac-arm64", "mac"]) {
     const candidate = join(release, name, "Armadra.app");
@@ -126,7 +126,7 @@ function seedWorkspace(dataDir) {
  * target reports a CORS refusal that reads like a product bug. The shell
  * serves its renderer over loopback HTTP, so that is what this matches.
  */
-async function attachToRenderer(port) {
+export async function attachToRenderer(port) {
   let seen = [];
   for (let attempt = 0; attempt < 120; attempt += 1) {
     try {
@@ -150,7 +150,7 @@ async function attachToRenderer(port) {
   );
 }
 
-function cdp(url) {
+export function cdp(url) {
   const socket = new WebSocket(url);
   const pending = new Map();
   let nextId = 1;
@@ -158,8 +158,13 @@ function cdp(url) {
     socket.once("open", done);
     socket.once("error", fail);
   });
+  const listeners = [];
   socket.on("message", (data) => {
     const message = JSON.parse(data.toString("utf8"));
+    if (message.id === undefined) {
+      for (const listener of listeners) listener(message);
+      return;
+    }
     const waiter = pending.get(message.id);
     if (waiter === undefined) return;
     pending.delete(message.id);
@@ -168,6 +173,10 @@ function cdp(url) {
   });
   return {
     ready,
+    /** CDP 事件（没有 id 的消息）：控制台、异常。 */
+    onEvent(listener) {
+      listeners.push(listener);
+    },
     send(method, params) {
       const id = nextId;
       nextId += 1;
@@ -261,6 +270,8 @@ async function main() {
   }
   const binary = join(app, "Contents/MacOS/Armadra");
   const dataDir = mkdtempSync(join(tmpdir(), "armadra-packaged-"));
+  const home = join(dataDir, "home");
+  mkdirSync(home);
   const port = await freePort();
 
   // Started once with no window work to do, purely so the core creates and
@@ -273,12 +284,18 @@ async function main() {
       `--remote-debugging-port=${port}`,
       "--remote-allow-origins=*",
       `--user-data-dir=${join(dataDir, "electron")}`,
+      // 临时 HOME 下没有登录钥匙串：不让 Chromium 去找它。
+      "--use-mock-keychain",
     ],
     {
       env: {
         ...process.env,
         PATH: LAUNCHD_PATH,
         ARMADRA_DATA_DIR: dataDir,
+        // 临时 HOME：打包版的 core 启动时会把各 CLI 旧的全局安装迁走（备份后
+        // 清理）并往 ~/.codex/config.toml 写信任记录，用真实 HOME 跑这个探针就
+        // 是替操作员做了这件事。
+        HOME: home,
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -354,7 +371,7 @@ async function main() {
   process.exit(outcome?.ok ? 0 : 1);
 }
 
-async function killTmux(socket) {
+export async function killTmux(socket) {
   if (!existsSync(socket)) return;
   await new Promise((done) => {
     const child = spawn("tmux", ["-S", socket, "kill-server"], {
