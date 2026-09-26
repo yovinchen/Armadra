@@ -1,0 +1,14 @@
+-- 终端会话的创建者（设计 `docs/design/server-accounts-and-sharing.md` S5）。
+--
+-- 服务器壳上，往**自己**开的终端里写只要 `terminal:create`（operator），往别人
+-- 开的里写要 `terminal:drive`（driver）。到 0027 为止「谁开的」只记在路由门的
+-- 内存里，core 一重启这张表就空了：operator 从此写不进自己之前开的终端，只能
+-- 重开一个。这一列把它落进会话行本身，路由门按它判。
+--
+-- 空串是「本机 owner 或 core 自己开的」：桌面壳、控制动词、依赖编排、冷启动都
+-- 没有请求身份。已有的行一律是空串——升级之前没有人记过成员，而空串对成员来说
+-- 正是「别人的」，和升级前重启之后的判法一致，不会有谁因为这条迁移多拿到权限。
+--
+-- 不挂外键到 `identity_principals`：终端域在身份域之前就有，而且停用或删除一个
+-- 账号不该连带改写终端的历史行；判定时拿请求主体比对这一列即可。
+ALTER TABLE terminal_sessions ADD COLUMN creator_principal_id TEXT NOT NULL DEFAULT '';

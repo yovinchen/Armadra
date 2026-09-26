@@ -49,6 +49,12 @@ export interface RequestIdentity {
    * 再经过任何请求级的门。
    */
   readonly revalidate?: () => AuthorizationSubject | undefined;
+  /**
+   * 这次请求来自身份域里的哪台设备（会话绑着的那一行 `identity_devices`）。
+   * 服务器壳认证出会话时带上；桌面壳没有，那里只有「本机」一台设备。在线表拿它
+   * 判「是不是同一个人的另一个窗口」，设备名也优先用它的。
+   */
+  readonly device?: { readonly deviceId: string; readonly deviceName: string };
 }
 
 const OWNER_SUBJECT: AuthorizationSubject = {

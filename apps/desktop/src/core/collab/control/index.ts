@@ -15,7 +15,12 @@ import { type Outcome, outcomeBody, raw, result } from "./outcome";
 
 export { outcomeBody };
 
-export { CONFIRM_TIMEOUT_SECS, answerConfirm, pendingConfirms } from "./close";
+export {
+  CONFIRM_TIMEOUT_SECS,
+  answerConfirm,
+  confirmWorkspace,
+  pendingConfirms,
+} from "./close";
 export { NODE_PALETTE, PLACEMENT_GAP, PLACEMENT_STEP } from "./board";
 export type { Outcome } from "./outcome";
 

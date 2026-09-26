@@ -26,6 +26,7 @@
     "0024_edge_roles.sql": "9937cb9ad72833ea1226797c16986f180601ab2cc63943edc4247c7e9309bc1b",
     "0025_context_reads.sql": "0f0ed4e90a338410d70a658370a120d85c38165f7b6699753fb08eb4293448ae",
     "0026_delivery_target_state.sql": "e4583ed6cde8043ed412f37cb60447b2077c362bb77b8ba9a5afc534259bcf96",
-    "0027_agent_dependencies.sql": "d25bb4c7646ba758a90a1fdaaad9730f68b72e45948c562b8c18d7b11eeac386"
+    "0027_agent_dependencies.sql": "d25bb4c7646ba758a90a1fdaaad9730f68b72e45948c562b8c18d7b11eeac386",
+    "0028_terminal_creator.sql": "ea631c247cb85d6361c778bc83ce11f35e6a0a53b27036696d27201cbf0c7ff4"
   }
 }

@@ -27,6 +27,8 @@ export const CONFIRM_TIMEOUT_SECS = 130;
 
 interface Pending {
   readonly settle: (approve: boolean) => void;
+  /** 发起确认的节点所在的工作空间；服务器壳的路由门按它判谁能答。 */
+  readonly workspaceId: string;
 }
 
 /**
@@ -48,6 +50,11 @@ export function answerConfirm(requestId: string, approve: boolean): boolean {
   confirms.delete(requestId);
   pending.settle(approve);
   return true;
+}
+
+/** 一条待确认的请求属于哪块画布；没有这条（答过、超时、从未有过）是空串。 */
+export function confirmWorkspace(requestId: string): string {
+  return confirms.get(requestId)?.workspaceId ?? "";
 }
 
 /** For the tests: how many verbs are waiting right now. */
@@ -181,6 +188,7 @@ function requestConfirmation(
     timer.unref?.();
     confirms.set(options.requestId, {
       settle: (approve) => finish(approve ? "approved" : "denied"),
+      workspaceId: caller.node.workspaceId,
     });
     context.publish(caller.node.workspaceId, {
       type: "control.confirm",

@@ -220,9 +220,10 @@ export const ROUTE_SCOPE_RULES: readonly RouteScopeRule[] = [
   },
   { pattern: /^\/browser\//, read: "browser:read", write: "browser:control" },
 
-  { pattern: /^\/api\/ownership/, read: "canvas:read", write: "canvas:write" },
-
   // 「谁读过这个节点」与画布本体同一档：它答的是画布上的一个节点的历史。
+  // 节点属于哪块画布由服务器壳的路由门去查（`identity/route-access.ts`）；
+  // 这里声明的只是权限名。`/api/ownership` 曾在这张表里，2026-09-20 连同
+  // 路由一起删掉了，表外的路由对成员本来就是 403。
   { pattern: /^\/api\/nodes\/[^/]+\/context-reads$/, read: "canvas:read" },
 ];
 

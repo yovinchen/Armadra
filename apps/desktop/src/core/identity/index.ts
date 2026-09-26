@@ -1,11 +1,17 @@
 import type { CoreContext } from "../main";
+import { confirmWorkspace } from "../collab/control/close";
 import { instanceId } from "../instance";
 import { coreCapabilities } from "../schedule/capabilities";
 import { AccountsService } from "./accounts";
 import { installAuditSink } from "./audit";
 import { Authorizer } from "./authorize";
 import { startControlChannel } from "./control";
-import { currentSubject, installAccessGate, installRouteGuard } from "./gate";
+import {
+  currentSubject,
+  installAccessGate,
+  installRouteGuard,
+  requestIdentity,
+} from "./gate";
 import { API_PREFIX, IdentityHttp } from "./http";
 import { createRouteGuard } from "./route-access";
 import { IdentityService } from "./service";
@@ -101,14 +107,20 @@ export function installIdentity(context: CoreContext): void {
     createRouteGuard({
       database: context.db.database,
       permits: (subject, required) => authorizer.permits(subject, required),
+      effectiveScopes: (subject) => authorizer.effectiveScopes(subject),
+      // 关闭确认只在内存里等人答，库里查不到它属于哪块画布。
+      lookups: { confirmWorkspace },
     }),
   );
   installAuditSink((event) => {
+    // 调用方没写是谁时记这次请求的人：审批答复、画布接管这些写入点在域里，
+    // 它们不该为了审计去认识请求身份，而服务器壳上「谁答的」正是这条记录的意义。
+    const identity = requestIdentity();
     store.transaction((tx) => {
       tx.accounts.appendAudit({
         atMs: Date.now(),
-        principalId: event.principalId ?? "",
-        deviceId: event.deviceId ?? "",
+        principalId: event.principalId ?? identity?.subject.principalId ?? "",
+        deviceId: event.deviceId ?? identity?.device?.deviceId ?? "",
         action: event.action,
         target: (event.target ?? "").slice(0, 256),
         workspaceId: (event.workspaceId ?? "").slice(0, 256),
