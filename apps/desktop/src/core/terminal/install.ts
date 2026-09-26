@@ -778,6 +778,7 @@ function wrapSsh(
     inner,
     hosts: remote.host,
     askpass: remote.askpass,
+    remote: (hostId, env) => remote.integration.terminal(hostId, env),
   });
 }
 

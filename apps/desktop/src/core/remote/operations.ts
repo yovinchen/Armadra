@@ -68,6 +68,12 @@ import { type RootFingerprint, fingerprintOf } from "./switch";
 import { trackOperation } from "./git-worker";
 import { readRemoteResources } from "./resources-worker";
 import { unwatchFiles, watchFiles } from "./watch-worker";
+import {
+  listenHooks,
+  locate as locateIntegration,
+  replyHook,
+  sync as syncIntegration,
+} from "./integration-worker";
 
 /** 操作执行时拿得到的东西：本机是控制端的 Git 服务，远端是 Worker 自己的。 */
 export interface OperationContext {
@@ -82,6 +88,8 @@ export interface OperationContext {
    * 控制端对本机工作空间直接调表时没有它，用到它的操作只在远端有意义。
    */
   readonly session?: WorkerSession;
+  /** Worker 的 `--state-dir`；画布注入与分块传输的暂存都在它下面。 */
+  readonly stateDir?: string | undefined;
 }
 
 export type OperationArgs = Record<string, unknown>;
@@ -612,6 +620,24 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
     ),
   ),
 
+  /* ---------------------------- 画布注入 ---------------------------- */
+  /** 这台机器上的注入位置；只读。 */
+  "integration.locate": read((context, _root, args) =>
+    locateIntegration(context.stateDir, args),
+  ),
+  /** 按哈希落产物：同样的内容再发一次什么也不改，所以可以重放。 */
+  "integration.sync": read((context, _root, args) =>
+    syncIntegration(context.stateDir, args),
+  ),
+  /** 开 Hook 中继 socket；已经开着同一个就什么也不做。 */
+  "hook.listen": read(
+    async (context, _root, args) => await listenHooks(context.session, args),
+  ),
+  /** 把一条中继请求的答复交回去；第二次送达答 `delivered: false`。 */
+  "hook.reply": read((context, _root, args) =>
+    replyHook(context.session, args),
+  ),
+
   "git.rebaseTodo": read(
     async (context, root, args) =>
       await rebaseTodoPreview(
@@ -643,6 +669,9 @@ const GIT_OPERATION_NAMES = new Set([
   "git.messageCapture",
 ]);
 
+/** 画布注入的产物同步与 Hook 中继。 */
+export const INTEGRATION_CAPABILITY = "remote.integration.v1";
+
 /** 一个操作属于哪个能力组。 */
 export function capabilityOf(operation: string): string | undefined {
   if (operation === "files.watch" || operation === "files.unwatch") {
@@ -654,5 +683,8 @@ export function capabilityOf(operation: string): string | undefined {
   if (GIT_OPERATION_NAMES.has(operation)) return GIT_OPERATIONS_CAPABILITY;
   if (operation.startsWith("git.")) return GIT_CAPABILITY;
   if (operation.startsWith("resources.")) return RESOURCES_CAPABILITY;
+  if (operation.startsWith("integration.") || operation.startsWith("hook.")) {
+    return INTEGRATION_CAPABILITY;
+  }
   return undefined;
 }

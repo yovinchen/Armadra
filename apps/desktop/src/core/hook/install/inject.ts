@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join as nativeJoin } from "node:path";
 import type { LaunchWord, ShellDialect } from "../../terminal/shell";
 import {
   eventKey,
@@ -82,8 +82,15 @@ export function isInjected(agentId: string): boolean {
 
 /** `<data>/integration/<cli>` — everything of one CLI's injection. */
 export function integrationDir(dataDir: string, agentId: string): string {
-  return join(dataDir, "integration", agentId);
+  return nativeJoin(dataDir, "integration", agentId);
 }
+
+/**
+ * How a layout joins its paths. The native one for this machine's data
+ * directory; `path.posix.join` for the copy synced to an execution host
+ * (`remote.ts`), which is POSIX whatever the controller runs on.
+ */
+export type PathJoin = (...parts: string[]) => string;
 
 /* --------------------------------- layout --------------------------------- */
 
@@ -120,15 +127,16 @@ export interface ArtifactLayout {
   readonly marker: string;
 }
 
-function skillUnder(root: string): string {
+function skillUnder(root: string, join: PathJoin): string {
   return join(root, SKILLS_ROOT, SKILL_NAME, "SKILL.md");
 }
 
 export function artifactLayout(
   dataDir: string,
   agentId: string,
+  join: PathJoin = nativeJoin,
 ): ArtifactLayout {
-  const dir = integrationDir(dataDir, agentId);
+  const dir = join(dataDir, "integration", agentId);
   const marker = join(dir, "injection.json");
   const instructions = join(dir, "instructions.md");
   switch (agentId) {
@@ -141,11 +149,11 @@ export function artifactLayout(
         settings: join(dir, "settings.json"),
         pluginDir,
         manifest: join(pluginDir, ".claude-plugin", "plugin.json"),
-        skill: skillUnder(pluginDir),
+        skill: skillUnder(pluginDir, join),
       };
     }
     case "codex":
-      return { dir, marker, skill: skillUnder(dir) };
+      return { dir, marker, skill: skillUnder(dir, join) };
     case "opencode": {
       const configDir = join(dir, "config");
       return {
@@ -154,7 +162,7 @@ export function artifactLayout(
         instructions,
         configDir,
         module: join(configDir, "plugins", "armadra-status.js"),
-        skill: skillUnder(configDir),
+        skill: skillUnder(configDir, join),
       };
     }
     case "pi":
@@ -164,7 +172,7 @@ export function artifactLayout(
         marker,
         instructions,
         module: join(dir, "armadra-status.ts"),
-        skill: skillUnder(dir),
+        skill: skillUnder(dir, join),
         skillDir: join(dir, SKILLS_ROOT, SKILL_NAME),
         ...(agentId === "omp" ? { overlay: join(dir, "overlay.yml") } : {}),
       };
@@ -177,7 +185,7 @@ export function artifactLayout(
         pluginDir,
         manifest: join(pluginDir, "plugin.json"),
         pluginHooks: join(pluginDir, "hooks.json"),
-        skill: skillUnder(pluginDir),
+        skill: skillUnder(pluginDir, join),
         instructionsDir,
         instructions: join(
           instructionsDir,
@@ -240,6 +248,12 @@ function json(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+/** Which machine the artifacts are written for; this one when absent. */
+export interface ArtifactTarget {
+  readonly join?: PathJoin;
+  readonly windows?: boolean;
+}
+
 /**
  * Every file of one CLI's injection, path → contents. Deterministic: the same
  * revision and client produce the same bytes, so regenerating is a no-op on
@@ -249,8 +263,11 @@ export function artifactFiles(
   dataDir: string,
   agentId: string,
   clientBin: string,
+  target: ArtifactTarget = {},
 ): Map<string, string> {
-  const layout = artifactLayout(dataDir, agentId);
+  const join = target.join ?? nativeJoin;
+  const windows = target.windows ?? process.platform === "win32";
+  const layout = artifactLayout(dataDir, agentId, join);
   const content = skillContent();
   const files = new Map<string, string>();
   if (content !== undefined) {
@@ -314,7 +331,7 @@ export function artifactFiles(
       const entry: JsonObject = {
         type: "command",
         bash: hookCommand(clientBin, agentId),
-        ...(process.platform === "win32"
+        ...(windows
           ? { powershell: `& ${hookCommand(clientBin, agentId)}` }
           : {}),
         timeoutSec: HOOK_TIMEOUT_SECONDS,
@@ -738,12 +755,32 @@ function literalInjection(
   if (!isInjected(request.agentId)) return undefined;
   const marker = readMarker(request.dataDir, request.agentId);
   if (marker === undefined) return undefined;
-  const layout = artifactLayout(request.dataDir, request.agentId);
+  return injectionFromLayout(
+    request.agentId,
+    artifactLayout(request.dataDir, request.agentId),
+    marker.clientBin,
+    isFile,
+  );
+}
+
+/**
+ * The argv and environment for one CLI's artifacts at `layout`, naming only
+ * the files `exists` confirms. Shared by this machine's launch (which asks the
+ * disk) and the copy synced to an execution host (`remote.ts`, which knows
+ * what it just wrote there).
+ */
+export function injectionFromLayout(
+  agentId: string,
+  layout: ArtifactLayout,
+  clientBin: string,
+  exists: (path: string | undefined) => path is string,
+): Omit<Injection, "words"> | undefined {
+  const isFile = exists;
   const skill = isFile(layout.skill);
   const instructions = isFile(layout.instructions)
     ? layout.instructions
     : undefined;
-  switch (request.agentId) {
+  switch (agentId) {
     case "claude":
       return {
         args: [
@@ -761,7 +798,7 @@ function literalInjection(
       const content = skillContent();
       return {
         args: codexArgs(
-          hookCommand(marker.clientBin, "codex"),
+          hookCommand(clientBin, "codex"),
           skill && content !== undefined
             ? content.developerInstructions(layout.skill)
             : undefined,

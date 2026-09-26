@@ -56,6 +56,7 @@ export function useLaunchSequence(
         agent,
         undefined,
         launchDialect(nodeData, refs.shellRef.current),
+        Boolean(nodeData.ssh),
       );
       refs.transportRef.current?.input(`${launch.command}\r`);
       refs.freshSessionRef.current = false;

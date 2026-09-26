@@ -186,6 +186,13 @@ describe("启动行按节点终端的 shell 引用", () => {
       buildAgentLaunch({ id: "codex" }, 'fix "a" & b', "cmd"),
     ).toThrow(/batch/);
   });
+
+  it("SSH 节点只敲程序名：本机路径与注入路径在执行主机上都不存在", () => {
+    setAgentRegistry([codex]);
+    expect(
+      buildAgentLaunch({ id: "codex" }, undefined, "posix", true).command,
+    ).toBe("codex");
+  });
 });
 
 describe("建会话请求里的账号绑定（S02 预留）", () => {

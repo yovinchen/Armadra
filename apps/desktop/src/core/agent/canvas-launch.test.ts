@@ -263,6 +263,29 @@ describe("canvas launch lines", () => {
     expect(line).toContain("--resume session-1");
     expect(line).toContain("--append-system-prompt-file");
   });
+
+  it("leaves an SSH node's line bare: the host's shims inject", () => {
+    const launch = canvasLaunch({
+      settings,
+      dataDir,
+      agentId: "claude",
+      nodeId: "n1",
+      model: "opus",
+      program: "/opt/homebrew/bin/claude",
+      dialect: "cmd",
+      ssh: true,
+    });
+    // 本机的程序路径与注入路径在执行主机上都不存在；行按 POSIX 写。
+    expect(launch.line).toBe("claude --model opus");
+    const resumed = resumeLine(
+      settings,
+      "codex",
+      { agent: { id: "codex" }, ssh: { hostId: "far" } },
+      "thread-1",
+      { dataDir, path: "/usr/local/bin/codex" },
+    );
+    expect(resumed).toBe("codex resume thread-1");
+  });
 });
 
 /* ------------------------------- structure -------------------------------- */

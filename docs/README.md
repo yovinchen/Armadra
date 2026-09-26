@@ -51,6 +51,7 @@
 | [Agent 协作通道](design/agent-collaboration-channels.md)        | Pi / OMP / Copilot 的 Hook 适配与省资源通道                    |
 | [Agent 接入统一管理](design/agent-integration.md)               | Hook + 技能一个安装单元、启动时注入、旧残留修复                |
 | [画布内注入](design/canvas-only-integration.md)                 | Hook、技能与画布说明只在画布启动时生效，全局安装的一次性迁移   |
+| [远端画布注入](design/remote-canvas-injection.md)               | SSH 终端里的 CLI：产物同步、垫片与经 Worker 中继的 Hook        |
 | [Agent 推式投递与终端驱动](design/agent-delivery.md)            | `send` 动词、目标状态机、驱动租约、Agent 的名字与带任务启动    |
 | [全面修改方案（2026-09）](design/overhaul-plan.md)              | 本轮总纲：界面补齐、Mermaid、功能复查、TS 核心、收尾与多端编译 |
 | [服务器账号、中转与共享](design/server-accounts-and-sharing.md) | 多 principal、组与授予编译成 scope、接口与现有代码的预留点     |

@@ -47,6 +47,44 @@ export function workerBundle(): Promise<string> {
   return built;
 }
 
+let builtHook: Promise<string> | undefined;
+let hookOutput: string | undefined;
+
+/**
+ * Hook 客户端（`armadra-hook.js`）的包：远端画布注入把它同步到执行主机上，由那边
+ * 的 node 跑。与 `electron.vite.config.ts` 里的第五个目标同一个入口与格式。
+ */
+export function hookClientBundle(): Promise<string> {
+  builtHook ??= (async () => {
+    const cache = join(desktop, "node_modules", ".cache");
+    mkdirSync(cache, { recursive: true });
+    const outDir = mkdtempSync(join(cache, "armadra-hook-"));
+    hookOutput = outDir;
+    await build({
+      configFile: false,
+      logLevel: "silent",
+      root: desktop,
+      build: {
+        outDir,
+        emptyOutDir: true,
+        target: "node22",
+        ssr: true,
+        minify: false,
+        rollupOptions: {
+          input: {
+            "armadra-hook": resolve(desktop, "src/cli/armadra-hook/main.ts"),
+          },
+          external: ["electron", "node-pty"],
+          output: { format: "cjs", entryFileNames: "[name].js" },
+        },
+      },
+      ssr: { noExternal: true },
+    });
+    return join(outDir, "armadra-hook.js");
+  })();
+  return builtHook;
+}
+
 /**
  * 起一个真 Worker 子进程；stdio 就是控制端与它之间的整条连接。`extra` 追加在
  * `worker --stdio` 之后，例如语言连接的 `--language-link`。
@@ -66,4 +104,9 @@ export function disposeWorkerBundle(): void {
   if (output !== undefined) rmSync(output, { recursive: true, force: true });
   output = undefined;
   built = undefined;
+  if (hookOutput !== undefined) {
+    rmSync(hookOutput, { recursive: true, force: true });
+  }
+  hookOutput = undefined;
+  builtHook = undefined;
 }

@@ -150,8 +150,12 @@ export function buildAgentLaunch(
   agent: TerminalAgent,
   prompt?: string,
   dialect: ShellDialect = defaultShellDialect(),
+  remote = false,
 ): LaunchCommand {
-  return assembleLaunchCommand({ ...launchInput(agent, prompt), dialect });
+  return assembleLaunchCommand({
+    ...launchInput(agent, prompt, remote),
+    dialect,
+  });
 }
 
 /**
@@ -196,16 +200,21 @@ export function buildAgentLaunchArgv(agent: TerminalAgent): LaunchArgv {
  * 再找一次 `codex`，找到的可能是另一份（比如 Homebrew 下签名已吊销的旧版本，
  * 一启动就被系统 SIGKILL）。探测过能用的那一份，就要原样启动它。
  */
-function launchInput(agent: TerminalAgent, prompt?: string) {
+function launchInput(agent: TerminalAgent, prompt?: string, remote = false) {
+  // SSH 节点的行由执行主机上的 shell 读：本机的程序路径与注入的路径那边都不
+  // 存在。程序按名字由远端 PATH 找，注入由远端的垫片补上（Runtime 在开终端时
+  // 已同步过去）。
   const override = usePreferencesStore.getState().launchOverrides[agent.id];
   // Windows 上 npm 装的 CLI 是 `.cmd` 包装：批处理会让 cmd.exe 把参数再读一遍，
   // 引用挡不住。Runtime 读出了包装背后的程序（`launchTarget`）时直接起它。
-  const target = override ? undefined : registryEntry(agent.id)?.launchTarget;
-  const programOverride =
-    override ||
-    target?.program ||
-    registryEntry(agent.id)?.resolvedPath ||
-    undefined;
+  const target =
+    remote || override ? undefined : registryEntry(agent.id)?.launchTarget;
+  const programOverride = remote
+    ? undefined
+    : override ||
+      target?.program ||
+      registryEntry(agent.id)?.resolvedPath ||
+      undefined;
   const custom = customAgentFor(agent.id);
   // 画布注入的 argv（设计 canvas-only-integration §2）：Hook、技能与画布说明
   // 只在从画布启动时交给 CLI，由 Runtime 的 `GET /api/agents` 现答。路径是
@@ -215,7 +224,7 @@ function launchInput(agent: TerminalAgent, prompt?: string) {
   // `assembleLaunchCommand` 按节点 shell 的方言引用；Codex 的长值留在节点终端
   // 的环境变量里只写变量名——几 KB 的一行敲进刚起的 shell 会被截断。旧
   // Runtime 只给 `launchArgs`，照旧逐个引用。
-  const row = registryEntry(agent.id);
+  const row = remote ? undefined : registryEntry(agent.id);
   const words = row?.launchWords ?? [];
   const injected = words.length > 0 ? [] : (row?.launchArgs ?? []);
   return {

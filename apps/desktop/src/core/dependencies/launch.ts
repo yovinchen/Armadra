@@ -271,6 +271,7 @@ export function launchLine(
     dataDir: collab.dataDir,
     agentId,
     dialect: nodeDialect(sessionShell ?? stringField(data, "shell"), ssh),
+    ssh,
     ...(permissionMode === undefined ? {} : { permissionMode }),
     ...(model === undefined ? {} : { model }),
     ...(row?.resolvedPath == null ? {} : { program: row.resolvedPath }),

@@ -51,7 +51,7 @@ import {
   TerminalError,
   isAdoptable,
 } from "../backend";
-import { sshArgv } from "./argv";
+import { remoteShellCommand, sshArgv } from "./argv";
 import type { AskpassService } from "./askpass";
 
 /** Looks a host up in the settings registry. `undefined` when there is none. */
@@ -63,7 +63,19 @@ export interface SshBackendOptions {
   readonly inner: TerminalBackend;
   readonly hosts: HostLookup;
   readonly askpass: AskpassService;
+  /**
+   * 画布 Agent 终端在远端 shell 里要带的环境（`remote/integration.ts`）：注入
+   * 产物同步好之后答；不是 Agent 终端、主机没有 Worker 或同步失败时答
+   * `undefined`，终端照常以登录 shell 打开。
+   */
+  readonly remote?: (
+    hostId: string,
+    env: readonly (readonly [string, string])[],
+  ) => Promise<readonly (readonly [string, string])[] | undefined>;
 }
+
+/** 远端注入最多让终端等这么久；首次连接要探测 Node、握手并同步产物。 */
+const REMOTE_PREPARE_TIMEOUT_MS = 30_000;
 
 /**
  * The extra a caller attaches to a spec to say "this one goes over SSH".
@@ -121,12 +133,36 @@ export class SshBackend implements TerminalBackend {
     // because a key passphrase for an agent-driven pane is a prompt nobody is
     // sitting in front of, and the dialog is where it can actually be answered.
     const askpass = this.options.askpass.childEnvironment(host.id) ?? [];
+    const remoteEnv = await this.remoteEnvironment(spec);
+    if (remoteEnv !== undefined && remoteEnv.length > 0) {
+      argv.push(remoteShellCommand(remoteEnv));
+    }
     return {
       ...spec,
       command: program,
       args: argv,
       env: [...spec.env, ...askpass],
     };
+  }
+
+  private async remoteEnvironment(
+    spec: SshTerminalSpec,
+  ): Promise<readonly (readonly [string, string])[] | undefined> {
+    const prepare = this.options.remote;
+    if (prepare === undefined) return undefined;
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), REMOTE_PREPARE_TIMEOUT_MS);
+      timer.unref?.();
+    });
+    try {
+      return await Promise.race([
+        prepare(spec.sshHostId, spec.env).catch(() => undefined),
+        late,
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   /* ------------------------ everything else is the inner ------------------- */

@@ -74,6 +74,13 @@ export interface CanvasLaunchRequest {
    * The core's own default shell's when absent.
    */
   readonly dialect?: ShellDialect;
+  /**
+   * The node's terminal is an SSH session: the line is read by a POSIX shell
+   * on the execution host. It carries no injected words — every path they
+   * name is on this machine — and no program resolved here; the host's
+   * shims (`hook/install/remote.ts`) add the injection when the CLI starts.
+   */
+  readonly ssh?: boolean;
 }
 
 export interface CanvasLaunch {
@@ -129,24 +136,30 @@ export function canvasLaunch(request: CanvasLaunchRequest): CanvasLaunch {
       : { permissionMode: request.permissionMode }),
     ...(request.model === undefined ? {} : { model: request.model }),
   });
-  const injection = injectionFor(
-    request.settings,
-    request.dataDir,
-    request.agentId,
-    {
-      ...(request.nodeId === undefined ? {} : { nodeId: request.nodeId }),
-      resume: request.resume !== undefined && request.resume !== "",
-    },
-  );
+  const ssh = request.ssh === true;
+  const injection = ssh
+    ? { args: [], words: [] }
+    : injectionFor(request.settings, request.dataDir, request.agentId, {
+        ...(request.nodeId === undefined ? {} : { nodeId: request.nodeId }),
+        resume: request.resume !== undefined && request.resume !== "",
+      });
   const flags = request.frozenArgs ?? plan.args;
-  const resolved =
-    request.program ??
-    (process.platform === "win32" ? resolveCommand(plan.program) : undefined) ??
-    plan.program;
-  const target = launchTargetOf(resolved);
+  // 本机解析到的程序路径在执行主机上不存在：SSH 节点用注册表里的程序名，由
+  // 远端 shell 的 PATH 找（垫片排在最前面）。本机在 Windows 上则绕过 npm 的
+  // `.cmd` 包装，直接起它背后的程序。
+  const resolved = ssh
+    ? plan.program
+    : (request.program ??
+      (process.platform === "win32"
+        ? resolveCommand(plan.program)
+        : undefined) ??
+      plan.program);
+  const target = ssh ? undefined : launchTargetOf(resolved);
   const program = target?.program ?? resolved;
   const lead = target?.args ?? [];
-  const dialect = request.dialect ?? nodeDialect(undefined);
+  const dialect = ssh
+    ? nodeDialect(undefined, true)
+    : (request.dialect ?? nodeDialect(undefined));
   return {
     program,
     args: [...lead, ...flags, ...injection.args],

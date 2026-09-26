@@ -62,6 +62,8 @@ import {
   remoteConnected,
   remoteDisconnected,
   remotePushed,
+  executeRemote,
+  listenRemote,
   setLanguageCaller,
   setRemoteCaller,
 } from "./execute";
@@ -70,6 +72,7 @@ import { remoteResources } from "../resources/remote";
 import { missingCapability } from "./handshake";
 import { capabilityOf } from "./operations";
 import { RemoteWorker, RemoteWorkers, unsupported } from "./worker";
+import { RemoteIntegration } from "./integration";
 
 /**
  * Substitutes argv[0] of every `ssh` this domain starts.
@@ -85,6 +88,8 @@ export interface RemoteDomain {
   readonly workers: RemoteWorkers;
   /** 每台主机的语言连接（`worker --stdio --language-link`），按需建立。 */
   readonly languageLinks: RemoteWorkers;
+  /** 画布 SSH 终端的远端注入与 Hook 中继。 */
+  readonly integration: RemoteIntegration;
   /** The registry read fresh, so a settings edit is visible immediately. */
   readonly host: (hostId: string) => SshHost | undefined;
   stop(): Promise<void>;
@@ -298,12 +303,24 @@ export function install(context: CoreContext): RemoteDomain {
   };
   setLanguageCaller(callLanguage);
 
+  const integration = new RemoteIntegration({
+    dataDir: context.dataDir,
+    version: VERSION,
+    call: async (hostId, operation, args) =>
+      await executeRemote(hostId, operation, "/", args),
+    log: (message, fields) => context.log.warn(message, fields),
+  });
+  const unlisten = listenRemote(integration);
+
   const domain: RemoteDomain = {
     askpass,
     workers,
     languageLinks,
+    integration,
     host,
     stop: async () => {
+      unlisten();
+      integration.stop();
       if (assembled === domain) assembled = undefined;
       const current = setRemoteCaller(undefined);
       if (current !== call) setRemoteCaller(current);

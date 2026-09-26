@@ -21,7 +21,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { RepositoryService } from "../git/repository/service";
 import { VERSION } from "../instance";
@@ -44,6 +44,7 @@ import { LANGUAGE_CAPABILITY, LANGUAGE_OPERATIONS } from "./language";
 import {
   FILES_CAPABILITY,
   GIT_CAPABILITY,
+  INTEGRATION_CAPABILITY,
   GIT_OPERATIONS_CAPABILITY,
   OPERATIONS,
   RESOURCES_CAPABILITY,
@@ -61,6 +62,7 @@ export const WORKER_CAPABILITIES: readonly string[] = [
   GIT_OPERATIONS_CAPABILITY,
   WATCH_CAPABILITY,
   RESOURCES_CAPABILITY,
+  INTEGRATION_CAPABILITY,
 ];
 
 /** 语言连接（`--language-link`）声明的能力。 */
@@ -90,6 +92,8 @@ export interface WorkerServerOptions {
    */
   readonly operations?: Readonly<Record<string, Operation>>;
   readonly capabilities?: readonly string[];
+  /** `--state-dir`；缺省是 `~/.armadra-worker`。 */
+  readonly stateDir?: string | undefined;
 }
 
 /** 起一个 Worker 会话；返回的 Promise 在输入结束、所有在途请求答完后兑现。 */
@@ -126,6 +130,7 @@ export async function serveWorker(options: WorkerServerOptions): Promise<void> {
     service,
     freshDiscovery: false,
     session,
+    stateDir: options.stateDir,
   };
   // 连接结束时还在排队或在跑的 Git 长操作一并取消：控制端已经听不到它们的结局，
   // 让它们在没有人看的地方继续推送或改仓库，比取消更糟。
@@ -292,9 +297,11 @@ export async function runWorker(args: WorkerArguments): Promise<number> {
     process.stderr.write("armadra worker: only --stdio is supported\n");
     return 2;
   }
-  if (args.stateDir !== undefined) {
+  const stateDir =
+    args.stateDir === undefined ? undefined : resolve(args.stateDir);
+  if (stateDir !== undefined) {
     try {
-      mkdirSync(args.stateDir, { recursive: true, mode: 0o700 });
+      mkdirSync(stateDir, { recursive: true, mode: 0o700 });
     } catch (failure) {
       process.stderr.write(
         `armadra worker: cannot create the state directory: ${
@@ -307,6 +314,7 @@ export async function runWorker(args: WorkerArguments): Promise<number> {
   await serveWorker({
     input: process.stdin,
     output: process.stdout,
+    stateDir,
     ...(args.languageLink
       ? {
           operations: LANGUAGE_OPERATIONS,

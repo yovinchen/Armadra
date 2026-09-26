@@ -139,6 +139,39 @@ export function sshArgv(dataDir: string, host: SshHost): string[] {
 }
 
 /**
+ * The remote command a canvas SSH terminal runs instead of the login shell's
+ * default: the node's identity in the environment, the injection shims
+ * (`ARMADRA_SHIMS`) first on `PATH`, then the user's own login shell.
+ *
+ * `ssh` hands this string to the far side's login shell, which may be sh,
+ * fish or csh. So everything shell-specific happens inside `/bin/sh -c`, the
+ * values go through `env` in single quotes, and a value that would need an
+ * escape in any of those shells (`'`, `\`, `!`, a control character) is
+ * refused here rather than guessed at — the caller only forwards values
+ * that cannot need one (`remote/integration.ts`).
+ */
+export function remoteShellCommand(
+  env: readonly (readonly [string, string])[],
+): string {
+  const words = ["env"];
+  for (const [key, value] of env) {
+    if (!/^[A-Z_][A-Z0-9_]*$/u.test(key)) {
+      throw new Error(`Cannot forward ${key} to the remote shell`);
+    }
+    if (!/^[^'\\!\u0000-\u001f\u007f]*$/u.test(value)) {
+      throw new Error(`Cannot forward the value of ${key} to the remote shell`);
+    }
+    words.push(`${key}='${value}'`);
+  }
+  words.push(
+    "/bin/sh",
+    "-c",
+    `'PATH="$ARMADRA_SHIMS:$PATH"; export PATH; exec "\${SHELL:-/bin/sh}" -l'`,
+  );
+  return words.join(" ");
+}
+
+/**
  * The reachability probe: no TTY, no password prompt, five seconds, `true` as
  * the remote command.
  *

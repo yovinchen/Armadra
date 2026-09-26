@@ -605,6 +605,7 @@ export function resumeLine(
     settings,
     agentId,
     resume: providerSessionId,
+    ssh: data.ssh !== null && typeof data.ssh === "object",
     ...(program?.dataDir === undefined ? {} : { dataDir: program.dataDir }),
     ...(program?.nodeId === undefined ? {} : { nodeId: program.nodeId }),
     ...(program?.path === undefined ? {} : { program: program.path }),
