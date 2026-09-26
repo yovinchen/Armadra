@@ -4,7 +4,7 @@ import { runtimeApi } from "@/api/client";
 import { useMergeStore } from "@/editor/merge/merge-store";
 import { merge3 } from "@/lib/merge3";
 import { useCanvasStore } from "@/store/canvas-store";
-import { clearDraft, readDraft, writeDraft } from "./drafts";
+import { clearDraft, draftOrigin, readDraft, writeDraft } from "./drafts";
 import type { EditorRefs } from "./refs";
 
 export interface RelocateActions {
@@ -65,9 +65,11 @@ export function useRelocate(
       const ours = current();
       if (!workspaceId || ours === null) return;
       const file = await runtimeApi.readFile(workspaceId, target);
-      // 草稿改起时的那一版：本机副本里记着就用它，没有就退回编辑器的基准。
+      // 草稿改起时的那一版：本机副本里记着就用它（文件被删之后记在
+      // `origin` 里），没有就退回编辑器的基准。
       const base =
-        readDraft(workspaceId, path)?.base || refs.baselineRef.current;
+        draftOrigin(readDraft(workspaceId, path))?.content ??
+        refs.baselineRef.current;
       useMergeStore.getState().beginDraft({
         path: target,
         regions: merge3(base, ours, file.content),

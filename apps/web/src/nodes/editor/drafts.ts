@@ -15,11 +15,40 @@ const PREFIX = "armadra.editorDraft.";
 export interface StoredDraft {
   /** 草稿改起时磁盘上的内容版本；文件已被删、按新建保存时没有。 */
   baseVersion?: string;
-  /** 那一版的正文，三方合并的 base。 */
+  /** 那一版的正文，三方合并的 base。文件已被删时编辑器的基准是空串，这里
+   * 也跟着是空串——真正的 base 在 `origin` 里。 */
   base: string;
   draft: string;
+  /**
+   * 文件被删之后，草稿最初改起的那一版正文与它的内容版本。「重新定位 →
+   * 合并」拿它当 base；没有它，base 只剩空串，整份草稿都会被当成新增而处处
+   * 冲突。超过 {@link ORIGIN_MAX_CHARS} 不存。
+   */
+  origin?: string;
+  originVersion?: string;
   /** 毫秒时间戳，只用于排查。 */
   savedAt: number;
+}
+
+/** `origin` 的上限（字符）：再大的正文只放在 `base` 里那一份，不存第二份。 */
+export const ORIGIN_MAX_CHARS = 256 * 1024;
+
+/**
+ * 草稿真正改起的那一版：文件还在时就是 `base` 与 `baseVersion`，文件被删之后
+ * 是记下的 `origin`。都没有时 `undefined`，调用方退回编辑器自己的基准。
+ */
+export function draftOrigin(
+  stored: StoredDraft | null | undefined,
+): { content: string; version?: string } | undefined {
+  if (!stored) return undefined;
+  if (stored.origin !== undefined)
+    return {
+      content: stored.origin,
+      ...(stored.originVersion ? { version: stored.originVersion } : {}),
+    };
+  if (stored.baseVersion)
+    return { content: stored.base, version: stored.baseVersion };
+  return undefined;
 }
 
 function key(workspaceId: string, path: string): string {
@@ -46,6 +75,10 @@ export function readDraft(
       savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0,
       ...(typeof parsed.baseVersion === "string"
         ? { baseVersion: parsed.baseVersion }
+        : {}),
+      ...(typeof parsed.origin === "string" ? { origin: parsed.origin } : {}),
+      ...(typeof parsed.originVersion === "string"
+        ? { originVersion: parsed.originVersion }
         : {}),
     };
   } catch {

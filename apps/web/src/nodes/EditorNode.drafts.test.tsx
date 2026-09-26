@@ -81,7 +81,7 @@ vi.mock("./NodeShell", () => ({
 import { MergeDialog } from "@/editor/merge/MergeDialog";
 import { useMergeStore } from "@/editor/merge/merge-store";
 import { EditorNode } from "./EditorNode";
-import { readDraft, writeDraft } from "./editor/drafts";
+import { ORIGIN_MAX_CHARS, readDraft, writeDraft } from "./editor/drafts";
 
 const ON_DISK = "a".repeat(64);
 const OLD = "b".repeat(64);
@@ -327,6 +327,62 @@ describe("relocating a draft whose file is gone", () => {
     expect(readDraft("w1", "note.txt")).toBeNull();
     // 合并不写盘。
     expect(mocks.write).not.toHaveBeenCalled();
+  });
+
+  it("keeps the real base across edits after the file is gone, so the merge only conflicts where both sides did", async () => {
+    orphan(
+      { base: "a\nb\nc\nd\ne\n", draft: "a\nB\nc\nd\ne\n" },
+      { content: "a\nb\nc\nd\nE\n", size: 10, sha256: ON_DISK },
+    );
+    const first = render(<EditorNode {...props()} />);
+    // 文件没了之后又改了一处：本机副本改写了，base 成了空串，但草稿改起时
+    // 的那一版与它的内容版本跟着带下去。
+    replace(await view(), "A\nB\nc\nd\ne\n");
+    first.unmount();
+    expect(readDraft("w1", "note.txt")).toMatchObject({
+      base: "",
+      draft: "A\nB\nc\nd\ne\n",
+      origin: "a\nb\nc\nd\ne\n",
+      originVersion: OLD,
+    });
+
+    // 再打开一次（base 仍是空串）、再改一次，那一版还在。
+    render(
+      <>
+        <EditorNode {...props()} />
+        <MergeDialog />
+      </>,
+    );
+    const editor = await view();
+    await waitFor(() =>
+      expect(editor.state.doc.toString()).toBe("A\nB\nc\nd\ne\n"),
+    );
+    replace(editor, "A\nB\nc\nd\ne\n\n");
+    replace(editor, "A\nB\nc\nd\ne\n");
+    await relocateTo("other.txt");
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+    // 两边改的是不相邻的行：没有冲突要人挑，直接应用。
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Apply to draft" }),
+    );
+    await waitFor(() =>
+      expect(readDraft("w1", "other.txt")).toMatchObject({
+        base: "a\nb\nc\nd\nE\n",
+        draft: "A\nB\nc\nd\nE\n",
+        baseVersion: ON_DISK,
+      }),
+    );
+  });
+
+  it("does not keep a second copy of a very large base", async () => {
+    const big = "x".repeat(ORIGIN_MAX_CHARS + 1);
+    orphan({ base: big, draft: "kept\n" }, new Error("unused"));
+    const first = render(<EditorNode {...props()} />);
+    replace(await view(), "kept more\n");
+    first.unmount();
+    const stored = readDraft("w1", "note.txt");
+    expect(stored).toMatchObject({ base: "", draft: "kept more\n" });
+    expect(stored?.origin).toBeUndefined();
   });
 
   it("overwrites an existing file only after a confirmation", async () => {

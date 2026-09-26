@@ -6,7 +6,13 @@ import { runtimeApi } from "@/api/client";
 import { useT } from "@/app/preferences-store";
 import { useMergeStore } from "@/editor/merge/merge-store";
 import { merge3 } from "@/lib/merge3";
-import { clearDraft, readDraft, writeDraft } from "./drafts";
+import {
+  ORIGIN_MAX_CHARS,
+  clearDraft,
+  draftOrigin,
+  readDraft,
+  writeDraft,
+} from "./drafts";
 import type { EditorRefs } from "./refs";
 import type { ExternalChange, LoadState } from "./types";
 
@@ -83,11 +89,30 @@ export function useDraftProtection(
       clearDraft(workspaceId, path);
       return;
     }
+    // 文件被删之后编辑器的基准不再是草稿改起的那一版（重开时是空串），所以
+    // 那一版从上一份本机副本里接着带下去；上一份也没有时，编辑器手里的基准
+    // 还是删之前打开的正文，就用它。
+    let origin: { content: string; version?: string } | undefined;
+    if (refs.recreateRef.current) {
+      origin =
+        draftOrigin(readDraft(workspaceId, path)) ??
+        (refs.baselineRef.current !== ""
+          ? { content: refs.baselineRef.current }
+          : undefined);
+      if (origin && origin.content.length > ORIGIN_MAX_CHARS)
+        origin = undefined;
+    }
     writeDraft(workspaceId, path, {
       base: refs.baselineRef.current,
       draft: content,
       ...(refs.versionRef.current && !refs.recreateRef.current
         ? { baseVersion: refs.versionRef.current }
+        : {}),
+      ...(origin
+        ? {
+            origin: origin.content,
+            ...(origin.version ? { originVersion: origin.version } : {}),
+          }
         : {}),
     });
   }, [identity, path, workspaceId]);
