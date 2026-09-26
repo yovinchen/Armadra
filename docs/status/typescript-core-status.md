@@ -2223,3 +2223,39 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：264 文件通过、1 跳过（3120 条通过、6 跳过），live 配置 2 文件 2 条（含新的 `verbs.live.integration.test.ts`，真 Chromium 跑全部动词），脚本 38 条通过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
 - `pnpm --filter @armadra/server test`：10 文件 82 条通过。
 - `pnpm check`：format、typecheck、ci:workflows、release:check 通过；repo:check 报 `tools/probes/agent-e2e.mjs` 1675 行超限，基线 5017db32 上即如此，未改动。
+
+## 53. 三平台 CI：远端执行主机、Windows 启动行与编辑器草稿串用例（2026-09-26）
+
+接着 §33。依据是 PR #6 的两次运行：36171079430（8e436cfd）与 36217989294（ce0aa8cd）。后一次 Windows 上 `apps/desktop` 19 条失败，Linux 与 macOS 各 1 条（live 配置），三个平台都因 desktop 先失败而没跑到 web；前一次 macOS 的 web 有 1 条。本机没有 Windows，下面 Windows 的部分靠逻辑与 `path.win32` 单测，要等下一次 CI 证实。
+
+原则照 §33：执行主机是 POSIX 机器（`worker.path` 本来就只收 `/` 开头），**控制端可以是 Windows**。远端路径在控制端一律按 POSIX 判；只属于某一台机器的路径（本机工作空间根、私钥、落盘位置）按那台机器自己的规则判。
+
+### 53.1 产品 bug（Windows 控制端线上会遇到）
+
+- **切回本机被 400。** `remote/switch.ts` 的 `validateRequest` 对所有目标写死 `startsWith("/")`，`remote/operations.ts` 的 `registerRoot` 同样。Windows 控制端把工作空间切回本机（`executionHostId: ""`）时根是 `C:\…`，两处都拒。现在：目标是本机按控制端的 `node:path` 判，目标是执行主机按 `path.posix` 判；`registerRoot` 与 Worker 帧入口（`remote/server.ts`）按「执行这一步的那台机器」的 `isAbsolute` 判——它们跑在哪台机器上，根就是哪台机器的路径。`language/routes.integration.test.ts` 的「moving the workspace to another root」失败正是这一条（本机 → 本机的强制切换）。
+- **私钥路径配不上。** `settings/ssh-hosts.ts` 的 `validateHost` 要求 `identityFile` 以 `/` 开头且不含反斜杠，但 `ssh -i` 读的是控制端的文件，Windows 上是 `C:\Users\…\.ssh\id_ed25519`。改为按控制端规则判绝对、Windows 上放开反斜杠（它只进本机 argv，不进远端 shell）；`worker.path` / `worker.stateDir` 在执行主机上，照旧只收 POSIX。这一条 CI 没有覆盖到，是排查时顺带发现的。
+- **画布启动行的单引号。** `hook/install/inject.ts` 的 `shellWord` 只会 POSIX 单引号，Windows 上节点 shell 默认是 `COMSPEC`（`cmd.exe`），它不认单引号，`--settings 'C:\…\settings.json'` 连引号一起到 CLI。Windows 上只含路径字符（含 `\`、`~`）的原样写，其余用 `cmd.exe` 与 PowerShell 都会剥掉的双引号。`.map(shellWord)` 两处改成显式箭头，免得数组下标被当成平台参数。`agent/canvas-launch.test.ts`、`terminal/hibernator.test.ts` 的两条失败由此而来，期望值改为经 `shellWord` 拼出。
+
+### 53.2 测试假设（源码没问题）
+
+- `browser/cdp/verbs.test.ts` 截图：回答里是落盘后的绝对路径，Windows 上是 `s\view.png`，期望改用 `join`。live 用例里同样的 `shots/view.png` 一并改掉（Windows 上 live 配置这次没跑到）。
+- `hook/install/{codex,migrate}.test.ts`：夹具把 `[hooks.state."<路径>:stop:1:0"]` 原样写进 TOML，Windows 路径里的 `\U`、`\A` 成了转义序列，读回来的键已不是那个路径，于是「删掉我们的信任记录」无从匹配。夹具改为像 Codex 那样转义（`JSON.stringify` 与 TOML 基本字符串兼容），`codex.test.ts` 的断言改走 `stateKeys`。产品这边写与读都经 `escapeKey` / `unescapeKey`，本来就对。
+- `browser/headless/verbs.live.integration.test.ts` 的 resize（Linux 与 macOS）：回答的是 `cssLayoutViewport` 的客户区——坐标检查用的就是它。fixture 两个方向都能滚，runner 上是经典滚动条，800×600 答成 785×585；本机是浮动滚动条所以一直是 800×600。断言改为两边各在一条滚动条厚度之内。
+- `EditorNode.save.test.tsx`（macOS 的 web）：根因是**用例之间串了草稿**。「late save response」那条在 `note.txt` 里敲了 `one` 就换文件，卸载时的 flush 把它作为草稿写进 localStorage（base 版本 `aaa…`），之后没人清；下一条打开 `note.txt`，读到的版本正好也是 `aaa…`，恢复逻辑把 `one` 放回来——放回发生在用例敲 `draft` 之前还是之后取决于时序，CI 慢就撞上。本机复现不了的原因更隐蔽：Node 25 起全局自带 `localStorage` getter，没给 `--localstorage-file` 时答 `undefined` 且盖住 jsdom 的那一个，本机（Node 26）上所有本机存储读写都静默失败，CI 是 Node 22。修法两层：`app/test-setup.ts` 在存储不可用时换回 jsdom 自己的 `localStorage`，本机与 CI 跑同一件事；`EditorNode.{save,files,external}.test.tsx` 的 `beforeEach` 先 `localStorage.clear()`（`drafts.test.tsx` 本来就注入了自己的存储）。
+
+### 53.3 按平台门控
+
+- `remote/execution.test.ts` 的「opens a project on the host only once its root is proven there」与「rebinds to the same project elsewhere…」：它们把本机子进程当执行主机，经路由交给控制端一条远端根；控制端只收 POSIX 根，而 Windows runner 上的目录只有 `D:\…` 一种写法——「Windows 执行主机」本来就不存在。Windows 控制端切回本机的那一半由 `remote.test.ts` 的 `path.win32` 用例和 `language/routes.integration.test.ts` 覆盖。
+- 同一批里其余 11 条（stdio 握手、读重放、远端文件 / 导入 / Git 路由、推送监听、语言连接）**没有**门控：它们失败都是因为 Worker 帧入口写死 `/`，改成按 Worker 自己的机器判之后，在 Windows 上照样能测控制端那一半——`RemoteWorker` 的 stdio、帧、重连就是 Windows 控制端线上要跑的代码。
+
+### 53.4 没做的
+
+- `agent/launch.ts` 给程序路径的引用、`codexWords` 的 `"$ARMADRA_CODEX_HOOK"` 仍是 POSIX shell 语法（`cmd.exe` 用 `%VAR%`，PowerShell 用 `$env:VAR`）。Windows 上的 Codex 画布启动行因此仍然不对，需要按节点实际 shell 生成，范围超出这次 CI 修复。
+- `apps/web/src/panels/automation/CreatePlanForm.tsx` 对新会话根目录写死 `startsWith("/")`，Windows 控制端上同样会拒 `C:\…`；本次没有 CI 用例覆盖，未改。
+
+### 53.5 验证
+
+- `pnpm --filter @armadra/desktop test`：266 文件通过、2 跳过（3142 条通过、13 跳过）；live 配置 2 文件 2 条通过；脚本 38 条通过。
+- `pnpm --filter @armadra/web test`：283 文件 2761 条通过（test-setup 换回真存储之后全量复跑）；`typecheck` 通过。`vitest run src/nodes/EditorNode --sequence.shuffle` 连跑 5 次，37 条全过。
+- 新增用例：`remote.test.ts` 用 `path.win32` 模拟 Windows 控制端的切换校验；`settings/schema.test.ts` 的私钥路径；`hook/install/inject.test.ts` 的 `shellWord` 两个平台。
+- `pnpm check`、`pnpm format:check` 通过。Windows 上的结论待推送后 CI 确认。
