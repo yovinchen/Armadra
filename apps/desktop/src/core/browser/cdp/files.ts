@@ -69,6 +69,8 @@ function written(
 }
 
 const MAX_SIDE = 16_384;
+/** Longest a host printer may take before `pdf` gives up on it. */
+const PRINT_TIMEOUT_MS = 20_000;
 
 export async function capture(
   session: CdpSession,
@@ -138,7 +140,23 @@ export async function pdf(host: VerbHost, args: Args): Promise<unknown> {
   const landscape = args.landscape === true;
   let bytes: Buffer;
   if (host.printToPdf !== undefined) {
-    bytes = await host.printToPdf({ landscape });
+    // Electron's printer never finishes a `<webview>` page that has a
+    // cross-origin iframe (checked on Electron 42: the promise hangs, and the
+    // app can die with it on quit). Refused up front rather than hung on;
+    // the timeout is for whatever else might stall it.
+    if (host.session.childFrames().length > 0)
+      refuse(
+        DRIVE_CODES.refused,
+        "桌面浏览器节点打印不了含跨源 iframe 的页面；可以用 capture --full-page 截整页",
+      );
+    const printing = host.printToPdf({ landscape });
+    printing.catch(() => undefined);
+    bytes = await Promise.race([
+      printing,
+      sleep(PRINT_TIMEOUT_MS).then(() =>
+        refuse(DRIVE_CODES.timeout, "打印 PDF 超时"),
+      ),
+    ]);
   } else {
     const answer = (await host.session.send("Page.printToPDF", {
       landscape,

@@ -603,7 +603,7 @@ describe("type, fill, select, press", () => {
       text: "秘密内容",
       replace: true,
     });
-    expect(text).toContain("已输入 4 个字符");
+    expect(text).toContain("输入 4 个字符");
     expect(text).not.toContain("秘密内容");
     const methods = page.methods();
     expect(methods).toContain("Input.insertText");
@@ -874,6 +874,24 @@ describe("capture and pdf", () => {
     );
     expect(printed).toBe(1);
     expect(page.methods()).not.toContain("Page.printToPDF");
+    // Electron's printer hangs on a page with a cross-origin iframe: refused
+    // before it is asked.
+    page.children.set("child-1", {
+      targetId: "F",
+      owner: 1,
+      url: "https://x.test/",
+    });
+    session.noteEvent("Target.attachedToTarget", {
+      sessionId: "child-1",
+      targetInfo: { type: "iframe", targetId: "F", url: "https://x.test/" },
+    });
+    await expect(
+      runVerbOnHost(
+        host({ printToPdf: async () => Buffer.from("%PDF-") }),
+        "pdf",
+        { workspaceRoot: workspace, path: "r.pdf" },
+      ),
+    ).rejects.toThrow("跨源 iframe");
   });
 });
 

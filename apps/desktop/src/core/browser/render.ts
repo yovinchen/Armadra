@@ -102,7 +102,7 @@ function body(verb: string, source: ArgSource, result: Result): string {
     case "drag":
       return `已把 ${text(result, "from")} 拖到 ${text(result, "to")}。\n${where(result)}`;
     case "type":
-      return `已输入 ${number(result, "chars")} 个字符${aimed(result)}。\n${where(result)}`;
+      return `已${aimed(result) === "" ? "" : `在${aimed(result)} `}输入 ${number(result, "chars")} 个字符。\n${where(result)}`;
     case "fill": {
       const fields = array(result, "fields");
       let out = `已填写 ${fields.length} 项：\n`;

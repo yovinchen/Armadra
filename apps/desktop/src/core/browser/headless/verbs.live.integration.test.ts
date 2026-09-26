@@ -215,10 +215,10 @@ describe.skipIf(found.path === undefined)(
       // type / fill / select (native and custom) / checkbox.
       expect(
         await run("type", { ref: refOf(snap, '"邮箱"'), text: "a@b.c" }),
-      ).toContain("已输入 5 个字符");
+      ).toContain("输入 5 个字符");
       expect(
         await run("type", { ref: refOf(snap, "跨源输入"), text: "hi" }),
-      ).toContain("已输入 2 个字符");
+      ).toContain("输入 2 个字符");
       const filled = await run("fill", {
         field: [
           `${refOf(snap, '"邮箱"')}=x@y.z`,
