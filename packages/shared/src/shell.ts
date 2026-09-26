@@ -149,6 +149,11 @@ export function quoteShellWord(value: string, dialect: ShellDialect): string {
  * `prefix` followed by the value of the environment variable `name`, as one
  * word — double quotes in every dialect, so the value is never split:
  * `"p$NAME"` / `"p%NAME%"` / `"p${env:NAME}"`.
+ *
+ * `cmd.exe` pastes the value's text into those quotes before it reads the
+ * line, so there the *value* must hold no `"` and not end in `\` (which would
+ * escape the closing quote for the program). The environment is ours, so it is
+ * written for that — see the core's `codexTomlString`.
  */
 export function shellEnvWord(
   prefix: string,
