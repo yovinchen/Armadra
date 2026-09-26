@@ -2412,4 +2412,56 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `node tools/probes/remote-e2e.mjs`：26 项全部通过，含新场景 8（画布上建连到假远端的 SSH Agent 节点、开终端、敲 `claude --model probe`：执行主机上的假 CLI 经垫片收到注入的 argv、远端 shell 带着节点身份与远端端点文件、读到同步过去的说明（1936 字节）与技能（11122 字节），SessionStart 经 Worker 中继记进 `agent_status`）。探针的 core 现在带 `ARMADRA_NO_GLOBAL_WRITES=1`，假 ssh 像真 ssh 一样不带本机的 `ARMADRA_*` 过去。
 - `pnpm --filter @armadra/desktop test`：272 文件通过、2 跳过（3177 条通过、8 跳过），live 2 条、脚本 38 条通过（worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
 - `pnpm --filter @armadra/web test`：284 文件 2782 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条；`pnpm --filter @armadra/shared test`：29 文件 247 条。
+
+## 59. 浏览器工具四项补强、被动旁听、草稿 base、组队 worktree（2026-09-26）
+
+接 §52（浏览器工具）、§37 / §45（编辑器）与 G03（Frame 绑定 worktree）。设计文档 `design/browser-agent-tools.md` 的 §2、§4、§5、§7、§9 已同步。
+
+### 59.1 整页截图里的跨源 iframe
+
+- `captureBeyondViewport` 把视图撑到整页大小再截，跨源 iframe 的渲染进程不为此重画，视口以外截出来是空白（实测：页底一块红色的跨源 iframe，旧路径截出的红像素为 0）。
+- 页面有跨源 iframe 时改为逐屏：按视口大小滚过去（与 `scroll` 同一种滚轮，经白名单），每屏截可见区域（不带 `captureBeyondViewport`，clip 是文档坐标），按**实测**滚动位置贴到画布上，横向也分段，截完滚回原处；没有跨源 iframe 仍一次截完。上限 120 屏、6400 万像素，超了截到那里并在回答里说。jpeg 不拼接，回答说明代价。`fixed` / `sticky` 元素每屏都在、会重复出现，是按屏截的必然结果。
+- PNG 编解码：仓库里只有探针脚本 `tools/probes/ui-features/fixtures.mjs` 有一份手写的（core 不能引 `tools/`），于是在 `core/browser/cdp/png.ts` 按同样的做法写一份 TS 版：`node:zlib` 负责压缩与解压，只认 Chromium 截图的 8 位非交错 RGB/RGBA，输出 RGBA。没有引入依赖——纯 JS 的现成包做的也是这一百来行，外加用不到的调色板、16 位与交错；原生图像库要跟着 Electron 与 Node 各编一份。
+
+### 59.2 桌面壳被动旁听（第一次驱动之前的控制台与请求）
+
+- core `browser/observe.ts`：「被连着的浏览器节点」= 任一终端节点的链接文档里 `kind: "browser"` 的那些（与驱动授权同一份事实），整份经 drive 通道的 `observe` 通知推给壳；链接文档写入（`canvas/context-links.ts` 新增 `onContextLinksChanged`）、`board.changed`（节点删除时链接文档随之删）与通道接通（`DriveClient` 在 `ready` 时交出 `channelReady`）时推，同一份不重推。只有桌面壳后端这样做，headless 本来从开标签就在记。
+- 壳 `main/browser/observe.ts` 与 `GuestSession.observe`：连着的节点，它在画布上的每个 guest 被动接上调试器，只经 `CdpSession.listen` 发 `Runtime.enable`、`Log.enable`、`Network.enable`（`maxPostDataSize: 0`）三条订阅，与 `send` 走同一道白名单、只是不看撤销标记。不开 `Page` 域（对话框与文件选择框照旧由页面自己弹）、不拦文件选择框、不自动附加 iframe、不发输入、不算租约（`isAttached()` 仍为 false，下载照旧归人）。新注册的 guest（新标签页、刷新）连着就接上。
+- 语义不变的两件事：`before-input-event` 与人工接管——人收回页面仍整个摘掉调试器（设备尺寸模拟、对话框接管随那次会话结束），随后重新被动接上，缓冲在会话对象上原样留着；最后一条连线断开时摘掉，正在驱动时不摘（租约结束时摘）。探针桌面壳一段整批动词后租约仍在 Agent 手里。
+- 限制：跨源 iframe 里的控制台要等第一次驱动开了自动附加才进来；`Runtime.enable` 可被页面用已知手法探测到（这是需求点名要开的三路之一）。
+- 开销（本机 Chrome headless 各跑 12 次取中位数，同一页面分别不接调试器 / 只开这三路订阅）：常见页面（20 条 console、50 个请求）页面自测完成时间 16.1 → 18.9 ms；压力页面（2000 条带对象参数的 console、300 个请求，约 3200 条事件）117 → 162 ms。主进程这一侧把事件记进环形缓冲约 1 µs/条（回放同一批 4000 条事件 × 20 轮，80 ms）；缓冲每页各 500 条封顶，内存有界。
+
+### 59.3 多选 `<select>`
+
+- `select` 给多个 `--value` / `--label` 时只对 `<select multiple>` 生效：直接走唯一的写入脚本 `chooseOption`（下标列表逗号分隔，结束时恰好这些被选中；逐项 ctrl 点选不是合成输入够得着的，键入跳转会把选区换成一项），读回核对；同一个选项用值和文字各写一次算一个。非 multiple 的元素给多个，动词与脚本两处都拒绝；自绘下拉给多个也拒。单选的核对改为按下标，选项重名时键入跳转落在同名的另一项上不再被当成成功。
+- 冻结脚本表的源码守卫同步：写入者判定加上 `.selected =`，`chooseOption` 的每一处赋值逐个钉住（本地变量与循环变量之外，页面上只有 `options[j].selected` 与 `selectedIndex` 两处）。
+
+### 59.4 `--selector` 穿透 Shadow DOM
+
+- 二选一选了显式的 `宿主 >>> 里面`（可连写多层）：自动递归会让同一个选择器在页面改版后悄悄指到影子树里的别的元素，显式写法让「进了影子树」是调用方看得见的决定。普通选择器找不到时回答提示这种写法。
+- 新冻结读脚本 `shadowQuery`：逐层 `querySelector`，每层进上一层结果的开放 shadow root，答回元素本身；这是表里唯一按引用作答的一条，白名单只对它放开 `returnByValue: false`，句柄只交给新放行的 `DOM.requestNode`（只收 `objectId`、只答节点 id），用完立刻释放。失败答短串：`bad`、`none:N`、`closed:N`。闭合的 shadow root 页面脚本与调试协议都进不去，回答如实说「没有开放的 shadow root」。`wait --selector` 同一种写法。
+- `elementState` 的遮挡检查改为在元素自己的根上取 `elementFromPoint`：否则影子树里的按钮永远被宿主「挡住」（真浏览器用例先撞上了这一条）。
+
+### 59.5 编辑器：文件被删后草稿的 base
+
+- 原因：文件没了时编辑器基准是空串，之后每次改写本机副本 `base` 都跟着变空，「重新定位 → 合并」拿空串做三方 base，整份草稿都成了新增、处处冲突。
+- `drafts.ts` 的副本加 `origin` / `originVersion`：文件被删期间改写时，从上一份副本接着带下去（上一份还在时就是它的 `base` + `baseVersion`），都没有时退回编辑器手里删之前的正文；超过 256K 字符不存第二份。`use-relocate` 合并用 `draftOrigin()` 取 base。用例：删后改、重开、再改之后重新定位合并，两边改的是不相邻的行，直接应用无冲突；超大正文不存 `origin`。
+
+### 59.6 `canvas team` / `open-agent` 每人一条 worktree
+
+- 写法二选一选了成员内联：`--member "agent|标题|任务|worktree=名字或路径"`（没有任务写 `agent|标题||worktree=名字`；只在最后一段以 `worktree=` 开头时摘下，任务里的竖线照旧保留），`open-agent --worktree`。独立参数配对在多个成员时要靠顺序对齐，容易错位。
+- `core/collab/control/worktree.ts`：名字先找分支名或目录名是它的现有 worktree（主检出不算），没有就在 `.worktrees/名字` 从当前 HEAD 建同名分支；路径是工作区内的相对路径或落在工作区里的绝对路径，那里已有检出就用，否则新建、分支取目录名。新建走 Git 域装好的那一个 `RepositoryService` 的同一条写队列（`core/git/index.ts` 导出 `gitService()`），等它结束，失效仓库发现缓存。要求本机工作区、有写与执行权限、根目录是仓库。
+- 画布：已有 Frame 绑着这条检出就放进去，没有就建一个（绑定与页面上 `worktreeFrameBinding` 同一口径，1040×720），成员 `parentId` 指向它、落点在 Frame 内错开、`cwd` 是检出的绝对路径——与 `addNode` 在绑定 Frame 里继承的那一份相同，依赖编排的启动也读它。检出在建任何节点之前备好，Git 拒绝就整队不建；建完重新读一次画布再存。`--dry-run` 不建。
+- 技能正文（示例与一段说明）与 `armadra-hook --help` 的 canvas 段同步，`SKILLS_REVISION` 13 → 14；`guides/architecture.md` 的控制动词一段补了一句。
+
+### 59.7 端到端
+
+- `tools/probes/browser-agent-e2e.mjs`：fixture 加开放与闭合的 shadow root、`<select multiple>`、页底一整块红色的跨源 iframe、加载后 1.2 秒的一条控制台；新增多选与非 multiple 被拒、`>>>` 点击与闭合拒绝、整页截图拼接后页底 iframe 确实是红的（按「红明显多于绿」认：前面按过 Control+a，页面整体处在选中态）；桌面壳一段在任何动词之前读控制台，读得到那条日志。`resize` 的断言改成与真浏览器用例同一口径（滚动条占位的机器答 785×585，本机接了鼠标时就是这样）。
+- `tools/probes/agent-e2e.mjs` 场景 6：假 CLI（记下自己工作目录的 sh）、自己一套 core 与临时仓库，`--only 6` 单跑不需要真 CLI 登录；断言检出与分支、两个 Frame 的绑定、同名成员共用 Frame、成员终端从节点 `cwd` 起在检出里、`open-agent --worktree` 按分支名进同一个 Frame、`--dry-run` 不建、Git 拒绝（`main` 已存在）时画布不多节点、worktree 列表正好多两条。
+
+### 59.8 验证
+
+- `pnpm --filter @armadra/desktop test`：270 文件通过、2 跳过（3172 条通过、8 跳过）；live 2 文件 3 条通过（新增一条真 Chromium：`>>>` 点击、闭合拒绝、多选与禁用项被拒、红色跨源 iframe 在拼接图里——临时切回旧路径时同一断言红像素为 0）；脚本 38 条通过。
+- `pnpm --filter @armadra/web test`：284 文件 2782 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条通过。
+- `node tools/probes/browser-agent-e2e.mjs --electron`：headless 与桌面壳两段共 124 条全过。`node tools/probes/agent-e2e.mjs --only 6`：13 条全过，操作员配置未改动。
 - `pnpm check`、`pnpm format:check` 通过。

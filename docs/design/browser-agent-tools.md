@@ -28,11 +28,11 @@
 | `click` / `hover`                                             | 目标见 §4；`--double`                                                                                          |
 | `drag --from --to`                                            | 引用或 CSS 选择器                                                                                              |
 | `type` / `fill --field 引用=值`                               | 不给目标时打进当前焦点；`fill` 按元素类型处理文本框、复选框、下拉                                              |
-| `select`                                                      | 原生下拉、combobox、listbox                                                                                    |
+| `select`                                                      | 原生下拉、combobox、listbox；`<select multiple>` 可重复 `--value` / `--label` 一次选多项                       |
 | `press --key`                                                 | 命名键、F1–F12、组合键（§6）                                                                                   |
 | `scroll`                                                      | 上下左右、到顶到底，或把目标滚进可视区域                                                                       |
 | `wait`                                                        | `--text`、`--text-gone`、`--idle`、`--selector`、地址、标题；最长 30 秒                                        |
-| `capture` / `pdf`                                             | 视口、整页（`captureBeyondViewport`）、元素截图；PDF 写进工作区                                                |
+| `capture` / `pdf`                                             | 视口、整页、元素截图（整页含跨源 iframe 时逐屏拼接，§9）；PDF 写进工作区                                       |
 | `resize`                                                      | 200–3840 × 200–2160，`--reset` 复原                                                                            |
 | `upload` / `download` / `tabs` / `close` / `dialog` / `lease` | 与原先相同                                                                                                     |
 
@@ -67,12 +67,14 @@
 
 `--ref`、`--role [--name]`（先精确再按包含，多个时列出候选并各自发引用）、`--selector`（主框架）、`--x --y`。
 
+`--selector 宿主 >>> 里面` 进入宿主开放的 shadow root，可以连写多层；`DOM.querySelector` 穿不进影子树，所以这种写法由冻结读脚本 `shadowQuery` 逐层查找，答回元素句柄，再经 `DOM.requestNode` 换成节点 id 并立刻释放句柄（它是冻结表里唯一按引用作答的一条，白名单只对它放开 `returnByValue: false`，`DOM.requestNode` 只收 `objectId`、只答节点 id）。闭合的 shadow root 页面脚本与调试协议都进不去，回答如实说「没有开放的 shadow root」；普通选择器找不到时提示这种写法。`wait --selector` 认同一种写法。`elementState` 的遮挡检查按元素自己的根（shadow root）取 `elementFromPoint`，否则影子里的按钮永远被宿主「挡住」。
+
 按下之前：把元素（以及外面每一层 iframe）滚进可视区域，用 `DOM.getContentQuads` 取中心，跨源 iframe 里的元素逐层加上 iframe 内容框的位置；再用冻结脚本 `elementState` 检查可见、未禁用、中心点确实落在它身上——被别的东西挡住时拒绝并说出挡住它的是什么。指针移过去之后再量一次，悬停展开的菜单收起会让下面的东西挪位。
 
 ## 5. 表单与下拉
 
 - 文本一律经 `Input.insertText`，清空用 `selectAll` + `deleteBackward` 两个编辑命令；从不给字段赋值。
-- 原生 `<select>`：先 `DOM.focus`（不点开，点开的是系统菜单，合成按键够不着），再逐字发 `char` 事件做键入跳转；键入跳转对 CJK 不生效，或选项重名时，调用唯一的写入脚本 `chooseOption`：只对已启用的 SELECT、只按下标选它自己的已启用选项，并触发 `input` 与 `change`。这是冻结脚本表里唯一的写入者，源码测试钉住它的每一处赋值。
+- 原生 `<select>`：先 `DOM.focus`（不点开，点开的是系统菜单，合成按键够不着），再逐字发 `char` 事件做键入跳转；键入跳转对 CJK 不生效，或选项重名时，调用唯一的写入脚本 `chooseOption`：只对已启用的 SELECT、只按下标选它自己的已启用选项，并触发 `input` 与 `change`。`<select multiple>` 给多个值时直接走它：下标列表以逗号分隔，结束时恰好这些选项被选中（逐项 ctrl 点选不是合成输入够得着的）；非 multiple 的元素给多个值，动词与脚本两处都拒绝；同一个选项用值和文字各写一次算一个。这是冻结脚本表里唯一的写入者，源码测试钉住它的每一处赋值。
 - 自绘下拉（combobox、listbox、带弹出的 button）：点开，在快照里找 option / menuitem / treeitem，可编辑的先键入过滤，再点选项。
 
 ## 6. 按键白名单
@@ -86,7 +88,7 @@
 - 白名单只为此增加订阅：`Log.enable/disable` 与 `Network.enable`（固定 `maxPostDataSize: 0`）/`disable`。所有会返回正文、提交体、Cookie、证书或会改流量的 `Network.*` 方法逐个写进禁止表；`sole-call-site.test.ts` 钉住 Network 域只有这两个方法，并确认读请求事件的只有 `devlog.ts`，且它不读任何头。
 - `devlog.ts` 每页两个环形缓冲（各 500 条）。控制台记级别、来源、文字（1000 字以内）与位置；请求记方法、地址、类型、状态、大小、耗时、失败原因、是否来自缓存。地址去掉用户名密码与片段，名字像凭据的查询参数值换成「…」。
 - `wait --idle`：500 ms 内没有进行中的请求。拿到响应后 5 秒没动静、或 10 秒没响应的请求不再算进行中（长轮询、流）；跨源 iframe 的文档请求在那个 iframe 会话导航到它时记为结束。
-- 桌面壳在 Agent 第一次驱动时才接上调试器，之前的控制台输出不在缓冲里；headless 后端从开标签就开始记。
+- 桌面壳：浏览器节点一被终端节点连线（按链接文档算，与驱动授权同一份事实），壳就被动接上调试器，只发 `Runtime.enable`、`Log.enable`、`Network.enable` 三条订阅——不开 `Page` 域（对话框与文件选择框照旧由页面自己弹），不拦文件选择框，不自动附加 iframe，不算租约（下载照旧归人），不发输入，所以 `before-input-event` 与人工接管的判定不变。第一次驱动在同一个调试器上补齐其余准备；人收回页面时整个摘掉（设备尺寸模拟、对话框接管都随那次会话结束）再重新被动接上，缓冲留着；最后一条连线断开就摘掉。core 在连线变化与 drive 通道接通时把整份节点表推给壳（`observe` 通知）。跨源 iframe 里的控制台要等第一次驱动开了自动附加才进来。headless 后端从开标签就开始记。
 
 ## 8. 对话框、租约与超时
 
@@ -96,12 +98,14 @@
 
 ## 9. 两个后端的差别
 
-|          | headless（服务器壳、无壳的 core）        | 桌面壳 `<webview>`                                                                                     |
-| -------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| PDF      | CDP `Page.printToPDF`                    | Electron `printToPDF`；页面含跨源 iframe 时先拒绝（Electron 打印这种页面永远不返回），其余加 20 秒上限 |
-| `resize` | 改 headless 自己的视口，画面流跟着变     | CDP 设备尺寸模拟，调试器断开（人接管）即恢复                                                           |
-| `--tab`  | 指向该 target                            | 指向该标签的 guest，不切换人看到的那一个                                                               |
-| 整页截图 | 跨源 iframe 在视口以外的部分截出来是空白 | 同左                                                                                                   |
+|          | headless（服务器壳、无壳的 core）    | 桌面壳 `<webview>`                                                                                     |
+| -------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| PDF      | CDP `Page.printToPDF`                | Electron `printToPDF`；页面含跨源 iframe 时先拒绝（Electron 打印这种页面永远不返回），其余加 20 秒上限 |
+| `resize` | 改 headless 自己的视口，画面流跟着变 | CDP 设备尺寸模拟，调试器断开（人接管）即恢复                                                           |
+| `--tab`  | 指向该 target                        | 指向该标签的 guest，不切换人看到的那一个                                                               |
+| 整页截图 | 含跨源 iframe 时逐屏滚动截取再拼接   | 同左                                                                                                   |
+
+整页截图：`captureBeyondViewport` 把视图临时撑到整页大小再截，跨源 iframe 的渲染进程不会为此重画，视口以外截出来是空白。所以页面有跨源 iframe 时改为按视口大小一屏一屏滚过去（与 `scroll` 同一种滚轮），每屏截可见区域（不带 `captureBeyondViewport`），按实测的滚动位置贴到画布上，截完滚回原处；没有跨源 iframe 仍一次截完。PNG 编解码用 `node:zlib` 手写（`cdp/png.ts`），不引依赖。代价：`fixed` / `sticky` 元素每屏都在，拼出来会重复；jpeg 不拼接，回答里说明。
 
 ## 10. 验证
 
