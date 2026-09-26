@@ -519,3 +519,105 @@ describe("R8：注册、组共享与收权通知", () => {
     }
   });
 });
+
+describe("组管理员", () => {
+  const as = (principalId: string): AuthorizationSubject => ({
+    principalId,
+    kind: "member",
+    scopes: [scope("identity:read")],
+  });
+  const denied = (fn: () => unknown) =>
+    expect(fn).toThrow(expect.objectContaining({ kind: "permission" }));
+
+  it("管得了自己的组：增删成员、改组内角色、签发与作废本组邀请", () => {
+    const { accounts, owner } = harness();
+    const lead = accounts.createPrincipal(owner, { displayName: "组长" });
+    const mate = accounts.createPrincipal(owner, { displayName: "组员" });
+    const group = accounts.createGroup(owner, "前端组");
+    accounts.putGroupMember(owner, group.groupId, lead.principalId, "admin");
+    const admin = as(lead.principalId);
+
+    accounts.putGroupMember(admin, group.groupId, mate.principalId, "member");
+    accounts.putGroupMember(admin, group.groupId, mate.principalId, "admin");
+    const roleOf = () =>
+      accounts
+        .listGroups(owner)
+        .find((row) => row.groupId === group.groupId)
+        ?.members.find((row) => row.principalId === mate.principalId)?.role;
+    expect(roleOf()).toBe("admin");
+    accounts.removeGroupMember(admin, group.groupId, mate.principalId);
+    expect(roleOf()).toBeUndefined();
+
+    const issued = accounts.issueInvitation(admin, {
+      role: "viewer",
+      targetGroupId: group.groupId,
+    });
+    expect(
+      accounts.listInvitations(admin).map((row) => row.invitationId),
+    ).toEqual([issued.invitationId]);
+    accounts.revokeInvitation(admin, issued.invitationId);
+  });
+
+  it("越不了权：别的组、建删组、工作空间共享、全局与 owner 都不行", () => {
+    const { accounts, owner } = harness();
+    const lead = accounts.createPrincipal(owner, { displayName: "组长" });
+    const mate = accounts.createPrincipal(owner, { displayName: "组员" });
+    const mine = accounts.createGroup(owner, "前端组");
+    const other = accounts.createGroup(owner, "后端组");
+    accounts.putGroupMember(owner, mine.groupId, lead.principalId, "admin");
+    const admin = as(lead.principalId);
+
+    denied(() =>
+      accounts.putGroupMember(admin, other.groupId, mate.principalId, "member"),
+    );
+    denied(() =>
+      accounts.removeGroupMember(admin, other.groupId, lead.principalId),
+    );
+    denied(() =>
+      accounts.putGroupMember(admin, mine.groupId, owner.principalId, "member"),
+    );
+    denied(() => accounts.createGroup(admin, "新组"));
+    denied(() => accounts.deleteGroup(admin, mine.groupId));
+    denied(() => accounts.renameGroup(admin, mine.groupId, "改名"));
+    denied(() =>
+      accounts.issueInvitation(admin, {
+        role: "viewer",
+        targetGroupId: other.groupId,
+      }),
+    );
+    denied(() =>
+      accounts.issueInvitation(admin, {
+        role: "viewer",
+        targetGroupId: mine.groupId,
+        targetWorkspaceId: "w1",
+      }),
+    );
+    denied(() =>
+      accounts.putGrant(admin, {
+        workspaceId: "w1",
+        subjectKind: "group",
+        subjectId: mine.groupId,
+        role: "viewer",
+      }),
+    );
+    denied(() => accounts.createPrincipal(admin, { displayName: "新人" }));
+    // 别的组的邀请他看不见也作废不了；组员（非 admin）什么都管不了。
+    const foreign = accounts.issueInvitation(owner, {
+      role: "viewer",
+      targetGroupId: other.groupId,
+    });
+    expect(
+      accounts.listInvitations(admin).map((row) => row.invitationId),
+    ).not.toContain(foreign.invitationId);
+    denied(() => accounts.revokeInvitation(admin, foreign.invitationId));
+    accounts.putGroupMember(owner, mine.groupId, mate.principalId, "member");
+    denied(() =>
+      accounts.removeGroupMember(
+        as(mate.principalId),
+        mine.groupId,
+        lead.principalId,
+      ),
+    );
+    denied(() => accounts.listInvitations(as(mate.principalId)));
+  });
+});

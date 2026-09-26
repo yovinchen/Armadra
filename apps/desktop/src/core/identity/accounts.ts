@@ -260,12 +260,11 @@ export class AccountsService {
     const invitationId = newId();
     const token = `${invitationId}.${newSecret()}`;
     return this.options.store.transaction((tx) => {
-      this.require(
+      this.requireInvitationRights(
         tx.accounts,
         actor,
-        targetWorkspaceId === ""
-          ? [scope("identity:manage")]
-          : [scope("workspace:share", targetWorkspaceId)],
+        targetGroupId,
+        targetWorkspaceId,
       );
       const now = this.now();
       if (
@@ -316,8 +315,24 @@ export class AccountsService {
     consumedAtMs: number;
   }[] {
     return this.options.store.transaction((tx) => {
-      this.require(tx.accounts, actor, [scope("identity:manage")]);
-      return tx.accounts.invitations().map((row) => ({
+      // 管理员看全部；组管理员只看指向自己所管的组、且不带工作空间的那些——
+      // 带工作空间的邀请是共享，那是 `workspace:share` 的事，组管理员没有。
+      const everything = this.manages(tx.accounts, actor);
+      const administered = everything
+        ? new Set<string>()
+        : this.administeredGroups(tx.accounts, actor);
+      if (!everything && administered.size === 0) {
+        throw new IdentityError("permission");
+      }
+      return tx.accounts
+        .invitations()
+        .filter(
+          (row) =>
+            everything ||
+            (row.targetWorkspaceId === "" &&
+              administered.has(row.targetGroupId)),
+        )
+        .map((row) => ({
         invitationId: row.invitationId,
         issuedBy: row.issuedBy,
         role: row.role,
@@ -429,12 +444,11 @@ export class AccountsService {
     this.options.store.transaction((tx) => {
       const row = tx.accounts.invitation(invitationId);
       if (row === undefined) throw new IdentityError("notFound");
-      this.require(
+      this.requireInvitationRights(
         tx.accounts,
         actor,
-        row.targetWorkspaceId === ""
-          ? [scope("identity:manage")]
-          : [scope("workspace:share", row.targetWorkspaceId)],
+        row.targetGroupId,
+        row.targetWorkspaceId,
       );
       if (row.consumedAtMs !== 0) return;
       const now = this.now();
@@ -617,12 +631,15 @@ export class AccountsService {
       throw new IdentityError("invalid");
     }
     this.options.store.transaction((tx) => {
-      this.require(tx.accounts, actor, [scope("identity:manage")]);
-      if (
-        tx.accounts.group(groupId) === undefined ||
-        tx.accounts.principal(principalId) === undefined
-      ) {
+      this.requireGroupAdmin(tx.accounts, actor, groupId);
+      const target = tx.accounts.principal(principalId);
+      if (tx.accounts.group(groupId) === undefined || target === undefined) {
         throw new IdentityError("notFound");
+      }
+      // 组管理员管的是组里的「人」，不是服务器的主人：把 owner 拉进组、改它的
+      // 组内角色都不改变 owner 的任何授权，却会让组表显示一个组管理员管着 owner。
+      if (target.kind === "owner" && !this.manages(tx.accounts, actor)) {
+        throw new IdentityError("permission");
       }
       const now = this.now();
       tx.accounts.putGroupMember({
@@ -649,7 +666,13 @@ export class AccountsService {
       throw new IdentityError("invalid");
     }
     this.options.store.transaction((tx) => {
-      this.require(tx.accounts, actor, [scope("identity:manage")]);
+      this.requireGroupAdmin(tx.accounts, actor, groupId);
+      if (
+        tx.accounts.principal(principalId)?.kind === "owner" &&
+        !this.manages(tx.accounts, actor)
+      ) {
+        throw new IdentityError("permission");
+      }
       tx.accounts.removeGroupMember(groupId, principalId);
       this.note(tx.accounts, actor, this.now(), {
         action: "identity.group.member.remove",
@@ -898,6 +921,72 @@ export class AccountsService {
       ),
     );
     if (!allowed) throw new IdentityError("permission");
+  }
+
+  /** 有没有全局的 `identity:manage`（owner 恒有）。不抛，给「要不要过滤」用。 */
+  private manages(accounts: AccountsTx, actor: AuthorizationSubject): boolean {
+    try {
+      this.require(accounts, actor, [scope("identity:manage")]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 这个主体在哪些组里是 `admin`。 */
+  private administeredGroups(
+    accounts: AccountsTx,
+    actor: AuthorizationSubject,
+  ): Set<string> {
+    const groups = new Set<string>();
+    if (actor.principalId === "") return groups;
+    for (const groupId of accounts.groupsOf(actor.principalId)) {
+      const own = accounts
+        .groupMembers(groupId)
+        .find((member) => member.principalId === actor.principalId);
+      if (own?.role === "admin") groups.add(groupId);
+    }
+    return groups;
+  }
+
+  /**
+   * 管这个组的成员：全局 `identity:manage`，或者本组的 `admin`。
+   *
+   * 组角色是**组内**的：它不编译成任何 scope（授权仍只有 scope 一种表达，设计
+   * S3），只在组管理这几个动作上多一道「你是不是这个组的管理员」。所以组管理员
+   * 管不到别的组、建不了组、删不了组，也发不了工作空间上的共享。
+   */
+  private requireGroupAdmin(
+    accounts: AccountsTx,
+    actor: AuthorizationSubject,
+    groupId: string,
+  ): void {
+    if (this.manages(accounts, actor)) return;
+    if (this.administeredGroups(accounts, actor).has(groupId)) return;
+    throw new IdentityError("permission");
+  }
+
+  /**
+   * 签发或作废一张邀请要什么：指向工作空间的要那块工作空间的 `workspace:share`；
+   * 只指向组的要能管那个组。两者都指向时两条都要。
+   */
+  private requireInvitationRights(
+    accounts: AccountsTx,
+    actor: AuthorizationSubject,
+    targetGroupId: string,
+    targetWorkspaceId: string,
+  ): void {
+    if (targetWorkspaceId !== "") {
+      this.require(accounts, actor, [
+        scope("workspace:share", targetWorkspaceId),
+      ]);
+    }
+    if (targetGroupId !== "") {
+      this.requireGroupAdmin(accounts, actor, targetGroupId);
+    }
+    if (targetGroupId === "" && targetWorkspaceId === "") {
+      this.require(accounts, actor, [scope("identity:manage")]);
+    }
   }
 
   /** 动自己的凭据不需要 `identity:manage`；动别人的需要。 */
