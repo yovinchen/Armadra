@@ -12,6 +12,7 @@ import {
 } from "./background";
 import { DISCARD_TICK_MS, discardSettings, shouldDiscard } from "./discard";
 import { registerGuest, reportView } from "./drive";
+import { expectGuestTeardown } from "./guest-teardown";
 import type {
   WebviewElement,
   WebviewFailure,
@@ -119,6 +120,20 @@ export function WebviewGuest({
    */
   const restoringRef = React.useRef(false);
   const [discarded, setDiscarded] = React.useState(false);
+
+  const onElementRef = React.useRef(onElement);
+  onElementRef.current = onElement;
+  /**
+   * `<webview>` 的 ref。必须是一个稳定的函数：内联的箭头每次渲染都是新的，
+   * React 会先拿 `null` 调旧的那个——那就分不出「元素真的要被移走」和「只是
+   * 重渲了一次」。摘下（`null`）只在元素离开时发生，而且早于把它移出文档，
+   * 所以 Electron 在移除时抛的那一句由这里预告（`./guest-teardown`）。
+   */
+  const attachGuest = React.useCallback((element: HTMLElement | null) => {
+    if (element === null && ref.current !== null) expectGuestTeardown();
+    ref.current = (element as WebviewElement | null) ?? null;
+    onElementRef.current(ref.current);
+  }, []);
 
   const patchRef = React.useRef(onPatch);
   patchRef.current = onPatch;
@@ -479,10 +494,7 @@ export function WebviewGuest({
   return (
     <div className="relative h-full w-full">
       <webview
-        ref={(element) => {
-          ref.current = (element as WebviewElement | null) ?? null;
-          onElement(ref.current);
-        }}
+        ref={attachGuest}
         src={tab.src || "about:blank"}
         partition={partition}
         // 必须是字符串：React 对它不认识的属性收到布尔 `true` 时**不写 DOM**

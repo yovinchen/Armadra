@@ -220,13 +220,11 @@ export async function runElectron(ctx) {
     "document.body.innerText.includes('页面要选择文件')",
   );
   check("electron upload 回答文件选择框后画布上的提示随之消失", chip === false);
-  // 关标签页时 Electron 自己的 <webview> 卸载会报一条 Invalid guestInstanceId
-  // （guest 已先被销毁）；那是壳内部的时序，单列出来，其余 error 一律算失败。
-  const known = /Invalid guestInstanceId/;
-  const unexpected = errors.filter((each) => !known.test(each));
-  check("electron 渲染页没有意料之外的 error", unexpected.length === 0, {
-    unexpected,
-    known: errors.filter((each) => known.test(each)).length,
+  // 关标签页时 Electron 自己的 <webview> 卸载曾经报一条 Invalid guestInstanceId；
+  // 页面现在在卸载那一刻认出并拦下它（`nodes/browser/guest-teardown.ts`，§58），
+  // 所以这里不再单列，任何 error 都算失败。
+  check("electron 渲染页没有 error（含关标签页）", errors.length === 0, {
+    errors,
   });
   const after = await call("Page.captureScreenshot", { format: "png" });
   if (after.result?.data) {
