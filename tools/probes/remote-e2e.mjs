@@ -3,12 +3,15 @@
 // 真 core、真 Vite 页面、新 profile 的无头 Chrome，经 CDP 在界面上把远端工作
 // 空间用一遍：建工作空间、文件树与编辑保存、Git 状态 / 暂存 / 提交与一次 fetch
 // 长操作的进度和取消、远端语言服务、文件监听推送、资源面板按主机筛选、把工作
-// 空间在本机与远端之间来回切换。每一步都截图。
+// 空间在本机与远端之间来回切换；画布上一个 SSH 终端里的 Agent 拿到远端的画布
+// 注入（技能、说明与 Hook，经 Worker 中继回到 core）。每一步都截图。
 //
 // 「远端」是这台机器自己，经一个**假 ssh**：core 的 `ARMADRA_REMOTE_WORKER_LAUNCHER`
 // 本来就替换每条 `ssh` 启动行的 argv[0]（`core/remote/index.ts`），探针把它指到
 // 一个临时脚本——吃掉 ssh 的选项与目的主机，把剩下的远端命令交给本机的
-// `/bin/sh -c`，和远端登录 shell 做的事一样。Worker 就是本仓库的
+// `/bin/sh -c`，和远端登录 shell 做的事一样。画布 SSH 终端跑的是 `PATH` 上的
+// `ssh`，探针把同一个脚本以 `ssh` 的名字放在 core 的 `PATH` 最前面。真 ssh 不转发
+// 本机的环境变量，所以假 ssh 也把 `ARMADRA_*` 清掉（只留关掉全局写入的那个）。Worker 就是本仓库的
 // `apps/desktop/out/core/main.js worker --stdio`。不启动 sshd，不碰任何 SSH 或系统
 // 配置；也因此**没有**验证真实的 ssh 传输、主机密钥与 askpass。
 //
@@ -31,7 +34,9 @@ import {
   realpathSync,
   writeFileSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import {
   child,
@@ -93,8 +98,45 @@ while [ $# -gt 0 ]; do
   esac
 done
 shift
-[ $# -eq 0 ] && exec "\${SHELL:-/bin/sh}" -l
+# 真 ssh 不带本机的环境过去：远端 shell 里的 ARMADRA_* 只能来自远端命令。
+for name in $(env | cut -d= -f1 | grep '^ARMADRA_[A-Za-z0-9_]*$'); do
+  [ "$name" = ARMADRA_NO_GLOBAL_WRITES ] || unset "$name"
+done
+# 远端用户的登录 shell 是 sh：与操作员自己的 shell 配置无关。
+SHELL=/bin/sh
+export SHELL
+[ $# -eq 0 ] && exec /bin/sh -l
 exec /bin/sh -c "$*"
+`;
+
+/**
+ * 执行主机上的假 CLI：名字叫 `claude`，排在远端 PATH 里垫片的后面。它把收到的
+ * argv、注入的说明与技能写进一份报告，再照 settings.json 里的 Hook 命令报一次
+ * SessionStart——那条命令是同步到执行主机上的 `armadra-hook`，端点是 Worker 的
+ * 中继 socket。
+ */
+const FAKE_CLAUDE = (report) => `#!${process.execPath}
+const { readFileSync, writeFileSync } = require("node:fs");
+const { execSync } = require("node:child_process");
+const argv = process.argv.slice(2);
+// core 在本机探测 CLI 时也会跑到它（同一个 PATH）：只认画布敲的那一行。
+if (!argv.includes("probe")) { process.stdout.write("0.0.0 (probe)\\n"); process.exit(0); }
+const after = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : undefined);
+const read = (path) => { try { return readFileSync(path, "utf8"); } catch { return null; } };
+const out = { argv, env: { node: process.env.ARMADRA_NODE_ID || null, endpoint: process.env.ARMADRA_ENDPOINT_FILE || null } };
+const settings = after("--settings");
+out.instructions = after("--append-system-prompt-file") ? read(after("--append-system-prompt-file")) : null;
+out.skill = after("--plugin-dir") ? read(after("--plugin-dir") + "/skills/armadra/SKILL.md") : null;
+if (settings) {
+  const command = JSON.parse(readFileSync(settings, "utf8")).hooks.SessionStart[0].hooks[0].command;
+  out.hook = command;
+  try {
+    execSync(command, { input: JSON.stringify({ hook_event_name: "SessionStart", session_id: "remote-probe-session", cwd: process.cwd() }) });
+    out.hookExit = 0;
+  } catch (error) { out.hookExit = error.status ?? -1; }
+}
+writeFileSync(${JSON.stringify(report)}, JSON.stringify(out, null, 2));
+process.stdout.write("fake claude ran on the execution host\\n");
 `;
 
 await h.run(async () => {
@@ -118,6 +160,17 @@ await h.run(async () => {
   const fakeSsh = join(bin, "fake-ssh");
   writeFileSync(fakeSsh, FAKE_SSH);
   chmodSync(fakeSsh, 0o755);
+  // 画布 SSH 终端的 `ssh`，与 Worker 的启动器是同一个脚本。
+  const sshBin = join(base, "ssh-bin");
+  mkdirSync(sshBin);
+  writeFileSync(join(sshBin, "ssh"), FAKE_SSH);
+  chmodSync(join(sshBin, "ssh"), 0o755);
+  // 执行主机上的假 CLI（在 PATH 里，排在垫片之后）。
+  const remoteCli = join(base, "remote-cli");
+  mkdirSync(remoteCli);
+  const cliReport = join(base, "remote-cli-report.json");
+  writeFileSync(join(remoteCli, "claude"), FAKE_CLAUDE(cliReport));
+  chmodSync(join(remoteCli, "claude"), 0o755);
   const worker = join(bin, "armadra-worker");
   writeFileSync(
     worker,
@@ -166,6 +219,9 @@ await h.run(async () => {
     ARMADRA_DATA_DIR: data,
     ARMADRA_LOG: process.env.ARMADRA_LOG ?? "warn",
     ARMADRA_REMOTE_WORKER_LAUNCHER: fakeSsh,
+    // 探针不碰操作员的 CLI 配置：启动时的迁移、本机与执行主机上的 Codex 信任记录都不写。
+    ARMADRA_NO_GLOBAL_WRITES: "1",
+    PATH: `${sshBin}:${remoteCli}:${process.env.PATH ?? ""}`,
   };
   const runtime = child(
     h,
@@ -230,7 +286,16 @@ await h.run(async () => {
   const viteUrl = await startVite(h, root, environment);
   const chrome = await startChrome(h);
   const page = await chrome.open({ name: "page" });
-  await scenario({ api, page, base, project, other, viteUrl });
+  await scenario({
+    api,
+    page,
+    base,
+    project,
+    other,
+    viteUrl,
+    data,
+    cliReport,
+  });
 });
 
 /** 这一步的每一处失败都记下来，截一张图，接着跑下一步。 */
@@ -761,6 +826,141 @@ async function scenario(ctx) {
       local.executionHostId || "本机",
     );
     await closeDialogs(page);
+  });
+
+  /* ------------------- 8. SSH 终端里的 Agent 拿到画布注入 ------------------- */
+
+  await attempt(ctx, "08-remote-injection", async () => {
+    const workspaceId = ctx.remote.id;
+    const boards = (await api(`/api/workspaces/${workspaceId}/boards`)).body;
+    const board =
+      boards[0] ??
+      (
+        await api(`/api/workspaces/${workspaceId}/boards`, {
+          method: "POST",
+          body: { name: "remote-e2e" },
+        })
+      ).body;
+    const documentPath = `/api/workspaces/${workspaceId}/boards/${board.id}/document`;
+    const current = (await api(documentPath)).body;
+    const stamp = new Date().toISOString();
+    const nodeId = randomUUID();
+    await api(documentPath, {
+      method: "PUT",
+      body: {
+        expectedUpdatedAt: current.board.updatedAt,
+        nodes: [
+          ...current.nodes,
+          {
+            id: nodeId,
+            boardId: board.id,
+            type: "terminal",
+            title: "远端 Claude",
+            color: "#0a84ff",
+            position: { x: 900, y: 600 },
+            size: { width: 520, height: 330 },
+            labels: [],
+            note: "",
+            data: {
+              kind: "terminal",
+              agent: { id: "claude" },
+              ssh: { hostId: HOST_ID },
+            },
+            createdAt: stamp,
+            updatedAt: stamp,
+          },
+        ],
+        edges: current.edges,
+        viewport: current.board.viewport ?? { x: 0, y: 0, zoom: 1 },
+        whiteboard: current.whiteboard ?? "",
+      },
+    });
+    // 与页面开 SSH 节点的终端同一个请求：只带主机 id。
+    const session = (
+      await api("/api/terminals", {
+        method: "POST",
+        body: {
+          workspaceId,
+          cwd: ctx.project,
+          nodeId,
+          agent: { id: "claude" },
+          ssh: { hostId: HOST_ID },
+        },
+      })
+    ).body;
+    const capture = async () =>
+      (await api(`/api/terminals/${session.id}/capture?lines=40`)).body.data ??
+      "";
+    // 等远端的登录 shell 起来，再敲页面为 SSH 节点敲的那一行（只有程序名与旗标）。
+    for (let round = 0; round < 100; round += 1) {
+      if (/\$\s*$/mu.test(await capture())) break;
+      await sleep(100);
+    }
+    await api(`/api/terminals/${session.id}/paste`, {
+      method: "POST",
+      body: { text: "claude --model probe", enter: true },
+    });
+    let report;
+    for (let round = 0; round < 150 && report === undefined; round += 1) {
+      try {
+        report = JSON.parse(readFileSync(ctx.cliReport, "utf8"));
+      } catch {
+        await sleep(100);
+      }
+    }
+    if (report === undefined) {
+      throw new Error(`假 CLI 没有跑起来：${await capture()}`);
+    }
+    const integration = join(ctx.base, "worker-state", "integration");
+    const settingsPath = report.argv[report.argv.indexOf("--settings") + 1];
+    check(
+      typeof settingsPath === "string" && settingsPath.startsWith(integration),
+      "启动行里没有注入，垫片在执行主机上接上了注入的 argv",
+      report.argv.join(" "),
+    );
+    check(
+      report.env.node === nodeId &&
+        String(report.env.endpoint).startsWith(integration),
+      "远端 shell 带着节点身份与执行主机上的端点文件",
+      `${report.env.node} · ${report.env.endpoint}`,
+    );
+    check(
+      String(report.instructions).includes("armadra-hook canvas") &&
+        String(report.skill).includes("armadra"),
+      "假 CLI 读到了同步过去的画布说明与技能",
+      `${String(report.instructions).length} / ${String(report.skill).length} 字节`,
+    );
+    const database = new DatabaseSync(join(ctx.data, "canvas.db"), {
+      readOnly: true,
+    });
+    let status;
+    try {
+      for (let round = 0; round < 100 && status === undefined; round += 1) {
+        // 只认假 CLI 那一次 SessionStart 带来的会话 id：终端起来时 core 自己
+        // 也可能先记一行。
+        status = database
+          .prepare(
+            "SELECT * FROM agent_status WHERE node_id = ? AND session_id = 'remote-probe-session'",
+          )
+          .get(nodeId);
+        if (status === undefined) await sleep(100);
+      }
+    } finally {
+      database.close();
+    }
+    check(
+      report.hookExit === 0 && status !== undefined,
+      "远端 Hook 经 Worker 中继回到了 core",
+      status === undefined
+        ? `hook=${report.hook} exit=${report.hookExit}`
+        : `${status.session_id} · ${status.last_event_at ?? ""}`,
+    );
+    await page.capture("08-remote-injection");
+    await api(`/api/terminals/${session.id}/terminate`, {
+      method: "POST",
+      body: { mode: "process" },
+      allowFailure: true,
+    });
   });
 
   const final = page.drain();

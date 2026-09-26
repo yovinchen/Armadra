@@ -163,9 +163,9 @@ pnpm --filter @armadra/desktop build
 node tools/probes/remote-e2e.mjs [输出目录]
 ````
 
-「远端」就是这台机器：core 本来就读 `ARMADRA_REMOTE_WORKER_LAUNCHER` 替换每条 `ssh` 启动行的 argv[0]（`core/remote/index.ts`），探针把它指到临时目录里的一个假 ssh——按 `ssh(1)` 的规则吃掉选项与目的主机，把剩下的远端命令交给本机 `/bin/sh -c`；Worker 就是 `apps/desktop/out/core/main.js worker --stdio`。执行主机登记与 mock-lsp 的语言服务器设置走接口，其余全在界面上：设置 → SSH 打开远程项目；资源管理器打开文件、编辑、⌘S 落盘；Git 窗口的状态、勾选暂存、提交；日志页右键「获取远端更新」看进行中的提示与百分比，再对一次 upload-pack 睡 30 秒的 fetch 点「取消」；打开 `notes.md` 看 mock-lsp 的诊断（并按进程树确认它跑在 `worker --stdio --language-link` 下面）；在远端磁盘上改开着的文件看编辑器跟上（登记答 `mode: events`）；资源面板按主机筛选；设置 → 执行主机把一个本机工作空间切到假远端再切回来。
+「远端」就是这台机器：core 本来就读 `ARMADRA_REMOTE_WORKER_LAUNCHER` 替换每条 `ssh` 启动行的 argv[0]（`core/remote/index.ts`），探针把它指到临时目录里的一个假 ssh——按 `ssh(1)` 的规则吃掉选项与目的主机，把剩下的远端命令交给本机 `/bin/sh -c`；Worker 就是 `apps/desktop/out/core/main.js worker --stdio`。执行主机登记与 mock-lsp 的语言服务器设置走接口，其余全在界面上：设置 → SSH 打开远程项目；资源管理器打开文件、编辑、⌘S 落盘；Git 窗口的状态、勾选暂存、提交；日志页右键「获取远端更新」看进行中的提示与百分比，再对一次 upload-pack 睡 30 秒的 fetch 点「取消」；打开 `notes.md` 看 mock-lsp 的诊断（并按进程树确认它跑在 `worker --stdio --language-link` 下面）；在远端磁盘上改开着的文件看编辑器跟上（登记答 `mode: events`）；资源面板按主机筛选；设置 → 执行主机把一个本机工作空间切到假远端再切回来。最后一步走接口：画布上建一个连到假远端的 SSH Agent 节点、开它的终端（与页面同一个请求），敲页面为 SSH 节点敲的那一行 `claude --model probe`；执行主机上的 `claude` 是一个假 CLI，报告它经垫片收到的注入 argv、远端 shell 里的节点身份与端点文件、读到的说明与技能，并照 settings.json 的 Hook 命令报一次 SessionStart，探针在库里看到它经 Worker 中继到达。画布 SSH 终端的 `ssh` 是同一个假 ssh（放在 core 的 `PATH` 最前面），它和真 ssh 一样不带本机的 `ARMADRA_*` 过去；core 带着 `ARMADRA_NO_GLOBAL_WRITES=1`，不碰操作员的 CLI 配置。
 
-产物默认在 `target/remote-e2e/`：`result.json` 与每一步的截图（`01-remote-workspace.png` … `07c-switched-local.png`）。上游是临时目录里的裸仓库，`remote.origin.uploadpack` 指向一个先睡几秒的包装，本机传输才看得到进行中与取消。没有验证：真实的 ssh 传输、主机密钥与 askpass、跨机器的路径与平台差异、远端终端节点（它走真 `ssh`，不经这个替换）。
+产物默认在 `target/remote-e2e/`：`result.json` 与每一步的截图（`01-remote-workspace.png` … `08-remote-injection.png`）。上游是临时目录里的裸仓库，`remote.origin.uploadpack` 指向一个先睡几秒的包装，本机传输才看得到进行中与取消。没有验证：真实的 ssh 传输、主机密钥与 askpass、跨机器的路径与平台差异、真 sshd 对远端命令的处理。
 
 ## 浏览器节点的 Agent 工具（armadra-hook browser）
 
