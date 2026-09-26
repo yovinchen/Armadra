@@ -111,6 +111,25 @@ export function sameLease(left: Lease, right: Lease): boolean {
   );
 }
 
+/**
+ * 「谁在驱动」变了没有：同 {@link sameLease}，只是不看 `expiresAt`。
+ *
+ * 持有者续期只把到期时刻往后推，状态、持有者与代次都不动（「持有者续期不换
+ * 代次」）。对看的人来说这不是一件事：徽标画的是谁在驱动，不画倒计时。终端
+ * 里人每敲一个键就续一次，按 {@link sameLease} 广播的话每一键都是一帧——
+ * 所以广播按这一条判，到期时刻仍然每次都精确地续（空闲窗口的语义一分不差），
+ * 只是不为它发帧。
+ */
+export function sameHolding(left: Lease, right: Lease): boolean {
+  return (
+    left.state === right.state &&
+    left.generation === right.generation &&
+    left.holder?.kind === right.holder?.kind &&
+    left.holder?.id === right.holder?.id &&
+    left.holder?.displayName === right.holder?.displayName
+  );
+}
+
 /* ---------------------------------- actors -------------------------------- */
 
 /**

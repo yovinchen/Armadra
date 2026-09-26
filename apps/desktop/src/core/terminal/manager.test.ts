@@ -664,6 +664,41 @@ describe("驱动租约", () => {
     });
   });
 
+  it("人连续敲键只在拿到租约那一下广播一帧，续期不再逐键广播（§58）", async () => {
+    const { manager, advance, leases } = harness();
+    const session = await spawn(manager, "node-a");
+    for (let key = 0; key < 100; key += 1) {
+      await manager.input(session.id, 1, "x", undefined, human());
+      advance(200);
+    }
+    expect(leases.map((event) => event.lease.state)).toEqual(["human"]);
+    // 续期照旧逐键推后到期时刻：最后一键之后仍要整整十秒才放开。
+    advance(TERMINAL_HUMAN_IDLE_SECONDS * 1_000 - 201);
+    expect(manager.sweepDrives()).toBe(0);
+    await expect(
+      manager.input(session.id, 1, "ls", undefined, agent()),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining("LEASE_HELD_BY_HUMAN"),
+    });
+    advance(1);
+    expect(manager.sweepDrives()).toBe(1);
+    expect(leases.map((event) => event.lease.state)).toEqual(["human", "free"]);
+  });
+
+  it("Agent 持有时人敲一键仍然抢回租约，并且只广播换手那一帧", async () => {
+    const { manager, leases } = harness();
+    const session = await spawn(manager, "node-a");
+    await manager.input(session.id, 1, "ls", undefined, agent());
+    await manager.input(session.id, 1, "pwd", undefined, agent());
+    expect(leases.map((event) => event.lease.state)).toEqual(["agent"]);
+    await manager.input(session.id, 1, "x", undefined, human());
+    await manager.input(session.id, 1, "y", undefined, human());
+    expect(leases.map((event) => event.lease.state)).toEqual([
+      "agent",
+      "human",
+    ]);
+  });
+
   it("人在打字时 Agent 的写入被拒，码是 LEASE_HELD_BY_HUMAN", async () => {
     const { manager } = harness();
     const session = await spawn(manager, "node-a");

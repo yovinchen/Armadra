@@ -10,6 +10,8 @@ import {
   agentActor,
   humanActor,
   leaseRefusalText,
+  sameHolding,
+  sameLease,
 } from "./lease";
 import {
   AGENT_IDLE_SECONDS,
@@ -83,5 +85,20 @@ describe("驱动租约（中立模块）", () => {
     expect(() => terminal.release(human(), "terminal")).toThrowError(
       /LEASE_HELD_BY_AGENT: another agent is using this terminal/,
     );
+  });
+
+  it("续期只推后到期时刻：sameLease 算变化，sameHolding 不算", () => {
+    const lease = new DriveLease(0, TERMINAL);
+    lease.request(human(), T0);
+    const first = lease.snapshot();
+    lease.request(human(), at(3));
+    const renewed = lease.snapshot();
+    expect(renewed.expiresAt).not.toBe(first.expiresAt);
+    expect(sameLease(first, renewed)).toBe(false);
+    expect(sameHolding(first, renewed)).toBe(true);
+    lease.request(agent(), at(4));
+    expect(sameHolding(renewed, lease.snapshot())).toBe(true);
+    lease.takeover(human(), at(5));
+    expect(sameHolding(renewed, lease.snapshot())).toBe(false);
   });
 });

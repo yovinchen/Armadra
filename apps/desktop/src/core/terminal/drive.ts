@@ -10,7 +10,7 @@ import {
   actorId,
   freeLease,
   leaseRefusalText,
-  sameLease,
+  sameHolding,
 } from "../drive/lease";
 import { audit } from "../identity/audit";
 
@@ -231,8 +231,17 @@ export class TerminalDriveBook {
     return answer;
   }
 
+  /**
+   * 只在「谁在驱动」真的变了时落代次并广播（§58）。
+   *
+   * 以前按 `sameLease` 判，持有者续期推后的 `expiresAt` 也算一次变化：
+   * 人在终端里每敲一个键就向每个客户端广播一帧 `terminal.lease`，每台设备上的
+   * 徽标跟着重渲。续期本身照旧每次都做（`DriveLease.request`），所以「停手
+   * 十秒自动恢复」「Agent 一轮 120 秒」都与之前一样精确；变的只是不为到期时刻
+   * 发帧；core 里要精确的到期时刻读 `lease()` 的当前快照。
+   */
   private announce(sessionId: string, before: Lease, after: Lease): void {
-    if (sameLease(before, after)) return;
+    if (sameHolding(before, after)) return;
     if (before.generation !== after.generation) {
       this.storeGeneration(sessionId, after.generation);
     }
