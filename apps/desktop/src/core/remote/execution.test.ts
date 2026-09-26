@@ -526,113 +526,125 @@ describe("opening and switching execution hosts", () => {
     cleanupFixtures();
   });
 
-  it("opens a project on the host only once its root is proven there", async () => {
-    const far = repositoryAt(join(core.directory, "far"));
-    const opened = await core.call("POST", "/api/workspaces/remote", {
-      name: "far",
-      executionHostId: HOST.id,
-      rootPath: far.path,
-    });
-    expect(opened.status).toBe(200);
-    expect(opened.body).toMatchObject({
-      executionHostId: HOST.id,
-      rootPath: far.path,
-    });
+  // 这两条把远端根交给控制端，而控制端只收 POSIX 绝对路径（执行主机是 POSIX
+  // 机器）；这里的「执行主机」是本机子进程，在 Windows runner 上它的目录只有
+  // `D:\…` 一种写法，那种「Windows 执行主机」本来就不存在。Windows 控制端切回
+  // 本机的那一半由 `remote.test.ts` 与 `language/routes.integration.test.ts` 覆盖。
+  it.skipIf(process.platform === "win32")(
+    "opens a project on the host only once its root is proven there",
+    async () => {
+      const far = repositoryAt(join(core.directory, "far"));
+      const opened = await core.call("POST", "/api/workspaces/remote", {
+        name: "far",
+        executionHostId: HOST.id,
+        rootPath: far.path,
+      });
+      expect(opened.status).toBe(200);
+      expect(opened.body).toMatchObject({
+        executionHostId: HOST.id,
+        rootPath: far.path,
+      });
 
-    const missing = await core.call("POST", "/api/workspaces/remote", {
-      name: "gone",
-      executionHostId: HOST.id,
-      rootPath: join(core.directory, "does-not-exist"),
-    });
-    expect(missing.status).toBe(400);
-    const listed = (await core.call("GET", "/api/workspaces")).body as {
-      name: string;
-    }[];
-    expect(listed.map((one) => one.name)).not.toContain("gone");
-  }, 60_000);
+      const missing = await core.call("POST", "/api/workspaces/remote", {
+        name: "gone",
+        executionHostId: HOST.id,
+        rootPath: join(core.directory, "does-not-exist"),
+      });
+      expect(missing.status).toBe(400);
+      const listed = (await core.call("GET", "/api/workspaces")).body as {
+        name: string;
+      }[];
+      expect(listed.map((one) => one.name)).not.toContain("gone");
+    },
+    60_000,
+  );
 
-  it("rebinds to the same project elsewhere, refuses a different one unless forced, and waits for live terminals", async () => {
-    const here = repositoryAt(join(core.directory, "here"));
-    const there = join(core.directory, "there");
-    here.git("clone", "-q", here.path, there);
-    const created = await core.call("POST", "/api/workspaces", {
-      name: "moving",
-      rootPath: here.path,
-      permissions: { read: true, write: true, execute: true },
-    });
-    const id = (created.body as { id: string }).id;
+  it.skipIf(process.platform === "win32")(
+    "rebinds to the same project elsewhere, refuses a different one unless forced, and waits for live terminals",
+    async () => {
+      const here = repositoryAt(join(core.directory, "here"));
+      const there = join(core.directory, "there");
+      here.git("clone", "-q", here.path, there);
+      const created = await core.call("POST", "/api/workspaces", {
+        name: "moving",
+        rootPath: here.path,
+        permissions: { read: true, write: true, execute: true },
+      });
+      const id = (created.body as { id: string }).id;
 
-    // 同一个项目：HEAD 与顶层目录都一致，直接改绑。
-    const moved = await core.call(
-      "PATCH",
-      `/api/workspaces/${id}/execution-host`,
-      { executionHostId: HOST.id, rootPath: there },
-    );
-    expect(moved.status).toBe(200);
-    expect(moved.body).toMatchObject({
-      executionHostId: HOST.id,
-      rootPath: realpathSync(there),
-    });
-    // 此后的读来自新主机上的那个目录。
-    writeFileSync(join(there, "only-there.txt"), "x");
-    const listing = await core.call("GET", `/api/workspaces/${id}/files`);
-    expect(JSON.stringify(listing.body)).toContain("only-there.txt");
+      // 同一个项目：HEAD 与顶层目录都一致，直接改绑。
+      const moved = await core.call(
+        "PATCH",
+        `/api/workspaces/${id}/execution-host`,
+        { executionHostId: HOST.id, rootPath: there },
+      );
+      expect(moved.status).toBe(200);
+      expect(moved.body).toMatchObject({
+        executionHostId: HOST.id,
+        rootPath: realpathSync(there),
+      });
+      // 此后的读来自新主机上的那个目录。
+      writeFileSync(join(there, "only-there.txt"), "x");
+      const listing = await core.call("GET", `/api/workspaces/${id}/files`);
+      expect(JSON.stringify(listing.body)).toContain("only-there.txt");
 
-    // 另一个项目：两边指纹都给出来，不强制就不动。
-    const other = repositoryAt(join(core.directory, "other"));
-    other.write("different.txt", "y");
-    other.commit("different");
-    const refused = await core.call(
-      "PATCH",
-      `/api/workspaces/${id}/execution-host`,
-      { executionHostId: "", rootPath: other.path },
-    );
-    expect(refused.status).toBe(409);
-    expect(refused.body).toMatchObject({
-      code: "root_mismatch",
-      from: { entryCount: expect.any(Number) },
-      to: { entryCount: expect.any(Number) },
-    });
+      // 另一个项目：两边指纹都给出来，不强制就不动。
+      const other = repositoryAt(join(core.directory, "other"));
+      other.write("different.txt", "y");
+      other.commit("different");
+      const refused = await core.call(
+        "PATCH",
+        `/api/workspaces/${id}/execution-host`,
+        { executionHostId: "", rootPath: other.path },
+      );
+      expect(refused.status).toBe(409);
+      expect(refused.body).toMatchObject({
+        code: "root_mismatch",
+        from: { entryCount: expect.any(Number) },
+        to: { entryCount: expect.any(Number) },
+      });
 
-    // 还有终端开着：先列出来，而不是在它脚下换机器。
-    core.database
-      .prepare(
-        "INSERT INTO terminal_sessions (id, workspace_id, owner_node_id, cwd, shell, status, created_at) " +
-          "VALUES ('term-1', ?, 'node-1', '/', 'sh', 'running', '2026-01-01T00:00:00Z')",
-      )
-      .run(id);
-    const blocked = await core.call(
-      "PATCH",
-      `/api/workspaces/${id}/execution-host`,
-      { executionHostId: "", rootPath: other.path, force: true },
-    );
-    expect(blocked.status).toBe(409);
-    expect(blocked.body).toMatchObject({
-      code: "switch_blocked",
-      blockers: [{ kind: "terminal", detail: "node-1" }],
-    });
-    core.database
-      .prepare(
-        "UPDATE terminal_sessions SET status = 'exited' WHERE id = 'term-1'",
-      )
-      .run();
+      // 还有终端开着：先列出来，而不是在它脚下换机器。
+      core.database
+        .prepare(
+          "INSERT INTO terminal_sessions (id, workspace_id, owner_node_id, cwd, shell, status, created_at) " +
+            "VALUES ('term-1', ?, 'node-1', '/', 'sh', 'running', '2026-01-01T00:00:00Z')",
+        )
+        .run(id);
+      const blocked = await core.call(
+        "PATCH",
+        `/api/workspaces/${id}/execution-host`,
+        { executionHostId: "", rootPath: other.path, force: true },
+      );
+      expect(blocked.status).toBe(409);
+      expect(blocked.body).toMatchObject({
+        code: "switch_blocked",
+        blockers: [{ kind: "terminal", detail: "node-1" }],
+      });
+      core.database
+        .prepare(
+          "UPDATE terminal_sessions SET status = 'exited' WHERE id = 'term-1'",
+        )
+        .run();
 
-    const forced = await core.call(
-      "PATCH",
-      `/api/workspaces/${id}/execution-host`,
-      { executionHostId: "", rootPath: other.path, force: true },
-    );
-    expect(forced.status).toBe(200);
-    expect(forced.body).not.toHaveProperty("executionHostId");
-    expect(forced.body).toMatchObject({ rootPath: other.path });
+      const forced = await core.call(
+        "PATCH",
+        `/api/workspaces/${id}/execution-host`,
+        { executionHostId: "", rootPath: other.path, force: true },
+      );
+      expect(forced.status).toBe(200);
+      expect(forced.body).not.toHaveProperty("executionHostId");
+      expect(forced.body).toMatchObject({ rootPath: other.path });
 
-    const migrate = await core.call(
-      "PATCH",
-      `/api/workspaces/${id}/execution-host`,
-      { executionHostId: HOST.id, rootPath: there, migrateFiles: true },
-    );
-    expect(migrate.status).toBe(501);
-  }, 60_000);
+      const migrate = await core.call(
+        "PATCH",
+        `/api/workspaces/${id}/execution-host`,
+        { executionHostId: HOST.id, rootPath: there, migrateFiles: true },
+      );
+      expect(migrate.status).toBe(501);
+    },
+    60_000,
+  );
 });
 
 afterAll(() => {

@@ -24,6 +24,7 @@
 
 import { createHash } from "node:crypto";
 import { readdirSync } from "node:fs";
+import * as path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 /** What the caller asks for. */
@@ -290,6 +291,7 @@ export class SwitchError extends Error {
 export function validateRequest(
   request: SwitchRequest,
   canWrite: boolean,
+  localPaths: Pick<typeof path, "isAbsolute"> = path,
 ): void {
   if (request.migrateFiles === true) {
     throw new SwitchError(
@@ -298,7 +300,15 @@ export function validateRequest(
       "Armadra 只把工作空间重新绑到另一台执行主机，不搬文件。请在新主机上克隆这个项目再打开它。",
     );
   }
-  if (!request.rootPath.startsWith("/") || request.rootPath.length > 4_096) {
+  // 目标是本机（空 id）时按控制端自己的规则判，Windows 控制端的根是 `C:\…`；
+  // 目标是执行主机时一律按 POSIX 判——执行主机是 POSIX 机器，控制端即使是
+  // Windows 也不能拿平台默认的 `node:path` 去认那边的路径。`localPaths` 只为
+  // 让测试在任一平台上模拟 Windows 控制端。
+  const absolute =
+    request.executionHostId === ""
+      ? localPaths.isAbsolute(request.rootPath)
+      : path.posix.isAbsolute(request.rootPath);
+  if (!absolute || request.rootPath.length > 4_096) {
     throw new SwitchError(
       400,
       "bad_request",

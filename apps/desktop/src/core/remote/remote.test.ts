@@ -7,6 +7,7 @@
  * carries its cases.
  */
 
+import { posix, win32 } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FrameDecoder, MAX_FRAME, encodeFrame } from "./frames";
 import {
@@ -531,6 +532,39 @@ describe("the execution host switch", () => {
         validateRequest({ executionHostId: "box", rootPath }, true),
       ).toThrow(SwitchError);
     }
+  });
+
+  /**
+   * 控制端可以是 Windows，执行主机是 POSIX：切回本机按控制端的规则认 `C:\…`，
+   * 切到执行主机只认 POSIX 绝对路径，不看控制端是什么平台。
+   */
+  it("judges a root by the machine it names, even from a Windows control side", () => {
+    expect(() =>
+      validateRequest(
+        { executionHostId: "", rootPath: "C:\\work\\project" },
+        true,
+        win32,
+      ),
+    ).not.toThrow();
+    for (const rootPath of ["C:\\work\\project", "work/project"]) {
+      expect(() =>
+        validateRequest({ executionHostId: "box", rootPath }, true, win32),
+      ).toThrow(SwitchError);
+    }
+    expect(() =>
+      validateRequest(
+        { executionHostId: "box", rootPath: "/srv/p" },
+        true,
+        win32,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateRequest(
+        { executionHostId: "", rootPath: "C:\\work\\project" },
+        true,
+        posix,
+      ),
+    ).toThrow(SwitchError);
   });
 
   it("requires the write grant before it will force", () => {

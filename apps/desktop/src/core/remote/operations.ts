@@ -14,6 +14,7 @@
  */
 
 import { readdirSync, statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { commit, headCommit, initRepository } from "../git/commit";
 import { gitOutput } from "../git/context";
 import { type DiffScope, readDiff } from "../git/diff";
@@ -213,7 +214,9 @@ export async function registerRoot(root: string): Promise<{
   readonly root: string;
   readonly fingerprint: RootFingerprint;
 }> {
-  if (!root.startsWith("/")) {
+  // 按执行这一步的机器判：本机工作空间在控制端跑（Windows 上是 `C:\…`），远端的
+  // 在 Worker 上跑。写死 `/` 会让 Windows 控制端连「切回本机」都登记不了。
+  if (!isAbsolute(root)) {
     throw badRequest("A workspace root must be an absolute path");
   }
   let canonical: string;

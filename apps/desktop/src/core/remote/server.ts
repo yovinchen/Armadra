@@ -21,6 +21,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { RepositoryService } from "../git/repository/service";
 import { VERSION } from "../instance";
@@ -231,7 +232,11 @@ export async function answer(
     });
   }
   const payload = request.payload as OperationPayload | undefined;
-  if (typeof payload?.root !== "string" || !payload.root.startsWith("/")) {
+  // 「绝对」按 Worker 自己这台机器的规则判：根是这台机器上的路径，操作表里的
+  // `root.register` 在本机与 Worker 两处跑的也是同一条。执行主机必须是 POSIX
+  // 这件事由控制端在收下远端根时校验（`remote/switch.ts`、`workspaces/execution.ts`），
+  // 不在这里重复——这里要是写死 `/`，同一张表在两处就有两种「绝对」。
+  if (typeof payload?.root !== "string" || !isAbsolute(payload.root)) {
     return reply(400, {
       error: {
         code: "bad_request",
