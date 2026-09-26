@@ -58,6 +58,8 @@ interface LanguageState {
   readonly manager: Manager;
   /** 最近一次收到的设置，原样比较，没变就不重写。 */
   settings: string;
+  /** 经这条连接开过、还没关的会话（`workspaceId` → 会话 id）。 */
+  readonly open: Map<string, string>;
 }
 
 function state(context: OperationContext): LanguageState {
@@ -74,7 +76,7 @@ function state(context: OperationContext): LanguageState {
         events: (workspaceId) => events(session, workspaceId),
         version: VERSION,
       });
-      return { store, manager, settings: "" };
+      return { store, manager, settings: "", open: new Map() };
     },
     async (owned) => {
       await owned.manager.shutdown();
@@ -202,17 +204,37 @@ export const LANGUAGE_OPERATIONS: Readonly<Record<string, Operation>> = {
       },
     });
     sessionId = opened.sessionId;
+    owned.open.set(opened.sessionId, workspaceId);
     // 在答复之前推出：控制端收到答复时这些帧已经在它那一侧排着了。
     for (const body of early.splice(0)) push(body);
     return opened;
   }),
 
-  "language.close": op(true, async (owned, _root, args) => ({
-    closed: await owned.manager.closeSession(
-      text(args, "workspaceId"),
-      text(args, "sessionId"),
-    ),
-  })),
+  "language.close": op(true, async (owned, _root, args) => {
+    owned.open.delete(text(args, "sessionId"));
+    return {
+      closed: await owned.manager.closeSession(
+        text(args, "workspaceId"),
+        text(args, "sessionId"),
+      ),
+    };
+  }),
+
+  /**
+   * 还开着几个会话。控制端据此判断这条连接闲着没有（`remote/language-idle.ts`）；
+   * 服务器那边已经丢掉的会话（停服、收回授权）不算。
+   */
+  "language.activity": op(true, (owned) => {
+    let sessions = 0;
+    for (const [sessionId, workspaceId] of [...owned.open]) {
+      if (owned.manager.hubOfSession(workspaceId, sessionId) === undefined) {
+        owned.open.delete(sessionId);
+      } else {
+        sessions += 1;
+      }
+    }
+    return { sessions };
+  }),
 
   /** 浏览器发来的一条 JSON-RPC 文本。答复（如果有）作为推送帧回去。 */
   "language.send": op(false, (owned, _root, args) => {

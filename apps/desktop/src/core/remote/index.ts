@@ -73,6 +73,7 @@ import { missingCapability } from "./handshake";
 import { capabilityOf } from "./operations";
 import { RemoteWorker, RemoteWorkers, unsupported } from "./worker";
 import { RemoteIntegration } from "./integration";
+import { LANGUAGE_IDLE_CHECK_MS, LanguageIdle } from "./language-idle";
 
 /**
  * Substitutes argv[0] of every `ssh` this domain starts.
@@ -297,6 +298,33 @@ export function install(context: CoreContext): RemoteDomain {
     }
   });
 
+  // 长时间没有语言会话的主机，关掉那条闲置的语言连接；下一次开会话时按需重连。
+  const idle = new LanguageIdle({
+    live: () => languageLinks.live().map(([hostId]) => hostId),
+    sessions: async (hostId) => {
+      const [, link] =
+        languageLinks.live().find(([candidate]) => candidate === hostId) ?? [];
+      if (link === undefined) throw new Error("the link is gone");
+      const answer = (await link.request(
+        "language.activity",
+        { root: "/", args: {} },
+        true,
+      )) as { sessions?: unknown };
+      return typeof answer.sessions === "number" ? answer.sessions : 1;
+    },
+    close: (hostId) => {
+      context.log.info("closing an idle language link", { hostId });
+      languageLinks
+        .live()
+        .find(([candidate]) => candidate === hostId)?.[1]
+        .close();
+    },
+  });
+  const idleTimer = setInterval(() => {
+    void idle.check();
+  }, LANGUAGE_IDLE_CHECK_MS);
+  idleTimer.unref?.();
+
   const callLanguage: Parameters<typeof setLanguageCaller>[0] = async (
     hostId,
     action,
@@ -305,6 +333,7 @@ export function install(context: CoreContext): RemoteDomain {
   ) => {
     const entry = host(hostId);
     const link = languageLinks.get(entry, hostId);
+    idle.touch(hostId);
     await askpass.start();
     if (link.capability(LANGUAGE_CAPABILITY) === false) {
       throw unsupported(
@@ -331,6 +360,7 @@ export function install(context: CoreContext): RemoteDomain {
     integration,
     host,
     stop: async () => {
+      clearInterval(idleTimer);
       unlisten();
       integration.stop();
       if (assembled === domain) assembled = undefined;

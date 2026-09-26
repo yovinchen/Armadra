@@ -415,6 +415,11 @@ export class RemoteWorker {
     }
   }
 
+  /** 有一条握手成功、还活着的连接。 */
+  get live(): boolean {
+    return this.supervisor.connection?.alive === true;
+  }
+
   /** Whether the live Worker advertised `capability`; `undefined` before any. */
   capability(capability: string): boolean | undefined {
     const live = this.supervisor.connection;
@@ -507,5 +512,10 @@ export class RemoteWorkers {
   closeAll(): void {
     for (const worker of this.workers.values()) worker.close();
     this.workers.clear();
+  }
+
+  /** 连接活着的那些，按主机 id。 */
+  live(): [string, RemoteWorker][] {
+    return [...this.workers.entries()].filter(([, worker]) => worker.live);
   }
 }

@@ -55,6 +55,7 @@ import {
 } from "./execute";
 import { RemoteGitOperations } from "./git-operations";
 import { LANGUAGE_CAPABILITY } from "./language";
+import { LanguageIdle } from "./language-idle";
 import type { RemoteResourceRead } from "./resources-worker";
 import { remoteWatches } from "./watch";
 import { RemoteWorker } from "./worker";
@@ -706,6 +707,59 @@ describe("the language link", () => {
       }),
     );
     expect(language.has(workspace.id, opened.sessionId)).toBe(false);
+  }, 60_000);
+
+  it("closes the link once it has no session, and reconnects for the next one", async () => {
+    const workspace = {
+      id: "ws-idle",
+      name: "far",
+      rootPath: root.path,
+      color: "#000",
+      permissions: { read: true, write: true, execute: true },
+      executionHostId: HOST.id,
+      lastOpenedAt: "",
+      createdAt: "",
+      updatedAt: "",
+    } as Workspace;
+    const settings = {
+      servers: { marksman: { path: process.execPath, args: [MOCK_LSP] } },
+    };
+    const activity = async (): Promise<number> =>
+      (
+        (await link.request(
+          "language.activity",
+          { root: "/", args: {} },
+          true,
+        )) as { sessions: number }
+      ).sessions;
+    const idle = new LanguageIdle({
+      live: () => (link.live ? [HOST.id] : []),
+      sessions: async () => await activity(),
+      close: () => link.close(),
+      idleMs: 0,
+    });
+
+    const opened = await language.open(
+      workspace,
+      HOST.id,
+      settings,
+      "markdown",
+      "node-1",
+    );
+    expect(await activity()).toBe(1);
+    // 有会话：不关。
+    await idle.check();
+    expect(link.live).toBe(true);
+
+    await language.close(workspace.id, opened.sessionId);
+    expect(await activity()).toBe(0);
+    await idle.check();
+    expect(link.live).toBe(false);
+
+    // 下一次要用：按需再握一次手，服务照常。
+    const listed = await language.service(workspace, HOST.id, settings, false);
+    expect(listed.status).not.toBe("unavailable");
+    expect(link.live).toBe(true);
   }, 60_000);
 
   it("says the link is lost, per language, when the host cannot be reached", async () => {
