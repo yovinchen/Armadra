@@ -17,6 +17,8 @@ import type { JsonValue } from "./json.js";
 import { isSuccess, postJsonRequest, totalTimeoutMs } from "./http.js";
 import type { HookResponse } from "./http.js";
 import { headersFor, loadSession, send } from "./session.js";
+import { FILE_SUFFIX, STDIN_VALUE, TextReader } from "./text-input.js";
+import type { TextSources } from "./text-input.js";
 import { BROWSER_VERBS, CONTEXT_VERBS } from "./usage.js";
 
 /** The `{flag: value}` object a control route carries as `args`. */
@@ -177,8 +179,16 @@ export async function runBrowser(args: string[]): Promise<number> {
  *
  * A flag repeated more than once collects into an array so verbs such as
  * `link --to a --to b` work without special casing.
+ *
+ * `--flag -` takes the value from stdin and `--flag-file PATH` from a file
+ * (`text-input.ts`): arbitrary text — a message body, a task — does not have
+ * to survive the shell's quoting, and on Windows `cmd.exe`'s.
  */
-export function parseFlags(args: string[]): { ok: Args } | { error: string } {
+export function parseFlags(
+  args: string[],
+  sources?: TextSources,
+): { ok: Args } | { error: string } {
+  const reader = new TextReader(sources);
   const map: Args = {};
   let index = 0;
   while (index < args.length) {
@@ -203,7 +213,20 @@ export function parseFlags(args: string[]): { ok: Args } | { error: string } {
         value = true;
       }
     }
-    insertOrAppend(map, name, value);
+    let target = name;
+    if (name.length > FILE_SUFFIX.length && name.endsWith(FILE_SUFFIX)) {
+      target = name.slice(0, -FILE_SUFFIX.length);
+      if (typeof value !== "string" || value === "")
+        return { error: `--${name} needs a path` };
+      const read = reader.file(target, value);
+      if ("error" in read) return read;
+      value = read.ok;
+    } else if (value === STDIN_VALUE) {
+      const read = reader.stdin(name);
+      if ("error" in read) return read;
+      value = read.ok;
+    }
+    insertOrAppend(map, target, value);
     index += 1;
   }
   return { ok: map };

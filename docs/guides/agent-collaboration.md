@@ -138,6 +138,13 @@ armadra-hook canvas ack --id <message-id>
 PATH，模型按技能的说明改用 `"$ARMADRA_HOOK_BIN"`（2026-09-16 补：此前 sidecar 目录不在 PATH 上，打包版里模型按技能
 跑 `armadra-hook` 只会得到 command not found）。
 
+Windows 上装的是 `<数据目录>/bin/armadra-hook.exe`：一个控制台小程序，读旁边的 `armadra-hook.launch`（第一行
+Electron，第二行 bundle），设 `ELECTRON_RUN_AS_NODE=1`，把调用方的命令行原样接上交给 Electron。以前的
+`armadra-hook.cmd` 会经过 `cmd.exe` 再读一遍，正文里的 `&`、`|`、`%`、`^`、`"` 会变成别的命令；它仍写在旁边，
+给还指着它的旧配置和没有 `.exe` 的构建兜底。带任意文本的参数另外都能从标准输入（`--body -`）或文件
+（`--body-file <路径>`，`--task-file`、`--text-file` 同理）读，技能与 `--help` 都写了——Windows PowerShell 5.1
+自己会弄丢参数里的 `"`，这是它唯一稳妥的传法。
+
 不安装新的 MCP 服务、不追加启动提示、不轮询 CLI、不改变 CLI 配置即可使用。可选的 Hook 安装仍需用户显式触发；它将两个独立的按需技能放入 provider 的 `skills/` 目录，移除以前由 Armadra 标记的长篇全局指令区块，保留用户的其他内容。普通启动不会修改全局 `AGENTS.md` 或 provider 配置。
 
 ### 可复用边界

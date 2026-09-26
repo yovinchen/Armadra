@@ -106,6 +106,14 @@ CANVAS:
   Repeated flags become arrays; a bare flag is \`true\`. \`--dry-run\` is passed
   through to the runtime, which then validates without mutating the board.
 
+TEXT FROM STDIN OR A FILE (canvas and browser verbs):
+  --body -                  read the value from stdin (one flag per call)
+  --body-file PATH          read it from a file; --task-file, --member-file,
+                            --text-file, --field-file … work the same way
+  UTF-8, or UTF-16 with a BOM; CRLF becomes LF; one trailing newline dropped.
+  Use these whenever the text has quotes, &, |, %, ^, $ or line breaks —
+  above all in Windows PowerShell 5.1, which mangles an embedded ".
+
 ${browserUsage()}
 
 ENVIRONMENT:
