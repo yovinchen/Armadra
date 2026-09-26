@@ -136,7 +136,8 @@ function body(verb: string, source: ArgSource, result: Result): string {
     }
     case "capture": {
       const element = text(result, "element");
-      return `截图已保存到工作区：${text(result, "path")}${element === "" ? "" : `（${element}）`}\n${number(result, "width")}×${number(result, "height")}，${number(result, "bytes")} 字节，sha256 ${text(result, "sha256")}\n`;
+      const note = text(result, "note");
+      return `截图已保存到工作区：${text(result, "path")}${element === "" ? "" : `（${element}）`}\n${number(result, "width")}×${number(result, "height")}，${number(result, "bytes")} 字节，sha256 ${text(result, "sha256")}\n${note === "" ? "" : `${note}。\n`}`;
     }
     case "pdf":
       return `PDF 已保存到工作区：${text(result, "path")}\n${number(result, "pages")} 页，${number(result, "bytes")} 字节，sha256 ${text(result, "sha256")}\n`;

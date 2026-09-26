@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { render } from "../render";
 import { FakePage, type FakeElement } from "./fake-page";
+import { decodePng } from "./png";
 import { CdpSession } from "./session";
 import { runVerbOnHost, type VerbDialog, type VerbHost } from "./verbs";
 
@@ -958,6 +959,75 @@ describe("capture and pdf", () => {
       .filter((each) => each.method === "Page.captureScreenshot")
       .at(-1)!.params.clip;
     expect(clip).toMatchObject({ x: 10, y: 430, width: 100, height: 20 });
+  });
+
+  it("stitches the full page screen by screen when a cross-origin iframe is on it", async () => {
+    page.children.set("child-1", {
+      targetId: "frame-x",
+      owner: 20,
+      url: "https://other.test/x",
+    });
+    session.noteEvent("Target.attachedToTarget", {
+      sessionId: "child-1",
+      targetInfo: { type: "iframe", targetId: "frame-x", url: "" },
+    });
+    page.viewport = { width: 100, height: 60 };
+    page.content = { width: 150, height: 200 };
+    page.scroll = { x: 0, y: 30 };
+    page.deviceScale = 2;
+    page.wheelScrolls = true;
+    page.paint = (x, y) => [Math.floor(y) % 256, Math.floor(x) % 256, 7, 255];
+    const text = await run("capture", {
+      path: "s/stitched.png",
+      fullPage: true,
+    });
+    expect(text).toContain("150×200");
+    expect(text).toContain("分 8 屏截取后拼接");
+    const shots = page.sent.filter(
+      (each) => each.method === "Page.captureScreenshot",
+    );
+    // Never beyond the viewport: that is what leaves the iframe blank.
+    for (const shot of shots)
+      expect(shot.params.captureBeyondViewport).toBeUndefined();
+    expect(shots.map((shot) => shot.params.clip)).toContainEqual({
+      x: 50,
+      y: 140,
+      width: 100,
+      height: 60,
+      scale: 1,
+    });
+    const image = decodePng(readFileSync(join(workspace, "s/stitched.png")));
+    expect([image.width, image.height]).toEqual([300, 400]);
+    const at = (x: number, y: number) => [
+      ...image.pixels.subarray(
+        (y * image.width + x) * 4,
+        (y * image.width + x) * 4 + 4,
+      ),
+    ];
+    // Every CSS pixel came from the screen that showed it.
+    for (const [x, y] of [
+      [0, 0],
+      [120, 10],
+      [30, 95],
+      [149, 199],
+      [60, 170],
+    ] as const)
+      expect(at(x * 2, y * 2)).toEqual([y, x, 7, 255]);
+    // And the page was put back where the person left it.
+    expect(page.scroll).toEqual({ x: 0, y: 30 });
+
+    // jpeg is not stitched; the answer says what that costs.
+    const jpeg = await run("capture", {
+      path: "s/full.jpg",
+      fullPage: true,
+      format: "jpeg",
+    });
+    expect(jpeg).toContain("jpeg 不做分段拼接");
+    expect(
+      page.sent
+        .filter((each) => each.method === "Page.captureScreenshot")
+        .at(-1)!.params.captureBeyondViewport,
+    ).toBe(true);
   });
 
   it("writes only inside the workspace", async () => {

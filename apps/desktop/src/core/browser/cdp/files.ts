@@ -3,7 +3,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 import { DRIVE_CODES, refuse } from "./codes";
-import { clickAt, sleep } from "./input";
+import { clickAt, sleep, wheel } from "./input";
+import { blank, decodePng, encodePng, paste } from "./png";
 import {
   findTarget,
   hasTarget,
@@ -83,6 +84,7 @@ export async function capture(
     | undefined;
   let beyond = false;
   let what = "";
+  let note = "";
   if (hasTarget(args)) {
     const target = await findTarget(session, args);
     if (target.point !== undefined)
@@ -102,6 +104,14 @@ export async function capture(
     };
     what = label(target);
   } else if (args.fullPage === true) {
+    // 跨源 iframe 是另一个渲染进程画的：`captureBeyondViewport` 把视图临时撑到
+    // 整页大小再截，而那个进程不会为此重画，视口以外的 iframe 截出来是空白。
+    // 有跨源 iframe 时改成一屏一屏滚过去截、再拼起来；没有时仍是一次截完。
+    if (session.childFrames().length > 0) {
+      if (format === "png") return stitchedCapture(session, path);
+      note =
+        "页面含跨源 iframe，jpeg 不做分段拼接，视口以外的 iframe 可能是空白；要完整的整页请用 png";
+    }
     // OUR measurement, never anything the caller sent. `captureBeyondViewport`
     // is what makes the part below the fold render at all; without it the
     // clip is the viewport's pixels stretched over a page-sized rectangle.
@@ -127,7 +137,145 @@ export async function capture(
     width: Math.round(clip?.width ?? viewport.width),
     height: Math.round(clip?.height ?? viewport.height),
     ...(what === "" ? {} : { element: what }),
+    ...(note === "" ? {} : { note }),
   };
+}
+
+/** 拼接画布的像素上限（RGBA 每像素 4 字节，约 256 MB）。 */
+const MAX_STITCH_PIXELS = 64 * 1024 * 1024;
+/** 最多截几屏；再多的页面截到这里为止并在回答里说明。 */
+const MAX_SEGMENTS = 120;
+
+interface ScrollState {
+  top: number;
+  left: number;
+  height: number;
+  width: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+async function scrollState(session: CdpSession): Promise<ScrollState> {
+  return session.run<ScrollState>("scrollPosition");
+}
+
+/**
+ * 滚到 (left, top) 附近，等页面停稳，回答实际停在哪。用的是 `scroll` 动词同一
+ * 种滚法（视口中间的鼠标滚轮），页面停在哪就按哪贴，不按要求的位置猜——
+ * 平滑滚动、吸附点、拒绝滚动的页面都只会让某一段贴得不一样，而不是错位。
+ */
+async function scrollTo(
+  session: CdpSession,
+  from: ScrollState,
+  left: number,
+  top: number,
+): Promise<ScrollState> {
+  const dx = Math.round(left - from.left);
+  const dy = Math.round(top - from.top);
+  if (dx === 0 && dy === 0) return from;
+  await wheel(session, dx, dy);
+  let last = from;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(50);
+    const now = await scrollState(session);
+    if (attempt > 0 && now.top === last.top && now.left === last.left)
+      return now;
+    last = now;
+  }
+  return last;
+}
+
+/**
+ * 分段截整页：按视口大小一屏一屏滚过去，每屏截可见区域，按实测的滚动位置贴
+ * 到一张画布上，最后滚回原处。截的是视口本身（不带 `captureBeyondViewport`），
+ * 所以每一屏里的跨源 iframe 都是它自己的进程刚画好的。
+ *
+ * 代价：`position: fixed` / `sticky` 的东西每屏都在，拼出来会重复出现；这是
+ * 按屏截的必然结果，页面上没有跨源 iframe 时不走这里。
+ */
+async function stitchedCapture(
+  session: CdpSession,
+  path: string,
+): Promise<unknown> {
+  // 滚轮落在视口中间，而视口要是量过的那个。
+  await session.refreshViewport();
+  const start = await scrollState(session);
+  const viewWidth = Math.max(1, start.viewportWidth);
+  const viewHeight = Math.max(1, start.viewportHeight);
+  const pageWidth = Math.min(Math.max(start.width, viewWidth), MAX_SIDE);
+  const pageHeight = Math.min(Math.max(start.height, viewHeight), MAX_SIDE);
+  const lefts = offsets(pageWidth, viewWidth);
+  const tops = offsets(pageHeight, viewHeight);
+
+  let canvas: ReturnType<typeof blank> | undefined;
+  let scale = 1;
+  let segments = 0;
+  let cut = false;
+  let at = start;
+  try {
+    rows: for (const top of tops) {
+      for (const left of lefts) {
+        if (segments >= MAX_SEGMENTS) {
+          cut = true;
+          break rows;
+        }
+        at = await scrollTo(session, at, left, top);
+        // 视口本身，不带滚动条：clip 是文档坐标，取当前可见的那一块。
+        const shot = (await session.send("Page.captureScreenshot", {
+          format: "png",
+          clip: {
+            x: at.left,
+            y: at.top,
+            width: viewWidth,
+            height: viewHeight,
+            scale: 1,
+          },
+        })) as { data: string };
+        const piece = decodePng(Buffer.from(shot.data, "base64"));
+        segments += 1;
+        if (canvas === undefined) {
+          // 截图按设备像素给：高分屏上一个 CSS 像素是 2×2。
+          scale = piece.width / viewWidth;
+          let width = Math.round(pageWidth * scale);
+          let height = Math.round(pageHeight * scale);
+          if (width * height > MAX_STITCH_PIXELS) {
+            height = Math.max(1, Math.floor(MAX_STITCH_PIXELS / width));
+            cut = true;
+          }
+          canvas = blank(width, height);
+        }
+        paste(
+          canvas,
+          piece,
+          Math.round(at.left * scale),
+          Math.round(at.top * scale),
+        );
+      }
+    }
+  } finally {
+    // 滚回截之前的位置：截图不该改变人看到的页面。
+    await scrollTo(session, at, start.left, start.top).catch(() => undefined);
+  }
+  if (canvas === undefined) refuse(DRIVE_CODES.failed, "没有截到任何画面");
+  const bytes = encodePng(canvas);
+  return {
+    ...written(path, bytes),
+    width: Math.round(canvas.width / scale),
+    height: Math.round(canvas.height / scale),
+    segments,
+    note: cut
+      ? `页面含跨源 iframe，分 ${segments} 屏截取后拼接；页面太长，只截到前 ${Math.round(canvas.height / scale)} px`
+      : `页面含跨源 iframe，分 ${segments} 屏截取后拼接`,
+  };
+}
+
+/** 0、一屏、两屏……最后一个对齐到末尾（浏览器本来也只能滚到那里）。 */
+function offsets(total: number, step: number): number[] {
+  const out: number[] = [];
+  const last = Math.max(0, total - step);
+  for (let at = 0; at < last; at += step) out.push(at);
+  out.push(last);
+  return out;
 }
 
 /**

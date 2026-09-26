@@ -1,3 +1,4 @@
+import { blank, encodePng } from "./png";
 import { SCRIPTS } from "./scripts";
 import type { CdpDispatch } from "./session";
 
@@ -213,8 +214,41 @@ export class FakePage {
       case "Page.navigate":
         this.url = String(params.url);
         return { frameId: "main" };
-      case "Page.captureScreenshot":
-        return { data: ONE_PIXEL_PNG };
+      case "Page.captureScreenshot": {
+        const clip = params.clip as
+          | { x: number; y: number; width: number; height: number }
+          | undefined;
+        const paint = this.paint;
+        if (paint === undefined || clip === undefined)
+          return { data: ONE_PIXEL_PNG };
+        // 按文档坐标画出 clip 那一块，设备像素比 `deviceScale`。
+        const scale = this.deviceScale;
+        const width = Math.round(clip.width * scale);
+        const height = Math.round(clip.height * scale);
+        const image = blank(width, height);
+        for (let y = 0; y < height; y += 1)
+          for (let x = 0; x < width; x += 1) {
+            const rgba = paint(clip.x + x / scale, clip.y + y / scale);
+            image.pixels.set(rgba, (y * width + x) * 4);
+          }
+        return { data: encodePng(image).toString("base64") };
+      }
+      case "Input.dispatchMouseEvent":
+        if (this.wheelScrolls && params.type === "mouseWheel") {
+          const maxX = Math.max(0, this.content.width - this.viewport.width);
+          const maxY = Math.max(0, this.content.height - this.viewport.height);
+          this.scroll = {
+            x: Math.min(
+              maxX,
+              Math.max(0, this.scroll.x + Number(params.deltaX ?? 0)),
+            ),
+            y: Math.min(
+              maxY,
+              Math.max(0, this.scroll.y + Number(params.deltaY ?? 0)),
+            ),
+          };
+        }
+        return {};
       case "Page.printToPDF":
         return {
           data: Buffer.from(

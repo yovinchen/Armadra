@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { shellArgs, withWorkspace } from "../args";
 import { render } from "../render";
+import { decodePng } from "../cdp/png";
 import { discoverBrowser } from "./discover";
 import { HeadlessBackend } from "./index";
 
@@ -80,6 +81,25 @@ function page(port: number): Record<string, string> {
     "/inner": `<!doctype html><body style="margin:0"><button onclick="this.textContent='同源已点'">同源按钮</button></body>`,
     "/cross": `<!doctype html><body style="margin:0"><button onclick="this.textContent='跨源已点'; console.log('跨源日志')">跨源按钮</button><input aria-label="跨源输入"></body>`,
     "/next": `<!doctype html><title>下一页</title><body><button>提交</button></body>`,
+    // 影子树（开放与闭合）、多选下拉，以及视口以下一个整块红色的跨源 iframe。
+    "/deep": `<!doctype html><html><head><title>深处</title><style>
+      body { margin: 0; font: 14px sans-serif; } .spacer { height: 1600px; }
+    </style></head><body>
+      <x-open id="open"></x-open><x-shut id="shut"></x-shut>
+      <span id="said"></span>
+      <label>标签 <select id="tags" multiple size="4"><option value="a">甲</option><option value="b">乙</option><option value="c">丙</option><option value="d" disabled>丁</option></select></label>
+      <label>单选 <select id="one"><option value="x">一</option><option value="y">二</option></select></label>
+      <div class="spacer"></div>
+      <iframe id="red" src="${other}/red" style="display:block;width:300px;height:200px;border:0"></iframe>
+      <div style="height:400px"></div>
+      <script>
+        var open = document.getElementById('open').attachShadow({ mode: 'open' });
+        open.innerHTML = '<button onclick="document.getElementById(\\'said\\').textContent=\\'影子已点\\'">影子按钮</button>';
+        var shut = document.getElementById('shut').attachShadow({ mode: 'closed' });
+        shut.innerHTML = '<button>关着的按钮</button>';
+      </script>
+    </body></html>`,
+    "/red": `<!doctype html><body style="margin:0;background:#ff0000"></body>`,
   };
 }
 
@@ -364,6 +384,67 @@ describe.skipIf(found.path === undefined)(
       );
       expect(await run("close", { tab: background })).not.toContain(background);
     });
+
+    it(
+      "shadow roots, a multiple select, and a stitched full page",
+      { timeout: 90_000 },
+      async () => {
+        await run("navigate", { url: `${base}/deep` });
+
+        // `>>>` reaches into an open shadow root; a closed one is named as such.
+        expect(await run("click", { selector: "#open >>> button" })).toContain(
+          "已点击",
+        );
+        expect(
+          await run("wait", { selector: "#open >>> button", timeout: 2000 }),
+        ).toContain("内满足");
+        expect(await run("read", { mode: "text" })).toContain("影子已点");
+        const shut = await fails("click", { selector: "#shut >>> button" });
+        expect(shut).toContain("没有开放的 shadow root");
+        expect(await fails("click", { selector: "#open >>> .nope" })).toContain(
+          "shadow root 里没有匹配",
+        );
+
+        // Several options of a `<select multiple>`; several for a plain select
+        // and a disabled option are refused.
+        expect(
+          await run("select", { selector: "#tags", value: ["a", "c"] }),
+        ).toContain("已选中：甲、丙");
+        const tags = await run("read", {});
+        expect(tags).toMatch(/listbox "标签"/);
+        expect(
+          await fails("select", { selector: "#one", value: ["x", "y"] }),
+        ).toContain("multiple");
+        expect(
+          await fails("select", { selector: "#tags", value: ["a", "d"] }),
+        ).toContain("禁用");
+
+        // The red cross-origin iframe sits below the fold. Stitched, it is red.
+        const full = await run("capture", {
+          path: "shots/deep.png",
+          "full-page": true,
+        });
+        expect(full).toContain("屏截取后拼接");
+        const image = decodePng(
+          readFileSync(join(workspace, "shots/deep.png")),
+        );
+        const [, cssWidth] = /\n(\d+)×/.exec(full) ?? [];
+        const scale = image.width / Number(cssWidth);
+        let red = 0;
+        for (let y = Math.round(1500 * scale); y < image.height; y += 4)
+          for (let x = 0; x < image.width; x += 4) {
+            const at = (y * image.width + x) * 4;
+            if (
+              image.pixels[at]! > 230 &&
+              image.pixels[at + 1]! < 30 &&
+              image.pixels[at + 2]! < 30
+            )
+              red += 1;
+          }
+        // 300×200 CSS px, sampled every 4 device px.
+        expect(red * 16).toBeGreaterThan(300 * 200 * scale * scale * 0.8);
+      },
+    );
   },
 );
 
