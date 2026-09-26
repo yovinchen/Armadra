@@ -156,10 +156,17 @@ export default async function run(ctx) {
           ? liveSession(node.id)
           : { id: woke.id, generation: woke.generation },
       );
+      // 屏幕上的恢复行只停留一瞬（CLI 起来会清屏或重画）；进程的 argv 一直
+      // 在。两样都看。
       const resumed = await waitSoft(
         async () => {
           const text = await screen(node.id, 200);
-          return text.includes(facts[agent].providerSession) ? text : undefined;
+          if (text.includes(facts[agent].providerSession)) return text;
+          return agentPid(node.id, agent)?.command.includes(
+            facts[agent].providerSession,
+          )
+            ? "argv"
+            : undefined;
         },
         { timeout: 30_000 },
       );

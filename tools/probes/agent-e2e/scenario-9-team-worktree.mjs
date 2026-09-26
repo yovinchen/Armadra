@@ -1,8 +1,8 @@
-// 场景 6：`canvas team` 给成员各自一条 worktree（typescript-core-status §59）。
+// 场景 9：`canvas team` 给成员各自一条 worktree（typescript-core-status §59）。
 //
 // 不用真 CLI：它有自己的一套 core（临时数据目录、临时 git 仓库当工作区），
 // Agent 用一个假 CLI（一段 sh，把自己起在哪个目录写下来再停在 shell 里）。
-// 所以 `--only 6` 单跑时不要求 Claude / Codex 的登录，也不起 Vite 与 Chrome；
+// 所以 `--only 9` 单跑时不要求 Claude / Codex 的登录，也不起 Vite 与 Chrome；
 // 全量跑时它在其余场景之后另起这一套。
 //
 // 断言：

@@ -56,7 +56,10 @@ import scenario2 from "./agent-e2e/scenario-2-claude-delivery.mjs";
 import scenario3 from "./agent-e2e/scenario-3-dependencies-team.mjs";
 import scenario4 from "./agent-e2e/scenario-4-eco-hibernate.mjs";
 import scenario5 from "./agent-e2e/scenario-5-canvas-only.mjs";
-import scenario6 from "./agent-e2e/scenario-6-team-worktree.mjs";
+import scenario6 from "./agent-e2e/scenario-6-other-clis.mjs";
+import scenario7 from "./agent-e2e/scenario-7-claude-approval.mjs";
+import scenario8 from "./agent-e2e/scenario-8-send-wakes.mjs";
+import scenario9 from "./agent-e2e/scenario-9-team-worktree.mjs";
 
 const SCENARIOS = [
   ["1", scenario1],
@@ -64,15 +67,18 @@ const SCENARIOS = [
   ["3", scenario3],
   ["4", scenario4],
   ["5", scenario5],
+  ["6", scenario6],
+  ["7", scenario7],
+  ["8", scenario8],
 ];
 
 async function main() {
-  // 场景 6 用假 CLI、自己起一套 core：单跑它时不要真 CLI 的登录，也不起页面。
-  if (only.has("6")) {
+  // 场景 9 用假 CLI、自己起一套 core：单跑它时不要真 CLI 的登录，也不起页面。
+  if (only.has("9")) {
     report.safety.before ??= fingerprint();
-    await scenario6();
+    await scenario9();
   }
-  if (![...only].some((id) => id !== "6")) return;
+  if (![...only].some((id) => id !== "9")) return;
   const ctx = await setup();
   for (const [id, run] of SCENARIOS) if (only.has(id)) await run(ctx);
 
@@ -86,6 +92,14 @@ async function main() {
     "SELECT id, title FROM nodes WHERE board_id = ?",
     board.id,
   );
+}
+
+// 被中断也要收尾：不收的话 core、tmux 服务器、Vite 与临时目录都留在机器上。
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    report.error = `被 ${signal} 中断`;
+    finalize();
+  });
 }
 
 try {

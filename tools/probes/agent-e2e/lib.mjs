@@ -28,10 +28,16 @@ const onlyFlag = argv.indexOf("--only");
 export const only =
   onlyFlag >= 0
     ? new Set(argv[onlyFlag + 1].split(",").map((part) => part.trim()))
-    : new Set(["1", "2", "3", "4", "5", "6"]);
+    : new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+// `--backend direct`：终端后端改成 direct（非 tmux）再跑。缺省按平台（macOS
+// 装了 tmux 就是 tmux）。
+const backendFlag = argv.indexOf("--backend");
+export const backend = backendFlag >= 0 ? argv[backendFlag + 1] : undefined;
 const positional = argv.filter(
   (value, index) =>
-    !value.startsWith("--") && (onlyFlag < 0 || index !== onlyFlag + 1),
+    !value.startsWith("--") &&
+    (onlyFlag < 0 || index !== onlyFlag + 1) &&
+    (backendFlag < 0 || index !== backendFlag + 1),
 );
 export const output = resolve(positional[0] ?? join(root, "target/agent-e2e"));
 mkdirSync(output, { recursive: true });
@@ -137,6 +143,37 @@ export async function waitSoft(test, options) {
   }
 }
 
+/**
+ * 改一次画布文档：`mutate(current)` 答 `{ nodes, edges }`。编辑租约在某个页面手
+ * 里时 PUT 答 423；探针先关页面再写，关掉的页面的租约要等它过期（30 秒 TTL）。
+ */
+export async function putDocument(api, documentPath, mutate) {
+  await waitFor(
+    "编辑租约空出来、文档写进去",
+    async () => {
+      const current = await api(documentPath);
+      const next = mutate(current);
+      try {
+        await api(documentPath, {
+          method: "PUT",
+          body: JSON.stringify({
+            expectedUpdatedAt: current.board.updatedAt,
+            nodes: next.nodes,
+            edges: next.edges ?? current.edges,
+            viewport: current.board.viewport,
+            whiteboard: current.board.whiteboard,
+          }),
+        });
+        return true;
+      } catch (error) {
+        if (!/→ (423|409)/.test(String(error.message))) throw error;
+        return false;
+      }
+    },
+    { timeout: 60_000, interval: 2000 },
+  );
+}
+
 /* -------------------------- 操作员配置的字节快照 -------------------------- */
 
 const guarded = [
@@ -151,6 +188,14 @@ const guarded = [
   join(homedir(), ".config/opencode/plugins/armadra-status.js"),
   join(homedir(), ".pi/agent/extensions/armadra-status.ts"),
   join(homedir(), ".omp/agent/extensions/armadra-status.ts"),
+  // 场景 6 的四个 CLI：凭据只复制出去，配置一个字节都不该变。
+  join(homedir(), ".config/opencode/opencode.json"),
+  join(homedir(), ".local/share/opencode/auth.json"),
+  join(homedir(), ".pi/agent/auth.json"),
+  join(homedir(), ".pi/agent/settings.json"),
+  join(homedir(), ".omp/agent/config.yml"),
+  join(homedir(), ".omp/agent/models.yml"),
+  join(homedir(), ".copilot/config.json"),
 ];
 export function fingerprint() {
   const answer = {};
@@ -273,29 +318,37 @@ export async function setup() {
   delete environment.TMUX_PANE;
   delete environment.CLAUDECODE;
   const coreLog = createWriteStream(join(output, "core.log"));
-  const runtime = spawn(
-    process.execPath,
-    [binary, "--listen", "tcp:127.0.0.1:0", "--data-dir", data],
-    {
-      cwd: root,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: environment,
-    },
-  );
-  cleanups.push(() => runtime.kill("SIGKILL"));
-  runtime.stdout.pipe(coreLog);
-  runtime.stderr.pipe(coreLog);
+  // 可重启：`--backend` 改的是启动时读的设置，改完要重起一次 core。
+  let runtime;
   let origin = "";
-  for (let attempt = 0; attempt < 300 && !origin; attempt += 1) {
-    if (runtime.exitCode !== null) throw new Error("core 退出，见 core.log");
-    try {
-      origin = JSON.parse(readFileSync(join(data, "endpoints.json"), "utf8"))
-        .runtime.http;
-    } catch {
-      await sleep(100);
+  const startCore = async () => {
+    rmSync(join(data, "endpoints.json"), { force: true });
+    runtime = spawn(
+      process.execPath,
+      [binary, "--listen", "tcp:127.0.0.1:0", "--data-dir", data],
+      {
+        cwd: root,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: environment,
+      },
+    );
+    const child = runtime;
+    cleanups.push(() => child.kill("SIGKILL"));
+    runtime.stdout.pipe(coreLog, { end: false });
+    runtime.stderr.pipe(coreLog, { end: false });
+    origin = "";
+    for (let attempt = 0; attempt < 300 && !origin; attempt += 1) {
+      if (runtime.exitCode !== null) throw new Error("core 退出，见 core.log");
+      try {
+        origin = JSON.parse(readFileSync(join(data, "endpoints.json"), "utf8"))
+          .runtime.http;
+      } catch {
+        await sleep(100);
+      }
     }
-  }
-  note("core 已启动", origin);
+    note("core 已启动", origin);
+  };
+  await startCore();
 
   const api = async (path, init = {}) => {
     const answer = await fetch(new URL(path, origin), {
@@ -317,6 +370,24 @@ export async function setup() {
     body: JSON.stringify({ terminal: { ecoMode: false } }),
   });
   report.backend = await api("/api/terminals/backend");
+  if (backend !== undefined && report.backend.effective !== backend) {
+    await api("/api/settings", {
+      method: "PATCH",
+      body: JSON.stringify({ terminal: { backend } }),
+    });
+    const previous = runtime;
+    previous.kill("SIGTERM");
+    await waitFor("core 退出", () => previous.exitCode !== null, {
+      timeout: 15_000,
+      interval: 100,
+    }).catch(() => previous.kill("SIGKILL"));
+    await startCore();
+    report.backend = await api("/api/terminals/backend");
+    if (report.backend.effective !== backend)
+      throw new Error(
+        `终端后端没有换成 ${backend}：${JSON.stringify(report.backend)}`,
+      );
+  }
   note("终端后端", report.backend);
 
   for (const agent of ["claude", "codex"]) {
@@ -529,9 +600,18 @@ export async function setup() {
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...environment, ARMADRA_DATA_DIR: data },
+      // 自成一个进程组：pnpm 下面才是真正的 vite，只杀 pnpm 会留下一个挂在
+      // launchd 下的孤儿开发服务器（2026-09-26 跑一次留一个）。
+      detached: true,
     },
   );
-  cleanups.push(() => vite.kill("SIGKILL"));
+  cleanups.push(() => {
+    try {
+      process.kill(-vite.pid, "SIGKILL");
+    } catch {
+      vite.kill("SIGKILL");
+    }
+  });
   let served = false;
   vite.stdout.on("data", (chunk) => {
     if (String(chunk).includes("ready in")) served = true;
@@ -824,10 +904,13 @@ export async function setup() {
         const lines = text.split("\n").filter((line) => line.trim() !== "");
         if (/^probe%/.test(lines.at(-1) ?? ""))
           throw new Error("Claude 退回了 shell");
-        return (
-          /\? for shortcuts|shift\+tab to cycle/i.test(text) &&
-          !/trust this folder/i.test(text)
+        // 页脚要出现在信任对话框**之后**：direct 后端的 capture 是回放缓冲，
+        // 对话框的字还留在前面的历史里（tmux 读的是真屏幕，没有这个问题）。
+        const footer = Math.max(
+          text.lastIndexOf("? for shortcuts"),
+          text.lastIndexOf("shift+tab to cycle"),
         );
+        return footer >= 0 && footer > text.lastIndexOf("trust this folder");
       },
       { timeout, interval: 1000 },
     );
@@ -879,6 +962,8 @@ export async function setup() {
   /** pane 里 CLI 进程的 pid（tmux 后端：pane 的 shell 下面那个 claude / codex）。 */
   const agentPid = (nodeId, agent) => {
     const session = liveSession(nodeId);
+    if (session?.backend_kind === "direct")
+      return directAgentPid(nodeId, agent);
     if (session?.backend_ref == null) return undefined;
     let pane;
     try {
@@ -932,7 +1017,62 @@ export async function setup() {
     );
     return hit === undefined
       ? undefined
-      : { pid: hit.pid, command: hit.command.slice(0, 200) };
+      : { pid: hit.pid, command: hit.command.slice(0, 1500) };
+  };
+  /**
+   * direct 后端没有 pane 可问：PTY 的 shell 是 core 的子进程，CLI 在它下面，
+   * 环境里带着 `ARMADRA_NODE_ID`（shell 自己的那份 `ps -E` 读不出来，zsh 改写
+   * 过那块内存；它的子进程读得出）。在 core 的进程树里按节点 id 与 CLI 名认。
+   */
+  const directAgentPid = (nodeId, agent) => {
+    const processes = (withEnv) =>
+      execFileSync(
+        "ps",
+        ["-A", ...(withEnv ? ["-E"] : []), "-ww", "-o", "pid=,ppid=,command="],
+        { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+      )
+        .split("\n")
+        .map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/))
+        .filter(Boolean)
+        .map(([, pid, ppid, command]) => ({
+          pid: Number(pid),
+          ppid: Number(ppid),
+          command,
+        }));
+    const table = processes(false);
+    const environments = new Map(
+      processes(true).map((row) => [row.pid, row.command]),
+    );
+    const under = new Set([runtime.pid]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const row of table) {
+        if (under.has(row.ppid) && !under.has(row.pid)) {
+          under.add(row.pid);
+          grew = true;
+        }
+      }
+    }
+    const pattern = new RegExp(
+      `(^|/)${agent}(\\s|$)|/${agent}/|${agent}\\.js|@openai/codex|claude-code`,
+    );
+    // 最上面那个：Codex 的 node 包装下面还有一个原生二进制。
+    const hit = table.find(
+      (row) =>
+        under.has(row.pid) &&
+        row.pid !== runtime.pid &&
+        pattern.test(row.command) &&
+        (environments.get(row.pid) ?? "").includes(
+          `ARMADRA_NODE_ID=${nodeId}`,
+        ) &&
+        !table.some(
+          (parent) => parent.pid === row.ppid && pattern.test(parent.command),
+        ),
+    );
+    return hit === undefined
+      ? undefined
+      : { pid: hit.pid, command: hit.command.slice(0, 1500) };
   };
   const alive = (pid) => {
     try {
@@ -973,8 +1113,13 @@ export async function setup() {
     tmuxSocket,
     environment,
     coreLog,
-    runtime,
-    origin,
+    get runtime() {
+      return runtime;
+    },
+    get origin() {
+      return origin;
+    },
+    startCore,
     api,
     agents,
     claudeRow,
