@@ -50,7 +50,6 @@ describe("the IPC table", () => {
         "window:is-focused",
         "window:key-intent-result",
         "dialog:pick-directory",
-        "dialog:pick-files",
         "shell:open-external",
         "shell:show-item-in-folder",
         "shortcuts:apply",

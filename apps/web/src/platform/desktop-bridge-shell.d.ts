@@ -11,7 +11,6 @@
  */
 
 interface ArmadraDialogOptions {
-  multiple?: boolean;
   defaultPath?: string;
 }
 
@@ -25,7 +24,6 @@ interface ArmadraBridge {
   readonly dialog: {
     /** 选目录，返回绝对路径；用户取消是空数组。 */
     pickDirectory(options?: ArmadraDialogOptions): Promise<string[]>;
-    /** 选文件，返回绝对路径而不是字节——读文件是 Runtime 的事。 */
   };
   readonly shell: {
     /** 只放行 `http` / `https`，其余以 `scheme_not_allowed` 拒绝。 */

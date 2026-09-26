@@ -83,7 +83,7 @@ Go 使用 `-mod=readonly -trimpath`、`GOTOOLCHAIN=local`，缓存位于 `target
 
 - Overlay 标题栏、隐藏系统标题、`vibrancy: "sidebar"`，最小 960×600；前端 `src/shell` 绘制标题区域，
   拖拽区走 `-webkit-app-region`（`data-app-region`）。
-- `dialog:pick-directory` / `dialog:pick-files` 返回绝对路径而非字节；`shell:open-external` 只允许 `http` / `https`。
+- `dialog:pick-directory` 返回绝对路径而非字节（没有选文件的通道：文件经页面自己的文件输入进画布）；`shell:open-external` 只允许 `http` / `https`。
 - 文件拖放是普通的 DOM `drop`，绝对路径由 `webUtils.getPathForFile` 取，坐标已经是 CSS 像素。
 - CSP 的连接范围为本地 Runtime http/ws 和默认 Host HTTP；`<webview>` 与图片保留各自所需的来源。
 - 更新走 electron-updater；未签名阶段更新器关闭，`dist` 会给本地包打上 `armadraUpdates: "disabled"` 标记，

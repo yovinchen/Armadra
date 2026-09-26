@@ -159,15 +159,17 @@ RSS 树汇总标记为估计，多个进程共享页可能重复计算，不称�
 
 资源预算：终端屏幕/scrollback、Worker 收据/日志、浏览器进程、前端 LRU 分开配置。日志和转录有保留期与容量上限，清理前排除活跃会话及未完成交接引用。
 
-### 8.1 实现状态（T02，M7，写于 Rust Runtime 阶段，仅供追溯）
+### 8.1 实现现状
 
-> 以下路径（`apps/runtime/src/resources/`）与「Runtime」措辞是 Rust Runtime 时期的实现记录；对应逻辑现在归 core 的 resources 域，具体文件以现有源码为准，本节不逐句更新路径。
+资源域在 core 的 `apps/desktop/src/core/resources/`，由 `index.ts` 装配采样路由与电源租约路由。
 
-已交付：`apps/runtime/src/resources/` 用锁定版本的 `sysinfo` 采集本机总览（CPU、内存、swap、负载、数据目录所在磁盘、uptime）与每个受管终端会话的进程树 CPU / RSS / 子进程数 / 状态；电源来源在 macOS 读 `pmset -g batt`、Linux 读 `/sys/class/power_supply`，其它平台 unknown。采样是订阅制：`POST …/resources/subscription` 拿带 TTL 的订阅，样本经既有工作空间事件流以 `resource.sample` 推送，最后一份订阅过期后采样循环自行停止；间隔取 `resources.intervalMs`（默认 2s，执行端侧夹在 500ms–60s）。所有指标是可选值，测不出来发 `null`，前端显示短横线。CPU 靠连续刷新求差，一次性 `GET` 会先垫一次基线再采，所以首屏和刚启动的进程都不会出现假 0。
-
-孤立会话按两类列出：有行无节点（可认领）与有 tmux 会话无行（只能终止）。认领由执行端把行绑回并回传应使用的 `nodeId`——即会话自己的 key，前端用它建节点，恢复出来的节点拥有的仍是原进程。
-
-未实现：多执行主机筛选与远端一轮读取、内存 pressure。SSH 会话标为 `remote`、指标 unknown，不用控制机数据冒充远端。
+- **本机采样**（`sample.ts`）：主机总览取 Node 的 `os`（内存、负载、uptime）加数据目录所在磁盘；进程用一次全表 `ps -Ao pid=,ppid=,rss=,time=,lstart=,state=,comm=` 读，与 `terminal/process.ts` 读进程树是同一条命令，不引入原生模块。会话行报进程树 CPU / RSS / 子进程数 / 状态，至多列出占用最高的 32 个子进程，`childCount` 仍是真实总数。测不到的一律 `null`（前端画破折号），CPU 靠相邻两拍的累计时间求差，首拍为 `null`；进程按 `(pid, startTime)` 去重。Windows 上没有 `ps`，进程指标与负载均值都是 `null`，不编零。
+- **内存压力与电源**（`platform-probe.ts`）：pressure 只在 macOS 读 `kern.memorystatus_vm_pressure_level`，Linux 的 PSI 报的是停顿时间而不是等级，不自行定阈值，其余平台 `null`；电源来源 macOS 读 `pmset -g batt`、Linux 读 `/sys/class/power_supply`，其余 unknown。
+- **会话追踪**（`sessions.ts`）：身份来自 `terminal_sessions` 表，当前 pane pid 问 core 自己那台 tmux 服务器（`-S <dataDir>/tmux.sock`），不问用户默认的那台；取不到 pid 报 `no-pid`。
+- **订阅**（`service.ts`）：`POST …/resources/subscription` 拿带 TTL 的订阅，样本经工作空间事件流以 `resource.sample` 推送，订阅全部过期后采样循环停止。每个订阅可提 `intervalMs`，夹在 `[resources.intervalMs, 60s]`，循环按存活订阅里最快的一档跑；离屏的终端徽标取 30 秒，面板或任一可见徽标把节奏拉回设置里的那档。
+- **远端执行主机**（`remote.ts`、`hosts.ts`、`sockets.ts`）：每台主机一拍至多一次 Worker 往返（`resources.read`），采样读上一轮的缓存；会话与远端进程树按 SSH 连接的本地端口对上。读不到或缓存过旧时远端行是 `null`、原因 `remote`，从不拿控制机的数字冒充。面板顶部按主机筛选。
+- **孤立会话**：两类——`no-node`（有会话行、节点已删，可认领）与 `no-row`（有 `armadra-*` tmux 会话、没有行，只能终止）。认领把行绑回并回传节点应使用的 `nodeId`；终止只接受 `session:<id>` 或 `ref:<name>` 两种寻址，拆树复用终端域的 `terminateTree`，任意 pid 无法经这条路寻址。
+- **前端**：面板在 `apps/web/src/panels/resources/`，终端节点头部的内存徽标是 `MemoryBadge.tsx`（进程树 RSS 之和，标为估计；超过 `armadra.resources.sessionMemoryWarnBytes`，默认 2 GiB，变色并按 `sessionId:generation` 提醒一次，只提醒不处置）。
 
 ### 8.2 实现状态（§4.3 补齐，M7，写于 Rust Runtime / Go Host 阶段，仅供追溯）
 

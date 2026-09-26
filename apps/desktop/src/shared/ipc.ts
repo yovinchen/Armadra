@@ -71,12 +71,15 @@ export const IPC = {
   identityTicket: spec("identity:ticket", "invoke", "window"),
 
   /**
-   * Directory and file pickers. Both return absolute paths rather than bytes:
-   * the page hands a path to the Runtime, which is the process that may read
-   * it, so the file never travels through the renderer at all.
+   * The directory picker. It returns absolute paths rather than bytes: the
+   * page hands a path to the Runtime, which is the process that may read it,
+   * so nothing picked travels through the renderer at all.
+   *
+   * There is no file picker channel: files enter the canvas through the
+   * page's own `<input type="file">` (`pickFilesForCanvas`), and the browser
+   * node's file chooser is answered by the core over CDP.
    */
   dialogPickDirectory: spec("dialog:pick-directory", "invoke", "window"),
-  dialogPickFiles: spec("dialog:pick-files", "invoke", "window"),
 
   /** `shell.openExternal`, with an `http`/`https` scheme allow-list. */
   shellOpenExternal: spec("shell:open-external", "invoke", "window"),
@@ -214,7 +217,6 @@ export const IMPLEMENTED_CHANNELS: readonly string[] = [
   IPC.updatesInstall.channel,
   IPC.updatesRestartReport.channel,
   IPC.dialogPickDirectory.channel,
-  IPC.dialogPickFiles.channel,
   IPC.shellOpenExternal.channel,
   IPC.shellShowItemInFolder.channel,
   IPC.shortcutsApply.channel,
@@ -328,11 +330,10 @@ export function errorCode(error: unknown): string | undefined {
 
 export const NOT_IMPLEMENTED = "not_implemented";
 
-/** What `dialog:pick-directory` / `dialog:pick-files` accept. Paths, never
- * bytes: the page hands a path to the Runtime, which is the process allowed to
- * read it, so the file never travels through the renderer at all. */
+/** What `dialog:pick-directory` accepts. Paths, never bytes: the page hands a
+ * path to the Runtime, which is the process allowed to read it, so the folder
+ * never travels through the renderer at all. */
 export interface PickOptions {
-  readonly multiple?: boolean;
   readonly defaultPath?: string;
 }
 

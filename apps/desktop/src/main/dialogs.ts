@@ -3,17 +3,15 @@ import type { PickOptions } from "../shared/ipc";
 import { getMainWindow } from "./window";
 
 /**
- * The two system pickers.
+ * The system folder picker.
  *
- * Both return ABSOLUTE PATHS rather than bytes, which is the rule the Rust
- * shell also kept (`platform/index.ts:46-56`): the page hands a path to the
- * Runtime, and the Runtime is the process allowed to read it. Handing the page
- * bytes would mean copying every picked file through the renderer, and for the
- * browser node's file chooser it would mean writing a copy into the project
- * before the page could see it.
+ * It returns ABSOLUTE PATHS rather than bytes: the page hands a path to the
+ * Runtime, and the Runtime is the process allowed to read it. There is no file
+ * picker here — files reach the canvas through the page's own file input, and
+ * the browser node's file chooser is answered by the core over CDP.
  *
- * The dialogs are attached to the window (`showOpenDialog(window, …)`) so they
- * are sheets on macOS rather than free-floating panels — a free panel can end
+ * The dialog is attached to the window (`showOpenDialog(window, …)`) so it is
+ * a sheet on macOS rather than a free-floating panel — a free panel can end
  * up behind the window it belongs to, with no way back to it.
  */
 
@@ -42,11 +40,4 @@ async function show(
  */
 export function pickDirectory(options?: PickOptions): Promise<string[]> {
   return show(["openDirectory", "createDirectory"], options);
-}
-
-export function pickFiles(options?: PickOptions): Promise<string[]> {
-  return show(
-    options?.multiple ? ["openFile", "multiSelections"] : ["openFile"],
-    options,
-  );
 }

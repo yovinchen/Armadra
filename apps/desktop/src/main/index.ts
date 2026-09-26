@@ -62,7 +62,7 @@ import {
 } from "./browser";
 import { clearBrowsingData } from "./browser/clear-data";
 import { setDriveEnvironment } from "./runtime-process";
-import { pickDirectory, pickFiles } from "./dialogs";
+import { pickDirectory } from "./dialogs";
 import { openExternal, showItemInFolder } from "./external";
 import {
   installApplicationMenu,
@@ -116,8 +116,6 @@ function registerIpc(): void {
     ...updates.handlers,
     [IPC.dialogPickDirectory.channel]: (options) =>
       pickDirectory(options as PickOptions | undefined),
-    [IPC.dialogPickFiles.channel]: (options) =>
-      pickFiles(options as PickOptions | undefined),
     [IPC.shellOpenExternal.channel]: (url) => openExternal(url),
     // Revealing is its own channel with its own allow-list; see
     // `shell-core/reveal-path.ts` for why it is not a `file://` URL through

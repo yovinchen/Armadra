@@ -40,7 +40,7 @@ vi.mock("electron", () => ({
 
 vi.mock("./window", () => ({ getMainWindow: () => mainWindow }));
 
-import { pickDirectory, pickFiles } from "./dialogs";
+import { pickDirectory } from "./dialogs";
 
 beforeEach(() => {
   calls.length = 0;
@@ -69,21 +69,6 @@ describe("the folder picker", () => {
   });
 });
 
-describe("the file picker", () => {
-  it("selects one file by default", async () => {
-    await pickFiles();
-    expect(calls[0]?.options.properties).toEqual(["openFile"]);
-  });
-
-  it("selects several when asked", async () => {
-    await pickFiles({ multiple: true });
-    expect(calls[0]?.options.properties).toEqual([
-      "openFile",
-      "multiSelections",
-    ]);
-  });
-});
-
 describe("where the panel is attached", () => {
   it("is a sheet on the window when there is one", async () => {
     await pickDirectory();
@@ -103,12 +88,11 @@ describe("cancelling", () => {
     // "nothing picked" as one.
     answer = { canceled: true, filePaths: ["/ignored"] };
     await expect(pickDirectory()).resolves.toEqual([]);
-    await expect(pickFiles()).resolves.toEqual([]);
   });
 
   it("answers with absolute paths rather than bytes", async () => {
     // The page hands a path to the Runtime, which is the process allowed to
     // read it; the file never travels through the renderer.
-    await expect(pickFiles()).resolves.toEqual(["/picked"]);
+    await expect(pickDirectory()).resolves.toEqual(["/picked"]);
   });
 });

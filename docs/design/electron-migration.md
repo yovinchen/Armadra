@@ -76,7 +76,7 @@ BrowserWindow ──load──▶ 上面的 URL；页面从 preload 读一次 { 
 | 域        | 通道                                                                                   | 方向                               | 备注                                                                          |
 | --------- | -------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------- |
 | transport | `transport:endpoints`                                                                  | invoke                             | 返回 `{ httpBase, wsBase, hostBase, dataDir }`，替代 `__armadra/transport`    |
-| dialog    | `dialog:pick-directory`、`dialog:pick-files`                                           | invoke                             | 保留「返回路径而非字节」与 `canCreateDirectories`                             |
+| dialog    | `dialog:pick-directory`（选文件的通道已删，页面没有调用者）                            | invoke                             | 保留「返回路径而非字节」与 `canCreateDirectories`                             |
 | shell     | `shell:open-external`                                                                  | invoke                             | scheme 白名单 `http`/`https`，其余拒绝                                        |
 | updates   | `updates:state/check/dismiss/cancel/download/install/restart-report`                   | invoke                             | 7 条与今天的 Tauri command 一一对应；`updates:progress` 事件                  |
 | shortcuts | `shortcuts:apply`                                                                      | invoke；`shortcuts:triggered` 事件 | 只认 `global.toggleWindow` / `global.newTerminal`                             |

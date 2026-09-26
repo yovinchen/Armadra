@@ -94,7 +94,6 @@ export interface ArmadraDesktopApi {
   };
   readonly dialog: {
     pickDirectory(options?: PickOptions): Promise<string[]>;
-    pickFiles(options?: PickOptions): Promise<string[]>;
   };
   readonly shell: {
     openExternal(url: string): Promise<void>;
@@ -175,8 +174,6 @@ const api: ArmadraDesktopApi = {
   dialog: {
     pickDirectory: (options) =>
       ipcRenderer.invoke(IPC.dialogPickDirectory.channel, options),
-    pickFiles: (options) =>
-      ipcRenderer.invoke(IPC.dialogPickFiles.channel, options),
   },
   shell: {
     openExternal: (url) =>
