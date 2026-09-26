@@ -17,6 +17,8 @@
 //   4. 节能休眠：秒级阈值（`ARMADRA_TEST_ECO_IDLE_SECONDS`，见
 //      `core/terminal/hibernate.ts::ecoTestOverride`），进程确实退出，聚焦节点唤
 //      醒后 resume 同一个会话、还记得之前说过的话。Claude 与 Codex 各一遍。
+//   5. 画布内注入：同样的环境，只差启动行上的注入参数——画布外启动的 Codex /
+//      Claude 看不到画布说明与我们的技能、Hook 不打到 core；带上注入参数后都生效。
 //
 // 认证与隔离：
 //   * Codex 用临时 CODEX_HOME，只**复制** ~/.codex/auth.json 进去。token 超过 7
@@ -35,7 +37,7 @@
 //
 // 用法（仓库根目录）：
 //   pnpm libs:build && pnpm --filter @armadra/desktop build
-//   node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4]
+//   node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4,5]
 //
 // 产物：<输出目录>/result.json、每个场景的截图、core.log。
 import { finalize, only, report, setup, state } from "./agent-e2e/lib.mjs";
@@ -43,12 +45,14 @@ import scenario1 from "./agent-e2e/scenario-1-codex-first-delivery.mjs";
 import scenario2 from "./agent-e2e/scenario-2-claude-delivery.mjs";
 import scenario3 from "./agent-e2e/scenario-3-dependencies-team.mjs";
 import scenario4 from "./agent-e2e/scenario-4-eco-hibernate.mjs";
+import scenario5 from "./agent-e2e/scenario-5-canvas-only.mjs";
 
 const SCENARIOS = [
   ["1", scenario1],
   ["2", scenario2],
   ["3", scenario3],
   ["4", scenario4],
+  ["5", scenario5],
 ];
 
 async function main() {

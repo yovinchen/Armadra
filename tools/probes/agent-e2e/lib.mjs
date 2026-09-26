@@ -28,7 +28,7 @@ const onlyFlag = argv.indexOf("--only");
 export const only =
   onlyFlag >= 0
     ? new Set(argv[onlyFlag + 1].split(",").map((part) => part.trim()))
-    : new Set(["1", "2", "3", "4"]);
+    : new Set(["1", "2", "3", "4", "5"]);
 const positional = argv.filter(
   (value, index) =>
     !value.startsWith("--") && (onlyFlag < 0 || index !== onlyFlag + 1),
@@ -144,6 +144,13 @@ const guarded = [
   join(homedir(), ".codex/config.toml"),
   join(homedir(), ".codex/hooks.json"),
   join(homedir(), ".codex/auth.json"),
+  // 旧版装进各 CLI 全局目录的东西：迁移只该在真实应用里发生，探针一个都不碰。
+  join(homedir(), ".claude/skills/armadra/SKILL.md"),
+  join(homedir(), ".codex/skills/armadra/SKILL.md"),
+  join(homedir(), ".copilot/hooks/armadra.json"),
+  join(homedir(), ".config/opencode/plugins/armadra-status.js"),
+  join(homedir(), ".pi/agent/extensions/armadra-status.ts"),
+  join(homedir(), ".omp/agent/extensions/armadra-status.ts"),
 ];
 export function fingerprint() {
   const answer = {};
@@ -254,6 +261,11 @@ export async function setup() {
     ARMADRA_LOG: "info",
     CODEX_HOME: codexHome,
     CLAUDE_CONFIG_DIR: claudeInstallHome,
+    // core 启动时的一次性迁移按这些目录找旧的全局安装：全指到临时目录，探针
+    // 不替操作员清他机器上的东西（那是升级后真实应用第一次启动的事）。
+    XDG_CONFIG_HOME: join(scratch, "xdg"),
+    COPILOT_HOME: join(scratch, "copilot-home"),
+    PI_CODING_AGENT_DIR: join(scratch, "pi-agent"),
     SHELL: shell,
     ARMADRA_TEST_ECO_IDLE_SECONDS: String(ECO_IDLE_SECONDS),
   };
