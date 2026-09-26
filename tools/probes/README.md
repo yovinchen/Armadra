@@ -166,3 +166,16 @@ node tools/probes/remote-e2e.mjs [输出目录]
 「远端」就是这台机器：core 本来就读 `ARMADRA_REMOTE_WORKER_LAUNCHER` 替换每条 `ssh` 启动行的 argv[0]（`core/remote/index.ts`），探针把它指到临时目录里的一个假 ssh——按 `ssh(1)` 的规则吃掉选项与目的主机，把剩下的远端命令交给本机 `/bin/sh -c`；Worker 就是 `apps/desktop/out/core/main.js worker --stdio`。执行主机登记与 mock-lsp 的语言服务器设置走接口，其余全在界面上：设置 → SSH 打开远程项目；资源管理器打开文件、编辑、⌘S 落盘；Git 窗口的状态、勾选暂存、提交；日志页右键「获取远端更新」看进行中的提示与百分比，再对一次 upload-pack 睡 30 秒的 fetch 点「取消」；打开 `notes.md` 看 mock-lsp 的诊断（并按进程树确认它跑在 `worker --stdio --language-link` 下面）；在远端磁盘上改开着的文件看编辑器跟上（登记答 `mode: events`）；资源面板按主机筛选；设置 → 执行主机把一个本机工作空间切到假远端再切回来。
 
 产物默认在 `target/remote-e2e/`：`result.json` 与每一步的截图（`01-remote-workspace.png` … `07c-switched-local.png`）。上游是临时目录里的裸仓库，`remote.origin.uploadpack` 指向一个先睡几秒的包装，本机传输才看得到进行中与取消。没有验证：真实的 ssh 传输、主机密钥与 askpass、跨机器的路径与平台差异、远端终端节点（它走真 `ssh`，不经这个替换）。
+
+## 浏览器节点的 Agent 工具（armadra-hook browser）
+
+```sh
+pnpm libs:build
+pnpm --filter @armadra/desktop build
+node tools/probes/browser-agent-e2e.mjs              # 真 core 的 headless 后端
+node tools/probes/browser-agent-e2e.mjs --electron   # 再跑一遍桌面壳的 <webview>
+```
+
+真链路：`apps/desktop/out/cli/armadra-hook.js browser <动词>` → 真 core（没有桌面壳时用自己起的 headless Chromium，与服务器壳同一个后端）→ 节点令牌、连线、同工作空间三条授权 → 控制租约 → 动词 → CDP 白名单 → 页面。画布由接口建：一个终端节点连到一个浏览器节点，另有一个没连线的浏览器节点；终端节点起一个 `/bin/sh` 会话换来 core 签发的节点令牌。fixture 是本机随机端口上的一页表单，含同源 iframe 与 `localhost` 那个端口上的跨源 iframe（真 OOPIF）、原生与自绘下拉、HTML5 拖放、悬停菜单、confirm、文件输入、下载、延时文字、一个 200 与一个 404 的 fetch。每个动词都跑：快照（缺省、`--interactive`、`--max-bytes`）、按引用 / 角色名称 / 选择器点击（含两种 iframe 里的元素）、`--snapshot` 差异、`type` / `fill` / `select`、组合键与被拒的按键、`hover` / `drag`、`wait --text / --text-gone / --idle` 与一次 3 秒的超时、控制台与请求元数据（核对 token、Cookie 不出现）、左右滚与滚到元素、视口 / 整页 / 元素截图、PDF、`resize`、上传与下载、对话框阻塞与处理、`--action stop`、导航后旧引用重找、没发过的引用被拒、`back` / `forward`、`tabs --new` 与 `--tab` 读后台标签、`close`、租约查看与交还，外加 `--help` 的浏览器段。`--electron` 起开发构建的 Electron（临时数据目录与 profile，`ARMADRA_DESKTOP_OWNS_RUNTIME=1`、随机 `ARMADRA_RUNTIME_PORT`），在它的渲染页里调接口并打开画布，让浏览器节点挂成真的 `<webview>`，再跑同一批动词；另查上传后画布上的选择框提示消失、渲染页没有意料之外的 error。整批动词结束时租约仍是「Agent 正在操作」，即 Agent 自己的 CDP 输入没有被当成人在操作。
+
+产物默认在 `target/browser-agent-e2e/`：`result.json`（每个场景与每次 hook 调用的耗时）、两个后端各自的快照文本、请求与控制台输出、视口 / 整页 / 元素截图、PDF，以及 Electron 画布前后两张截图。没有验证：Windows 与 Linux（原生下拉在那两处走同一条输入路径，但没跑过）、真实站点（登录、反自动化脚本）、非 macOS 上 Electron 的打印、人与 Agent 同时抢一个页面的交互（租约本身由单测覆盖）。
