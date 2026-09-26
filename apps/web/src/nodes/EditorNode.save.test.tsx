@@ -93,6 +93,9 @@ afterAll(() => {
   Range.prototype.getBoundingClientRect = oldBounds;
 });
 beforeEach(() => {
+  // 草稿按「工作空间 + 路径」存进 localStorage：上一条用例改了没存的正文，会在
+  // 这一条打开同一个文件时被当作草稿放回来。每条都从空存储开始。
+  localStorage.clear();
   mocks.read.mockReset();
   mocks.write.mockReset();
   usePreferencesStore.setState({ locale: "en" });
