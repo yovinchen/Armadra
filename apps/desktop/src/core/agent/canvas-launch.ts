@@ -92,7 +92,9 @@ export function canvasLaunch(request: CanvasLaunchRequest): CanvasLaunch {
   return {
     program,
     args: [...flags, ...injection.args],
-    words: [program, ...flags].map(shellWord).concat(injection.words),
+    words: [program, ...flags]
+      .map((word) => shellWord(word))
+      .concat(injection.words),
   };
 }
 

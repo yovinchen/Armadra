@@ -10,6 +10,7 @@ import {
   canvasEnvironment,
   canvasLaunch,
   canvasLaunchLine,
+  shellWord,
 } from "./canvas-launch";
 import type { AgentSettings, CustomAgent } from "./registry";
 
@@ -133,7 +134,7 @@ describe("canvas launch lines", () => {
     const line = coldStartLine(settings, spec, dataDir);
     expect(
       line.startsWith(
-        `claude --model opus --settings ${artifactLayout(dataDir, "claude").settings}`,
+        `claude --model opus --settings ${shellWord(artifactLayout(dataDir, "claude").settings as string)}`,
       ),
     ).toBe(true);
     expect(coldStartLine(settings, spec)).toBe("claude --model opus");

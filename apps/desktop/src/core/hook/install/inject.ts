@@ -582,8 +582,26 @@ export interface Injection {
 
 const NOTHING: Injection = { args: [], words: [], env: [] };
 
-/** POSIX single quotes, only when the word needs them. */
-export function shellWord(value: string): string {
+/**
+ * POSIX single quotes, only when the word needs them.
+ *
+ * Windows is the exception: the node's shell there is `COMSPEC` (`cmd.exe`)
+ * or PowerShell, and `cmd.exe` does not treat `'` as a quote — a
+ * `--settings 'C:\…\settings.json'` reached the CLI with the quotes still on
+ * and named no file. A path's `\` and `~` (8.3 names) are ordinary there, so
+ * such a word goes as it is; anything else takes double quotes, which both
+ * shells strip.
+ */
+export function shellWord(
+  value: string,
+  platform: string = process.platform,
+): string {
+  if (platform === "win32") {
+    if (value.length > 0 && /^[A-Za-z0-9_@+=:,./\\~-]+$/.test(value)) {
+      return value;
+    }
+    return `"${value.replace(/"/g, '""')}"`;
+  }
   if (value.length > 0 && /^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
@@ -658,7 +676,7 @@ export function canvasInjection(request: InjectionRequest): Injection {
   const literal = literalInjection(request);
   if (literal === undefined) return NOTHING;
   if (request.agentId !== "codex") {
-    return { ...literal, words: literal.args.map(shellWord) };
+    return { ...literal, words: literal.args.map((word) => shellWord(word)) };
   }
   const marker = readMarker(request.dataDir, "codex") as InjectionMarker;
   const layout = artifactLayout(request.dataDir, "codex");

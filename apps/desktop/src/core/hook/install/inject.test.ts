@@ -21,6 +21,7 @@ import {
   codexTrusted,
   prepareInjection,
   removeInjection,
+  shellWord,
 } from "./inject";
 import { stateKeys } from "./toml-state";
 import { tempDir } from "../../testing/temp-dir";
@@ -330,5 +331,26 @@ describe("Codex's trust records", () => {
     mkdirSync(codexHome, { recursive: true });
     writeFileSync(codexConfigPath(codexHome), "this is [not toml\n", "utf8");
     expect(() => prepare("codex")).toThrow(/not valid TOML/);
+  });
+});
+
+/**
+ * 启动行是敲进节点终端的；Windows 上那个 shell 默认是 `cmd.exe`，它不认单引号。
+ */
+describe("typed launch words", () => {
+  it("quotes for a POSIX shell only where needed", () => {
+    expect(shellWord("/d/settings.json", "linux")).toBe("/d/settings.json");
+    expect(shellWord("a b", "darwin")).toBe("'a b'");
+    expect(shellWord("it's", "linux")).toBe("'it'\\''s'");
+  });
+
+  it("leaves a Windows path bare and double-quotes the rest", () => {
+    expect(
+      shellWord("C:\\Users\\RUNNER~1\\AppData\\settings.json", "win32"),
+    ).toBe("C:\\Users\\RUNNER~1\\AppData\\settings.json");
+    expect(shellWord("C:\\Users\\Ada Bell\\s.json", "win32")).toBe(
+      '"C:\\Users\\Ada Bell\\s.json"',
+    );
+    expect(shellWord('say "hi"', "win32")).toBe('"say ""hi"""');
   });
 });
