@@ -2259,3 +2259,37 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/web test`：283 文件 2761 条通过（test-setup 换回真存储之后全量复跑）；`typecheck` 通过。`vitest run src/nodes/EditorNode --sequence.shuffle` 连跑 5 次，37 条全过。
 - 新增用例：`remote.test.ts` 用 `path.win32` 模拟 Windows 控制端的切换校验；`settings/schema.test.ts` 的私钥路径；`hook/install/inject.test.ts` 的 `shellWord` 两个平台。
 - `pnpm check`、`pnpm format:check` 通过。Windows 上的结论待推送后 CI 确认。
+
+## 54. 启动行按节点 shell 的方言引用；本机路径按 core 的平台校验
+
+接 §53.4 没做的两项。Windows 是发布目标：节点终端的 shell 缺省是 `COMSPEC`（`cmd.exe`，没有时 `powershell.exe`，见 `terminal/environment.ts::defaultShell`），画布启动行却一直按 POSIX 写。
+
+### 54.1 按方言引用
+
+- `packages/shared/src/shell.ts`（core 里逐字节同一份 `core/terminal/shell.ts`——core 不依赖 `@armadra/shared`，`agent/canvas-launch.test.ts` 比对两份）：四种方言 `posix`（sh/bash/zsh/dash/ksh）、`fish`、`cmd`、`powershell`（含 `pwsh`），`quoteShellWord` 引参数、`shellEnvWord` 引「前缀 + 环境变量」（`"${VAR}"` / `"$VAR"` / `"%VAR%"` / `"${env:VAR}"`），`shellCommandLine` 拼整行（PowerShell 的程序带引号时前面加 `&`）。
+  - fish 单独一种：它的单引号里 `\\`、`\'` 仍是转义，以反斜杠结尾的值会吞掉收尾的引号；`%` 开头曾是进程展开。
+  - `cmd.exe`：不含 `"`、`%`、`!` 的值用 C 运行库的双引号（引号前与末尾的反斜杠加倍）；含它们的值整体按 C 运行库引用后给每个活字符加 `^`，`%` 写成 `^%`，使 `%NAME%` 的变量名变成未定义的 `NAME^`。拒绝换行。
+  - PowerShell：单引号（`'` 与弯单引号都加倍）。值里的 `"` 要靠 PowerShell 7.3+ 的原生参数传递才能原样到达；Windows PowerShell 5.1 会剥掉，这是那个 shell 的限制，没有绕。
+- 启动行不再带已引用好的词：`canvasInjection` 的 `words` 与 `GET /api/agents` 的 `launchWords` 改成未引用的 `LaunchWord`（字面值，或 Codex 的 `{ prefix, env }`），由拼行的一方按方言引用。
+- 方言取节点终端实际跑的 shell（`canvas-launch.ts::nodeDialect` / 页面 `agent/launch.ts::launchDialect`）：会话记录里的 `shell` → 节点指定的 → core 的缺省 shell；SSH 节点一律 POSIX。四条路都走同一个出口：页面（`use-launch.ts` 用会话记录的 shell，会话网关把它带出来）、依赖编排（活着的终端的 `shell` 列，否则节点数据）、休眠唤醒（`hibernatedSession` 带出那一行的 `shell`）、冷启动（缺省 shell）。
+- Codex 由行展开的两个环境变量在 `cmd.exe` 下不能照原样：`cmd.exe` 先把值贴进引号再读，值里的 `"` 会结束引号、暴露后面的 `&`，程序再按 C 运行库剥掉裸引号。`inject.ts::codexTomlString` 在 `cmd` 方言下把 TOML 串的定界引号写成 `\"`、其间 `& | < > ^ ( ) % ! " \` 与控制字符写成 `\uXXXX`；其余方言照旧是 JSON 形状。所以 `canvasEnvironment` / `ownedEnvironment` 也按终端的方言答（`POST /api/terminals`、`spawnForNode`、冷启动、`Hibernator.environment` 都传进来）。
+- `/api/health` 末尾追加 `platform`（`process.platform`）与 `defaultShell`（只报程序名）。页面的 `app/core-host.ts` 问一次，给缺省方言与本机路径规则用。
+- 顺手：文件拖进 fish 终端时路径改用 fish 的引用。
+
+### 54.2 本机路径按平台校验
+
+- `apps/web/src/lib/host-path.ts`：`isAbsoluteHostPath(path, rules)`，POSIX 要 `/` 开头，Windows 收盘符与 UNC、拒 `"<>|?*` 与盘符之外的 `:`；`isAbsoluteExecutable` 在 POSIX 侧照旧不收空白，Windows 侧收（`Program Files`）。
+- 自动化向导（`CreatePlanForm.tsx`、`wizard.ts::buildLaunchSpec`）：工作区绑在执行主机上时按 POSIX，否则按 core 的平台；占位符跟着换。全仓搜过 `startsWith("/")`：其余几处（文件拖放、画框绑定、Markdown 图片、工作区相对路径）已经分平台或本就是工作区相对路径，不动。
+
+### 54.3 Windows 集成用例
+
+- `core/agent/windows-launch.test.ts`（`it.runIf(process.platform === "win32")`）：把 `shellCommandLine` 生成的整行交给真的 `cmd.exe`（`/d /s /c`，原样传参）与 `pwsh`（`-EncodedCommand`，只在 7.x 存在时跑），程序是回显 argv 与环境变量的 node 脚本；断言十八个值（空格、引号、`%`、`^`、`&`、`|`、`$`、反引号、`!`、中文、反斜杠结尾、空串）与两个由行展开的环境变量（普通值；`codexTomlString` 写的 TOML 串，解析回来等于原文）原样到达。
+- 程序直接是 `node.exe`，不经 `.cmd` 包装：批处理的 `%*` 会让 `cmd.exe` 再读一遍参数，含 `\"` 与 `&` 的参数在第二遍里露出来，这是 `.cmd` 包装本身的问题（npm 装的 CLI 在 Windows 上多是这种包装），任何引用都挡不住。
+- `cmd.exe` 下由行展开的值不能含 `"`、不能以 `\` 结尾——环境是我们自己写的，Codex 的两个已按此写。
+
+### 54.4 验证
+
+- `packages/shared`：29 文件 247 条通过。`shell.test.ts` 表驱动四种方言 × 18 个值，`cmd.exe` 的读法（`%` 展开、引号外的 `^`、C 运行库切参数）在用例里模拟；core 的 `terminal/shell.test.ts` 把整行真的交给本机的 sh/bash/zsh/dash 读回（shared 没有 node 类型，真跑 shell 的用例放在 core）。
+- `pnpm --filter @armadra/desktop test`：267 文件通过、3 跳过（3149 条通过、15 跳过），live 2 条通过；`windows-launch.test.ts` 在 macOS 上 2 条跳过、能编译。
+- `pnpm --filter @armadra/web test`：284 文件 2780 条通过；`typecheck` 通过。
+- `pnpm check`、`pnpm format:check` 通过。Windows 上的两条集成用例待 CI 确认。
