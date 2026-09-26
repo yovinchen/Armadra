@@ -100,11 +100,21 @@ export function isSuccess(response: HookResponse): boolean {
  * to loopback TCP. The two attempts share one budget so a hanging socket
  * cannot make the hook take twice as long.
  */
+/**
+ * A failed exchange. `sent` means the request bytes had already left: the
+ * runtime may have acted on them, so nobody may send the same request again —
+ * a resent `open-agent` opens a second node, a resent `click` clicks twice.
+ */
+export interface SendFailure {
+  readonly error: string;
+  readonly sent?: boolean;
+}
+
 export async function send(
   endpoint: Endpoint,
   request: HookRequest,
   total = totalTimeoutMs(),
-): Promise<{ ok: HookResponse } | { error: string }> {
+): Promise<{ ok: HookResponse } | SendFailure> {
   const deadline = Date.now() + total;
   const bytes = requestBytes(request);
   let lastError = "no transport configured";
@@ -117,6 +127,8 @@ export async function send(
       `cannot connect to ${endpoint.sock}`,
     );
     if ("ok" in attempt) return attempt;
+    // Delivered but unanswered: falling back to TCP would send it twice.
+    if (attempt.sent === true) return attempt;
     lastError = attempt.error;
   }
 
@@ -148,7 +160,7 @@ function exchange(
   bytes: Buffer,
   deadline: number,
   connectLabel: string,
-): Promise<{ ok: HookResponse } | { error: string }> {
+): Promise<{ ok: HookResponse } | SendFailure> {
   return new Promise((resolve) => {
     if (remaining(deadline) === 0) {
       resolve({ error: `${connectLabel}: timed out before connecting` });
@@ -162,9 +174,7 @@ function exchange(
     const socket = net.connect(target);
     socket.setNoDelay(true);
 
-    const finish = (
-      outcome: { ok: HookResponse } | { error: string },
-    ): void => {
+    const finish = (outcome: { ok: HookResponse } | SendFailure): void => {
       if (settled) return;
       settled = true;
       clearTimeout(connectTimer);
@@ -181,7 +191,11 @@ function exchange(
      */
     const finishWithError = (message: string): void => {
       const complete = tryParse(Buffer.concat(chunks));
-      finish(complete === undefined ? { error: message } : { ok: complete });
+      finish(
+        complete === undefined
+          ? { error: message, sent: connected }
+          : { ok: complete },
+      );
     };
 
     const connectTimer = setTimeout(
@@ -215,11 +229,15 @@ function exchange(
     });
     socket.on("end", () => {
       const parsed = parseResponse(Buffer.concat(chunks));
-      finish("ok" in parsed ? parsed : { error: parsed.error });
+      finish(
+        "ok" in parsed ? parsed : { error: parsed.error, sent: connected },
+      );
     });
     socket.on("close", () => {
       const parsed = parseResponse(Buffer.concat(chunks));
-      finish("ok" in parsed ? parsed : { error: parsed.error });
+      finish(
+        "ok" in parsed ? parsed : { error: parsed.error, sent: connected },
+      );
     });
   });
 }

@@ -3,7 +3,10 @@
  * canonicalisation the Rust client gets from `serde_json` for free.
  */
 
+import { mkdtempSync, rmSync } from "node:fs";
 import * as net from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { canonicalJson, parseJson } from "./json.js";
@@ -134,6 +137,71 @@ describe("transport", () => {
     const outcome = await send({ path: "-", port }, request);
     expect((outcome as { ok: { status: number } }).ok.status).toBe(204);
     expect(Date.now() - started).toBeLessThan(TOTAL_TIMEOUT_MS);
+  });
+});
+
+/** Reads a request and never answers; counts the connections it saw. */
+async function swallow(
+  listen: (server: net.Server) => Promise<void>,
+): Promise<{ server: net.Server; connections: () => number }> {
+  let seen = 0;
+  const server = net.createServer((socket) => {
+    seen += 1;
+    socket.on("error", () => {});
+  });
+  server.unref();
+  await listen(server);
+  return { server, connections: () => seen };
+}
+
+/**
+ * 请求已经写出去、只是答复没回来时，runtime 可能已经执行了它。换另一条
+ * 传输再发一遍，`open-agent` 会建出第二个节点、`click` 会点两次。
+ */
+describe("a request that left but was not answered", () => {
+  // Windows 上没有 unix socket，这条回退路径只在 POSIX 上存在。
+  it.skipIf(process.platform === "win32")(
+    "is not resent over the fallback transport",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "armadra-http-"));
+      const sock = join(dir, "hook.sock");
+      const first = await swallow(
+        (server) =>
+          new Promise<void>((resolve) => server.listen(sock, () => resolve())),
+      );
+      const fallback = await swallow(
+        (server) =>
+          new Promise<void>((resolve) =>
+            server.listen(0, "127.0.0.1", () => resolve()),
+          ),
+      );
+      const port = (fallback.server.address() as net.AddressInfo).port;
+      try {
+        const request = postJsonRequest(
+          "/canvas/open-agent",
+          [],
+          Buffer.from("{}"),
+        );
+        const outcome = await send({ path: "-", sock, port }, request, 300);
+        expect(outcome).toMatchObject({ sent: true });
+        expect(first.connections()).toBe(1);
+        expect(fallback.connections()).toBe(0);
+      } finally {
+        first.server.close();
+        fallback.server.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("still falls back when the first transport refused the connection", async () => {
+    const port = await serveOnce("HTTP/1.1 204 No Content\r\n\r\n", 0);
+    const request = postJsonRequest("/hook/copilot", [], Buffer.from("{}"));
+    const outcome = await send(
+      { path: "-", sock: join(tmpdir(), "armadra-no-such.sock"), port },
+      request,
+    );
+    expect((outcome as { ok: { status: number } }).ok.status).toBe(204);
   });
 });
 

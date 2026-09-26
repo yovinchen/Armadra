@@ -63,8 +63,9 @@ export function headersFor(
 
 /**
  * Tries each candidate in order, building a fresh request for each one via
- * `build`. Only a transport-layer failure (refused connection, timeout,
- * missing socket or port) advances to the next candidate — any HTTP answer at
+ * `build`. Only a transport-layer failure before the request left (refused
+ * connection, connect timeout, missing socket or port) advances to the next
+ * candidate; a request that was written and then timed out is not resent — any HTTP answer at
  * all, including a 4xx/5xx, is authoritative and ends the search immediately
  * (agent-integration.md §2.5).
  *
@@ -83,6 +84,16 @@ export async function send(
   for (const candidate of session.candidates) {
     const outcome = await httpSend(candidate, build(session, candidate), total);
     if ("ok" in outcome) return { ok: outcome.ok, candidate };
+    // The request reached this runtime and the answer did not come back. The
+    // next candidate is the same runtime on another transport, so trying it
+    // would run the verb a second time; say so instead.
+    if (outcome.sent === true) {
+      return {
+        error:
+          `the request reached ${describe(candidate)} but no answer came back ` +
+          `(${outcome.error}); it may already have taken effect, so it was not resent`,
+      };
+    }
     lastError = outcome.error;
   }
   return {
@@ -90,4 +101,11 @@ export async function send(
       `found ${session.candidates.length} hook endpoint candidate(s) but none is listening ` +
       `(last error: ${lastError})`,
   };
+}
+
+/** How a candidate is named in an error: its socket, else its port. */
+function describe(candidate: Endpoint): string {
+  if (candidate.sock !== undefined) return candidate.sock;
+  if (candidate.port !== undefined) return `127.0.0.1:${candidate.port}`;
+  return "the hook endpoint";
 }
