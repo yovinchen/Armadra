@@ -35,6 +35,8 @@ export interface SurfaceRefs {
   onFindRef: React.RefObject<(() => void) | undefined>;
   backendRef: React.RefObject<TerminalBackendKind | null>;
   sessionIdRef: React.RefObject<string | undefined>;
+  /** 当前会话跑的 shell（会话记录里的）；启动行按它的方言引用。 */
+  shellRef: React.RefObject<string | undefined>;
   fileDropQueue: React.RefObject<Promise<void>>;
   preferencesRef: React.RefObject<TerminalPreferences>;
   dataRef: React.RefObject<TerminalNodeData>;
@@ -76,6 +78,7 @@ export function useSurfaceRefs(current: {
     onFindRef: { current: current.onFind },
     backendRef: { current: null },
     sessionIdRef: { current: undefined },
+    shellRef: { current: undefined },
     fileDropQueue: { current: Promise.resolve() },
     preferencesRef: { current: current.preferences },
     dataRef: { current: current.data },

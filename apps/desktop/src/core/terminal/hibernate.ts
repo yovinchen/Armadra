@@ -316,6 +316,8 @@ export interface HibernatedSession {
   readonly workspaceId: string;
   readonly agentId: string | null;
   readonly endedAt: string | null;
+  /** The shell the row ran — the next generation runs the same one. */
+  readonly shell: string | null;
 }
 
 /**
@@ -331,7 +333,7 @@ export function hibernatedSession(
 ): HibernatedSession | undefined {
   const row = database
     .prepare(
-      "SELECT id, workspace_id, agent_id, status, termination_intent, ended_at " +
+      "SELECT id, workspace_id, agent_id, status, termination_intent, ended_at, shell " +
         "FROM terminal_sessions WHERE owner_node_id = ? " +
         "ORDER BY (status = 'running') DESC, generation DESC, created_at DESC LIMIT 1",
     )
@@ -346,6 +348,7 @@ export function hibernatedSession(
     workspaceId: String(row.workspace_id),
     agentId: (row.agent_id as string | null) ?? null,
     endedAt: (row.ended_at as string | null) ?? null,
+    shell: typeof row.shell === "string" && row.shell !== "" ? row.shell : null,
   };
 }
 

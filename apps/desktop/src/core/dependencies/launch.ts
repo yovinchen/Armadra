@@ -1,4 +1,4 @@
-import { canvasLaunchLine } from "../agent/canvas-launch";
+import { canvasLaunchLine, nodeDialect } from "../agent/canvas-launch";
 import {
   LaunchRefused,
   expectedProcesses,
@@ -76,7 +76,12 @@ export async function launchNode(
 
   let command: string;
   try {
-    command = launchLine(collab, agentId, node.data);
+    command = launchLine(
+      collab,
+      agentId,
+      node.data,
+      liveShell(database, launch.nodeId),
+    );
   } catch (error) {
     if (error instanceof LaunchRefused) {
       return { kind: "failed", reason: "launchRefused" };
@@ -241,6 +246,7 @@ export function launchLine(
   collab: CollabContext,
   agentId: string,
   data: Record<string, unknown>,
+  sessionShell?: string,
 ): string {
   const agent =
     data.agent !== null && typeof data.agent === "object"
@@ -257,14 +263,34 @@ export function launchLine(
   } catch {
     row = undefined;
   }
+  // 写成节点终端那个 shell 的方言：已经有终端就是它实际跑的那个，否则是
+  // `spawnForNode` 马上要起的那个（节点指定的，或者本机缺省的）。
+  const ssh = data.ssh !== null && typeof data.ssh === "object";
   return canvasLaunchLine({
     settings: collab.settings,
     dataDir: collab.dataDir,
     agentId,
+    dialect: nodeDialect(sessionShell ?? stringField(data, "shell"), ssh),
     ...(permissionMode === undefined ? {} : { permissionMode }),
     ...(model === undefined ? {} : { model }),
     ...(row?.resolvedPath == null ? {} : { program: row.resolvedPath }),
   });
+}
+
+/** 节点正在跑的那个终端的 shell；没有活着的终端时不答。 */
+function liveShell(
+  database: CollabContext["database"],
+  nodeId: string,
+): string | undefined {
+  const row = database
+    .prepare(
+      "SELECT shell FROM terminal_sessions WHERE owner_node_id = ? AND status = 'running' " +
+        "ORDER BY generation DESC, created_at DESC LIMIT 1",
+    )
+    .get(nodeId) as { shell?: unknown } | undefined;
+  return typeof row?.shell === "string" && row.shell !== ""
+    ? row.shell
+    : undefined;
 }
 
 /**

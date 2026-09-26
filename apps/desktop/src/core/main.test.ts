@@ -226,6 +226,9 @@ describe("what the core answers", () => {
           : { ok: true, sock: join(core.dataDir, "hook.sock") },
       // 这台机器上有没有 Chromium 决定真假；键必须在，页面靠它给浏览器入口。
       capabilities: { headlessBrowser: expect.any(Boolean) as boolean },
+      // 页面按它校验本机路径、按缺省 shell 引用启动行。
+      platform: process.platform,
+      defaultShell: expect.any(String) as string,
     });
   });
 

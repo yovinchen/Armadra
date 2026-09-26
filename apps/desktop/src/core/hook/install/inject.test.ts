@@ -20,8 +20,8 @@ import {
   codexSessionTrust,
   codexTrusted,
   prepareInjection,
+  codexTomlString,
   removeInjection,
-  shellWord,
 } from "./inject";
 import { stateKeys } from "./toml-state";
 import { tempDir } from "../../testing/temp-dir";
@@ -168,22 +168,22 @@ describe("canvas injection", () => {
       ],
       [CODEX_INSTRUCTIONS_VAR, JSON.stringify(text)],
     ]);
-    expect(words).toContain(`"hooks.SessionStart=$${CODEX_HOOK_VAR}"`);
-    expect(words).toContain(
-      `"developer_instructions=$${CODEX_INSTRUCTIONS_VAR}"`,
-    );
-    expect(words.join(" ").length).toBeLessThan(600);
+    expect(words).toContainEqual({
+      prefix: "hooks.SessionStart=",
+      env: CODEX_HOOK_VAR,
+    });
+    expect(words).toContainEqual({
+      prefix: "developer_instructions=",
+      env: CODEX_INSTRUCTIONS_VAR,
+    });
+    expect(JSON.stringify(words).length).toBeLessThan(1200);
   });
 
-  it("types every other CLI's argv as quoted words", () => {
+  it("hands every other CLI's argv over as its words, unquoted", () => {
     for (const agentId of ["claude", "opencode", "pi", "omp", "copilot"]) {
       prepare(agentId);
       const { args, words } = inject(agentId);
-      expect(words.length, agentId).toBe(args.length);
-      for (const [index, word] of words.entries()) {
-        const arg = args[index] as string;
-        expect(word === arg || word === `'${arg}'`, agentId).toBe(true);
-      }
+      expect(words, agentId).toEqual(args);
     }
   });
 
@@ -335,22 +335,43 @@ describe("Codex's trust records", () => {
 });
 
 /**
- * 启动行是敲进节点终端的；Windows 上那个 shell 默认是 `cmd.exe`，它不认单引号。
+ * 启动行是敲进节点终端的；Windows 上那个 shell 默认是 `cmd.exe`。行里的词由
+ * `terminal/shell.ts` 按方言引用，这里只管 Codex 那两个由行展开的环境变量。
  */
-describe("typed launch words", () => {
-  it("quotes for a POSIX shell only where needed", () => {
-    expect(shellWord("/d/settings.json", "linux")).toBe("/d/settings.json");
-    expect(shellWord("a b", "darwin")).toBe("'a b'");
-    expect(shellWord("it's", "linux")).toBe("'it'\\''s'");
+describe("Codex's expanded values per shell", () => {
+  const nasty = 'say "hi" & a|b <c> ^d (e) 100% !x! C:\\dir\\ 画布\n';
+
+  it("keeps a plain TOML string where the shell expands one finished word", () => {
+    expect(codexTomlString(nasty)).toBe(JSON.stringify(nasty));
+    expect(codexTomlString(nasty, "powershell")).toBe(JSON.stringify(nasty));
   });
 
-  it("leaves a Windows path bare and double-quotes the rest", () => {
-    expect(
-      shellWord("C:\\Users\\RUNNER~1\\AppData\\settings.json", "win32"),
-    ).toBe("C:\\Users\\RUNNER~1\\AppData\\settings.json");
-    expect(shellWord("C:\\Users\\Ada Bell\\s.json", "win32")).toBe(
-      '"C:\\Users\\Ada Bell\\s.json"',
+  it("writes cmd.exe's so nothing in it is live and its quotes survive", () => {
+    const value = codexTomlString(nasty, "cmd");
+    expect(value.startsWith('\\"')).toBe(true);
+    expect(value.endsWith('\\"')).toBe(true);
+    // Between the `\"` pair: nothing cmd.exe or the C runtime acts on, and a
+    // backslash only as the start of a `\uXXXX` escape.
+    const body = value.slice(2, -2);
+    expect(body).not.toMatch(/["%!^&|<>()\r\n]/);
+    expect(body).not.toMatch(/\\(?!u[0-9a-f]{4})/);
+    // The program receives `"` for each `\"`: a TOML basic string of the
+    // value, whose escapes here are JSON's.
+    expect(JSON.parse(value.replace(/\\"/g, '"'))).toBe(nasty);
+  });
+
+  it("puts the node shell's form into the terminal's environment", () => {
+    prepare("codex");
+    const vars = canvasInjection({
+      dataDir,
+      agentId: "codex",
+      nodeId: "node-1",
+      dialect: "cmd",
+    }).env;
+    const hook = vars.find(([name]) => name === CODEX_HOOK_VAR)?.[1] ?? "";
+    expect(hook).toBe(
+      `[{hooks=[{type=${codexTomlString("command", "cmd")},command=${codexTomlString(`${hookBin} codex`, "cmd")}}]}]`,
     );
-    expect(shellWord('say "hi"', "win32")).toBe('"say ""hi"""');
+    expect(hook).not.toMatch(/(?<!\\)"/);
   });
 });

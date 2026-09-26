@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import type { LaunchWord } from "../../terminal/shell";
 import { configPath as codexConfigPath } from "./codex";
 import {
   HOOK_CLIENT_REVISION,
@@ -77,8 +78,8 @@ export interface IntegrationState {
   readonly stale: boolean;
   /** Argv a canvas launch of this CLI carries, literal. */
   readonly launchArgs: readonly string[];
-  /** The same as words for a typed launch line (see `inject.ts`). */
-  readonly launchWords: readonly string[];
+  /** The same as words for a typed launch line, unquoted (see `inject.ts`). */
+  readonly launchWords: readonly LaunchWord[];
   /** Names of the environment variables a canvas launch sets. */
   readonly launchEnv: readonly string[];
   /** Files outside our data directory this integration writes. */

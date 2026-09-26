@@ -15,7 +15,8 @@ import { handleForNode } from "../canvas/handles";
 import { type EnvPairs, agentEnvironment, setHookClient } from "./environment";
 import { launcherClientBinary } from "../hook/install/shared";
 import { collab, setTerminalBridge } from "../agent";
-import { canvasEnvironment } from "../agent/canvas-launch";
+import { canvasEnvironment, nodeDialect } from "../agent/canvas-launch";
+import type { ShellDialect } from "./shell";
 import { listAgents } from "../agent/list";
 import { parseCustomAgents } from "../settings/custom-agents";
 import {
@@ -256,7 +257,13 @@ export function install(
       customAgents: () =>
         parseCustomAgents(settingsDomain()?.settings.snapshot() ?? {}),
     };
-  const ownedEnvironment = (nodeId: string, agentId: string) => {
+  // `dialect`：这个终端要跑的 shell 的方言。Codex 那两个由启动行展开的环境变
+  // 量要按它写（`hook/install/inject.ts::codexTomlString`）。
+  const ownedEnvironment = (
+    nodeId: string,
+    agentId: string,
+    dialect: ShellDialect,
+  ) => {
     try {
       issueNodeToken(context.dataDir, nodeId);
     } catch (failure) {
@@ -289,6 +296,7 @@ export function install(
         agentId,
         nodeId,
         (message, fields) => context.log.warn(message, fields),
+        dialect,
       ),
     ];
   };
@@ -310,7 +318,8 @@ export function install(
         ? policy
         : { ...policy, idleMinutes: ecoOverride.idleMinutes };
     },
-    environment: (nodeId, agentId) => ownedEnvironment(nodeId, agentId),
+    environment: (nodeId, agentId, dialect) =>
+      ownedEnvironment(nodeId, agentId, dialect),
     // 与依赖编排拼启动行时同一个来源：本机解析到的程序路径；画布注入的 argv
     // 由恢复行经 `agent/canvas-launch.ts` 从数据目录取。
     program: (agentId) => {
@@ -352,6 +361,7 @@ export function install(
       ? ownedEnvironment(
           body.nodeId as string,
           (body.agent as { id: string }).id,
+          nodeDialect(body.shell, body.ssh !== undefined),
         )
       : [];
     const session = await manager.spawn({
@@ -622,7 +632,11 @@ export function install(
         ...(request.sshHostId === undefined
           ? {}
           : { sshHostId: request.sshHostId }),
-        env: ownedEnvironment(request.nodeId, request.agentId),
+        env: ownedEnvironment(
+          request.nodeId,
+          request.agentId,
+          nodeDialect(request.shell, request.sshHostId !== undefined),
+        ),
       });
       return { sessionId: session.id, generation: session.generation };
     },
@@ -636,7 +650,12 @@ export function install(
       kind: "terminal",
       ownerNodeId: request.nodeId,
       agentId: request.agentId,
-      env: ownedEnvironment(request.nodeId, request.agentId),
+      // 冷启动起的是本机缺省的 shell，启动行（`schedule/cold-start.ts`）也按它写。
+      env: ownedEnvironment(
+        request.nodeId,
+        request.agentId,
+        nodeDialect(undefined),
+      ),
     });
     void typeLaunchLine(
       manager,

@@ -50,6 +50,7 @@ export function useTerminalSession(
         );
         if (existing && existing.state === "running") {
           refs.freshSessionRef.current = false;
+          refs.shellRef.current = existing.shell;
           setSessionId(existing.sessionId);
           return;
         }
@@ -79,6 +80,7 @@ export function useTerminalSession(
         });
         refs.freshSessionRef.current = true;
         refs.launchPhaseRef.current = "idle";
+        refs.shellRef.current = started.shell;
         // 会话 id 要存盘（重开应用靠它重新贴回同一个 pane），但它不是用户的
         // 编辑：`history: "ignore"` 把它挡在撤销栈外。否则开一块三十个终端的
         // 板子，⌘Z 要按三十次才碰得到自己的第一次改动。
@@ -145,6 +147,8 @@ export function useAdoptedSession(
     if (refs.creatingRef.current) return;
     refs.freshSessionRef.current = false;
     refs.launchPhaseRef.current = "idle";
+    // 别人起的会话，shell 由读回来的记录决定；在那之前按节点数据。
+    refs.shellRef.current = undefined;
     patch({ connection: "connecting", exitCode: null, error: null });
     setSessionId(dataSessionId);
   }, [refs, dataSessionId, patch, setSessionId]);

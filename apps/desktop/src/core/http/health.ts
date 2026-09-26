@@ -1,4 +1,6 @@
+import { basename } from "node:path";
 import { BUILD, instanceId } from "../instance";
+import { defaultShell } from "../terminal/environment";
 
 /**
  * `/health` and `/api/health` — the liveness document the shell and the hook
@@ -38,6 +40,15 @@ export interface HealthDocument {
    * 的键直接忽略。
    */
   readonly capabilities: Readonly<Record<string, boolean>>;
+  /**
+   * core 跑在哪个平台上（`process.platform`），以及节点没指定 shell 时终端跑
+   * 哪一个（只报程序名，`cmd.exe` / `zsh`，不报路径）。
+   *
+   * 页面是个浏览器，看不见 core 那台机器：本机路径按哪种规则校验、启动行按
+   * 哪种 shell 引用，都得问 core。
+   */
+  readonly platform: string;
+  readonly defaultShell: string;
 }
 
 export interface HealthSource {
@@ -62,5 +73,7 @@ export function healthDocument(source: HealthSource): HealthDocument {
     build: BUILD,
     hook: source.hookHealth(),
     capabilities: source.capabilities?.() ?? {},
+    platform: process.platform,
+    defaultShell: basename(defaultShell().replace(/\\/g, "/")),
   };
 }

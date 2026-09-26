@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
-import { canvasLaunchLine } from "../agent/canvas-launch";
+import { canvasLaunchLine, nodeDialect } from "../agent/canvas-launch";
+import type { ShellDialect } from "./shell";
 import { canResume, expectedProcesses, paneRunsAgent } from "../agent/launch";
 import { type AgentSettings, baseAgent } from "../agent/registry";
 import { getAgentStatus } from "../agent/status";
@@ -46,8 +47,16 @@ export interface HibernatorOptions {
   readonly manager: TerminalManager;
   readonly settings: () => AgentSettings;
   readonly policy: () => EcoPolicy;
-  /** 节点令牌与地址变量——与 `POST /api/terminals` 起 Agent 终端时同一份。 */
-  readonly environment: (nodeId: string, agentId: string) => EnvPairs;
+  /**
+   * 节点令牌与地址变量——与 `POST /api/terminals` 起 Agent 终端时同一份。
+   * `dialect` 是接回来的那一代要跑的 shell 的方言：Codex 从环境里展开的值要
+   * 按它写。
+   */
+  readonly environment: (
+    nodeId: string,
+    agentId: string,
+    dialect: ShellDialect,
+  ) => EnvPairs;
   /**
    * 本机解析到的程序路径（`GET /api/agents` 那一行的 `resolvedPath`）。缺席时
    * 用注册表里的程序名。
@@ -359,12 +368,18 @@ export class Hibernator {
       return fail("noProviderSession");
     }
     const settings = this.options.settings();
+    // 下一代在同一行上起，跑的是同一个 shell；SSH 节点的行由远端的 shell 读。
+    const dialect = nodeDialect(
+      hibernated.shell ?? undefined,
+      node.data.ssh !== null && typeof node.data.ssh === "object",
+    );
     let line: string;
     try {
       line = resumeLine(settings, agentId, node.data, providerSessionId, {
         ...this.options.program?.(agentId),
         dataDir: this.options.dataDir,
         nodeId,
+        dialect,
       });
     } catch (error) {
       return fail("launchRefused", error);
@@ -376,7 +391,7 @@ export class Hibernator {
     try {
       revived = await this.manager.revive(
         sessionId,
-        this.options.environment(nodeId, agentId),
+        this.options.environment(nodeId, agentId, dialect),
       );
     } catch (error) {
       return fail("spawnFailed", error);
@@ -505,6 +520,7 @@ export function resumeLine(
     readonly path?: string | undefined;
     readonly dataDir?: string | undefined;
     readonly nodeId?: string | undefined;
+    readonly dialect?: ShellDialect | undefined;
   },
 ): string {
   const agent =
@@ -520,6 +536,7 @@ export function resumeLine(
     ...(program?.dataDir === undefined ? {} : { dataDir: program.dataDir }),
     ...(program?.nodeId === undefined ? {} : { nodeId: program.nodeId }),
     ...(program?.path === undefined ? {} : { program: program.path }),
+    ...(program?.dialect === undefined ? {} : { dialect: program.dialect }),
     ...(permissionMode === undefined ? {} : { permissionMode }),
     ...(model === undefined ? {} : { model }),
   });

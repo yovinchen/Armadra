@@ -15,7 +15,11 @@ describe("the health document", () => {
       "build",
       "hook",
       "capabilities",
+      "platform",
+      "defaultShell",
     ]);
+    expect(document.platform).toBe(process.platform);
+    expect(document.defaultShell).not.toMatch(/[\\/]/);
     expect(document.status).toBe("ok");
     expect(document.instanceId).toBe(instanceId());
     expect(document.build).toBe(BUILD);

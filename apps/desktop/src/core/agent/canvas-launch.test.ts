@@ -10,8 +10,9 @@ import {
   canvasEnvironment,
   canvasLaunch,
   canvasLaunchLine,
-  shellWord,
+  nodeDialect,
 } from "./canvas-launch";
+import { quoteShellWord } from "../terminal/shell";
 import type { AgentSettings, CustomAgent } from "./registry";
 
 /**
@@ -83,12 +84,13 @@ describe("canvas launch lines", () => {
       dataDir,
       agentId: "codex",
       resume: "thread-9",
+      dialect: "posix",
     });
     expect(line.startsWith("codex resume thread-9 -c ")).toBe(true);
     expect(line).toContain("check_for_update_on_startup=false");
-    expect(line).toContain('"hooks.SessionStart=$ARMADRA_CODEX_HOOK"');
+    expect(line).toContain('"hooks.SessionStart=${ARMADRA_CODEX_HOOK}"');
     expect(line).toContain(
-      '"developer_instructions=$ARMADRA_CODEX_INSTRUCTIONS"',
+      '"developer_instructions=${ARMADRA_CODEX_INSTRUCTIONS}"',
     );
     // Short and single: the values are in the terminal's environment.
     expect(line).not.toContain("\n");
@@ -98,6 +100,36 @@ describe("canvas launch lines", () => {
       "ARMADRA_CODEX_HOOK",
       "ARMADRA_CODEX_INSTRUCTIONS",
     ]);
+  });
+
+  it("writes the line in the node shell's dialect", () => {
+    const program = "C:\\Program Files\\codex.exe";
+    const cmd = canvasLaunchLine({
+      settings,
+      dataDir,
+      agentId: "codex",
+      program,
+      dialect: "cmd",
+    });
+    expect(cmd.startsWith('"C:\\Program Files\\codex.exe" -c ')).toBe(true);
+    expect(cmd).toContain('"hooks.SessionStart=%ARMADRA_CODEX_HOOK%"');
+    const powershell = canvasLaunchLine({
+      settings,
+      dataDir,
+      agentId: "codex",
+      program,
+      dialect: "powershell",
+    });
+    expect(powershell.startsWith("& 'C:\\Program Files\\codex.exe' -c ")).toBe(
+      true,
+    );
+    expect(powershell).toContain(
+      '"hooks.SessionStart=${env:ARMADRA_CODEX_HOOK}"',
+    );
+    expect(nodeDialect("C:\\Windows\\system32\\cmd.exe")).toBe("cmd");
+    expect(nodeDialect("pwsh.exe")).toBe("powershell");
+    // An SSH node's line is read by the far host's shell.
+    expect(nodeDialect("C:\\Windows\\system32\\cmd.exe", true)).toBe("posix");
   });
 
   it("injects a custom entry as its base", () => {
@@ -134,7 +166,7 @@ describe("canvas launch lines", () => {
     const line = coldStartLine(settings, spec, dataDir);
     expect(
       line.startsWith(
-        `claude --model opus --settings ${shellWord(artifactLayout(dataDir, "claude").settings as string)}`,
+        `claude --model opus --settings ${quoteShellWord(artifactLayout(dataDir, "claude").settings as string, nodeDialect(undefined))}`,
       ),
     ).toBe(true);
     expect(coldStartLine(settings, spec)).toBe("claude --model opus");
@@ -188,6 +220,14 @@ describe("the single exit", () => {
     expect(callers(CORE, /(?<!function )\bplanLaunch\(/)).toEqual([
       "agent/canvas-launch.ts",
     ]);
+  });
+
+  /** The page quotes with `@armadra/shared`, the core with its own copy. */
+  it("keeps the core's quoting rules byte for byte the page's", () => {
+    const shared = join(CORE, "..", "..", "..", "..", "packages", "shared");
+    expect(readFileSync(join(CORE, "terminal", "shell.ts"), "utf8")).toBe(
+      readFileSync(join(shared, "src", "shell.ts"), "utf8"),
+    );
   });
 
   it("answers the injection argv from inject.ts to the exit and the list only", () => {

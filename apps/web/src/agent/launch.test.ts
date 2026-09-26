@@ -1,13 +1,16 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AgentInfo } from "@armadra/shared";
 
+import { setCoreHost } from "@/app/core-host";
 import {
   agentColor,
   agentColorVar,
   agentLabel,
   agentSessionRequest,
   buildAgentLaunch,
+  buildResumeLaunch,
   customAgentFor,
+  launchDialect,
   setAgentRegistry,
 } from "./launch";
 
@@ -103,6 +106,55 @@ describe("启动行用探测到的绝对路径", () => {
   it("没探测到时仍用注册表里的命令名", () => {
     const launch = buildAgentLaunch({ id: "codex" });
     expect(launch.command.startsWith("codex")).toBe(true);
+  });
+});
+
+describe("启动行按节点终端的 shell 引用", () => {
+  const codex: AgentInfo = {
+    id: "codex",
+    label: "Codex",
+    color: "#000",
+    launchCmd: "codex",
+    promptMode: "argv",
+    capabilities: [],
+    args: [],
+    resolvedPath: "C:\\Users\\Ada Bell\\AppData\\Roaming\\npm\\codex.cmd",
+    installed: true,
+    launchWords: ["-c", { prefix: "hooks.Stop=", env: "ARMADRA_CODEX_HOOK" }],
+  };
+
+  afterEach(() => {
+    setCoreHost(undefined);
+  });
+
+  it("会话记录里的 shell 优先，其次节点指定的，再次 core 的缺省", () => {
+    setCoreHost({ platform: "win32", defaultShell: "cmd.exe" });
+    expect(
+      launchDialect({}, "C:\\Program Files\\PowerShell\\7\\pwsh.exe"),
+    ).toBe("powershell");
+    expect(launchDialect({ shell: "/usr/bin/fish" })).toBe("fish");
+    expect(launchDialect({})).toBe("cmd");
+    // SSH 节点的行由远端的登录 shell 读。
+    expect(launchDialect({ ssh: { hostId: "h" } }, "cmd.exe")).toBe("posix");
+    setCoreHost(undefined);
+    expect(launchDialect({})).toBe("posix");
+  });
+
+  it("cmd.exe 与 PowerShell 各用自己的引号和环境变量写法", () => {
+    setAgentRegistry([codex]);
+    expect(buildAgentLaunch({ id: "codex" }, undefined, "cmd").command).toBe(
+      '"C:\\Users\\Ada Bell\\AppData\\Roaming\\npm\\codex.cmd" -c "hooks.Stop=%ARMADRA_CODEX_HOOK%"',
+    );
+    expect(
+      buildAgentLaunch({ id: "codex" }, undefined, "powershell").command,
+    ).toBe(
+      "& 'C:\\Users\\Ada Bell\\AppData\\Roaming\\npm\\codex.cmd' -c \"hooks.Stop=${env:ARMADRA_CODEX_HOOK}\"",
+    );
+    // 恢复行没有显式方言时按 core 的缺省 shell。
+    setCoreHost({ platform: "win32", defaultShell: "cmd.exe" });
+    expect(buildResumeLaunch("codex", "t-1").command).toBe(
+      '"C:\\Users\\Ada Bell\\AppData\\Roaming\\npm\\codex.cmd" resume t-1 -c "hooks.Stop=%ARMADRA_CODEX_HOOK%"',
+    );
   });
 });
 

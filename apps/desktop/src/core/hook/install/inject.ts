@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { LaunchWord, ShellDialect } from "../../terminal/shell";
 import {
   eventKey,
   configPath as codexConfigPath,
@@ -562,6 +563,12 @@ export interface InjectionRequest {
    * CLI that ever differs is answered here and nowhere else.
    */
   readonly resume?: boolean;
+  /**
+   * The dialect of the node terminal's shell. Only Codex's environment
+   * depends on it: a value the line expands as `%NAME%` has to be written for
+   * `cmd.exe` (see {@link codexTomlString}). POSIX when absent.
+   */
+  readonly dialect?: ShellDialect;
 }
 
 export interface Injection {
@@ -571,40 +578,17 @@ export interface Injection {
    */
   readonly args: readonly string[];
   /**
-   * The same, as words for a line typed into the node's shell: quoted where
-   * needed, and for Codex referring to {@link env} rather than spelling the
-   * values out (see {@link codexWords}). Every canvas launch line uses these.
+   * The same, as words for a line typed into the node's shell — not quoted
+   * yet, since that depends on the shell (`@armadra/shared`'s `shell.ts`) —
+   * and for Codex referring to {@link env} rather than spelling the values
+   * out (see {@link codexWords}). Every canvas launch line uses these.
    */
-  readonly words: readonly string[];
+  readonly words: readonly LaunchWord[];
   /** Merged into the canvas node's terminal environment. */
   readonly env: readonly (readonly [string, string])[];
 }
 
 const NOTHING: Injection = { args: [], words: [], env: [] };
-
-/**
- * POSIX single quotes, only when the word needs them.
- *
- * Windows is the exception: the node's shell there is `COMSPEC` (`cmd.exe`)
- * or PowerShell, and `cmd.exe` does not treat `'` as a quote — a
- * `--settings 'C:\…\settings.json'` reached the CLI with the quotes still on
- * and named no file. A path's `\` and `~` (8.3 names) are ordinary there, so
- * such a word goes as it is; anything else takes double quotes, which both
- * shells strip.
- */
-export function shellWord(
-  value: string,
-  platform: string = process.platform,
-): string {
-  if (platform === "win32") {
-    if (value.length > 0 && /^[A-Za-z0-9_@+=:,./\\~-]+$/.test(value)) {
-      return value;
-    }
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  if (value.length > 0 && /^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, "'\\''")}'`;
-}
 
 /** The environment variables Codex's typed line expands. */
 export const CODEX_HOOK_VAR = "ARMADRA_CODEX_HOOK";
@@ -626,25 +610,63 @@ export const CODEX_INSTRUCTIONS_VAR = "ARMADRA_CODEX_INSTRUCTIONS";
  * nothing, and Codex refuses the empty value with an error on screen rather
  * than starting without hooks.
  */
-export function codexWords(withInstructions: boolean): string[] {
-  const words = ["-c", "check_for_update_on_startup=false"];
+export function codexWords(withInstructions: boolean): LaunchWord[] {
+  const words: LaunchWord[] = ["-c", "check_for_update_on_startup=false"];
   for (const event of codexEvents()) {
-    words.push("-c", `"hooks.${event}=$${CODEX_HOOK_VAR}"`);
+    words.push("-c", { prefix: `hooks.${event}=`, env: CODEX_HOOK_VAR });
   }
   if (withInstructions) {
-    words.push("-c", `"developer_instructions=$${CODEX_INSTRUCTIONS_VAR}"`);
+    words.push("-c", {
+      prefix: "developer_instructions=",
+      env: CODEX_INSTRUCTIONS_VAR,
+    });
   }
   return words;
 }
 
 /** One hook table for Codex: `[{hooks=[{type="command",command=…}]}]`. */
-function codexHookTable(command: string): string {
-  return `[{hooks=[{type="command",command=${tomlString(command)}}]}]`;
+function codexHookTable(
+  command: string,
+  string: (value: string) => string = tomlString,
+): string {
+  return `[{hooks=[{type=${string("command")},command=${string(command)}}]}]`;
 }
 
 /** A TOML basic string; JSON's escapes are a subset TOML accepts. */
 function tomlString(value: string): string {
   return JSON.stringify(value);
+}
+
+/** What stays itself inside {@link codexTomlString}'s `cmd.exe` form. */
+const CMD_TOML_PLAIN = /^(?:[A-Za-z0-9 _.,:;/=+@#~*?{}[\]'-]|[^\x00-\x7f])$/u;
+
+/**
+ * A TOML basic string for a value the line expands as `"prefix=%NAME%"` in
+ * `cmd.exe`.
+ *
+ * `cmd.exe` pastes the variable's text into the line before it reads quotes,
+ * so a `"` in the value ends the quoting there and exposes what follows; the
+ * program then splits its command line with the C runtime's rules, which drop
+ * a bare `"`. So the string's own quotes are written `\"` — the runtime turns
+ * that into a `"` — and everything between them either reader would act on
+ * (`& | < > ^ ( ) % ! " \`, control characters) is a TOML `\uXXXX` escape.
+ * What is left is plain on whichever side of `cmd.exe`'s quoting it falls.
+ * POSIX shells and PowerShell expand a variable into one finished word, so
+ * they get {@link tomlString} as it is.
+ */
+export function codexTomlString(
+  value: string,
+  dialect: ShellDialect = "posix",
+): string {
+  if (dialect !== "cmd") return tomlString(value);
+  let body = "";
+  for (const char of value) {
+    // Only ASCII is ever escaped, so one `\uXXXX` per character.
+    body += CMD_TOML_PLAIN.test(char)
+      ? char
+      : `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`;
+  }
+  return `\\"${body}\\"`;
 }
 
 /** The `-c` pairs Codex gets: the hooks, the instructions, no update prompt. */
@@ -675,9 +697,7 @@ export function codexArgs(command: string, instructions?: string): string[] {
 export function canvasInjection(request: InjectionRequest): Injection {
   const literal = literalInjection(request);
   if (literal === undefined) return NOTHING;
-  if (request.agentId !== "codex") {
-    return { ...literal, words: literal.args.map((word) => shellWord(word)) };
-  }
+  if (request.agentId !== "codex") return { ...literal, words: literal.args };
   const marker = readMarker(request.dataDir, "codex") as InjectionMarker;
   const layout = artifactLayout(request.dataDir, "codex");
   const content = skillContent();
@@ -689,10 +709,20 @@ export function canvasInjection(request: InjectionRequest): Injection {
     args: literal.args,
     words: codexWords(instructions !== undefined),
     env: [
-      [CODEX_HOOK_VAR, codexHookTable(hookCommand(marker.clientBin, "codex"))],
+      [
+        CODEX_HOOK_VAR,
+        codexHookTable(hookCommand(marker.clientBin, "codex"), (value) =>
+          codexTomlString(value, request.dialect),
+        ),
+      ],
       ...(instructions === undefined
         ? []
-        : ([[CODEX_INSTRUCTIONS_VAR, tomlString(instructions)]] as const)),
+        : ([
+            [
+              CODEX_INSTRUCTIONS_VAR,
+              codexTomlString(instructions, request.dialect),
+            ],
+          ] as const)),
     ],
   };
 }

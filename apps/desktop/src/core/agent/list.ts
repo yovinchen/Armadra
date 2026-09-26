@@ -1,4 +1,5 @@
 import { state as integrationState } from "../hook/install/integration";
+import type { LaunchWord } from "../terminal/shell";
 import { type AgentProbe, storedProbe } from "./probe";
 import {
   type AgentInfo,
@@ -38,9 +39,10 @@ export interface AgentListRow extends AgentInfo {
   readonly launchArgs?: readonly string[];
   /**
    * The canvas injection as words for the typed launch line — what the page
-   * appends. Codex's name environment variables its node terminal carries.
+   * appends, quoting them for the node terminal's shell. Codex's name
+   * environment variables its node terminal carries (`{ prefix, env }`).
    */
-  readonly launchWords?: readonly string[];
+  readonly launchWords?: readonly LaunchWord[];
   /**
    * 缓存好的 `--version` 探测（`probe.ts`）。缺席表示这个 CLI 还没被探过，共享
    * 的求交集把它读成 unknown——**从不**读成「支持」。

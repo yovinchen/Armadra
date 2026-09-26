@@ -5,7 +5,7 @@ import {
   migrateLegacyLaunch,
   whenDependenciesKnown,
 } from "@/agent/dependency-store";
-import { buildAgentLaunch } from "@/agent/launch";
+import { buildAgentLaunch, launchDialect } from "@/agent/launch";
 import { armPendingLaunch } from "@/agent/pending-launch";
 import { useCanvasStore } from "@/store/canvas-store";
 import { LAUNCH_COLD_MS, LAUNCH_QUIET_MS } from "./constants";
@@ -52,7 +52,11 @@ export function useLaunchSequence(
       // Agent 建节点时也不再往里写任务了——第一条任务走投递，由 core 在节点第
       // 一次报空闲之后投进来（设计 agent-delivery.md §8）。所以这里也没有第二
       // 条「提示词写进 stdin」的路：启动行只负责把 CLI 起起来。
-      const launch = buildAgentLaunch(agent);
+      const launch = buildAgentLaunch(
+        agent,
+        undefined,
+        launchDialect(nodeData, refs.shellRef.current),
+      );
       refs.transportRef.current?.input(`${launch.command}\r`);
       refs.freshSessionRef.current = false;
       store.updateNodeData(

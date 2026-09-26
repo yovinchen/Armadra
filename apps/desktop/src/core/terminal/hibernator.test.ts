@@ -29,11 +29,9 @@ import {
   scheduledFor,
 } from "./hibernate";
 import { Hibernator, resumeLine } from "./hibernator";
-import {
-  artifactLayout,
-  prepareInjection,
-  shellWord,
-} from "../hook/install/inject";
+import { nodeDialect } from "../agent/canvas-launch";
+import { artifactLayout, prepareInjection } from "../hook/install/inject";
+import { quoteShellWord } from "./shell";
 import { tempDir } from "../testing/temp-dir";
 import { TerminalManager } from "./manager";
 
@@ -411,7 +409,7 @@ describe("hibernated → resuming → running", () => {
     expect(cli.typed).toHaveLength(1);
     expect(
       cli.typed[0]?.startsWith(
-        `/opt/bin/claude --resume prov-1 --permission-mode acceptEdits --model opus --settings ${shellWord(artifactLayout(injectionDir, "claude").settings as string)}`,
+        `/opt/bin/claude --resume prov-1 --permission-mode acceptEdits --model opus --settings ${quoteShellWord(artifactLayout(injectionDir, "claude").settings as string, nodeDialect(undefined))}`,
       ),
     ).toBe(true);
     // 旧的那条 idle 属于上一代：投递门链要等接回来的 CLI 自己再报一条。

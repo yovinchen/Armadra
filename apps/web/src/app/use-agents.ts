@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { AgentInfo } from "@armadra/shared";
 import { runtimeApi } from "../api/client";
 import { setAgentRegistry } from "../agent/launch";
+import { ensureCoreHost } from "./core-host";
 import { agentIsEnabled, usePreferencesStore } from "./preferences-store";
 
 /**
@@ -23,6 +24,11 @@ export function useAgentsQuery() {
   useEffect(() => {
     if (agents) setAgentRegistry(agents);
   }, [agents]);
+  // 启动行按 core 的缺省 shell 引用（`agent/launch.ts::launchDialect`），在
+  // 第一个节点要敲行之前先问到。
+  useEffect(() => {
+    ensureCoreHost();
+  }, []);
   return query;
 }
 

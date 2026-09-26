@@ -5,6 +5,12 @@ import {
   permissionModeSchema,
   type PermissionMode,
 } from "./domain/index.js";
+import {
+  posixQuote,
+  shellCommandLine,
+  type LaunchWord,
+  type ShellDialect,
+} from "./shell.js";
 
 /**
  * Agent registry — see docs/contracts/v3-agent-terminal-plan.md §5.1.
@@ -369,12 +375,18 @@ export interface AssembleLaunchCommandInput {
   /** Extra argv appended after the flags (custom agents). */
   extraArgs?: readonly string[];
   /**
-   * Words appended to the *typed* line as they are, after everything quoted:
-   * the canvas injection the runtime answers as `launchWords`, which may
-   * expand environment variables of the node's terminal. Not part of
-   * {@link assembleLaunchArgv} — a frozen plan never carries the injection.
+   * Words appended to the *typed* line, in front of the prompt: the canvas
+   * injection the runtime answers as `launchWords`, some of which read an
+   * environment variable of the node's terminal. Quoted with {@link dialect}
+   * like the rest. Not part of {@link assembleLaunchArgv} — a frozen plan
+   * never carries the injection.
    */
-  shellWords?: readonly string[];
+  shellWords?: readonly LaunchWord[];
+  /**
+   * The dialect of the shell the line is typed into (`shellDialect` of the
+   * node terminal's shell). POSIX when absent.
+   */
+  dialect?: ShellDialect;
   /** Prompt/permission behaviour to use when `agentId` is a `custom:` id. */
   baseAgent?: BuiltinAgentId;
   /**
@@ -399,15 +411,8 @@ export interface LaunchCommand {
   stdinPrompt?: string;
 }
 
-const SAFE_ARGUMENT = /^[A-Za-z0-9_@%+=:,./-]+$/;
-
 /** POSIX single-quote escaping: `it's` → `'it'\''s'`. */
-export function shellQuote(value: string): string {
-  if (value.length > 0 && SAFE_ARGUMENT.test(value)) {
-    return value;
-  }
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
+export const shellQuote = posixQuote;
 
 /**
  * The prompt is *typed into a shell*, not exec'd, so it must be a single line;
@@ -521,8 +526,9 @@ export function assembleLaunchArgv(
 }
 
 /**
- * The same launch as one line of shell text. Quoting happens here and only
- * here, so the argv above stays the values the CLI actually receives.
+ * The same launch as one line of shell text, quoted for `input.dialect`.
+ * Quoting happens here and only here, so the argv above stays the values the
+ * CLI actually receives.
  */
 export function assembleLaunchCommand(
   input: AssembleLaunchCommandInput,
@@ -534,10 +540,10 @@ export function assembleLaunchCommand(
   const withoutPrompt = input.prompt
     ? assembleLaunchArgv({ ...input, prompt: undefined }).args.length
     : args.length;
-  const quoted = [program, ...args].map(shellQuote);
-  const tail = quoted.splice(1 + withoutPrompt);
+  const words: LaunchWord[] = [...args];
+  words.splice(withoutPrompt, 0, ...(input.shellWords ?? []));
   return {
-    command: [...quoted, ...(input.shellWords ?? []), ...tail].join(" "),
+    command: shellCommandLine(program, words, input.dialect ?? "posix"),
     ...(stdinPrompt ? { stdinPrompt } : {}),
   };
 }

@@ -1,5 +1,6 @@
 import {
   agentDefinition,
+  quoteShellWord,
   shellQuote,
   type AgentInfo,
   type TerminalSession,
@@ -70,8 +71,10 @@ export function quoteTerminalPath(path: string, shell: string): string {
     case "dash":
     case "ksh":
     case "ash":
-    case "fish":
       return shellQuote(path);
+    case "fish":
+      // fish 的单引号里 `\\` 与 `\'` 仍是转义：以反斜杠结尾的路径会吞掉收尾的引号。
+      return quoteShellWord(path, "fish");
     case "pwsh":
     case "powershell":
       return `'${path.replace(/'/g, "''")}'`;

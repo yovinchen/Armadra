@@ -1,4 +1,5 @@
 export * from "./agents.js";
+export * from "./shell.js";
 export * from "./api/index.js";
 export * from "./domain/index.js";
 export * from "./hook-events.js";

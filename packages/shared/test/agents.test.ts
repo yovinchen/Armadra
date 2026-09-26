@@ -505,9 +505,38 @@ describe("the typed canvas injection", () => {
     expect(
       assembleLaunchCommand({
         agentId: "codex",
-        shellWords: ["-c", '"hooks.Stop=$ARMADRA_CODEX_HOOK"'],
+        shellWords: [
+          "-c",
+          { prefix: "hooks.Stop=", env: "ARMADRA_CODEX_HOOK" },
+        ],
       }).command,
-    ).toBe('codex -c "hooks.Stop=$ARMADRA_CODEX_HOOK"');
+    ).toBe('codex -c "hooks.Stop=${ARMADRA_CODEX_HOOK}"');
+    expect(
+      assembleLaunchCommand({
+        agentId: "codex",
+        programOverride: "C:\\Program Files\\codex.exe",
+        shellWords: [
+          "-c",
+          { prefix: "hooks.Stop=", env: "ARMADRA_CODEX_HOOK" },
+        ],
+        dialect: "powershell",
+      }).command,
+    ).toBe(
+      "& 'C:\\Program Files\\codex.exe' -c \"hooks.Stop=${env:ARMADRA_CODEX_HOOK}\"",
+    );
+    expect(
+      assembleLaunchCommand({
+        agentId: "codex",
+        programOverride: "C:\\Program Files\\codex.exe",
+        shellWords: [
+          "-c",
+          { prefix: "hooks.Stop=", env: "ARMADRA_CODEX_HOOK" },
+        ],
+        dialect: "cmd",
+      }).command,
+    ).toBe(
+      '"C:\\Program Files\\codex.exe" -c "hooks.Stop=%ARMADRA_CODEX_HOOK%"',
+    );
     expect(
       assembleLaunchCommand({
         agentId: "claude",

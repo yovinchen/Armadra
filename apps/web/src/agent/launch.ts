@@ -9,9 +9,12 @@ import {
   type LaunchArgv,
   type LaunchCommand,
   type PermissionMode,
+  type ShellDialect,
   type TerminalAgent,
+  shellDialect,
 } from "@armadra/shared";
 
+import { defaultShellDialect } from "@/app/core-host";
 import { t, usePreferencesStore } from "@/app/preferences-store";
 
 /**
@@ -121,16 +124,34 @@ export function permissionModeLabel(mode: PermissionMode): string {
 }
 
 /**
+ * 启动行要按哪种 shell 引用：节点终端实际跑的那个。
+ *
+ * `sessionShell` 是会话记录里的 shell（最准：core 替节点选的缺省值也在里面）；
+ * 还没有会话时用节点指定的，再没有就是 core 的缺省 shell。SSH 节点的行由远端
+ * 的登录 shell 读，那边按 POSIX。
+ */
+export function launchDialect(
+  node: { shell?: string; ssh?: unknown },
+  sessionShell?: string,
+): ShellDialect {
+  if (node.ssh) return "posix";
+  const shell = sessionShell || node.shell;
+  return shell ? shellDialect(shell) : defaultShellDialect();
+}
+
+/**
  * 节点上的 Agent 配置 → 要敲进 shell 的那一行。
  *
  * `prompt` 单独传：它来自"带帧粘贴"或右键菜单，而不是节点数据，
  * 且必须由 shared 压成一行（它是被敲进 shell 的，不是 exec）。
+ * `dialect` 缺省时按 core 的缺省 shell。
  */
 export function buildAgentLaunch(
   agent: TerminalAgent,
   prompt?: string,
+  dialect: ShellDialect = defaultShellDialect(),
 ): LaunchCommand {
-  return assembleLaunchCommand(launchInput(agent, prompt));
+  return assembleLaunchCommand({ ...launchInput(agent, prompt), dialect });
 }
 
 /**
@@ -143,10 +164,12 @@ export function buildAgentLaunch(
 export function buildResumeLaunch(
   agentId: string,
   sessionId: string,
+  dialect: ShellDialect = defaultShellDialect(),
 ): LaunchCommand {
   return assembleLaunchCommand({
     ...launchInput({ id: agentId }),
     resume: sessionId,
+    dialect,
   });
 }
 
@@ -183,8 +206,9 @@ function launchInput(agent: TerminalAgent, prompt?: string) {
   // 只在从画布启动时交给 CLI，由 Runtime 的 `GET /api/agents` 现答。路径是
   // Runtime 那台机器的，所以不落进节点数据，也不进后台计划——存下来的计划只
   // 认 agent id，冷启动时由 core 自己补上。
-  // 优先用 `launchWords`：同一份注入的「敲进 shell 的词」，Codex 的长值留在节
-  // 点终端的环境变量里只写变量名——几 KB 的一行敲进刚起的 shell 会被截断。旧
+  // 优先用 `launchWords`：同一份注入的「敲进 shell 的词」，还没引用，由
+  // `assembleLaunchCommand` 按节点 shell 的方言引用；Codex 的长值留在节点终端
+  // 的环境变量里只写变量名——几 KB 的一行敲进刚起的 shell 会被截断。旧
   // Runtime 只给 `launchArgs`，照旧逐个引用。
   const row = registryEntry(agent.id);
   const words = row?.launchWords ?? [];

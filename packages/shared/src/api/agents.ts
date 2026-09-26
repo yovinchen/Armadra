@@ -4,6 +4,12 @@ import { agentProbeSchema } from "../agent-capabilities.js";
 import { AGENT_CAPABILITIES, AGENT_IDS, PROMPT_MODES } from "../agents.js";
 import { agentIdSchema } from "../domain/index.js";
 
+/** A `LaunchWord` (`shell.ts`): a literal value, or a prefix and a variable. */
+export const launchWordSchema = z.union([
+  z.string(),
+  z.object({ prefix: z.string(), env: z.string() }),
+]);
+
 /** `GET /api/agents` — registry entry plus local detection. */
 export const agentInfoSchema = z.object({
   id: agentIdSchema,
@@ -53,13 +59,14 @@ export const agentInfoSchema = z.object({
    */
   launchArgs: z.array(z.string()).optional(),
   /**
-   * The same injection as shell words for a typed launch line, quoted where
-   * needed. Codex's words name environment variables the node's terminal
-   * carries (`$ARMADRA_CODEX_HOOK`) instead of spelling kilobytes out: a line
-   * that long is cut off while a fresh shell is still echoing it. The page
-   * appends these verbatim when present, and `launchArgs` otherwise.
+   * The same injection as words for a typed launch line, not yet quoted: the
+   * page quotes them for the node terminal's shell (`shell.ts`). Codex's
+   * words name environment variables the node's terminal carries
+   * (`{ prefix, env }`) instead of spelling kilobytes out: a line that long is
+   * cut off while a fresh shell is still echoing it. The page uses these when
+   * present, and `launchArgs` otherwise.
    */
-  launchWords: z.array(z.string()).optional(),
+  launchWords: z.array(launchWordSchema).optional(),
 });
 
 export const agentListSchema = z.array(agentInfoSchema);
@@ -157,8 +164,8 @@ export const integrationStateSchema = z.looseObject({
    * every mode but `launch`, and for an integration that is not installed.
    */
   launchArgs: z.array(z.string()).default([]),
-  /** The same as words for a typed launch line. */
-  launchWords: z.array(z.string()).default([]),
+  /** The same as words for a typed launch line, unquoted. */
+  launchWords: z.array(launchWordSchema).default([]),
   /** Names of the environment variables a canvas launch sets. */
   launchEnv: z.array(z.string()).default([]),
   /**

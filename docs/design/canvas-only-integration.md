@@ -17,9 +17,11 @@
 
 - `core/hook/install/inject.ts`：`canvasInjection({ dataDir, agentId, nodeId, resume })` 答 `{ args, env }`；`prepareInjection` 把产物写成当前修订（字节不变就不写），Codex 另写信任记录；`removeInjection` 全部收回。
 - `core/agent/canvas-launch.ts`：core 里唯一拼启动行的地方（`canvasLaunch` / `canvasLaunchLine`），权限模式与模型的旗标来自 `planLaunch`，后面接注入的 argv；`canvasEnvironment` 给节点终端的环境半边，也是「就要起这个 CLI 了」时确保产物最新的时刻。
-- 页面自己拼的启动行（新节点、`open-agent` / `team` 建的节点、从历史对话恢复）全部经 `apps/web/src/agent/launch.ts`，把 `GET /api/agents` 那一行的 `launchWords` 原样接在后面（旧 core 只给 `launchArgs` 时逐个引用）；两者都是 `canvasInjection` 的答案。
+- 页面自己拼的启动行（新节点、`open-agent` / `team` 建的节点、从历史对话恢复）全部经 `apps/web/src/agent/launch.ts`，把 `GET /api/agents` 那一行的 `launchWords` 接在后面（旧 core 只给 `launchArgs` 时逐个引用）；两者都是 `canvasInjection` 的答案。
 
-`canvasInjection` 答三样：`args`（字面 argv，给自己 exec CLI 的调用方，例如探针）、`words`（敲进节点 shell 的词，已按需引用）、`env`（并进节点终端环境）。除 Codex 外 `words` 就是 `args` 逐个引用；Codex 见 §3 末尾。
+`canvasInjection` 答三样：`args`（字面 argv，给自己 exec CLI 的调用方，例如探针）、`words`（敲进节点 shell 的词，还没引用）、`env`（并进节点终端环境）。除 Codex 外 `words` 就是 `args`；Codex 见 §3 末尾。
+
+启动行是敲进节点终端的，按那个 shell 的方言引用：`packages/shared/src/shell.ts`（core 里逐字节同一份 `core/terminal/shell.ts`，用例比对两份）分 `posix`（sh/bash/zsh/dash）、`fish`、`cmd`、`powershell` 四种，管参数引用与环境变量引用（`"${VAR}"` / `"$VAR"` / `"%VAR%"` / `"${env:VAR}"`）。方言取节点终端实际跑的 shell：会话记录里的 `shell`，没有会话时是节点指定的，再没有是 core 的缺省 shell（Windows 上是 `COMSPEC`，页面从 `/api/health` 的 `defaultShell` 得知）；SSH 节点一律 POSIX。Codex 那两个由行展开的环境变量在 `cmd.exe` 下另有写法（`inject.ts::codexTomlString`），所以 `canvasEnvironment` 也按方言答。
 
 启动路径与各自的出口：
 

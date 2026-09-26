@@ -1,10 +1,15 @@
 import {
+  type ShellDialect,
+  shellCommandLine,
+  shellDialect,
+} from "../terminal/shell";
+import {
   type Injection,
   canvasInjection,
   isInjected,
   prepareInjection,
-  shellWord,
 } from "../hook/install/inject";
+import { defaultShell } from "../terminal/environment";
 import { planLaunch } from "./launch";
 import { type AgentSettings, baseAgent } from "./registry";
 
@@ -23,6 +28,10 @@ import { type AgentSettings, baseAgent } from "./registry";
  * The environment half ({@link canvasEnvironment}) goes where every canvas
  * terminal's environment is built — the terminal domain's
  * `ownedEnvironment` — so the page's road carries it too.
+ *
+ * Both halves are written for the node terminal's shell ({@link nodeDialect}):
+ * the line is quoted in its dialect, and a Codex value the line expands from
+ * the environment is written so that shell expands it intact.
  */
 
 export interface CanvasLaunchRequest {
@@ -43,14 +52,34 @@ export interface CanvasLaunchRequest {
    * from the permission mode and model — the plan already carries those.
    */
   readonly frozenArgs?: readonly string[];
+  /**
+   * The dialect of the shell the line is typed into ({@link nodeDialect}).
+   * The core's own default shell's when absent.
+   */
+  readonly dialect?: ShellDialect;
 }
 
 export interface CanvasLaunch {
   readonly program: string;
   /** The whole argv, literal — for a caller that execs the CLI. */
   readonly args: readonly string[];
-  /** The line typed into the node's shell, word by word, already quoted. */
-  readonly words: readonly string[];
+  /** The line typed into the node's shell, quoted for its dialect. */
+  readonly line: string;
+}
+
+/**
+ * The dialect a node's launch line is written in: the shell its terminal
+ * runs. An SSH node's line is read by the shell on the far host, which is a
+ * POSIX login shell whatever this machine is; a local node without a shell
+ * of its own runs the default one ({@link defaultShell}, `COMSPEC` on
+ * Windows).
+ */
+export function nodeDialect(
+  shell: string | undefined,
+  ssh = false,
+): ShellDialect {
+  if (ssh) return "posix";
+  return shellDialect(shell ?? defaultShell());
 }
 
 /** The injection for this node's CLI, a custom entry resolved to its base. */
@@ -58,7 +87,11 @@ export function injectionFor(
   settings: AgentSettings,
   dataDir: string | undefined,
   agentId: string,
-  options: { readonly nodeId?: string; readonly resume?: boolean } = {},
+  options: {
+    readonly nodeId?: string;
+    readonly resume?: boolean;
+    readonly dialect?: ShellDialect;
+  } = {},
 ): Injection {
   if (dataDir === undefined) return { args: [], words: [], env: [] };
   return canvasInjection({
@@ -66,6 +99,7 @@ export function injectionFor(
     agentId: baseAgent(settings, agentId),
     ...(options.nodeId === undefined ? {} : { nodeId: options.nodeId }),
     ...(options.resume === undefined ? {} : { resume: options.resume }),
+    ...(options.dialect === undefined ? {} : { dialect: options.dialect }),
   });
 }
 
@@ -89,18 +123,17 @@ export function canvasLaunch(request: CanvasLaunchRequest): CanvasLaunch {
   );
   const flags = request.frozenArgs ?? plan.args;
   const program = request.program ?? plan.program;
+  const dialect = request.dialect ?? nodeDialect(undefined);
   return {
     program,
     args: [...flags, ...injection.args],
-    words: [program, ...flags]
-      .map((word) => shellWord(word))
-      .concat(injection.words),
+    line: shellCommandLine(program, [...flags, ...injection.words], dialect),
   };
 }
 
 /** The same launch as one line of shell text, each word quoted only if needed. */
 export function canvasLaunchLine(request: CanvasLaunchRequest): string {
-  return canvasLaunch(request).words.join(" ");
+  return canvasLaunch(request).line;
 }
 
 /**
@@ -115,6 +148,7 @@ export function canvasEnvironment(
   agentId: string,
   nodeId: string,
   log?: (message: string, fields: Record<string, unknown>) => void,
+  dialect: ShellDialect = nodeDialect(undefined),
 ): readonly (readonly [string, string])[] {
   const base = baseAgent(settings, agentId);
   if (!isInjected(base)) return [];
@@ -126,7 +160,5 @@ export function canvasEnvironment(
       error: error instanceof Error ? error.message : String(error),
     });
   }
-  return injectionFor(settings, dataDir, agentId, { nodeId }).env;
+  return injectionFor(settings, dataDir, agentId, { nodeId, dialect }).env;
 }
-
-export { shellWord };

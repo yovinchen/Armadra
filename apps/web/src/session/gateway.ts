@@ -30,6 +30,8 @@ export interface TerminalSessionRecord {
   exitCode?: number;
   /** 保留字段：core 不做 revision CAS，恒为 0。 */
   revision: bigint;
+  /** 这个会话跑的 shell：启动行按它的方言引用。 */
+  shell?: string;
 }
 
 /** 建一个会话要说清楚的事。 */
@@ -55,6 +57,7 @@ function fromRuntime(session: {
   generation?: number;
   exitCode?: number | null;
   hibernation?: "hibernated" | null;
+  shell?: string;
 }): TerminalSessionRecord {
   // 节能休眠的会话不是「已退出」：它还挂在节点上，点一下就用 CLI 的 resume
   // 接回来。当成退出的话，挂载会替它起一个全新的会话。
@@ -71,6 +74,7 @@ function fromRuntime(session: {
     generation: BigInt(Math.max(session.generation ?? 0, 0)),
     exitCode: session.exitCode ?? undefined,
     revision: 0n,
+    ...(session.shell ? { shell: session.shell } : {}),
   };
 }
 
