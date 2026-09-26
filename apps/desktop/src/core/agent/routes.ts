@@ -318,9 +318,9 @@ export function installRoutes(deps: AgentRouteDeps): void {
   server.router.handle(
     "POST",
     "/api/workspaces/{workspaceId}/handoffs",
-    answered((match, request) => ({
+    answeredAsync(async (match, request) => ({
       status: 200,
-      body: prepare(
+      body: await prepare(
         collab,
         param(match, "workspaceId"),
         parsePrepare(jsonObject(request.body)),

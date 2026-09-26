@@ -68,6 +68,7 @@ import { type RootFingerprint, fingerprintOf } from "./switch";
 import { trackOperation } from "./git-worker";
 import { readRemoteResources } from "./resources-worker";
 import { unwatchFiles, watchFiles } from "./watch-worker";
+import { capture as captureHandoff, captureArgs } from "../handoff/capture";
 import {
   listenHooks,
   locate as locateIntegration,
@@ -638,6 +639,12 @@ export const OPERATIONS: Readonly<Record<string, Operation>> = {
     replyHook(context.session, args),
   ),
 
+  /* ------------------------------ 交接 ------------------------------ */
+  /** 交接材料里要在执行主机上读的：文件引用、Git 指纹、SSH Agent 的转录尾巴。 */
+  "handoff.capture": read((_c, root, args) =>
+    captureHandoff(root, captureArgs(args)),
+  ),
+
   "git.rebaseTodo": read(
     async (context, root, args) =>
       await rebaseTodoPreview(
@@ -672,6 +679,9 @@ const GIT_OPERATION_NAMES = new Set([
 /** 画布注入的产物同步与 Hook 中继。 */
 export const INTEGRATION_CAPABILITY = "remote.integration.v1";
 
+/** 交接材料在执行主机上的采集。 */
+export const HANDOFF_CAPABILITY = "remote.handoff.v1";
+
 /** 一个操作属于哪个能力组。 */
 export function capabilityOf(operation: string): string | undefined {
   if (operation === "files.watch" || operation === "files.unwatch") {
@@ -683,6 +693,7 @@ export function capabilityOf(operation: string): string | undefined {
   if (GIT_OPERATION_NAMES.has(operation)) return GIT_OPERATIONS_CAPABILITY;
   if (operation.startsWith("git.")) return GIT_CAPABILITY;
   if (operation.startsWith("resources.")) return RESOURCES_CAPABILITY;
+  if (operation.startsWith("handoff.")) return HANDOFF_CAPABILITY;
   if (operation.startsWith("integration.") || operation.startsWith("hook.")) {
     return INTEGRATION_CAPABILITY;
   }

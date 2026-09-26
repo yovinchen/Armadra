@@ -7,9 +7,10 @@ import {
   pendingCount,
 } from "../collab/mailbox";
 import { type Caller, loadNode } from "../collab/nodes";
-import { locate, readTail, render } from "../collab/transcript";
+import { render } from "../collab/transcript";
 import { type CollabContext, nowDate, nowSeconds } from "../collab/service";
-import { type Fingerprinted, gitFingerprint } from "../git/fingerprint";
+import { UNAVAILABLE } from "../git/fingerprint";
+import { executeOn } from "../remote/execute";
 import {
   DomainError,
   badRequest,
@@ -34,6 +35,20 @@ import {
   fitBudget,
   sanitize,
 } from "./bundle";
+import {
+  type CaptureRequest,
+  type Captured,
+  capture,
+  readTranscriptTail,
+} from "./capture";
+
+/** 控制端这台机器在交接材料里的名字。 */
+const LOCAL_HOST = "local-runtime";
+
+/** 执行主机在交接材料里的名字。 */
+function hostLabel(hostId: string): string {
+  return hostId === "" ? LOCAL_HOST : `execution-host:${hostId}`;
+}
 
 /**
  * Frozen, user-approved handoff material.
@@ -185,6 +200,7 @@ function session(context: CollabContext, sessionId: string): SessionRow {
  */
 function identity(
   context: CollabContext,
+  space: { readonly executionHostId: string },
   workspaceId: string,
   nodeId: string,
   sessionId: string,
@@ -210,14 +226,22 @@ function identity(
   ) {
     throw conflict("Handoff session generation changed");
   }
-  // An Agent in an SSH terminal works in a directory on that host, and nothing
-  // maps an SSH terminal's host to a workspace execution host yet — so the
-  // working directory the bundle would name cannot be checked against anything.
-  if (node.data.ssh !== undefined && node.data.ssh !== null) {
+  // An Agent in an SSH terminal works in a directory on that host. The one
+  // correspondence that can be checked is "the terminal's host is the
+  // workspace's execution host": then its files, repository and transcript
+  // are all read there. Any other SSH host names a machine the bundle's
+  // material says nothing about.
+  const sshHost =
+    node.data.ssh !== undefined &&
+    node.data.ssh !== null &&
+    typeof node.data.ssh === "object"
+      ? String((node.data.ssh as { hostId?: unknown }).hostId ?? "")
+      : undefined;
+  if (sshHost !== undefined && sshHost !== space.executionHostId) {
     throw new DomainError(
       501,
       "unsupported",
-      "跨执行主机交接不可用：SSH 终端里的 Agent 所在的主机与工作空间的执行主机之间还没有经过核验的对应关系",
+      "跨执行主机交接不可用：SSH 终端里的 Agent 只能与绑在同一台执行主机上的工作空间交接",
     );
   }
   if (!hasCapability(context.settings, agent, "contextLink")) {
@@ -234,28 +258,20 @@ function identity(
     providerSessionId: status?.sessionId ?? null,
     modelId: null,
     accountId: null,
-    executionHost: "local-runtime",
+    executionHost: hostLabel(sshHost ?? ""),
     workingDirectory: row.cwd,
   };
 }
 
-export function prepare(
+export async function prepare(
   context: CollabContext,
   workspaceId: string,
   request: PrepareRequest,
-): HandoffView {
+): Promise<HandoffView> {
+  // The bundle is built from the workspace's files and repository. On a
+  // remote workspace those are read on its execution host through the Worker
+  // (`handoff/capture.ts`) — never from this machine's disk at the same path.
   const space = workspace(context, workspaceId, false);
-  // The bundle is built from the workspace's files and repository, read
-  // synchronously here. On a remote workspace those are on another machine,
-  // and reading this machine's disk at the same path would hand the target
-  // Agent material about the wrong files — refused by name instead.
-  if (space.executionHostId !== "") {
-    throw new DomainError(
-      501,
-      "unsupported",
-      "跨执行主机交接不可用：交接材料要从工作空间的文件与仓库里采集，而这个工作空间在远端执行主机上",
-    );
-  }
   if (request.sourceNodeId === request.targetNodeId) {
     throw badRequest("Choose a different target Agent");
   }
@@ -282,6 +298,7 @@ export function prepare(
   }
   const source = identity(
     context,
+    space,
     workspaceId,
     request.sourceNodeId,
     request.sourceSessionId,
@@ -289,6 +306,7 @@ export function prepare(
   );
   const target = identity(
     context,
+    space,
     workspaceId,
     request.targetNodeId,
     request.targetSessionId,
@@ -300,9 +318,9 @@ export function prepare(
       "Create a context link to the target before preparing a handoff",
     );
   }
-  let bundle = build(
+  let bundle = await build(
     context,
-    space.rootPath,
+    space,
     workspaceId,
     source,
     target,
@@ -311,6 +329,7 @@ export function prepare(
   // A recycle during snapshot collection must not silently relabel old data.
   identity(
     context,
+    space,
     workspaceId,
     request.sourceNodeId,
     request.sourceSessionId,
@@ -318,6 +337,7 @@ export function prepare(
   );
   identity(
     context,
+    space,
     workspaceId,
     request.targetNodeId,
     request.targetSessionId,
@@ -384,14 +404,14 @@ export function prepare(
  *     is not a repository, reports `unavailable` — an invented `observed` would
  *     be a claim about a worktree nobody looked at.
  */
-function build(
+async function build(
   context: CollabContext,
-  root: string,
+  space: { readonly rootPath: string; readonly executionHostId: string },
   workspaceId: string,
   source: Identity,
   target: Identity,
   request: PrepareRequest,
-): HandoffBundle {
+): Promise<HandoffBundle> {
   const status = getAgentStatus(context.database, source.nodeId);
   const omitted = [
     "referencesAreLiveFilesNotCopiedCode",
@@ -405,39 +425,62 @@ function build(
     sourceUpdatedAt: status?.lastEventAt ?? null,
   };
   let excerpt = "";
+  // Provider home directories are never scanned: only a path the current
+  // verified, generation-bound provider named is eligible.
+  const eligible =
+    request.includeTranscript &&
+    status !== undefined &&
+    status.verified &&
+    !status.restored
+      ? (status.transcriptPath ?? undefined)
+      : undefined;
+  // The transcript is on the machine the source Agent runs on, the files and
+  // the repository on the workspace's: an SSH Agent on the execution host has
+  // both there, a local Agent on a remote workspace has them apart.
+  const sourceRemote = source.executionHost !== LOCAL_HOST;
+  const execute = workspaceExecute(context, workspaceId);
+  const wanted: CaptureRequest = {
+    paths: request.filePaths,
+    execute: execute === true,
+    executionHost: hostLabel(space.executionHostId),
+    ...(eligible !== undefined && sourceRemote
+      ? { transcript: { provider: source.provider, path: eligible } }
+      : {}),
+  };
+  const captured =
+    space.executionHostId === ""
+      ? capture(space.rootPath, wanted)
+      : ((await executeOn(
+          space,
+          "handoff.capture",
+          wanted as unknown as Record<string, unknown>,
+        )) as Captured);
   if (request.includeTranscript) {
-    // Provider home directories are never scanned: only a path the current
-    // verified, generation-bound provider named is eligible.
-    const eligible =
-      status !== undefined && status.verified && !status.restored
-        ? status.transcriptPath
-        : undefined;
-    const located =
+    const tail =
       eligible === undefined
         ? undefined
-        : locate(source.provider, eligible, undefined);
-    if (located !== undefined) {
-      try {
-        const text = readTail(located.path, 256 * 1024);
-        excerpt = render(text).join("\n");
-        cutoff = {
-          ...cutoff,
-          kind: "transcriptBytes",
-          reference: String(Buffer.byteLength(text, "utf8")),
-        };
-      } catch {
-        omitted.push("transcriptUnreadableOrChanged");
-      }
+        : sourceRemote
+          ? captured.transcript
+          : readTranscriptTail(source.provider, eligible);
+    if (tail?.state === "read") {
+      excerpt = render(tail.text).join("\n");
+      cutoff = {
+        ...cutoff,
+        kind: "transcriptBytes",
+        reference: String(Buffer.byteLength(tail.text, "utf8")),
+      };
+    } else if (tail?.state === "unreadable") {
+      omitted.push("transcriptUnreadableOrChanged");
     }
     if (excerpt === "") omitted.push("noGenerationBoundTranscript");
   } else {
     omitted.push("transcriptNotSelected");
   }
-  const files = fingerprintFiles(root, request.filePaths);
+  const files = captured.files;
   if (files.some((file) => file.status !== "referenced")) {
     omitted.push("someFileReferencesUnavailable");
   }
-  const git = gitFingerprint(workspaceFingerprint(context, workspaceId, root));
+  const git = execute === undefined ? UNAVAILABLE : captured.git;
   if (git.status !== "observed") omitted.push("gitFingerprintUnavailable");
   omitted.push("worktreeDigestCoversStatusSummaryOnly");
   return {
@@ -453,7 +496,7 @@ function build(
     summaryMethod: "editableTemplateAndExcerpt",
     trust: TRUST,
     sourcePreserved: true,
-    files,
+    files: [...files],
     git,
     attachments: [],
     budget: {
@@ -477,16 +520,12 @@ function build(
  * `unavailable` fingerprint, which is the honest answer rather than a refusal
  * that would stop the handoff.
  */
-function workspaceFingerprint(
+function workspaceExecute(
   context: CollabContext,
   workspaceId: string,
-  root: string,
-): Fingerprinted | undefined {
+): boolean | undefined {
   try {
-    return {
-      rootPath: root,
-      execute: getWorkspace(context.database, workspaceId).permissions.execute,
-    };
+    return getWorkspace(context.database, workspaceId).permissions.execute;
   } catch {
     return undefined;
   }
@@ -646,7 +685,7 @@ export function accept(
   id: string,
   request: ConfirmRequest,
 ): HandoffView {
-  workspace(context, workspaceId, true);
+  const space = workspace(context, workspaceId, true);
   const existing = get(context, workspaceId, id);
   if (existing.digest !== request.expectedDigest) {
     throw conflict("Handoff preview digest changed");
@@ -656,6 +695,7 @@ export function accept(
   const target = existing.bundle.target;
   identity(
     context,
+    space,
     workspaceId,
     target.nodeId,
     target.sessionId,
@@ -842,6 +882,11 @@ export async function readForCaller(
   }
   identity(
     context,
+    {
+      executionHostId:
+        getWorkspace(context.database, caller.node.workspaceId)
+          .executionHostId ?? "",
+    },
     caller.node.workspaceId,
     target.nodeId,
     sessionId,

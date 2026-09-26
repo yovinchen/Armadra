@@ -32,7 +32,8 @@ export const handoffIdentitySchema = z.object({
   providerSessionId: z.string().nullable(),
   modelId: z.string().nullable(),
   accountId: z.string().nullable(),
-  executionHost: z.literal("local-runtime"),
+  // `local-runtime`，或远端的 `execution-host:<主机 id>`。
+  executionHost: z.string(),
   workingDirectory: z.string(),
 });
 export const handoffBundleSchema = z.object({
@@ -60,7 +61,7 @@ export const handoffBundleSchema = z.object({
       sha256: z.string().nullable(),
       bytes: z.number().int().nonnegative().nullable(),
       status: z.enum(["referenced", "missing", "excluded", "changed"]),
-      executionHost: z.literal("local-runtime"),
+      executionHost: z.string(),
     }),
   ),
   git: z.object({

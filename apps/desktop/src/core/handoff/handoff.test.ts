@@ -38,8 +38,10 @@ function request(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function prepared(overrides: Record<string, unknown> = {}): HandoffView {
-  return prepare(
+async function prepared(
+  overrides: Record<string, unknown> = {},
+): Promise<HandoffView> {
+  return await prepare(
     fixture.collab,
     fixture.workspaceId,
     request(overrides) as never,
@@ -60,8 +62,8 @@ afterEach(() => {
 });
 
 describe("prepare", () => {
-  it("freezes material and tells nobody", () => {
-    const view = prepared();
+  it("freezes material and tells nobody", async () => {
+    const view = await prepared();
     expect(view.state).toBe("prepared");
     expect(view.mailboxId).toBeNull();
     expect(view.acceptedAt).toBeNull();
@@ -75,34 +77,38 @@ describe("prepare", () => {
     ).toEqual({ n: 0 });
   });
 
-  it("refuses a target the source is not linked to", () => {
+  it("refuses a target the source is not linked to", async () => {
     const stranger = fixture.agentNode("Stranger", "claude");
     const strangerSession = fixture.session(stranger, "claude");
-    expect(() =>
+    await expect(
       prepared({
         targetNodeId: stranger,
         targetSessionId: strangerSession,
       }),
-    ).toThrow(/context link/i);
+    ).rejects.toThrow(/context link/i);
   });
 
-  it("refuses an invalid budget, an empty goal and its own node as target", () => {
-    expect(() => prepared({ byteBudget: 1024 })).toThrow();
-    expect(() =>
+  it("refuses an invalid budget, an empty goal and its own node as target", async () => {
+    await expect(prepared({ byteBudget: 1024 })).rejects.toThrow();
+    await expect(
       prepared({ sections: { ...EMPTY_SECTIONS, goal: "   " } }),
-    ).toThrow();
-    expect(() =>
+    ).rejects.toThrow();
+    await expect(
       prepared({ targetNodeId: source, targetSessionId: sourceSession }),
-    ).toThrow(/different target/i);
+    ).rejects.toThrow(/different target/i);
   });
 
-  it("refuses a generation that has already moved on", () => {
-    expect(() => prepared({ sourceGeneration: 2 })).toThrow(/generation/i);
+  it("refuses a generation that has already moved on", async () => {
+    await expect(prepared({ sourceGeneration: 2 })).rejects.toThrow(
+      /generation/i,
+    );
   });
 
-  it("fingerprints referenced files, and excludes the sensitive ones", () => {
+  it("fingerprints referenced files, and excludes the sensitive ones", async () => {
     writeFileSync(join(fixture.directory, "a.txt"), "hello");
-    const view = prepared({ filePaths: ["a.txt", ".env", "missing.txt"] });
+    const view = await prepared({
+      filePaths: ["a.txt", ".env", "missing.txt"],
+    });
     const byPath = new Map(view.bundle.files.map((f) => [f.path, f]));
     expect(byPath.get("a.txt")?.status).toBe("referenced");
     expect(byPath.get("a.txt")?.sha256).toHaveLength(64);
@@ -115,8 +121,8 @@ describe("prepare", () => {
     );
   });
 
-  it("truncates to the byte budget and says which section it cut", () => {
-    const view = prepared({
+  it("truncates to the byte budget and says which section it cut", async () => {
+    const view = await prepared({
       byteBudget: 8192,
       sections: {
         ...EMPTY_SECTIONS,
@@ -133,8 +139,8 @@ describe("prepare", () => {
 });
 
 describe("accept", () => {
-  it("puts the notice in the target's inbox and nothing in its terminal", () => {
-    const frozen = prepared();
+  it("puts the notice in the target's inbox and nothing in its terminal", async () => {
+    const frozen = await prepared();
     const view = accept(
       fixture.collab,
       fixture.workspaceId,
@@ -153,8 +159,8 @@ describe("accept", () => {
     expect(fixture.terminal.writes).toHaveLength(0);
   });
 
-  it("refuses a digest that no longer matches the preview", () => {
-    const view = prepared();
+  it("refuses a digest that no longer matches the preview", async () => {
+    const view = await prepared();
     expect(() =>
       accept(fixture.collab, fixture.workspaceId, view.bundle.handoffId, {
         expectedDigest: "0".repeat(64),
@@ -162,8 +168,8 @@ describe("accept", () => {
     ).toThrow(/digest/i);
   });
 
-  it("is idempotent: accepting twice does not post twice", () => {
-    const view = prepared();
+  it("is idempotent: accepting twice does not post twice", async () => {
+    const view = await prepared();
     const first = accept(
       fixture.collab,
       fixture.workspaceId,
@@ -183,8 +189,8 @@ describe("accept", () => {
     ).toEqual({ n: 1 });
   });
 
-  it("refuses after the context link is withdrawn", () => {
-    const view = prepared();
+  it("refuses after the context link is withdrawn", async () => {
+    const view = await prepared();
     fixture.database.prepare("DELETE FROM context_links").run();
     expect(() =>
       accept(fixture.collab, fixture.workspaceId, view.bundle.handoffId, {
@@ -196,7 +202,7 @@ describe("accept", () => {
 
 describe("reading and acknowledging", () => {
   it("hands the bundle to the addressed session only", async () => {
-    const view = prepared();
+    const view = await prepared();
     accept(fixture.collab, fixture.workspaceId, view.bundle.handoffId, {
       expectedDigest: view.digest,
     });
@@ -240,7 +246,7 @@ describe("reading and acknowledging", () => {
   });
 
   it("refuses to read a handoff nobody approved", async () => {
-    const view = prepared();
+    const view = await prepared();
     await expect(
       readForCaller(
         fixture.collab,
@@ -253,7 +259,7 @@ describe("reading and acknowledging", () => {
   });
 
   it("settles the record only when the inbox entry is acknowledged", async () => {
-    const view = prepared();
+    const view = await prepared();
     const queued = accept(
       fixture.collab,
       fixture.workspaceId,
@@ -288,8 +294,8 @@ describe("reading and acknowledging", () => {
 });
 
 describe("cancel", () => {
-  it("withdraws the inbox entry and marks the record cancelled", () => {
-    const view = prepared();
+  it("withdraws the inbox entry and marks the record cancelled", async () => {
+    const view = await prepared();
     const queued = accept(
       fixture.collab,
       fixture.workspaceId,
@@ -314,8 +320,8 @@ describe("cancel", () => {
     ).toThrow();
   });
 
-  it("keeps the history after the nodes are gone", () => {
-    const view = prepared();
+  it("keeps the history after the nodes are gone", async () => {
+    const view = await prepared();
     accept(fixture.collab, fixture.workspaceId, view.bundle.handoffId, {
       expectedDigest: view.digest,
     });
@@ -328,7 +334,7 @@ describe("cancel", () => {
 });
 
 describe("sanitizing", () => {
-  it("drops a private key block whole and redacts a token", () => {
+  it("drops a private key block whole and redacts a token", async () => {
     const text = [
       "keep this",
       "-----BEGIN RSA PRIVATE KEY-----",
@@ -344,7 +350,7 @@ describe("sanitizing", () => {
     expect(clean).not.toContain("sk-abcdefghijklmnopqrstuvwxyz");
   });
 
-  it("knows which paths are never read", () => {
+  it("knows which paths are never read", async () => {
     for (const path of [
       ".env",
       ".env.local",
