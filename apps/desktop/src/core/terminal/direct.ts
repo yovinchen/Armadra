@@ -1,3 +1,5 @@
+import { StringDecoder } from "node:string_decoder";
+
 import {
   type Attachment,
   type BackendCapabilities,
@@ -21,13 +23,13 @@ import {
   executable,
   notFound,
   sanitizePaste,
-  stripEscapes,
   tailLines,
   trimCaptured,
 } from "./backend";
 import { asRecord, childEnvironment } from "./environment";
 import { childCommands, processTable, terminateTree } from "./process";
 import { type Pty, openPty, releasePty } from "./pty";
+import { ReplayScreen } from "./replay-screen";
 
 /**
  * The fallback backend: one PTY per session, held by this process.
@@ -35,9 +37,8 @@ import { type Pty, openPty, releasePty } from "./pty";
  * A direct session **dies with the core**, and every behaviour here follows
  * from that one fact:
  *
- *   * `capture` replays the output buffer, because there is no screen to
- *     re-read — the same approximation the Rust `DirectBackend` makes, and
- *     labelled as such rather than presented as a real capture;
+ *   * `capture` reads a screen this backend keeps itself, fed with every
+ *     byte the PTY writes, because there is no terminal to re-read;
  *   * `attach` owes the socket a `snapshot` frame, because nothing redraws;
  *   * `scroll` does nothing: xterm owns that scrollback on the page side;
  *   * `detachAll` **kills**, because "release without ending the session" is
@@ -83,6 +84,14 @@ interface DirectSession {
   cadence: number;
   exited: boolean;
   exitCode: number | undefined;
+  /**
+   * Everything the PTY has written, laid out on a screen of its current size
+   * (`replay-screen.ts`) — what `capture` reads. Fed from the first byte, not
+   * rebuilt from the replay ring: a CLI that draws its prompt once and then
+   * only redraws a spinner pushes the prompt out of the ring within seconds.
+   */
+  readonly screen: ReplayScreen;
+  readonly decoder: StringDecoder;
 }
 
 export class DirectBackend implements TerminalBackend {
@@ -133,6 +142,8 @@ export class DirectBackend implements TerminalBackend {
       pending: [],
       pendingBytes: 0,
       timer: undefined,
+      screen: new ReplayScreen(spec.size.cols, spec.size.rows),
+      decoder: new StringDecoder("utf8"),
       cadence: OUTPUT_FLUSH_INTERVAL_MS,
       exited: false,
       exitCode: undefined,
@@ -198,6 +209,7 @@ export class DirectBackend implements TerminalBackend {
     session.pendingBytes = 0;
     session.replay.push(batch);
     while (session.replay.length > REPLAY_CHUNKS) session.replay.shift();
+    session.screen.write(session.decoder.write(batch));
     for (const listener of session.listeners.values()) {
       if (!listener.subscribed) {
         listener.buffered.push(batch);
@@ -295,6 +307,7 @@ export class DirectBackend implements TerminalBackend {
   async resize(key: SessionKey, size: TerminalSize): Promise<void> {
     const session = this.live(key);
     try {
+      session.screen.resize(size.cols, size.rows);
       session.pty?.resize(
         Math.max(2, Math.trunc(size.cols)),
         Math.max(2, Math.trunc(size.rows)),
@@ -304,7 +317,13 @@ export class DirectBackend implements TerminalBackend {
     }
   }
 
-  /** No real screen to read: the replay buffer is the best approximation. */
+  /**
+   * No real screen to re-read, so the plain capture reads the one this backend
+   * keeps ({@link DirectSession.screen}): a full-screen CLI draws with cursor
+   * moves, not lines, and stripping the escapes off the replay leaves either
+   * one run-on line or a tail of redraw fragments. The escaped form is the
+   * replay itself.
+   */
   async capture(
     key: SessionKey,
     lines: number,
@@ -312,10 +331,13 @@ export class DirectBackend implements TerminalBackend {
   ): Promise<string> {
     // A session that has produced nothing captures as the empty string; one
     // that does not exist is a 404, and the two must not look alike.
-    this.require(key);
-    const raw = this.snapshot(key) ?? "";
-    const text = withEscapes ? raw : stripEscapes(raw);
-    return tailLines(trimCaptured(text.replaceAll("\r", "")), lines);
+    const session = this.require(key);
+    // What arrived since the last batch is part of the screen too.
+    this.flush(session);
+    const text = withEscapes
+      ? (this.snapshot(key) ?? "").replaceAll("\r", "")
+      : session.screen.text();
+    return tailLines(trimCaptured(text), lines);
   }
 
   /**

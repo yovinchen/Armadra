@@ -157,6 +157,54 @@ describeUnix("the direct backend", () => {
   });
 
   /**
+   * 全屏界面不逐行打印：Claude 用跳列代替空格、用定位代替换行，Codex 每一拍
+   * 都定位回去重画同几行。capture 要答的是屏幕上此刻的样子——去掉转义直接当
+   * 文本，读到的是粘成一行的字或者几十行动画碎片（2026-09-26 direct 后端端
+   * 到端实测，Agent 读邻居终端与首投放行门都认不出提示符）。
+   */
+  it("captures a full-screen interface as the screen it draws", async () => {
+    backend = new DirectBackend();
+    const frames = Array.from(
+      { length: 200 },
+      (_, index) => `\\033[1;1H\\033[K⠋ tick ${index}`,
+    ).join("");
+    await backend.create(
+      spec("/bin/sh", [
+        "-c",
+        `printf '\\033[?1049h\\033[3;1H\\033[2GIs\\033[5Gthis\\033[10Gready?\\033[5;3H› Ask Codex${frames}'; sleep 5`,
+      ]),
+    );
+    const attachment = await backend.attach(key(), 1, { cols: 80, rows: 24 });
+    await waitFor(collect(attachment), "tick 199");
+    const lines = (await backend.capture(key(), 10, false)).split("\n");
+    expect(lines).toContain(" Is this ready?");
+    expect(lines).toContain("  › Ask Codex");
+    expect(lines.filter((line) => line.includes("tick"))).toEqual([
+      "⠋ tick 199",
+    ]);
+  });
+
+  /**
+   * 回放环只留最后 128 批。Codex 的输入框只在起来时画一次，之后每一拍重画
+   * 的是一小块动画——几秒钟就把画输入框的那一批挤出环外。屏幕得从会话开头一
+   * 直画下来，不能每次从回放环重建。
+   */
+  it("keeps what was drawn once after the replay ring has moved on", async () => {
+    backend = new DirectBackend();
+    await backend.create(
+      spec("/bin/sh", [
+        "-c",
+        "printf '\\033[5;3H> Ask Codex'; i=0; while [ $i -lt 400 ]; do printf '\\033[1;1H\\033[K~ tick %s' $i; i=$((i+1)); sleep 0.005; done; sleep 5",
+      ]),
+    );
+    const attachment = await backend.attach(key(), 1, { cols: 80, rows: 24 });
+    await waitFor(collect(attachment), "tick 399", 30);
+    const lines = (await backend.capture(key(), 30, false)).split("\n");
+    expect(lines).toContain("  > Ask Codex");
+    expect(lines).toContain("~ tick 399");
+  });
+
+  /**
    * The bracketed-paste wrapper is what makes a CLI treat multi-line text as
    * one paste event instead of as keystrokes, so a pasted prompt does not
    * submit itself line by line.

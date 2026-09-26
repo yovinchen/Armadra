@@ -445,19 +445,29 @@ export function sessionName(
   return `${SESSION_PREFIX}${nameComponent(workspaceId, 8)}-${tailComponent(key, 8)}-${generation}`;
 }
 
+/** A terminal row is never wider than this; a cursor-forward past it is junk. */
+const MAX_CURSOR_FORWARD = 512;
+
 /**
  * Strips ANSI/OSC escape sequences so a captured screen can be handed to an
- * agent as plain text. A direct port of the Rust state machine, including its
+ * agent as plain text. A forward move or a column jump becomes the spaces it
+ * skips. Rows are not reconstructed here — a replay that needs a screen goes
+ * through `replay-screen.ts`. A direct port of the Rust state machine, including its
  * treatment of BEL as a terminator and as a character to drop.
  */
 export function stripEscapes(text: string): string {
   let output = "";
+  // 这一行已经写出的字符数，给跳列（CSI n G）补空格用。按码点数，宽字符
+  // 只算一列——这是近似。
+  let column = 0;
   const characters = [...text];
   let index = 0;
   while (index < characters.length) {
     const character = characters[index] as string;
     index += 1;
     if (character !== "\u001b") {
+      if (character === "\n" || character === "\r") column = 0;
+      else if (character !== "\u0007") column += 1;
       if (character !== "\u0007") output += character;
       continue;
     }
@@ -465,10 +475,33 @@ export function stripEscapes(text: string): string {
     index += 1;
     if (next === "[") {
       // CSI: parameters then a final byte in @..~.
+      let parameters = "";
+      let final = "";
       while (index < characters.length) {
-        const code = (characters[index] as string).codePointAt(0) ?? 0;
+        const current = characters[index] as string;
+        const code = current.codePointAt(0) ?? 0;
         index += 1;
-        if (code >= 0x40 && code <= 0x7e) break;
+        if (code >= 0x40 && code <= 0x7e) {
+          final = current;
+          break;
+        }
+        parameters += current;
+      }
+      // 光标右移（CUF）与跳到第 n 列（CHA）：TUI 拿它们代替空格，回放缓冲里
+      // 去掉它们就把词粘在一起。右移换成它跨过的空格数；跳列按这一行已经写了
+      // 多少补到那一列，往回跳（覆盖写）不补。都封顶，一条荒唐的序列不造出一
+      // 大片空白。
+      if ((final === "C" || final === "G") && /^\d*$/.test(parameters)) {
+        const count = Math.max(parameters === "" ? 1 : Number(parameters), 1);
+        const pad =
+          final === "C"
+            ? count
+            : Math.min(count, MAX_CURSOR_FORWARD) - 1 - column;
+        if (pad > 0) {
+          const spaces = " ".repeat(Math.min(pad, MAX_CURSOR_FORWARD));
+          output += spaces;
+          column += spaces.length;
+        }
       }
       continue;
     }

@@ -94,6 +94,32 @@ describe("captured text", () => {
     expect(stripEscapes(raw)).toBe("hi there!");
   });
 
+  // Claude Code 的界面用「光标右移 n 格」（CSI n C）代替空格。direct 与会话
+  // 宿主的 capture 是回放缓冲去掉转义，右移被整个吃掉时读到的是
+  // 「Isthisaprojectyoucreated」「?forshortcuts」——Agent 读邻居终端、探针认
+  // 提示符都认不出来（2026-09-26 direct 后端端到端实测）。
+  it("turns a cursor-forward into the spaces it skips", () => {
+    expect(stripEscapes("Is\u001b[1Cthis\u001b[Ca\u001b[3Cproject")).toBe(
+      "Is this a   project",
+    );
+    expect(stripEscapes("?\u001b[1Cfor\u001b[1Cshortcuts")).toBe(
+      "? for shortcuts",
+    );
+    // 参数荒唐时不造出一大片空白。
+    expect(stripEscapes("a\u001b[99999Cb").length).toBeLessThan(1_000);
+  });
+
+  // 同一个界面更多时候直接跳到第 n 列（CSI n G）：按这一行已经写了多少补到
+  // 那一列；往回跳（覆盖写）没法在纯文本里表达，不补。
+  it("pads a column jump to the column it lands on", () => {
+    expect(
+      stripEscapes(
+        "\u001b[2GQuick\u001b[8Gsafety\u001b[15Gcheck:\n\u001b[2GIs",
+      ),
+    ).toBe(" Quick safety check:\n Is");
+    expect(stripEscapes("abcdef\u001b[3Gx")).toBe("abcdefx");
+  });
+
   it("drops the empty rows below the prompt", () => {
     expect(trimCaptured("a\nb\n\n   \n\n")).toBe("a\nb");
     expect(tailLines("a\nb\nc\nd", 2)).toBe("c\nd");
