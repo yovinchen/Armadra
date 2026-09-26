@@ -623,6 +623,11 @@ export class HeadlessNode {
       pendingChooser: () => this.chooser,
       clearChooser: () => {
         this.chooser = undefined;
+        this.options.emit({
+          type: "event",
+          event: "fileChooserClosed",
+          nodeId: this.nodeId,
+        });
       },
       openDialog: () => this.dialog,
       clearDialog: () => {

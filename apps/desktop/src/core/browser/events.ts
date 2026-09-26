@@ -96,6 +96,14 @@ export function onShellEvent(
         },
       });
       return;
+    // `upload` answered the chooser (or the page dropped it): the canvas chip
+    // that says "the page wants a file" goes, the same way a dialog's does.
+    case "fileChooserClosed":
+      context.publish(session.workspaceId, {
+        type: "browser.fileChooser",
+        sessionId: session.sessionId,
+      });
+      return;
     default:
   }
 }

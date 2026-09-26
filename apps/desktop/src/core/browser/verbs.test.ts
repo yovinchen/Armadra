@@ -344,6 +344,33 @@ describe("with a shell on the other end", () => {
     expect(dialogs[1]?.event).not.toHaveProperty("dialog");
   });
 
+  it("clears the file-chooser chip once upload has answered it", () => {
+    const current = browserFixture({ withShell: true });
+    fixture = current;
+    ensureSession(
+      current.context.sessions,
+      current.context,
+      current.nodeId,
+      current.workspaceId,
+      "",
+    );
+    onShellEvent(current.context, {
+      event: "fileChooser",
+      nodeId: current.nodeId,
+      mode: "selectSingle",
+    });
+    onShellEvent(current.context, {
+      event: "fileChooserClosed",
+      nodeId: current.nodeId,
+    });
+    const choosers = current.events.filter(
+      (entry) => entry.event.type === "browser.fileChooser",
+    );
+    expect(choosers).toHaveLength(2);
+    expect(choosers[0]?.event).toHaveProperty("chooser");
+    expect(choosers[1]?.event).not.toHaveProperty("chooser");
+  });
+
   it("ignores an event for a node nobody has driven", () => {
     const current = browserFixture({ withShell: true });
     fixture = current;

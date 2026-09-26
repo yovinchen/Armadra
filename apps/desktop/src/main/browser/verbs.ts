@@ -21,6 +21,7 @@ import {
 } from "./transfers";
 import { askRenderer } from "./renderer";
 import { onDomainEvent } from "./domain-events";
+import { publishEvent } from "./bus";
 
 /**
  * The Electron half of the verbs.
@@ -70,7 +71,10 @@ function shellHost(context: VerbContext): VerbHost {
       acceptStagedDownload(nodeId, id, workspaceRoot),
     rejectDownload: (id) => rejectStagedDownload(nodeId, id),
     pendingChooser: () => pendingChooser(nodeId),
-    clearChooser: () => clearChooser(nodeId),
+    clearChooser: () => {
+      clearChooser(nodeId);
+      publishEvent({ type: "event", event: "fileChooserClosed", nodeId });
+    },
     openDialog: () => openDialogs.get(nodeId),
     clearDialog: () => {
       openDialogs.delete(nodeId);
