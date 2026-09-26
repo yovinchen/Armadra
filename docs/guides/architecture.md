@@ -30,7 +30,8 @@ opencode 等 CLI Agent 作为终端节点放在一块无限画布上，节点之
 │ 启动时打到 stdout 的一致）；不一致时按 endpoints.json 与进程表确认    │
 │ 是同一数据目录、由桌面启动的旧 core 后发 SIGTERM 再重拉               │
 │  └── 随包资源：`resources/cli/armadra-hook.js`、`resources/migrations/`│
-│      （Windows 另有 `resources/session-host/host.cjs`）               │
+│      （Windows 另有 `resources/session-host/host.cjs` 与              │
+│      `resources/cli/armadra-hook.exe` 启动器）                        │
 │  └── 回环 HTTP 静态服务：内核分配端口，页面从这里加载                 │
 └───────────────────────────────┬──────────────────────────────────────┘
                                 │ 加载同一套页面（preload 给出基址与凭据）
@@ -153,10 +154,23 @@ Agent 节点就是终端节点里跑着一个 CLI，没有中间协议：
 
 1. core 在 PTY 里启动 CLI，注入 `ARMADRA_NODE_ID`、`ARMADRA_ENDPOINT_FILE`
    等环境变量。
-2. 用户在设置中显式安装后，core 往该 CLI 的配置目录写适配（`apps/desktop/src/core/hook/install/`）。
-   形式按 CLI 分两种：Claude / Codex / Copilot 装**命令 Hook**，行是 `armadra-hook` 这个小二进制；
-   Pi / Oh My Pi 装一份生成的 **TS 扩展**（`extensions/armadra-status.ts`），OpenCode 装插件。
+2. **画布内注入**：适配只随画布启动带上，不写各 CLI 的全局配置，画布外启动的 CLI
+   不受影响（[画布内注入](../design/canvas-only-integration.md)）。唯一出口是
+   `core/hook/install/inject.ts::canvasInjection`，产物（插件目录、扩展、技能、画布说明、
+   Claude 的 settings）生成在 `<数据目录>/integration/<cli>/`，启动行与终端环境按各 CLI
+   实测的参数引用它们：Claude / Codex / Copilot 是**命令 Hook**（行是 `armadra-hook`），
+   Pi / Oh My Pi 是生成的 **TS 扩展**，OpenCode 是插件。core 里拼启动行的只有
+   `core/agent/canvas-launch.ts`，页面只有 `web/agent/launch.ts`；整行按节点 shell 的方言
+   引用（posix、fish、cmd.exe、PowerShell 7 / 5.1），Windows 上绕过 npm 的 `.cmd` 包装直接
+   起真正的程序。唯一的全局写入是 Codex 的 Hook 信任记录；升级时旧的全局安装由
+   `migrate.ts` 先备份再清掉一次。SSH 终端里的 CLI 由 Worker 同步的产物与同名垫片注入、
+   Hook 经 Worker 中继（§3 远端一段）。
 3. 命令 Hook 每个事件调一次 `armadra-hook`；进程内扩展在 CLI 自己的进程里说同一套 HTTP。
+   Windows 上 `armadra-hook` 是一个 C# 小启动器（`cli/armadra-hook/windows-launcher.cs`，
+   打包时用系统自带的 `csc.exe` 编），把调用方的命令行原样交给
+   `ELECTRON_RUN_AS_NODE` 的 runner，参数不经 `cmd.exe` 第二次解释；没有 `.exe` 的构建
+   退回 `.cmd`。正文含 shell 特殊字符时，任何参数都可以改从标准输入（`--x -`）或文件
+   （`--x-file`）读。
    两者都读 `<数据目录>/hook-endpoint.env` 找到 core（优先 Unix socket，其次回环 TCP），
    带 per-node token 与终端绑定回报——同样的凭据、同样的请求，core 不因来源多给权限。
 4. core 归一化各家载荷（`hook/normalize/`）、reduce 成节点状态
@@ -165,7 +179,8 @@ Agent 节点就是终端节点里跑着一个 CLI，没有中间协议：
    并随 `GET /api/workspaces/{id}/sessions` 一起返回，使刷新后节点头部的来源徽标不丢。
 5. 没有任何适配的终端只有 `observed`：core 按已有的输入围栏与输出计数给一个弱提示，
    它不写进状态、也不能满足自动化提示词的空闲门（`core/terminal/` 的 `input_idle`）。
-6. 权限请求在节点头部直答，答案写回 `<数据目录>/pending/`，hook 客户端阻塞读取。
+6. 权限请求在节点头部直答，答案写回 `<数据目录>/pending/`，hook 客户端阻塞读取
+   （目前只有 Claude 的 Hook 能等答复）。
 
 内置 Agent 定义集中在 `packages/shared/src/agents.ts`（launch 命令、prompt 传递方式、
 权限模式对应的 argv、resume 方式、能力位），core 侧只镜像 id 与启动程序
@@ -183,7 +198,7 @@ core 侧。同一份目录供计费（内置表 → 目录 → `model-pricing.js
 Agent 之间的协作走 core 的两个动词表面：
 
 - `POST /context-link/{verb}`：读取被链接节点的转录、摘要或终端画面。
-- `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `team` / `sticky` /
+- `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `open-browser` / `team` / `sticky` /
   `link` / `rename` / `color` / `post` / `inbox` / `ack` / `handoff-read` / `interrupt` / `close` / `send` / `outbox` / `cancel`。`team` 一次建一组 Agent 节点，成员之间的先后写进依赖表（`core/dependencies`）。成员（与 `open-agent --worktree`）可以各带一条 worktree：检出不存在时经 Git 域同一条写队列新建，成员放进绑着它的 Frame（`core/collab/control/worktree.ts`）。
 
 依赖编排在 core 里（`core/dependencies/`，迁移 0027）：`open-agent --after` 与 `team`
@@ -193,10 +208,20 @@ Agent 之间的协作走 core 的两个动词表面：
 再把第一条任务放进投递队列，与 `send` 走同一条出队路；页面不在也照样生效。节点头的
 「等待 X」徽标读的是这张表，不再是节点数据里的 `pendingLaunch`。契约见 [core JSON 契约](../contracts/core-json-api.md) §8。
 
-所有 Agent 终端都能调用 `armadra-hook canvas help` 读取短帮助。默认协作采用
-`post` / `inbox` / `ack` 拉取消息箱，不自动注入终端输入或追加启动提示。显式安装
-Hook 时提供独立的按需技能，不再追加全局长指令。详见
+所有 Agent 终端都能调用 `armadra-hook canvas help` 读取短帮助。画布启动的 CLI 带着
+画布说明（一段「画布规则」）与按需技能：协作只走 `armadra-hook canvas`，要别的 Agent
+用 `open-agent` / `team`，要浏览器用画布浏览器节点。详见
 [Agent 适配与协作协议](./agent-collaboration.md)。
+
+浏览器节点的 Agent 工具是 `armadra-hook browser <动词>`，动词清单只有一份
+（`core/browser/verb-spec.ts`，`--help` 与技能都由它生成）；执行下沉在 core
+（`core/browser/cdp/`），CDP 调用经一张白名单，执行任意 JS 不开放
+（[浏览器节点的 Agent 工具](../design/browser-agent-tools.md)）。桌面壳里 CDP 在壳主
+进程：Agent 第一次驱动时接上调试器并拿租约；在那之前，被某个 Agent 终端连着的浏览器
+节点由壳**被动旁听**——core 按链接文档把「被连着的节点」推给壳
+（`core/browser/observe.ts`），壳只订阅 `Runtime` / `Log` / `Network`（不取头与正文），
+事件记进每页 500 条的缓冲，不发输入、不算租约，所以 `read --mode console / network`
+读得到第一次驱动之前的记录。headless 后端从开标签起就在记。
 
 ## 5. 数据模型与持久化
 
@@ -292,6 +317,8 @@ CSRF 与 Origin 校验（[服务器账号、中转与共享](../design/server-ac
 | Hook 端点文件       | `<数据目录>/hook-endpoint.env`（0600）                               | —                                               |
 | 节点 token          | `<数据目录>/node-tokens/<nodeId>`                                    | —                                               |
 | 待答权限            | `<数据目录>/pending/`                                                | —                                               |
+| 画布注入产物        | `<数据目录>/integration/<cli>/`                                      | —                                               |
+| Hook 客户端启动器   | `<数据目录>/bin/armadra-hook`（Windows 为 `.exe`，兜底 `.cmd`）      | —                                               |
 | 账号偏好            | `<数据目录>/settings.json`                                           | —                                               |
 | 本机偏好            | `<数据目录>/worker-settings.json`                                    | —                                               |
 | 模型目录缓存        | `<数据目录>/models-catalog.json`（0600）                             | —                                               |
@@ -337,15 +364,21 @@ id 上起下一代并敲恢复行。设计见 [terminal-host-design.md](../desig
   token 不出现在 URL 里，撤销设备后正在进行的流立即终止。
 - 服务器壳认证出的主体经 `AsyncLocalStorage` 跟着请求走（`core/identity/gate.ts` 的
   `runAs`），`core/identity/route-access.ts` 挂在 core 分发与升级之前，按
-  `route-scopes.ts` 给每条路由的 scope 判定：成员只拿到被共享工作空间上的授权，
-  全局路由一律 403，工作空间列表按授权过滤；授权一变，已开的事件流重新判定，不够就
-  以 4403 关掉。没有请求主体时放行——桌面壳里没有第二个人，行为不变。契约见
+  `route-scopes.ts` 给每条路由的 scope 判定。成员只拿到被共享工作空间上的授权，全局
+  路由分三类：按对象落到工作空间的（Agent 状态、上下文读取按节点所在画布，审批答复与
+  关闭确认按请求所在画布要 `approval:answer`）、无害的全局读（Agent 目录、模型、终端
+  后端、状态页，被共享过任意一块画布即放行）、本机管理（设置、执行主机、SSH、数据、
+  用量、集成、GitHub、自动化等，只给 owner）。组内 `admin` 能管本组成员与只指向本组的
+  邀请。工作空间列表按授权过滤；授权一变，已开的事件流重新判定，不够就以 4403 关掉，
+  失去写权的客户端当场交出画布写租约。没有请求主体时放行——桌面壳里没有第二个人，行为
+  不变。设计见[服务器账号与共享](../design/server-accounts-and-sharing.md) §6，契约见
   [core JSON 契约](../contracts/core-json-api.md) §10。
 
 ## 8. 未实现
 
 - **Windows 持久化会话**：session host 已实现并在 Windows CI 上通过，没有在真机上
-  长时间运行过（进度 §13、§33）。
+  长时间运行过（进度 §13、§33）。启动行方言、`.cmd` 绕过与 `.exe` 启动器同样只在
+  Windows CI 上跑过（进度 §54、§57、§61）。
 - **多人实时协同**：同一块板同时只有一个写者（§5 的编辑租约）；白板快照对 core 是
   不透明字符串，真要多人同时改时再引入 CRDT。
 - **自动更新**：electron-updater 已接通（`apps/desktop/src/main/updates/`），但未
