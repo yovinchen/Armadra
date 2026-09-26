@@ -136,7 +136,7 @@ describe("SettingsDialog", () => {
       );
     agentIntegration.mockReset().mockResolvedValue({
       agentId: "claude",
-      mode: "launch",
+      mode: "canvas",
       hook: { installed: true, revision: 3 },
       skill: { installed: false },
       legacy: {
@@ -165,7 +165,7 @@ describe("SettingsDialog", () => {
     });
     installAgentIntegration.mockReset().mockResolvedValue({
       agentId: "claude",
-      mode: "launch",
+      mode: "canvas",
       hook: { installed: true, revision: 4 },
       skill: { installed: true, revision: 4 },
       legacy: { found: [] },
@@ -173,7 +173,7 @@ describe("SettingsDialog", () => {
     });
     uninstallAgentIntegration.mockReset().mockResolvedValue({
       agentId: "claude",
-      mode: "launch",
+      mode: "canvas",
       hook: { installed: false },
       skill: { installed: false },
       legacy: { found: [] },
@@ -338,8 +338,8 @@ describe("SettingsDialog", () => {
   });
 
   /**
-   * 接入归一（Agent 接入归一 §2）：一种 CLI 一行，一行里注入方式、Hook、
-   * 技能、旧残留全都在，「安装 / 卸载」一个按钮同时管 Hook 与技能。
+   * 画布内注入（canvas-only-integration §5）：一种 CLI 一行，一行里注入方式、
+   * Hook、技能、旧残留全都在；没有「安装 / 卸载」，只有「重新生成」。
    */
   it("集成页一行说清注入方式、Hook、技能与旧残留", async () => {
     open();
@@ -356,23 +356,16 @@ describe("SettingsDialog", () => {
     expect(
       screen.getByText(zh("integration.hook.revision").replace("{value}", "3")),
     ).toBeTruthy();
-    expect(screen.getByText(zh("integration.mode.launch"))).toBeTruthy();
+    expect(screen.getByText(zh("integration.mode.canvas"))).toBeTruthy();
     expect(screen.getByText(zh("integration.skill.missing"))).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole("button", { name: zh("integration.reinstall") }),
+      screen.getByRole("button", { name: zh("integration.regenerate") }),
     );
     await waitFor(() =>
       expect(installAgentIntegration).toHaveBeenCalledWith("claude"),
     );
-    // 一个安装单元：不再各调一次老的两条路由。
-
-    fireEvent.click(
-      screen.getByRole("button", { name: zh("integration.uninstall") }),
-    );
-    await waitFor(() =>
-      expect(uninstallAgentIntegration).toHaveBeenCalledWith("claude"),
-    );
+    expect(uninstallAgentIntegration).not.toHaveBeenCalled();
   });
 
   it("「修复」按 found / removed / kept / backup 报结果", async () => {

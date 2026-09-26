@@ -74,7 +74,7 @@ describe("IntegrationPage", () => {
   it("lists every leftover entry before offering the repair", async () => {
     mock.integration.mockResolvedValue({
       agentId: "claude",
-      mode: "launch",
+      mode: "canvas",
       hook: { installed: false },
       skill: { installed: false },
       legacy: {
@@ -127,7 +127,7 @@ describe("IntegrationPage", () => {
       "(if [ -r '/Users/dev/.aicc/aicc-hook/claude.sh' ]; then sh '/Users/dev/.aicc/aicc-hook/claude.sh'; fi)";
     mock.integration.mockResolvedValue({
       agentId: "claude",
-      mode: "launch",
+      mode: "canvas",
       hook: { installed: true, revision: 4 },
       skill: { installed: true, revision: 10 },
       legacy: {
@@ -155,23 +155,44 @@ describe("IntegrationPage", () => {
     expect(screen.getByText("×11")).toBeTruthy();
   });
 
-  /** 扩展型的 CLI 没有文件可装，所以不画一对点了没用的按钮。 */
-  it("offers no install buttons for an in-process extension", async () => {
+  /**
+   * 画布内注入：没有「安装 / 卸载」，只有「重新生成」；唯一的全局写入（Codex
+   * 的信任记录）与升级时清掉的旧全局安装都在徽标上说出来。
+   */
+  it("shows the global write and the migration, and only regenerates", async () => {
     mock.integration.mockResolvedValue({
       agentId: "claude",
-      mode: "extension",
+      mode: "canvas",
       hook: { installed: true, revision: 4 },
-      skill: { installed: true, revision: 4 },
+      skill: { installed: true, revision: 12 },
       legacy: { found: [] },
-      revision: 4,
+      revision: 412,
+      globalWrites: ["/Users/dev/.codex/config.toml"],
+      migration: {
+        migratedAt: "2026-09-26T00:00:00Z",
+        removed: ["/Users/dev/.codex/hooks.json: armadra-hook"],
+        backups: ["/Users/dev/.codex/hooks.json.armadra-backup-20260926"],
+      },
     });
+    mock.installIntegration.mockResolvedValue({});
     view();
+    expect(await screen.findByText(zh("integration.mode.canvas"))).toBeTruthy();
     expect(
-      await screen.findByText(zh("integration.mode.extension")),
+      screen.getByText(
+        zh("integration.globalWrite").replace("{path}", "~/.codex/config.toml"),
+      ),
     ).toBeTruthy();
+    expect(screen.getByText(zh("integration.migrated"))).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: zh("integration.uninstall") }),
+      screen.queryByRole("button", { name: zh("integration.repair") }),
     ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: zh("integration.regenerate") }),
+    );
+    await waitFor(() =>
+      expect(mock.installIntegration).toHaveBeenCalledWith("claude"),
+    );
+    expect(mock.uninstallIntegration).not.toHaveBeenCalled();
   });
 
   /**

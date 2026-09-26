@@ -20,22 +20,11 @@ export function useAgentIntegration(agent: AgentInfo) {
   };
 }
 
-/** 装 / 卸之后同时失效「这一行」与 `GET /api/agents`：两边都带着状态。 */
+/** 重新生成之后同时失效「这一行」与 `GET /api/agents`：两边都带着状态。 */
 export function useIntegrationRefresh() {
   const client = useQueryClient();
   return (agentId: string) => {
     void client.invalidateQueries({ queryKey: integrationKey(agentId) });
     void client.invalidateQueries({ queryKey: ["agents"] });
   };
-}
-
-/** 一个按钮同时管 Hook 与技能：Runtime 把两者合成了一个安装单元。 */
-export async function runIntegrationInstall(
-  agentId: string,
-  action: "install" | "uninstall",
-): Promise<string | null> {
-  const answer = await (action === "install"
-    ? runtimeApi.installAgentIntegration(agentId)
-    : runtimeApi.uninstallAgentIntegration(agentId));
-  return answer.warning ?? null;
 }
