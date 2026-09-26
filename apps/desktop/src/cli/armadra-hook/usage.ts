@@ -76,14 +76,20 @@ CANVAS:
   open-agent --agent ID [--task TEXT] [--title T] [--permission-mode M]
                                       [--model M] [--after ID]
                                       [--after-turn current|next] [--ttl MIN]
+                                      [--worktree NAME_OR_PATH]
                                       open an agent
                                       node, link it, and give it a first task
-                                      once it reports idle
-  team --member "AGENT[@MODEL]|TITLE|TASK"... [--chain]
+                                      once it reports idle; --worktree puts it
+                                      in that checkout's Frame (created if
+                                      missing)
+  team --member "AGENT[@MODEL]|TITLE|TASK[|worktree=DIR]"... [--chain]
        [--gather "AGENT|TITLE|TASK"] [--after ID]
                                       open up to 6 agents at once; --chain
                                       makes each wait for the previous one,
-                                      --gather adds one that waits for all
+                                      --gather adds one that waits for all;
+                                      a member's worktree=NAME uses the
+                                      checkout on that branch or creates
+                                      .worktrees/NAME (no task: A|T||worktree=N)
   open-browser [--url URL] [--title T] open a browser node linked to this one;
                                       drive it with \`browser <verb>\`
   rename --node ID --handle NAME       set this node's name on the board

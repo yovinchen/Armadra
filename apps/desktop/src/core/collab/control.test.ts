@@ -1,3 +1,6 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { type AgentFixture, agentFixture, callerFor } from "../agent/fixture";
 import { loadBoard } from "../canvas/documents";
@@ -435,6 +438,126 @@ describe("team", () => {
         (entry) => entry.source === ids[0] && entry.target === ids[1],
       )?.role,
     ).toBe("peer");
+  });
+
+  describe("with a worktree per member", () => {
+    function git(...args: string[]): string {
+      try {
+        return execFileSync(
+          "git",
+          ["-c", "user.name=t", "-c", "user.email=t@t", ...args],
+          { cwd: fixture.directory, encoding: "utf8", stdio: "pipe" },
+        ).trim();
+      } catch (error) {
+        throw new Error(String((error as { stderr?: unknown }).stderr));
+      }
+    }
+    beforeEach(() => {
+      git("init", "-q", "-b", "main");
+      writeFileSync(join(fixture.directory, "a.txt"), "a\n");
+      writeFileSync(join(fixture.directory, ".gitignore"), "canvas.db*\n");
+      git("add", "-f", "a.txt", ".gitignore");
+      git("commit", "-q", "-m", "init");
+    });
+
+    it("creates the checkout and a bound Frame, and puts the member in it", async () => {
+      const body = ok(
+        await run(me, "team", {
+          member: [
+            "codex|实现|实现 a|b 两处|worktree=feat-a",
+            "claude|审阅||worktree=feat-a",
+            "claude|旁观|看看",
+          ],
+        }),
+      );
+      const rows = (body.result as { members: Record<string, unknown>[] })
+        .members;
+      expect(rows[0]!.worktree).toMatchObject({
+        path: ".worktrees/feat-a",
+        branch: "feat-a",
+        created: true,
+      });
+      expect(rows[2]!.worktree).toBeUndefined();
+      expect(String(body.message)).toContain(
+        "「实现」在 worktree .worktrees/feat-a（分支 feat-a，这次新建）里",
+      );
+      // The checkout is real, on its own branch.
+      const checkout = join(fixture.directory, ".worktrees", "feat-a");
+      expect(existsSync(join(checkout, "a.txt"))).toBe(true);
+      expect(git("-C", checkout, "branch", "--show-current")).toBe("feat-a");
+      // 竖线仍留在任务里，worktree 段摘掉了。
+      expect(queued(rows[0]!.id as string)).toEqual(["实现 a|b 两处"]);
+
+      const document = board();
+      const frames = document.nodes.filter((node) => node.type === "group");
+      expect(frames).toHaveLength(1);
+      const frame = frames[0]!;
+      expect(frame.data).toMatchObject({
+        kind: "group",
+        binding: {
+          worktreePath: ".worktrees/feat-a",
+          branch: "feat-a",
+          initScriptState: "none",
+        },
+      });
+      // Both members that named it are inside the one Frame, with the
+      // checkout as their working directory; the third is not.
+      for (const row of rows.slice(0, 2)) {
+        const node = document.nodes.find((each) => each.id === row.id)!;
+        expect(node.parentId).toBe(frame.id);
+        expect((node.data as { cwd?: string }).cwd).toBe(checkout);
+      }
+      const inside = rows
+        .slice(0, 2)
+        .map((row) => document.nodes.find((each) => each.id === row.id)!);
+      expect(inside[0]!.position).not.toEqual(inside[1]!.position);
+      const outside = document.nodes.find((each) => each.id === rows[2]!.id)!;
+      expect(outside.parentId).toBeUndefined();
+
+      // Again, by path, from open-agent: the same checkout, the same Frame.
+      const again = ok(
+        await run(me, "open-agent", {
+          agent: "claude",
+          title: "再来",
+          worktree: ".worktrees/feat-a",
+        }),
+      );
+      expect((again.result as { worktree: unknown }).worktree).toMatchObject({
+        path: ".worktrees/feat-a",
+        created: false,
+        frameId: frame.id,
+        frameCreated: false,
+      });
+      expect(
+        board().nodes.filter((node) => node.type === "group"),
+      ).toHaveLength(1);
+    });
+
+    it("binds an existing worktree by its branch name, and refuses what git refuses", async () => {
+      git("worktree", "add", "-q", "-b", "fix-b", "elsewhere/fix-b");
+      const body = ok(
+        await run(me, "open-agent", { agent: "codex", worktree: "fix-b" }),
+      );
+      expect((body.result as { worktree: unknown }).worktree).toMatchObject({
+        path: "elsewhere/fix-b",
+        branch: "fix-b",
+        created: false,
+        frameCreated: true,
+      });
+      const before = board().nodes.length;
+      // `main` is the main checkout's own branch: a new one of that name is
+      // refused by git, and nothing is left on the board.
+      expect(
+        refusal(await run(me, "team", { member: ["claude|x||worktree=main"] }))
+          .message,
+      ).toContain("worktree");
+      expect(
+        refusal(
+          await run(me, "team", { member: ["claude|x||worktree=../out"] }),
+        ).status,
+      ).toBe(400);
+      expect(board().nodes).toHaveLength(before);
+    });
   });
 
   it("refuses before creating anything", async () => {

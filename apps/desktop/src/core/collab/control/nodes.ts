@@ -5,7 +5,11 @@ import {
 } from "../../agent/launch";
 import { baseAgent, validAgentId } from "../../agent/registry";
 import { getAgentStatus } from "../../agent/status";
-import type { CanvasEdge, CanvasNode } from "../../canvas/document-types";
+import type {
+  BoardDocument,
+  CanvasEdge,
+  CanvasNode,
+} from "../../canvas/document-types";
 import { getContextLinks } from "../../canvas/context-links";
 import { handlesFor } from "../../canvas/handles";
 import { roleLabel } from "../context-link";
@@ -27,6 +31,13 @@ import {
   MAX_TTL_MINUTES,
 } from "../../dependencies/store";
 import { asRefusal, cleanTitle, load, newNode, placement, save } from "./board";
+import {
+  type WorktreeTarget,
+  checkWorktreeSpec,
+  ensureWorktree,
+  frameFor,
+  insideFrame,
+} from "./worktree";
 import { addLink } from "./edits";
 import { type Outcome, result } from "./outcome";
 import { checkBody, refuse as sendRefusal } from "./send";
@@ -154,12 +165,16 @@ export function openTerminal(
  * 授权来源（§3.2 D2），而「谁能给它投递」与「谁能读它」应该是画布上同一条看得
  * 见的线，不是一条只在渲染里存在的 rope。
  */
-export function openAgent(
+export async function openAgent(
   context: CollabContext,
   caller: Caller,
   args: Args,
-): Outcome {
+): Promise<Outcome> {
   const agentId = requireAgent(args.text("agent"), "open-agent 需要 --agent");
+  const worktreeSpec =
+    args.text("worktree") === undefined
+      ? undefined
+      : checkWorktreeSpec(args.text("worktree")!, "--worktree");
   // 过渡期：`--prompt` 等价于 `--task` 并带一行 warning。没有第二版的兼容窗口
   // ——这是给模型看的命令行，不是给脚本看的 API（§8.3）。
   const legacyPrompt = args.text("prompt");
@@ -177,7 +192,7 @@ export function openAgent(
   const after = args.list("after");
   const condition = readCondition(args);
   const ttlMinutes = readTtl(args);
-  const document = load(context, caller);
+  let document = load(context, caller);
   for (const id of after) {
     if (!document.nodes.some((node) => node.id === id)) {
       throw Refusal.badRequest(`--after 里的 \`${id}\` 不是这块画布上的节点。`);
@@ -230,17 +245,32 @@ export function openAgent(
         after,
         ...(after.length === 0 ? {} : { afterTurn: condition }),
         task: task ?? null,
+        worktree: worktreeSpec ?? null,
       },
     );
   }
 
-  const node = newNode(
+  // worktree 在建节点之前备好：Git 拒绝就整个拒绝，画布上不留一个没处放的
+  // 节点。建检出要一会儿，画布可能已经被改过，所以之后重新读一次。
+  let target: WorktreeTarget | undefined;
+  if (worktreeSpec !== undefined) {
+    target = await ensureWorktree(context, caller, worktreeSpec);
+    document = load(context, caller);
+  }
+  let node = newNode(
     document.board.id,
     "terminal",
     title,
     placement(document, caller.node.id),
     data,
   );
+  let frame: CanvasNode | undefined;
+  if (target !== undefined) {
+    const placed = placeInWorktree(document, caller, node, target);
+    document = placed.working;
+    node = placed.node;
+    frame = placed.frame;
+  }
   const now = rfc3339();
   const edges: CanvasEdge[] = [
     ...document.edges,
@@ -316,12 +346,22 @@ export function openAgent(
   } else if (waits !== undefined && task !== undefined) {
     parts.push("第一条任务会在它启动之后排进投递队列。");
   }
+  if (target !== undefined) parts.push(worktreeNote(title, target));
   return result(parts.join(""), {
     id: node.id,
     agent: agentId,
     title,
     command,
     after,
+    ...(target === undefined
+      ? {}
+      : {
+          worktree: {
+            ...worktreeRow(target),
+            frameId: node.parentId,
+            frameCreated: frame !== undefined,
+          },
+        }),
     ...(waits === undefined
       ? {}
       : {
@@ -364,20 +404,32 @@ function requireAgent(agentId: string | undefined, missing: string): string {
  */
 export const MAX_TEAM_MEMBERS = 6;
 
-/** 一个角色：哪个 Agent、用什么模型、叫什么、第一件事是什么。 */
+/** 一个角色：哪个 Agent、用什么模型、叫什么、第一件事是什么、在哪条 worktree。 */
 interface TeamRole {
   readonly agentId: string;
   readonly model: string | undefined;
   readonly title: string;
   readonly task: string | undefined;
+  readonly worktree: string | undefined;
 }
 
+const WORKTREE_PREFIX = "worktree=";
+
 /**
- * `agent[@模型]|标题|任务`。只切前两个 `|`：任务正文里出现的竖线原样保留。
- * 标题缺省为 agent 名，任务可以没有。
+ * `agent[@模型]|标题|任务[|worktree=名字或路径]`。只切前两个 `|`：任务正文里
+ * 出现的竖线原样保留；最后一段以 `worktree=` 开头时才当成 worktree 摘下来
+ * （没有任务时写成 `agent|标题||worktree=名字`）。标题缺省为 agent 名，任务
+ * 可以没有。
  */
 function parseRole(raw: string, flag: string): TeamRole {
-  const [head = "", title, ...rest] = raw.split("|");
+  const parts = raw.split("|");
+  let worktree: string | undefined;
+  const last = parts.at(-1)?.trim() ?? "";
+  if (parts.length >= 3 && last.startsWith(WORKTREE_PREFIX)) {
+    worktree = checkWorktreeSpec(last.slice(WORKTREE_PREFIX.length), flag);
+    parts.pop();
+  }
+  const [head = "", title, ...rest] = parts;
   const at = head.indexOf("@");
   const agentPart = (at < 0 ? head : head.slice(0, at)).trim();
   const agentId = requireAgent(
@@ -397,6 +449,48 @@ function parseRole(raw: string, flag: string): TeamRole {
     model,
     title: cleanTitle(title?.trim() || agentId),
     task: cleaned.trim() === "" ? undefined : checkBody(cleaned, flag),
+    worktree,
+  };
+}
+
+/**
+ * 把成员放进它那条 worktree 的 Frame：检出与 Frame 都已由 `ensureWorktree`
+ * / `frameFor` 备好，这里只改落点、父节点与 `cwd`。新建的 Frame 先进文档，
+ * 父节点必须排在子节点前面。
+ */
+function placeInWorktree(
+  working: BoardDocument,
+  caller: Caller,
+  node: CanvasNode,
+  target: WorktreeTarget,
+): { working: BoardDocument; node: CanvasNode; frame?: CanvasNode } {
+  const { frame, created, children } = frameFor(working, caller, target);
+  const data = node.data as Record<string, unknown>;
+  const placed: CanvasNode = {
+    ...node,
+    parentId: frame.id,
+    position: insideFrame(children),
+    data: { ...data, cwd: target.absolute },
+  };
+  return {
+    working: created
+      ? { ...working, nodes: [...working.nodes, frame] }
+      : working,
+    node: placed,
+    ...(created ? { frame } : {}),
+  };
+}
+
+/** 回答里那一句：在哪条 worktree、是不是这次建的。 */
+function worktreeNote(title: string, target: WorktreeTarget): string {
+  return `「${title}」在 worktree ${target.relative}（分支 ${target.branch}${target.created ? "，这次新建" : ""}）里。`;
+}
+
+function worktreeRow(target: WorktreeTarget): Record<string, unknown> {
+  return {
+    path: target.relative,
+    branch: target.branch,
+    created: target.created,
   };
 }
 
@@ -416,15 +510,15 @@ function parseRole(raw: string, flag: string): TeamRole {
  * 校验全部在建节点之前：外部依赖不成立、某个 CLI 不认 `--permission-mode`、
  * 来源链超限，都不该留下半个团。
  */
-export function team(
+export async function team(
   context: CollabContext,
   caller: Caller,
   args: Args,
-): Outcome {
+): Promise<Outcome> {
   const specs = args.all("member");
   if (specs.length === 0) {
     throw Refusal.badRequest(
-      'team 至少要一个 --member "agent[@模型]|标题|任务"。',
+      'team 至少要一个 --member "agent[@模型]|标题|任务[|worktree=名字或路径]"。',
     );
   }
   if (specs.length > MAX_TEAM_MEMBERS) {
@@ -444,7 +538,7 @@ export function team(
   const modes = roster.map((role) =>
     readPermissionMode(context, role.agentId, args),
   );
-  const document = load(context, caller);
+  let document = load(context, caller);
   for (const id of after) {
     if (!document.nodes.some((node) => node.id === id)) {
       throw Refusal.badRequest(`--after 里的 \`${id}\` 不是这块画布上的节点。`);
@@ -499,6 +593,7 @@ export function team(
         after: waits.external,
         afterMembers: waits.internal,
         task: role.task ?? null,
+        worktree: role.worktree ?? null,
       };
     });
     return result(
@@ -509,6 +604,18 @@ export function team(
     );
   }
 
+  // 各成员的 worktree 在建任何节点之前备好（同一条写两次只建一次）：Git 拒绝
+  // 就整队拒绝，不留下半个团。建检出要一会儿，之后重新读一次画布。
+  const targets = new Map<string, WorktreeTarget>();
+  for (const role of roster) {
+    if (role.worktree === undefined || targets.has(role.worktree)) continue;
+    targets.set(
+      role.worktree,
+      await ensureWorktree(context, caller, role.worktree),
+    );
+  }
+  if (targets.size > 0) document = load(context, caller);
+
   let working = document;
   const created: CanvasNode[] = [];
   roster.forEach((role, index) => {
@@ -518,13 +625,21 @@ export function team(
     if (role.model !== undefined) agent.model = role.model;
     if (inboxWake !== undefined) agent.inboxWake = inboxWake;
     // 一列排在调用者右边：`placement` 撞上前一个成员就往下挪一格。
-    const node = newNode(
+    let node = newNode(
       document.board.id,
       "terminal",
       role.title,
       placement(working, caller.node.id),
       { kind: "terminal", agent },
     );
+    const target =
+      role.worktree === undefined ? undefined : targets.get(role.worktree);
+    // 有 worktree 的成员放进绑着它的 Frame（没有就建），终端开在检出里。
+    if (target !== undefined) {
+      const placed = placeInWorktree(working, caller, node, target);
+      working = placed.working;
+      node = placed.node;
+    }
     created.push(node);
     working = { ...working, nodes: [...working.nodes, node] };
   });
@@ -616,6 +731,14 @@ export function team(
       command: commands[index],
       gather: index === members.length,
       after: upstreams,
+      ...(role.worktree === undefined
+        ? {}
+        : {
+            worktree: {
+              ...worktreeRow(targets.get(role.worktree)!),
+              frameId: node.parentId,
+            },
+          }),
       ...(taskId === undefined ? {} : { taskId }),
       ...(dependencies === undefined
         ? {}
@@ -637,7 +760,14 @@ export function team(
         : `${starting} 个现在启动，其余的等依赖满足后由 core 启动。`) +
       (gather === undefined
         ? ""
-        : `「${gather.title}」会在${chain ? "最后一棒" : "所有成员"}完成后启动。`),
+        : `「${gather.title}」会在${chain ? "最后一棒" : "所有成员"}完成后启动。`) +
+      roster
+        .map((role) =>
+          role.worktree === undefined
+            ? ""
+            : worktreeNote(role.title, targets.get(role.worktree)!),
+        )
+        .join(""),
     {
       chain,
       ...(starting === rows.length ? {} : { afterTurn: condition }),

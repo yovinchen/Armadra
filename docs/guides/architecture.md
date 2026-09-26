@@ -184,7 +184,7 @@ Agent 之间的协作走 core 的两个动词表面：
 
 - `POST /context-link/{verb}`：读取被链接节点的转录、摘要或终端画面。
 - `POST /control/{verb}`：`list` / `open-terminal` / `open-agent` / `team` / `sticky` /
-  `link` / `rename` / `color` / `post` / `inbox` / `ack` / `handoff-read` / `interrupt` / `close` / `send` / `outbox` / `cancel`。`team` 一次建一组 Agent 节点，成员之间的先后写进依赖表（`core/dependencies`）。
+  `link` / `rename` / `color` / `post` / `inbox` / `ack` / `handoff-read` / `interrupt` / `close` / `send` / `outbox` / `cancel`。`team` 一次建一组 Agent 节点，成员之间的先后写进依赖表（`core/dependencies`）。成员（与 `open-agent --worktree`）可以各带一条 worktree：检出不存在时经 Git 域同一条写队列新建，成员放进绑着它的 Frame（`core/collab/control/worktree.ts`）。
 
 依赖编排在 core 里（`core/dependencies/`，迁移 0027）：`open-agent --after` 与 `team`
 把「下游等哪些上游、等当前还是下一轮结束」写进依赖表，服务订阅 `agent.status` /

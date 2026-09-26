@@ -33,8 +33,20 @@ export function activeOperations(workspaceId: string): string[] {
   return active(workspaceId);
 }
 
+/**
+ * 装好的那一个 {@link RepositoryService}。`canvas team` / `open-agent
+ * --worktree` 要替成员建 worktree，必须排进同一条队列——另起一个实例就是同一
+ * 个仓库的第二条写队列。装配之前是 `undefined`。
+ */
+let installed: RepositoryService | undefined;
+
+export function gitService(): RepositoryService | undefined {
+  return installed;
+}
+
 export function install(context: CoreContext): void {
   const service = new RepositoryService();
+  installed = service;
   // Which workspace started which operation. It stays on this side rather
   // than in the service because it is a controller concept: the queue only
   // knows repositories, and two workspaces can be rooted in one.
