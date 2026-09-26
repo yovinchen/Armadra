@@ -2520,3 +2520,39 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 
 - 设备条本身不随右侧抽屉让位（开着抽屉时被盖住），不在本节范围。
 - 通知条一次有两条以上时，第二条起仍在标题带下面，会压住画布顶端的内容。
+
+## 61. Windows 上 `armadra-hook` 不再经过 `cmd.exe`：`.exe` 启动器与从标准输入 / 文件读参数（2026-09-26）
+
+§57 的范围外发现：Windows 上装的 `armadra-hook.cmd` 由 `cmd.exe` 执行，Git Bash 与 PowerShell 调 `.cmd` 都会过它，`canvas send --body`、`post`、`sticky`、`open-agent --task`、`team --member`、`browser type --text`、`fill --field` 里的 `&`、`|`、`"`、`%`、`^` 会被当成命令分隔、变量展开或让引号错位。
+
+### 61.1 启动器换成 `.exe`
+
+评估过的三条路：
+
+- **Node 单文件可执行**：要带一整份 Node，约 80 MB，每个架构一份，注入后还得重签。不取。
+- **Go / Rust 小壳**：1–2 MB，但发布机要多一套工具链（仓库已经是纯 TS），未签名的 Go 程序还常被杀软误报。不取。
+- **C# 小壳，用系统自带的 `csc.exe` 编**：每台 Windows 10/11 都有 .NET Framework 4 与它的 `csc.exe`，构建不加工具链；产物几 KB，`/platform:anycpu` 在 x64 与 arm64 上都原生运行。采用。
+- 让 `ARMADRA_HOOK_BIN` 直接指 `electron.exe` 不行：它是 GUI 子系统，PowerShell 调它不等退出、拿不到退出码，而且 `ELECTRON_RUN_AS_NODE` 与 bundle 路径没有地方带。
+
+实现：
+
+- `cli/armadra-hook/windows-launcher.cs`：读自己旁边的 `armadra-hook.launch`（第一行 runner，第二行 bundle），设 `ELECTRON_RUN_AS_NODE=1`，把调用方命令行里 argv[0] 之后的部分**原样**接在 `"runner" "bundle"` 后面交给 `CreateProcessW`——调用方给普通 `.exe` 拼命令行用的就是 runner 解析时的那套规则，参数不经第二次解释。标准句柄显式继承；子进程进一个 `KILL_ON_JOB_CLOSE` 作业，调用方超时杀掉启动器时 Electron 一起退；Ctrl+C 交给子进程。
+- `scripts/hook-launcher.mjs`：找 `%WINDIR%\Microsoft.NET\Framework{Arm64,64,}\v4.0.30319\csc.exe` 编它。`after-pack.mjs` 对 Windows 目标编进 `resources/cli/armadra-hook.exe`；Windows 宿主上编不出来构建失败，非 Windows 宿主打 Windows 目标只打警告（那样的包退回 `.cmd`）。
+- `launcher.ts::writeLauncher`（win32）：bundle 旁边有 `armadra-hook.exe` 就复制进 `<数据目录>/bin/`、写 `.launch`、返回 `.exe`；同时照旧写 `.cmd`，给还指着它的旧配置与没有 `.exe` 的构建兜底。字节相同不重写（正在跑的 hook 占着文件），不同而被占用时先改名挪开再写。`core/hook/install/shared.ts` 从 bundle 旁边找 `.exe`；侧车 / PATH 查找改为 `.exe` 优先。
+- 签名：Windows 构建目前不签名。`after-pack` 在 electron-builder 签名之前运行，`.exe` 与 `resources/` 里其他文件一起进签名步骤；配上真证书后要确认它被签到。
+
+### 61.2 兜底：任意参数从标准输入或文件读
+
+`cli/armadra-hook/text-input.ts`，在 `control.ts::parseFlags`（canvas 与 browser 共用）里统一接：`--x -` / `--x=-` 读标准输入（一次调用只许一个；标准输入是终端时直接报错，不等键盘），`--x-file <路径>` 读文件并存成 `x`（重复的 `--member-file` 与重复的 `--member` 一样追加）。UTF-8，带 BOM 的 UTF-16（Windows PowerShell 5.1 的 `>`）也认；CRLF 变 LF（否则往终端里多敲一个回车）；去掉末尾一个换行；上限与 hook 载荷同为 1 MB。`--help` 与技能加了一节说明，Windows 上正文有特殊字符时用它们——PowerShell 5.1 自己会弄丢参数里的 `"`，与启动器无关。`SKILLS_REVISION` 14 → 15。
+
+### 61.3 验证
+
+- 单测：`text-input.test.ts`（标准输入两种写法、只读一次、终端拒绝、空输入、值里带 `-`、文件、重复文件追加、读不到 / 没路径 / 超限、`--file` 不受影响、UTF-8/UTF-16 BOM、CRLF、末尾换行）；`hook.test.ts` 与 `launcher-client.test.ts` 补 win32 的 `.exe` 安装、字节相同不重写、没有 `.exe` 退回 `.cmd`；`scripts/hook-launcher.test.mjs`（csc 候选、参数、after-pack 只对 Windows 目标编、非 Windows 宿主打警告；真编译 Windows 上跑）。
+- 端到端 `text-transport.test.ts`：真 bundle + 假 core，`--body -` 与 `--body-file` 各一次，正文 `& | " % ^ %PATH% 中文 换行` 原样到达（本机通过）。Windows 专用三条（`describe.runIf(win32)`）：用 csc 现编 `.exe`，从 Git Bash（单引号正文）与 PowerShell（pwsh 用参数，只有 5.1 时用 `--body-file`）各调一次断言正文原样，另查退出码回传；本机跳过，编译与类型检查通过，要 Windows CI 跑实。
+- `pnpm --filter @armadra/desktop test`：276 文件通过、3 跳过（3284 条通过、21 跳过），脚本用例 42 条通过。
+- `pnpm check` 与 `pnpm format:check` 通过。
+
+### 61.4 没做 / 已知
+
+- C# 启动器本机（macOS）编不了，只在 Windows CI 上真正编译与运行；首次跑前没有实机结果。
+- Git Bash 会把形如 `/c/...` 的参数改写成 Windows 路径，这是 MSYS 自己的行为，正文以 `/` 开头时同样建议走文件或标准输入；技能里没单独写。
