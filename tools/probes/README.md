@@ -127,6 +127,8 @@ node tools/probes/agent-e2e.mjs [输出目录] [--only 1,2,3,4]
 
 ```
 
+入口只装配与收尾；各场景在 `agent-e2e/scenario-*.mjs`，共用的临时环境、core / Vite / Chrome 装配与断言工具在 `agent-e2e/lib.mjs`。
+
 四个场景：
 
 1. **Codex 首投**：普通终端节点当发送方（探针以它的节点身份跑 `armadra-hook canvas`，令牌经 `POST /api/terminals/{id}/node-token/refresh` 签发），`send` 投给两个互相连线的 Codex，再 `open-agent --task` 建第三个；断言投递 `delivered` + `targetState = observed-quiet`，且 hook 随后报了一轮。
