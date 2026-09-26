@@ -42,6 +42,20 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/ui/tooltip";
 /** 工具簇 14px 边距 + 38px 宽 + 8px 间距。 */
 const RIGHT_OFFSET = "right-[60px]";
 
+/**
+ * 设备条画不画。顶部通知条与它同在标题带里，要按它让位（`shell/Banners`）；
+ * 判据与下面的提前返回逐字一致。
+ */
+export function usePresenceBarVisible(): boolean {
+  const presence = useCanvasStore(currentPresence);
+  if (!presence) return false;
+  const me = presenceClientId();
+  return (
+    presence.writable === false ||
+    presence.clients.some((client) => client.clientId !== me)
+  );
+}
+
 export function PresenceBar() {
   const t = useT();
   const queryClient = useQueryClient();

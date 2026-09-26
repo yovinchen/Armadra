@@ -22,7 +22,8 @@ import { dispatchWorkspaceEvent } from "../api/events";
 import { useDeliveryStore } from "../agent/delivery-store";
 import { useCanvasStore } from "../store/canvas-store";
 import { makeNode } from "../canvas/test-support";
-import { Banners } from "./Banners";
+import { Banners, bannerBounds } from "./Banners";
+import { initialPanels } from "../store/canvas/internal";
 
 /**
  * 被拦下的投递在顶部说一次（设计 §10 最后一行）。
@@ -90,5 +91,43 @@ describe("Banners 的投递通知", () => {
     );
     act(() => dispatchWorkspaceEvent(refused("BODY_TOO_LONG")));
     expect(screen.queryByText(/planner/)).toBeNull();
+  });
+});
+
+/** §58：通知条坐进顶部标题带，外框不接指针，只有每一条本体接。 */
+describe("Banners 的位置与命中", () => {
+  it("外框穿透指针、本体接指针，文字放不下时截断", () => {
+    render(
+      <TestProviders>
+        <Banners />
+      </TestProviders>,
+    );
+    act(() => dispatchWorkspaceEvent(refused("LOOP_DETECTED")));
+    const stack = document.querySelector<HTMLElement>("[data-slot='banners']");
+    const banner = document.querySelector<HTMLElement>("[data-slot='banner']");
+    expect(stack?.className).toContain("pointer-events-none");
+    expect(stack?.className).toContain("top-[4px]");
+    expect(stack?.className).toContain("absolute");
+    expect(banner?.className).toContain("pointer-events-auto");
+    const text = screen.getByText(/planner/);
+    expect(text.className).toContain("truncate");
+    expect(text.getAttribute("title")).toBe(text.textContent);
+  });
+
+  it("左右让出侧栏开关与工具簇，开着抽屉时再让一个抽屉宽", () => {
+    expect(bannerBounds(initialPanels, false)).toEqual({
+      left: "14px",
+      right: "60px",
+    });
+    expect(
+      bannerBounds({ ...initialPanels, sidebar: "collapsed" }, false).left,
+    ).toBe("44px");
+    expect(
+      bannerBounds({ ...initialPanels, automation: "drawer" }, false).right,
+    ).toBe("calc(60px + min(100vw, var(--scm-w)))");
+    // 手机上抽屉铺满、工具簇不让，侧栏开关总在画布上。
+    expect(
+      bannerBounds({ ...initialPanels, explorer: "drawer" }, true),
+    ).toEqual({ left: "44px", right: "60px" });
   });
 });

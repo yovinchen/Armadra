@@ -112,12 +112,13 @@ function AppShell() {
             <Dock />
           </>
         )}
+        {/* 通知条坐在画布面的顶部标题带里，与工具簇同一层（`shell/Banners`）。 */}
+        <Banners />
       </div>
       {/* 手机布局的两块：底部导航与单节点焦点页。两者都在 <768px 才渲染，
           桌面上是 null，不占位也不订阅任何东西（客户端平台设计）。 */}
       <MobileBottomNav />
       <MobileFocusPage />
-      <Banners />
       <Overlays />
       <Toaster position="bottom-right" />
     </div>

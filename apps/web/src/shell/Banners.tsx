@@ -11,18 +11,33 @@ import {
 import { runtimeApi } from "../api/client";
 import { useDeliveryStore } from "../agent/delivery-store";
 import { requestCenterOnNode } from "../canvas/flow/flow-context";
+import { usePresenceBarVisible } from "../canvas/PresenceBar";
 import { usePreferencesStore, useT } from "../app/preferences-store";
 import { useAccess } from "../app/use-access";
 import { useEnabledAgents } from "../app/use-agents";
-import { useCanvasStore } from "../store/canvas-store";
+import { useCanvasStore, type PanelState } from "../store/canvas-store";
+import { cn } from "@/lib/cn";
 import { Button } from "@/ui/button";
 import { IconButton } from "@/ui/icon-button";
+import { noDragProps, trafficLightInset } from "./window-region";
+import { useCompactLayout } from "../platform/layout";
+import { WORK_PANEL_WIDTH, openRightDrawer } from "../panels/WorkPanelSheet";
 
 /** 保存失败时 Dock 的重试钮与通知条走同一个事件（App 监听后重新入队）。 */
 export const SAVE_RETRY_EVENT = "armadra:save-retry";
 
 /**
- * 通知条堆栈（§3.1，`top:46` 居中）。
+ * 通知条堆栈（§3.1，顶部居中）。
+ *
+ * 第一条（高 36px，离顶 4px）坐在窗口顶部 44px 那条标题带里（`--tabbar-h`，
+ * 桌面壳里它本来就是拖窗口的区域，右上工具簇也在这一带），而不是标题带下面：
+ * 以前的 `top:46` 正好压在视口顶部节点的标题栏中段，按在那里拖不动节点
+ * （§49.3 → §58）。
+ *
+ * 堆栈挂在画布面里（`App` 把它放在 `.workspace-surface` 下，与工具簇同一层），
+ * 左右各让出侧栏开关与工具簇（见 {@link bannerBounds}），在剩下那一段里居中；
+ * 放不下就截断，完整的一句在悬停提示与读屏名里。外框不接指针，只有每一条
+ * 本体接；本体在标题带里要写回 `no-drag`，否则桌面壳里按它的按钮是在拖窗口。
  *
  * 只放“需要用户知道且会持续存在”的四件事：保存失败、Runtime 断开、
  * 终端后端降级、CLI 配置里的旧版接入残留。一次性的信息用 sonner toast，
@@ -42,6 +57,12 @@ export function Banners() {
   const dismissNotice = useDeliveryStore((state) => state.dismissNotice);
   const selectNodes = useCanvasStore((state) => state.selectNodes);
   const nodes = useCanvasStore((state) => state.document?.nodes);
+  const compact = useCompactLayout();
+  const panels = useCanvasStore((state) => state.panels);
+  const { left, right } = bannerBounds(panels, compact);
+  // 多设备时右上多一条设备条（`canvas/PresenceBar`），宽度随设备与租约变，
+  // 标题带里放不下两样：这时通知条退到设备条下面那一行。
+  const belowPresence = usePresenceBarVisible();
   const nodeTitle = (nodeId: string) =>
     nodes?.find((node) => node.id === nodeId)?.title ?? nodeId;
 
@@ -184,10 +205,41 @@ export function Banners() {
   if (items.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed top-[46px] left-1/2 z-[var(--z-banners)] flex -translate-x-1/2 flex-col items-center gap-2">
+    <div
+      data-slot="banners"
+      style={{ left, right }}
+      data-below-presence={belowPresence ? "true" : undefined}
+      className={cn(
+        "pointer-events-none absolute z-[var(--z-banners)] flex flex-col items-center gap-2",
+        belowPresence ? "top-[60px]" : "top-[4px]",
+      )}
+    >
       {items}
     </div>
   );
+}
+
+/**
+ * 堆栈在画布面（`.workspace-surface`）里左右各让到哪儿。
+ *
+ * 标题带里左上角是侧栏开关（侧栏收起或窄屏时它落在画布上，`shell/LeftSidebar`），
+ * 右上角是工具簇，开着右侧抽屉时工具簇还会往左让一个抽屉宽
+ * （`shell/ControlsCluster`）。提示条在剩下那一段里居中，放不下就截断，
+ * 不会盖住这两样。
+ */
+export function bannerBounds(
+  panels: PanelState,
+  compact: boolean,
+): { left: string; right: string } {
+  const toggleOnCanvas = compact || panels.sidebar === "collapsed";
+  // 侧栏开关：信号灯占位 + 8px 边距 + 28px 钮 + 8px 间距。
+  const left = toggleOnCanvas ? `${trafficLightInset() + 44}px` : "14px";
+  // 工具簇：14px 边距 + 38px 宽 + 8px 间距；开着抽屉时再加抽屉宽。
+  const drawer = compact ? null : openRightDrawer(panels);
+  const right = drawer
+    ? `calc(60px + min(100vw, ${WORK_PANEL_WIDTH[drawer]}))`
+    : "60px";
+  return { left, right };
 }
 
 function Banner({
@@ -211,10 +263,16 @@ function Banner({
     <div
       role="status"
       data-tone={tone}
-      className="pointer-events-auto motion-fade-in flex h-9 items-center gap-2 rounded-[var(--r-card)] border border-border bg-[var(--panel)]/90 pr-1.5 pl-3 shadow-[var(--shadow-pill)] backdrop-blur-[12px] data-[tone=danger]:text-danger data-[tone=warn]:text-warn"
+      data-slot="banner"
+      {...noDragProps()}
+      className="pointer-events-auto motion-fade-in flex h-9 max-w-full min-w-0 items-center gap-2 rounded-[var(--r-card)] border border-border bg-[var(--panel)]/90 pr-1.5 pl-3 shadow-[var(--shadow-pill)] backdrop-blur-[12px] data-[tone=danger]:text-danger data-[tone=warn]:text-warn"
     >
-      <span className="[&_svg]:size-4 [&_svg]:[stroke-width:1.5]">{icon}</span>
-      <span className="text-foreground">{text}</span>
+      <span className="shrink-0 [&_svg]:size-4 [&_svg]:[stroke-width:1.5]">
+        {icon}
+      </span>
+      <span className="min-w-0 truncate text-foreground" title={text}>
+        {text}
+      </span>
       {actionLabel && onAction && (
         <Button variant="outline" size="xs" onClick={onAction}>
           {actionLabel}
