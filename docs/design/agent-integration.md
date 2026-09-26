@@ -8,6 +8,8 @@
 > （`apps/runtime/src/hook/install/*.rs`、`worker/agent_host.rs`）与 Go Host（`apps/host/internal/{agenthost,server,worker}`）
 > 两处，`proto/armadra/v1/agent.proto` 是两者之间的协议；现在两者已合一为 TS core，没有跨进程协议，落点即代码本身。
 > 现状文档见 [Agent 适配与低干扰协作](../guides/agent-collaboration.md)。
+>
+> 2026-09-26：安装与注入方式已被 [画布内注入](./canvas-only-integration.md) 取代——不再往任何 CLI 的全局配置里装 Hook 或技能，只在画布启动时逐次注入；下文 §3 的注入方式表与「文件安装」部分只作追溯。
 
 ## 1. 现状与问题
 

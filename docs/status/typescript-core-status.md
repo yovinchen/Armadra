@@ -2143,3 +2143,38 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/web test`：283 文件 2758 条通过；`typecheck` 通过。
 - `pnpm --filter @armadra/desktop test`：261 文件通过、1 跳过（3023 条通过、6 跳过；worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
 - `pnpm --filter @armadra/server test`：10 文件 82 条通过。
+
+## 51. 画布内注入：Hook、技能与画布说明只在画布启动时生效（2026-09-26）
+
+设计见 [画布内注入](../design/canvas-only-integration.md)。用户拍板：注入只在从画布启动时生效，画布外启动 CLI 零影响；升级后自动清掉现有的全局安装，清之前先备份。
+
+### 51.1 做了什么
+
+- **一个出口**：`core/hook/install/inject.ts::canvasInjection` 答 `{ args, words, env }`，产物固定在 `<数据目录>/integration/<cli>/`（插件目录、扩展、技能、说明文件、Claude 的 settings），修订变了就重写、字节不变不写。core 里拼启动行的只剩 `core/agent/canvas-launch.ts`：依赖编排、节能唤醒（带 resume）、计划任务冷启动都经它；页面的新节点 / `open-agent` / `team` / 历史对话恢复经 `web/agent/launch.ts`，接 `GET /api/agents` 的 `launchWords`。环境半边在终端域的 `ownedEnvironment`，也是「就要起这个 CLI」时确保产物最新的时刻。冷启动此前漏带注入（Claude 缺 `--settings`），已补。`canvas-launch.test.ts` 用源码扫描守住出口：`planLaunch(` 只在 `canvas-launch.ts`，页面的 `assembleLaunchCommand(` / `assembleLaunchArgv(` 只在 `web/agent/launch.ts`。
+- **六个 CLI 按实测矩阵**：Claude `--settings` / `--plugin-dir` / `--append-system-prompt-file`；Codex 每事件一个 `-c hooks.<Event>`、`-c developer_instructions`（规则 + 完整 `SKILL.md` 的绝对路径）、`-c check_for_update_on_startup=false`；OpenCode `OPENCODE_CONFIG_DIR` + `OPENCODE_CONFIG_CONTENT`；Pi `--extension` / `--skill` / `--append-system-prompt`；OMP 的 `=` 形式 + `--config` 覆盖层；Copilot `--plugin-dir`（`hooks` 与 `skills` 在 `plugin.json`）+ `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`。恢复时同样全带。
+- **Codex 的信任（方案 A）**：键 `/<session-flags>/config.toml:<事件>:0:0`，哈希沿用 `hookHash`；在临时 `CODEX_HOME` 里用 `codex app-server` 的 `hooks/list` 对照三种形状逐字节相同，写入后报 `trusted`，`codex exec` 下 Hook 真的调用并带着 `ARMADRA_NODE_ID`。启动时（本机有 Codex 配置目录才写）、起 Codex 终端时、「重新生成」时幂等写入，是唯一的全局写入。升级检查的键名从 0.155.1 的配置结构读出，并在 TUI 里对照：不加停在 `Update available!`，加上直接进目录信任提示。
+- **Codex 的启动行要短**：第一次全量端到端里 Codex 节点全停在半行上——几 KB 的一行敲进刚起的 shell 被截断（PTY 输入队列约 1 KB）。长值改放节点终端的环境变量 `ARMADRA_CODEX_HOOK` / `ARMADRA_CODEX_INSTRUCTIONS`，启动行只写 `"hooks.X=$ARMADRA_CODEX_HOOK"`，约 450 字节；`packages/shared` 的 `assembleLaunchCommand` 加 `shellWords`（原样接在引用过的词后面、提示词前面，不进冻结 argv）。
+- **一次性迁移**（`migrate.ts`）：core 启动时识别旧的全局安装——Claude `settings.json` 里的 Hook 与旧状态行、Codex `hooks.json` 条目及其信任记录、Copilot `hooks/armadra.json`、OpenCode / Pi / OMP 的 `armadra-status` 模块、各 `skills/armadra`（只认带修订号尾注的）与更早的技能目录。用户也编辑的文件备份成旁边的 `.armadra-backup-<时间戳>`，只有我们写的文件备份进 `<数据目录>/integration/global-backup-<时间戳>/`；只删自己的，结果记在 `integration/global-migration.json`，只做一次。测试套件设 `ARMADRA_NO_GLOBAL_WRITES=1`：测试起的 core 用真实 `HOME`，迁移与信任记录都不发生。
+- **集成页**：每行「画布内注入」、Hook / 技能修订、Codex 行的「信任记录写在 ~/.codex/config.toml」、迁移清过东西时的「已清理全局安装」（悬停看备份）、旧残留与修复；「安装 / 卸载」换成一个「重新生成」。
+- **画布说明与技能**（`SKILLS_REVISION` 12）：三种形式开头同一段「画布规则」——终端是画布节点、协作只走 `armadra-hook canvas`；要别的 Agent / 分工 / 并行一律 `canvas open-agent` / `canvas team`，不用 CLI 自带子代理；要浏览器用画布浏览器节点 `armadra-hook browser <动词>`，没有就先 `canvas open-browser --url`。动词表从 `core/browser/args.ts` 的 `VERBS` 生成。新增画布动词 `open-browser`（`collab/control/browser-node.ts`）：建浏览器节点，从调用者连一条对等边并写两份链接文档。
+- 过期注释：`extensions.ts`「为什么不用 `--extension`」、`skills.ts` 关于 `AGENTS.md` 的一段、`codex.ts`「0.153.4 哈希失效」一节、`copilot.ts`「为什么不用 `--plugin-dir`」都按实测重写。原来的全局安装函数（`codex.install`、`copilot.install`、`installPi` / `installOpencode`、`claude.install`）删掉，只留迁移要用的卸载。
+- `tools/probes/agent-e2e.mjs` 按场景拆开（单文件超 1500 行，repo:check 失败），加场景 5；探针的 core 环境把 XDG / Copilot / Pi 目录指到临时目录，比对的操作员文件加上旧版全局装的技能与模块。
+
+### 51.2 实测
+
+- 场景 5（真 Claude 2.1.260、真 Codex 0.155.1，同一份环境只差注入参数）：画布外 Codex 会话记录里没有画布说明与技能、Hook 没打到 core；画布内会话记录里有画布规则与 `integration/codex/skills/armadra` 路径、Hook 打到 core。画布外 Claude 的 init 里没有我们的插件与 `armadra:armadra`、Hook 没打到；画布内插件 `armadra@inline`（version 412）与 `armadra:armadra` 都在、Hook 打到。
+- 本机真实 `~/.claude/skills/armadra`、`~/.codex/skills/armadra`、`~/.codex/hooks.json` 的 8 条、Copilot / OpenCode / Pi / OMP 的全局文件都还在——旧版装的，升级后真实应用第一次启动会备份并清掉；探针与测试都不碰，跑前跑后字节一致。
+
+### 51.3 取舍与已知
+
+- Codex 信任的是固定命令 `<数据目录>/bin/armadra-hook codex`：画布外有人手敲同样的 `-c` 也会跑，但客户端没有 `ARMADRA_NODE_ID` 时什么都不做。用户自己在命令行上用 `-c hooks.<Event>` 会占同一个 `…:0:0` 键：它本来就未被信任；若用户自己给这个键写过信任，会被我们覆盖。
+- 环境早于本版本、跨升级存活的旧 shell 里敲 Codex 启动行，环境变量为空，Codex 当场报配置错误而不是悄悄不带 Hook。
+- OpenCode / Pi / OMP / Copilot 的逐次注入只按 2026-09-26 的实测矩阵实现与单测，端到端只覆盖了 Claude 与 Codex。
+- 远端（SSH）终端的注入路径指向本机数据目录，远端没有这些文件；本节没有处理。
+
+### 51.4 验证
+
+- `node tools/probes/agent-e2e.mjs`：五个场景 70 项全部通过（415 秒），控制台错误 0，操作员配置未改动。
+- `pnpm --filter @armadra/desktop test`：265 文件通过、1 跳过（3054 条通过、6 跳过；worktree 里 node-pty 的 `spawn-helper` 先 `chmod +x`）。
+- `pnpm --filter @armadra/web test`：283 文件 2761 条通过；`typecheck` 通过。`pnpm --filter @armadra/server test`：10 文件 82 条；`pnpm --filter @armadra/shared test`：28 文件 157 条。
+- `pnpm check`、`pnpm format:check` 通过。

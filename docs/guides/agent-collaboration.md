@@ -37,43 +37,20 @@ OpenCode 本机入口 npm postinstall 未执行、根本启动不了（当时的
 节点头部的状态（RUNNING / NEEDS YOU / DONE）与自动化调度的空闲判断，
 都来自同一件事：CLI 自己告诉 core 它在做什么。这条通道按 CLI 分两种形式，能力完全相同：
 
-| 形式       | CLI                         | 装在哪                                                                                                            | 怎么工作                                                             |
-| ---------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| 命令 Hook  | Claude Code、Codex、Copilot | Claude 是**启动参数指向的会话文件**（见下）；Codex `hooks.json`；Copilot 单独一个 `~/.copilot/hooks/armadra.json` | CLI 每个事件调一次 `armadra-hook`，它连 core 的本地 socket 回报      |
-| 进程内扩展 | Pi、Oh My Pi                | `<配置目录>/extensions/armadra-status.ts`（Pi 是 `~/.pi/agent/`，OMP 是 `~/.omp/agent/`）                         | 生成的 TS 扩展在 CLI 进程内连同一个 socket，不 fork 进程             |
-| 插件       | OpenCode                    | `~/.config/opencode/plugins/armadra-status.js`                                                                    | 插件在 CLI 进程内连同一个 socket，连不上时才退回 fork `armadra-hook` |
+| 形式       | CLI                         | 怎么交给 CLI（只在从画布启动时）                                                     | 怎么工作                                                             |
+| ---------- | --------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| 命令 Hook  | Claude Code、Codex、Copilot | Claude `--settings`，Codex 每个事件一个 `-c hooks.<Event>=…`，Copilot `--plugin-dir` | CLI 每个事件调一次 `armadra-hook`，它连 core 的本地 socket 回报      |
+| 进程内扩展 | Pi、Oh My Pi                | `--extension` / `--extension=` 指向数据目录里的 `armadra-status.ts`                  | 生成的 TS 扩展在 CLI 进程内连同一个 socket，不 fork 进程             |
+| 插件       | OpenCode                    | 节点终端的 `OPENCODE_CONFIG_DIR` 指向数据目录里的配置目录，插件在其 `plugins/`       | 插件在 CLI 进程内连同一个 socket，连不上时才退回 fork `armadra-hook` |
 
 进程内扩展**不比**命令 Hook 更可信：两者用同一个 bearer、同一份每节点令牌、同一条终端绑定发同样的请求，
 core 分不出也不会因此多给任何权限。区别只是省掉每个事件一次 fork。
 
-## 集成：Hook 与技能是一个安装单元
+## 集成：只在画布内注入
 
-一个 CLI 只有一个「已集成 / 未集成」状态。设置页的「集成」一行一次装好两样东西——上报事件的适配器，和教模型
-用 `armadra-hook canvas …` 动词的技能文件 `skills/armadra/SKILL.md`——一次卸载两样都清掉。两者的修订号合成一个
-`INTEGRATION_REVISION`（`<Hook 修订>×100 + <技能修订>`），任一变了都提示重新安装；Hook 事件契约本身
-（`HOOK_CLIENT_REVISION`）不随之变。设计见 [Agent 接入统一管理](../design/agent-integration.md)。
+Hook、技能（`SKILL.md`）与画布说明是一组**注入产物**，生成在 `<数据目录>/integration/<cli>/`，只经画布节点的启动行与终端环境交给 CLI；用户在画布外自己启动的 CLI 什么都看不到。各 CLI 的参数、恢复时的行为与 Codex 的信任记录见 [画布内注入](../design/canvas-only-integration.md) §3–§4。修订号仍是 `INTEGRATION_REVISION`（`<Hook 修订>×100 + <技能修订>`），变了就在下一次启动时重写产物；Hook 事件契约（`HOOK_CLIENT_REVISION`）不随之变。
 
-**注入方式**决定「装我会不会动你自己也在编辑的文件」，设置页按这三种标注：
-
-| 方式        | CLI                    | 落点                                                                               | 动全局配置吗 |
-| ----------- | ---------------------- | ---------------------------------------------------------------------------------- | ------------ |
-| `launch`    | Claude Code            | `<数据目录>/integration/claude/settings.json`，启动时 `--settings <该文件>` 指过去 | 不动         |
-| `extension` | OpenCode、Pi、Oh My Pi | 各 CLI 自己的扩展目录里一个**只有我们写**的文件                                    | 不动         |
-| `file`      | Codex、Copilot         | 合并进 CLI 自己的配置文件，幂等、带 `armadra-hook` 标记、可修复                    | 动，可撤     |
-
-Claude Code 的 `--settings <file-or-json>` 官方说明是「load **additional** settings from」，实测 2.1.260：
-用户 `settings.json` 里的 `SessionStart` 与 `--settings` 文件里的 `SessionStart` **两条都会跑**。所以画布起的会话
-多我们这一份 Hook，用户自己在别处开的 `claude` 一点没变——这正是把它从 `~/.claude/settings.json` 搬出来的理由。
-早期版本还会往用户的 `~/.claude/settings.json` 写一条我们自己的 `statusLine` 来带上下文读数；该功能已移除，
-现在谁也不写它，安装、修复与卸载都会把**认得出是我们写的**那条摘掉，用户自己的状态行一个字节不动。启动参数由 `GET /api/agents` 的 `launchArgs` 给出，前端拼到启动行上；
-它是**当场现答**的，不写进节点数据，也不冻结进后台计划——路径是这台机器的，开关是这个 CLI 版本的。
-
-技能没有启动参数可注入，六种 CLI 都是文件安装，落在各自的用户级技能目录 `<配置目录>/skills/armadra/SKILL.md`
-（Codex 的 `$CODEX_HOME/skills`、Pi 的 `<agent 目录>/skills` 等，
-均按各 CLI 自己的加载代码核实）。
-
-安装必须用户显式触发。识别规则只认文件里出现 `armadra-hook` 标记的条目；用户自己写的 hook、扩展和插件一律不动，
-卸载也只删自己写的那些。重装写出的字节完全相同。
+唯一写进 CLI 自己配置的是 Codex 的信任记录（`~/.codex/config.toml` 里 `/<session-flags>/config.toml:…` 那几条）：Codex 只从那里读信任。升级后第一次启动会把旧版装进各 CLI 全局配置的 Hook、模块与技能备份后清掉，只做一次，结果记在 `<数据目录>/integration/global-migration.json`，集成页上可见。集成页没有「安装 / 卸载」，只有「重新生成」。
 
 ### 旧残留与修复
 
