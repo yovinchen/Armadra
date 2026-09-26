@@ -23,7 +23,7 @@ import { askRenderer } from "./renderer";
 import { onDomainEvent } from "./domain-events";
 
 /**
- * The Electron half of the seventeen verbs.
+ * The Electron half of the verbs.
  *
  * The verbs themselves are `core/browser/cdp/verbs.ts` — a CDP call sequence
  * is the same sequence whichever Chromium runs it. What this file supplies is
@@ -75,6 +75,7 @@ function shellHost(context: VerbContext): VerbHost {
     clearDialog: () => {
       openDialogs.delete(nodeId);
     },
+    printToPdf: (options) => context.session.printToPdf(options),
   };
 }
 
@@ -89,7 +90,15 @@ export async function runVerb(request: DriveRequest): Promise<unknown> {
   // else's canvas.
   if (!isVerb(request.verb))
     refuse(DRIVE_CODES.unknownVerb, "that is not a browser verb");
-  const found = drivableSession(request.nodeId);
+  // `--tab` picks which of the node's pages this verb acts on; `close --tab`
+  // instead names the tab to close, and acts from the active one.
+  const tab =
+    request.verb === "close" || typeof request.args.tab !== "string"
+      ? undefined
+      : request.args.tab;
+  const found = drivableSession(request.nodeId, tab);
+  if (!found && tab !== undefined && drivableSession(request.nodeId) !== null)
+    refuse(DRIVE_CODES.notFound, `这个节点没有标签页 ${tab}`);
   if (!found)
     refuse(DRIVE_CODES.notDrivable, notDrivableMessage(request.nodeId));
   const { entry, session } = found;

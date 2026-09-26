@@ -113,8 +113,20 @@ export function guestByWebContentsId(webContentsId: number): Entry | undefined {
  */
 export function drivableSession(
   nodeId: string,
+  tabId?: string,
 ): { entry: Entry; session: GuestSession } | null {
-  const entry = drivableGuest(guests.values(), nodeId) as Entry | null;
+  // A named tab is any canvas guest of this node with that id, active or not:
+  // `--tab` is how an agent reads a background tab without switching the one
+  // a person is looking at.
+  const entry =
+    tabId === undefined
+      ? (drivableGuest(guests.values(), nodeId) as Entry | null)
+      : ([...guests.values()].find(
+          (guest) =>
+            guest.nodeId === nodeId &&
+            guest.surface === "canvas" &&
+            guest.tabId === tabId,
+        ) ?? null);
   if (!entry) return null;
   if (entry.contents.isDestroyed()) return null;
   if (entry.session === null) entry.session = new GuestSession(entry.contents);

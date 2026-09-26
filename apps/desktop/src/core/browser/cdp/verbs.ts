@@ -1,41 +1,49 @@
-import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
-
-import { BROWSER_KEYS, MAX_INSERT_TEXT } from "./allowlist";
+import { verbSpec } from "../verb-spec";
 import { CdpRefusal, DRIVE_CODES, refuse } from "./codes";
-import { allowGuestNavigation } from "./navigation";
+import { parseLevel } from "./devlog";
+import { capture, pdf, upload } from "./files";
+import { choose, fillFields, typeInto } from "./forms";
 import {
-  parseRef,
-  staleRefMessage,
-  unknownRefMessage,
-  verifyIdentity,
-} from "./refs";
-import type { RefRecord } from "./refs";
+  arrive,
+  chordOf,
+  clickAt,
+  dragBetween,
+  moveTo,
+  pressKey,
+  sleep,
+  wheel,
+} from "./input";
+import {
+  actionable,
+  findTarget,
+  hasTarget,
+  label,
+  pointOf,
+  refOrSelector,
+  type Target,
+} from "./locate";
+import { allowGuestNavigation } from "./navigation";
+import { refName } from "./refs";
 import type { CdpSession } from "./session";
-import { jailMessage, jailReadPath, jailWritePath } from "./workspace-path";
+import { diffLines, takeSnapshot, type Snapshot } from "./snapshot";
 
 /**
- * The seventeen verbs, executed against a page.
+ * The verbs, executed against a page.
  *
- * This file used to sit in the Electron shell, because the only page Armadra
- * could drive was a `<webview>` guest in somebody's window. On a server shell
- * there is no window and the page is a target in a headless Chromium — and
- * none of what is written here changes: a CDP call sequence is a CDP call
- * sequence. What the two backends do differently is held by {@link VerbHost},
- * which is everything a verb needs that is NOT a CDP command: the tab list,
- * the staged downloads, the file chooser, the open dialog.
+ * One implementation for both backends: a `<webview>` guest in the desktop
+ * window and a target in a headless Chromium this core started are driven by
+ * the same CDP sequences. What the two do differently is held by
+ * {@link VerbHost} — everything a verb needs that is NOT a CDP command: the
+ * tab list, the staged downloads, the file chooser, the open dialog, and the
+ * two things a headed guest does its own way (printing, resizing).
  *
- * Three rules run through all of them, and they are the reason this file is not
- * a thin wrapper over CDP:
+ * Three rules run through all of them, and they are the reason this file is
+ * not a thin wrapper over CDP:
  *
- *   1. **A stale ref is refused, never re-resolved.** A ref that silently
- *      re-resolves after a navigation is how an agent clicks "Delete account"
- *      while meaning "Next page".
- *   2. **`read` reports whether a field is filled, never what is in it**, and
- *      never mentions an element that is `hidden`, `aria-hidden` or
- *      `display:none`. That filtering is inside the frozen scripts, where it
- *      cannot be bypassed by a different caller.
+ *   1. **A ref is found again once, by what it described, or refused**
+ *      (`refs.ts`). Never silently re-pointed at whatever sits where it was.
+ *   2. **A field reports whether it is filled, never what is in it.** The
+ *      snapshot renderer and the frozen readers both keep that rule.
  *   3. **Answers carry re-measured values.** A scroll reports the distance the
  *      page actually moved, not the distance that was asked for; a click
  *      reports the URL after the click. An answer that echoes the request is an
@@ -64,8 +72,8 @@ export interface VerbDialog {
  * Everything a verb needs that is not a CDP command.
  *
  * Each method is about ONE node — the host is constructed per request, around
- * the node the caller named — so nothing below has to pass a node id into a
- * registry and nothing can reach a node it was not handed.
+ * the node (and tab) the caller named — so nothing below has to pass a node id
+ * into a registry and nothing can reach a node it was not handed.
  */
 export interface VerbHost {
   readonly nodeId: string;
@@ -91,6 +99,12 @@ export interface VerbHost {
 
   openDialog(): VerbDialog | undefined;
   clearDialog(): void;
+
+  /** A host whose browser prints its own way. Absent: CDP `Page.printToPDF`. */
+  printToPdf?(options: { landscape: boolean }): Promise<Buffer>;
+  /** A host that owns the viewport size itself (headless). Absent: CDP
+   * device-metrics emulation, which ends when the debugger detaches. */
+  resize?(size: { width: number; height: number } | null): Promise<void>;
 }
 
 function text(args: Args, name: string): string | undefined {
@@ -116,186 +130,35 @@ function list(args: Args, name: string): string[] {
   return typeof value === "string" ? [value] : [];
 }
 
-/* ------------------------------- targeting -------------------------------- */
-
-interface Located {
-  readonly x: number;
-  readonly y: number;
-  readonly role: string;
-  readonly name: string;
-  readonly visible: boolean;
-  readonly disabled: boolean;
-  /** Present only when the target was a ref: the enumeration index, which the
-   * element-detail scripts take. */
-  readonly index?: number;
-}
-
-interface Resolved {
-  found: boolean;
-  invalid?: boolean;
-  /** Position in {@link ELEMENT_QUERY}'s enumeration, or `-1` when the element
-   * is not one of the interactive kinds that enumeration covers. Only
-   * `resolveSelector` reports it; `resolveRef` was given the index already. */
-  index?: number;
-  role: string;
-  name: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  visible: boolean;
-  disabled: boolean;
-  viewportWidth?: number;
-  viewportHeight?: number;
-}
-
-function center(box: Resolved): { x: number; y: number } {
-  return { x: Math.round(box.x + box.w / 2), y: Math.round(box.y + box.h / 2) };
-}
-
-/**
- * Turns `--ref` / `--selector` / `--x --y` into a point in the page's
- * viewport, re-measured right now.
- *
- * A ref is checked twice: the table says whether it belongs to this navigation
- * generation, and the resolver says whether the element it points at is still
- * the element the ref described. Either check failing is a refusal.
- */
-async function locate(session: CdpSession, args: Args): Promise<Located> {
-  const x = num(args, "x");
-  const y = num(args, "y");
-  if (x !== undefined && y !== undefined) {
-    const viewport = await session.refreshViewport();
-    if (x < 0 || y < 0 || x > viewport.width || y > viewport.height) {
-      refuse(DRIVE_CODES.badArgument, "that point is outside the visible page");
-    }
-    return { x, y, role: "point", name: "", visible: true, disabled: false };
-  }
-
-  const wanted = text(args, "ref");
-  if (wanted) {
-    const ordinal = parseRef(wanted);
-    if (ordinal === null)
-      refuse(DRIVE_CODES.badArgument, `${wanted} is not a ref`);
-    const found = session.refs.lookup(ordinal);
-    if (!found.ok) {
-      refuse(
-        DRIVE_CODES.staleRef,
-        found.reason === "stale"
-          ? staleRefMessage(ordinal)
-          : unknownRefMessage(ordinal),
-      );
-    }
-    return await locateRef(session, found.record);
-  }
-
-  const selector = text(args, "selector");
-  if (!selector)
-    refuse(
-      DRIVE_CODES.badArgument,
-      "give a --ref, a --selector or --x and --y",
-    );
-  const box = await session.run<Resolved>("resolveSelector", selector);
-  if (!box?.found) {
-    if (box?.invalid)
-      refuse(DRIVE_CODES.badArgument, "that is not a valid CSS selector");
-    refuse(DRIVE_CODES.notFound, `nothing on this page matches ${selector}`);
-  }
-  if (!box.visible)
-    refuse(DRIVE_CODES.notFound, `${selector} is on the page but not visible`);
-  offViewport(box, selector);
-  return {
-    ...center(box),
-    role: box.role,
-    name: box.name,
-    visible: true,
-    disabled: box.disabled,
-    // `-1` means the element is not one of the interactive kinds the element
-    // query enumerates; the detail scripts take an index into exactly that
-    // list, so anything else must stay `undefined`.
-    ...(box.index !== undefined && box.index >= 0 ? { index: box.index } : {}),
-  };
-}
-
-/**
- * Refuses an element that is on the page but scrolled out of the viewport.
- *
- * Without this the refusal comes from the allowlist's coordinate bound
- * (`cdp/allowlist.ts`, the `Input.dispatchMouseEvent` clamp) and reads
- * «the command Input.dispatchMouseEvent is not permitted for agent control» —
- * which sounds like a permission verdict about the agent, not «scroll to it
- * first». The clamp stays where it is; this only says the true reason before
- * the caller reaches it.
- */
-function offViewport(box: Resolved, what: string): void {
-  const width = box.viewportWidth;
-  const height = box.viewportHeight;
-  if (width === undefined || height === undefined) return;
-  const point = center(box);
-  if (point.x < 0 || point.y < 0 || point.x > width || point.y > height) {
-    refuse(
-      DRIVE_CODES.refused,
-      `${what} is outside the visible area; scroll to it first`,
-    );
-  }
-}
-
-async function locateRef(
-  session: CdpSession,
-  record: RefRecord,
-): Promise<Located> {
-  const box = await session.run<Resolved>("resolveRef", record.index);
-  if (!box?.found || !verifyIdentity(record, box)) {
-    refuse(DRIVE_CODES.staleRef, staleRefMessage(record.ordinal));
-  }
-  if (!box.visible) {
-    refuse(
-      DRIVE_CODES.notFound,
-      `@${record.ordinal} is on the page but not visible`,
-    );
-  }
-  offViewport(box, `@${record.ordinal}`);
-  return {
-    ...center(box),
-    role: box.role,
-    name: box.name,
-    visible: true,
-    disabled: box.disabled,
-    index: record.index,
-  };
-}
-
-/* --------------------------------- input ---------------------------------- */
-
-async function clickAt(
-  session: CdpSession,
-  point: { x: number; y: number },
-): Promise<void> {
-  const common = { x: point.x, y: point.y, button: "left", clickCount: 1 };
-  await session.send("Input.dispatchMouseEvent", {
-    type: "mouseMoved",
-    x: point.x,
-    y: point.y,
-  });
-  await session.send("Input.dispatchMouseEvent", {
-    type: "mousePressed",
-    ...common,
-  });
-  await session.send("Input.dispatchMouseEvent", {
-    type: "mouseReleased",
-    ...common,
-  });
-}
-
 /** Where the page is, after whatever just happened. Always re-read. */
 async function pageState(
   session: CdpSession,
-): Promise<{ url: string; title: string; generation: number }> {
-  const seen = await session.run<{ title: string; url: string }>("readTitle");
+): Promise<{ url: string; title: string; generation: number; dialog?: true }> {
+  // The action opened a dialog: the page answers nothing until it is handled,
+  // and that is the news.
+  if (session.dialogOpen())
+    return {
+      url: "",
+      title: "",
+      generation: session.refs.currentGeneration(),
+      dialog: true,
+    };
+  const seen = await session
+    .run<{ title: string; url: string }>("readTitle")
+    .catch(() => undefined);
   return {
     url: seen?.url ?? "",
     title: seen?.title ?? "",
     generation: session.refs.currentGeneration(),
+  };
+}
+
+function aimed(target: Target): Record<string, unknown> {
+  return {
+    role: target.role,
+    name: target.name,
+    target: label(target),
+    ...(target.note === undefined ? {} : { note: target.note }),
   };
 }
 
@@ -310,19 +173,30 @@ const HANDLERS: Record<string, Handler> = {
       return history(session, action);
     if (action === "reload") {
       await session.send("Page.reload", {});
-      await settle(session);
+      await loaded(session);
       return pageState(session);
     }
-    const url = text(args, "url");
-    if (!url) refuse(DRIVE_CODES.badArgument, "navigate needs a --url");
-    if (!allowGuestNavigation(url)) {
-      refuse(
-        DRIVE_CODES.refused,
-        "a browser node only opens http and https addresses",
-      );
+    if (action === "stop") {
+      await session.send("Page.stopLoading", {});
+      await settle(session);
+      return { ...(await pageState(session)), stopped: true };
     }
-    await session.send("Page.navigate", { url });
-    await settle(session);
+    if (action !== "goto")
+      refuse(
+        DRIVE_CODES.badArgument,
+        `--action 只能是 back、forward、reload 或 stop，不是 ${action}`,
+      );
+    const url = text(args, "url");
+    if (!url) refuse(DRIVE_CODES.badArgument, "navigate 需要 --url");
+    if (!allowGuestNavigation(url)) {
+      refuse(DRIVE_CODES.refused, "浏览器节点只打开 http 与 https 地址");
+    }
+    const answer = (await session.send("Page.navigate", { url })) as {
+      errorText?: string;
+    };
+    if (typeof answer?.errorText === "string" && answer.errorText !== "")
+      refuse(DRIVE_CODES.failed, `打不开这个地址：${answer.errorText}`);
+    await loaded(session);
     return pageState(session);
   },
 
@@ -330,149 +204,148 @@ const HANDLERS: Record<string, Handler> = {
   forward: ({ session }) => history(session, "forward"),
 
   read: async ({ session }, args) => {
-    const mode = text(args, "mode") ?? "text";
+    const mode = text(args, "mode") ?? "snapshot";
     const limit = Math.max(1, Math.min(num(args, "limit") ?? 40, 500));
     const bytes = Math.max(
-      1_024,
-      Math.min(num(args, "maxBytes") ?? 24_576, 1_048_576),
+      512,
+      Math.min(num(args, "maxBytes") ?? 16_384, 1_048_576),
     );
     type Read = Record<string, unknown>;
-    if (mode === "title")
-      return { mode, ...(await session.run<Read>("readTitle")) };
-    if (mode === "text")
-      return { mode, ...(await session.run<Read>("readText", bytes)) };
-    if (mode === "links")
-      return { mode, ...(await session.run<Read>("readLinks", limit)) };
-    if (mode !== "map" && mode !== "elements") {
-      refuse(DRIVE_CODES.badArgument, `unknown read mode ${mode}`);
+    switch (mode) {
+      case "snapshot": {
+        const depth = num(args, "depth");
+        const shot = await takeSnapshot(session, {
+          interactive: flag(args, "interactive"),
+          ...(depth === undefined ? {} : { depth: Math.max(1, depth) }),
+          maxBytes: bytes,
+        });
+        return { mode, ...shot, interactive: flag(args, "interactive") };
+      }
+      case "title":
+        return { mode, ...(await session.run<Read>("readTitle")) };
+      case "text":
+        return { mode, ...(await session.run<Read>("readText", bytes)) };
+      case "links":
+        return { mode, ...(await session.run<Read>("readLinks", limit)) };
+      case "console": {
+        const level = parseLevel(text(args, "level"));
+        if (text(args, "level") !== undefined && level === undefined)
+          refuse(
+            DRIVE_CODES.badArgument,
+            "--level 只能是 error、warning、info、log 或 debug",
+          );
+        const read = session.devlog.consoleEntries({
+          ...(level === undefined ? {} : { level }),
+          ...(text(args, "filter") === undefined
+            ? {}
+            : { filter: text(args, "filter")! }),
+          limit,
+        });
+        if (flag(args, "clear")) session.devlog.clearConsole();
+        return { mode, ...read };
+      }
+      case "network": {
+        const read = session.devlog.networkEntries({
+          ...(text(args, "filter") === undefined
+            ? {}
+            : { filter: text(args, "filter")! }),
+          ...(text(args, "type") === undefined
+            ? {}
+            : { type: text(args, "type")! }),
+          failed: flag(args, "failed"),
+          limit,
+        });
+        if (flag(args, "clear")) session.devlog.clearNetwork();
+        return { mode, ...read };
+      }
+      default:
+        return refuse(
+          DRIVE_CODES.badArgument,
+          `没有 ${mode} 这种读法；可用 snapshot、text、links、title、console、network`,
+        );
     }
-    const seen = await session.run<{
-      elements: Array<{
-        index: number;
-        role: string;
-        name: string;
-        detail: string;
-      }>;
-      title: string;
-      url: string;
-    }>("readMap", limit);
-    const minted = session.refs.mint(seen?.elements ?? []);
-    return {
-      mode: "map",
-      title: seen?.title ?? "",
-      url: seen?.url ?? "",
-      elements: minted.map((record, position) => ({
-        ref: `@${record.ordinal}`,
-        role: record.role,
-        name: record.name,
-        detail: seen.elements[position]?.detail ?? "",
-      })),
-    };
   },
 
   click: async ({ session }, args) => {
-    const target = await locate(session, args);
-    if (target.disabled)
-      refuse(DRIVE_CODES.refused, "that control is disabled");
-    await clickAt(session, target);
+    const target = await findTarget(session, args);
+    const point = await arrive(session, () => pointOf(session, target));
+    await actionable(session, target);
+    await clickAt(session, point, flag(args, "double") ? 2 : 1);
     await settle(session);
-    const state = await pageState(session);
-    return { ...state, role: target.role, name: target.name };
+    return { ...(await pageState(session)), ...aimed(target) };
+  },
+
+  hover: async ({ session }, args) => {
+    const target = await findTarget(session, args);
+    const point = await pointOf(session, target);
+    await actionable(session, target);
+    await moveTo(session, point);
+    await settle(session);
+    return { ...(await pageState(session)), ...aimed(target) };
+  },
+
+  drag: async ({ session }, args) => {
+    const fromRef = text(args, "from");
+    const toRef = text(args, "to");
+    if (!fromRef || !toRef)
+      refuse(DRIVE_CODES.badArgument, "drag 需要 --from 与 --to");
+    const from = await refOrSelector(session, fromRef);
+    const to = await refOrSelector(session, toRef);
+    await pointOf(session, from);
+    await pointOf(session, to);
+    // Arriving at the start may end a hover and move things; bringing the
+    // end into view may have scrolled the start away. Measure both again.
+    const start = await arrive(session, () => pointOf(session, from));
+    await actionable(session, from);
+    const end = await pointOf(session, to);
+    await dragBetween(session, start, end);
+    await settle(session);
+    return {
+      ...(await pageState(session)),
+      from: label(from),
+      to: label(to),
+    };
   },
 
   type: async ({ session }, args) => {
     const body = typeof args.text === "string" ? args.text : "";
-    if (body.length > MAX_INSERT_TEXT) {
-      refuse(
-        DRIVE_CODES.badArgument,
-        "that is more text than one type may send",
-      );
-    }
-    const target = await locate(session, args);
-    if (target.disabled) refuse(DRIVE_CODES.refused, "that field is disabled");
-    await clickAt(session, target);
-    const focused = await session.run<{ found: boolean; editable: boolean }>(
-      "activeField",
-    );
-    if (!focused?.found || !focused.editable) {
-      refuse(DRIVE_CODES.refused, "that is not a field text can be typed into");
-    }
-    if (flag(args, "replace")) {
-      await session.send("Input.dispatchKeyEvent", {
-        type: "rawKeyDown",
-        commands: ["selectAll"],
-      });
-      await session.send("Input.dispatchKeyEvent", {
-        type: "rawKeyDown",
-        commands: ["deleteBackward"],
-      });
-    }
-    if (body.length > 0) await session.send("Input.insertText", { text: body });
-    if (flag(args, "submit")) await pressKey(session, "Enter", 0, 1);
+    const target = hasTarget(args)
+      ? await findTarget(session, args)
+      : undefined;
+    const typed = await typeInto(session, target, body, {
+      replace: flag(args, "replace"),
+      submit: flag(args, "submit"),
+    });
     await settle(session);
-    const after = await session.run<{ found: boolean; filled: boolean }>(
-      "activeField",
-    );
-    const state = await pageState(session);
     return {
-      ...state,
-      chars: [...body].length,
-      filled: after?.filled === true,
+      ...(await pageState(session)),
+      ...typed,
+      ...(target === undefined ? {} : aimed(target)),
     };
   },
 
-  press: async ({ session }, args) => {
-    const key = text(args, "key") ?? "";
-    if (!BROWSER_KEYS.includes(key)) {
-      refuse(
-        DRIVE_CODES.badArgument,
-        `press takes one of ${BROWSER_KEYS.join(", ")}; text goes through type`,
-      );
-    }
-    const repeat = Math.max(1, Math.min(num(args, "repeat") ?? 1, 32));
-    const modifiers = Math.max(0, Math.min(num(args, "modifiers") ?? 0, 15));
-    await pressKey(session, key, modifiers, repeat);
+  fill: async ({ session }, args) => {
+    const done = await fillFields(session, list(args, "fields"));
     await settle(session);
-    return { key, times: repeat, ...(await pageState(session)) };
+    return { ...(await pageState(session)), ...done };
   },
 
   select: async ({ session }, args) => {
-    const target = await locate(session, args);
-    if (target.index === undefined && !text(args, "selector")) {
-      refuse(DRIVE_CODES.badArgument, "select needs a --ref or a --selector");
-    }
-    const detail = await session.run<{
-      found: boolean;
-      tag: string;
-      options: Array<{ value: string; label: string; selected: boolean }>;
-    }>("describeElement", target.index ?? -1);
-    if (!detail?.found || detail.tag !== "select") {
-      refuse(DRIVE_CODES.refused, "that is not a dropdown");
-    }
-    const wanted = new Set([...list(args, "values"), ...list(args, "labels")]);
-    if (wanted.size === 0)
-      refuse(DRIVE_CODES.badArgument, "select needs a --value or a --label");
-    // A native dropdown is an OS control that swallows synthesized keys, so
-    // the option is reached by keyboard on the CLOSED element: focus it, then
-    // step with ArrowDown until the selection is the wanted one. Every step is
-    // an Input event; nothing here assigns to `value`, which would be a write
-    // from a script and is not something the frozen table can do.
-    await clickAt(session, target);
-    for (let step = 0; step < detail.options.length; step += 1) {
-      const current = await session.run<{
-        options: Array<{ value: string; label: string; selected: boolean }>;
-      }>("describeElement", target.index ?? -1);
-      const selected = current.options.find((option) => option.selected);
-      if (
-        selected &&
-        (wanted.has(selected.value) || wanted.has(selected.label))
-      ) {
-        await pressKey(session, "Enter", 0, 1);
-        return { chosen: [selected.label || selected.value] };
-      }
-      await pressKey(session, "ArrowDown", 0, 1);
-    }
-    refuse(DRIVE_CODES.notFound, "that dropdown has no such option");
+    const target = await findTarget(session, args);
+    const wanted = [...list(args, "values"), ...list(args, "labels")];
+    const chosen = await choose(session, target, wanted);
+    await settle(session);
+    return { chosen: [chosen], ...aimed(target) };
+  },
+
+  press: async ({ session }, args) => {
+    const key = text(args, "key");
+    if (!key) refuse(DRIVE_CODES.badArgument, "press 需要 --key");
+    const chord = chordOf(key, num(args, "modifiers") ?? 0);
+    const repeat = Math.max(1, Math.min(num(args, "repeat") ?? 1, 32));
+    await pressKey(session, chord, repeat);
+    await settle(session);
+    return { key, times: repeat, ...(await pageState(session)) };
   },
 
   scroll: async ({ session }, args) => {
@@ -480,96 +353,103 @@ const HANDLERS: Record<string, Handler> = {
       top: number;
       left: number;
       height: number;
+      width: number;
     }>("scrollPosition");
-    const toRef = text(args, "ref") ?? text(args, "selector");
-    if (toRef) {
-      // "Scroll to an element" is a wheel aimed at the difference between where
-      // the element is and where the middle of the viewport is: a measured
-      // move, not a script calling `scrollIntoView`.
-      const target = await locate(session, args);
-      const viewport = session.viewport();
-      const delta = Math.round(target.y - viewport.height / 2);
-      await wheel(session, delta);
+    let target: Target | undefined;
+    if (hasTarget(args)) {
+      // An element is brought into view by the page's own scrolling, in
+      // whatever container (or iframe) it is in; the answer measures the page.
+      target = await findTarget(session, args);
+      await pointOf(session, target);
     } else {
       const direction = text(args, "direction") ?? "down";
       const viewport = session.viewport();
       const amount = num(args, "amount");
-      const page = Math.max(120, Math.round(viewport.height * 0.8));
-      const delta =
-        direction === "top"
-          ? -before.height
-          : direction === "bottom"
-            ? before.height
-            : direction === "up"
-              ? -(amount ?? page)
-              : (amount ?? page);
-      await wheel(session, delta);
+      const pageY = Math.max(120, Math.round(viewport.height * 0.8));
+      const pageX = Math.max(120, Math.round(viewport.width * 0.8));
+      switch (direction) {
+        case "top":
+          await wheel(session, 0, -before.height);
+          break;
+        case "bottom":
+          await wheel(session, 0, before.height);
+          break;
+        case "up":
+          await wheel(session, 0, -(amount ?? pageY));
+          break;
+        case "down":
+          await wheel(session, 0, amount ?? pageY);
+          break;
+        case "left":
+          await wheel(session, -(amount ?? pageX), 0);
+          break;
+        case "right":
+          await wheel(session, amount ?? pageX, 0);
+          break;
+        default:
+          refuse(
+            DRIVE_CODES.badArgument,
+            "--direction 只能是 up、down、left、right、top 或 bottom",
+          );
+      }
     }
+    await sleep(120);
     const after = await session.run<{
       top: number;
       left: number;
       height: number;
+      width: number;
       viewportHeight: number;
+      viewportWidth: number;
     }>("scrollPosition");
     // The MEASURED move, which is what a page that refused to scroll reports
     // as zero rather than as the number that was asked for.
     return {
-      moved: after.top - before.top,
-      position: after.top,
-      extent: Math.max(0, after.height - after.viewportHeight),
+      moved: Math.round(after.top - before.top),
+      movedX: Math.round(after.left - before.left),
+      position: Math.round(after.top),
+      extent: Math.max(0, Math.round(after.height - after.viewportHeight)),
+      ...(target === undefined ? {} : aimed(target)),
     };
   },
 
-  wait: async ({ session }, args) => {
-    const timeout = Math.max(
-      0,
-      Math.min(num(args, "timeoutMs") ?? 15_000, 30_000),
-    );
-    const selector = text(args, "selector");
-    const urlContains = text(args, "urlContains");
-    const titleContains = text(args, "titleContains");
-    if (!selector && !urlContains && !titleContains) {
-      refuse(
-        DRIVE_CODES.badArgument,
-        "wait needs a --selector, --url-contains or --title-contains",
-      );
-    }
-    const started = Date.now();
-    for (;;) {
-      const probe = await session.run<{
-        invalid: boolean;
-        present: boolean;
-        visible: boolean;
-        title: string;
-        url: string;
-      }>("waitProbe", selector ?? "");
-      if (probe?.invalid)
-        refuse(DRIVE_CODES.badArgument, "that is not a valid CSS selector");
-      const matched =
-        (selector ? probe.visible : true) &&
-        (urlContains ? probe.url.includes(urlContains) : true) &&
-        (titleContains ? probe.title.includes(titleContains) : true);
-      const waited = Date.now() - started;
-      if (matched)
-        return {
-          matched: true,
-          waitedMs: waited,
-          url: probe.url,
-          title: probe.title,
-        };
-      if (waited >= timeout) {
-        return {
-          matched: false,
-          waitedMs: waited,
-          url: probe.url,
-          title: probe.title,
-        };
-      }
-      await sleep(100);
-    }
-  },
+  wait: async ({ session }, args) => waitFor(session, args),
 
   capture: async ({ session }, args) => capture(session, args),
+
+  pdf: async (host, args) => pdf(host, args),
+
+  resize: async (host, args) => {
+    const reset = flag(args, "reset");
+    const width = num(args, "width");
+    const height = num(args, "height");
+    if (!reset && (width === undefined || height === undefined))
+      refuse(
+        DRIVE_CODES.badArgument,
+        "resize 需要 --width 与 --height，或 --reset",
+      );
+    if (
+      !reset &&
+      (width! < 200 || width! > 3_840 || height! < 200 || height! > 2_160)
+    )
+      refuse(
+        DRIVE_CODES.badArgument,
+        "宽度要在 200–3840、高度在 200–2160 之间",
+      );
+    const size = reset ? null : { width: width!, height: height! };
+    if (host.resize !== undefined) await host.resize(size);
+    else if (size === null)
+      await host.session.send("Emulation.clearDeviceMetricsOverride", {});
+    else
+      await host.session.send("Emulation.setDeviceMetricsOverride", {
+        ...size,
+        deviceScaleFactor: 0,
+        mobile: false,
+      });
+    await settle(host.session);
+    const viewport = await host.session.refreshViewport();
+    return { width: viewport.width, height: viewport.height, reset };
+  },
 
   upload: async (host, args) => upload(host, args),
 
@@ -577,7 +457,7 @@ const HANDLERS: Record<string, Handler> = {
     const id = text(args, "id");
     if (!id) return { downloads: host.listDownloads() };
     const root = text(args, "workspaceRoot");
-    if (!root) refuse(DRIVE_CODES.badArgument, "no workspace to save into");
+    if (!root) refuse(DRIVE_CODES.badArgument, "没有可写入的工作区");
     if (flag(args, "accept")) return host.acceptDownload(id, root);
     return host.rejectDownload(id);
   },
@@ -586,11 +466,10 @@ const HANDLERS: Record<string, Handler> = {
     const wanted = text(args, "switch");
     const opened = text(args, "new");
     if (opened && !allowGuestNavigation(opened)) {
-      refuse(
-        DRIVE_CODES.refused,
-        "a browser node only opens http and https addresses",
-      );
+      refuse(DRIVE_CODES.refused, "浏览器节点只打开 http 与 https 地址");
     }
+    if (wanted && !host.listTabs().some((tab) => tab.id === wanted))
+      refuse(DRIVE_CODES.notFound, `这个节点没有标签页 ${wanted}`);
     if (wanted || opened) {
       await host.requestTab(
         wanted ? "switch" : "new",
@@ -603,16 +482,13 @@ const HANDLERS: Record<string, Handler> = {
 
   close: async (host, args) => {
     const tabId = text(args, "tab");
-    if (!tabId) refuse(DRIVE_CODES.badArgument, "close needs a --tab");
+    if (!tabId) refuse(DRIVE_CODES.badArgument, "close 需要 --tab");
     const tabs = host.listTabs();
     if (!tabs.some((tab) => tab.id === tabId)) {
-      refuse(DRIVE_CODES.notFound, `this node has no tab ${tabId}`);
+      refuse(DRIVE_CODES.notFound, `这个节点没有标签页 ${tabId}`);
     }
     if (tabs.length <= 1) {
-      refuse(
-        DRIVE_CODES.refused,
-        "the last tab stays open; closing a node is not a verb",
-      );
+      refuse(DRIVE_CODES.refused, "最后一个标签页不关；关节点不是浏览器动词");
     }
     await host.requestTab("close", tabId, "");
     return tabList(host);
@@ -624,14 +500,14 @@ const HANDLERS: Record<string, Handler> = {
     if (chooser) {
       refuse(
         DRIVE_CODES.refused,
-        "this page is asking for files; answer it with upload, not dialog",
+        "页面在要文件；请用 upload 回答，不是 dialog",
       );
     }
     const open = host.openDialog();
-    if (!open) refuse(DRIVE_CODES.notFound, "no dialog is open on this page");
+    if (!open) refuse(DRIVE_CODES.notFound, "这个页面没有打开的对话框");
     const wanted = text(args, "id");
     if (wanted && wanted !== open.id) {
-      refuse(DRIVE_CODES.notFound, `no dialog ${wanted} is open on this page`);
+      refuse(DRIVE_CODES.notFound, `没有打开的对话框 ${wanted}`);
     }
     await host.session.send("Page.handleJavaScriptDialog", {
       accept,
@@ -640,95 +516,47 @@ const HANDLERS: Record<string, Handler> = {
         : {}),
     });
     host.clearDialog();
+    await settle(host.session);
     return { kind: open.kind, message: open.message, accepted: accept };
   },
 
   // The lease is the core's, entirely. It reaches a backend only as the
   // revocation that detaches a debugger, which is not a verb.
-  lease: async () =>
-    refuse(DRIVE_CODES.unknownVerb, "the lease is not a shell verb"),
+  lease: async () => refuse(DRIVE_CODES.unknownVerb, "租约不是页面动词"),
 };
 
-/** Whether a name is one of the seventeen this file executes. */
+/** Whether a name is one this file executes. */
 export function isVerb(name: string): boolean {
   return Object.hasOwn(HANDLERS, name);
 }
 
-/* ------------------------------- helpers ---------------------------------- */
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((done) => setTimeout(done, ms));
+/** The names this file executes, for the one-list consistency test. */
+export function implementedVerbs(): string[] {
+  return Object.keys(HANDLERS);
 }
+
+/* ------------------------------- helpers ---------------------------------- */
 
 /** A short settle after anything that may navigate. Not a guarantee — `wait`
  * is the verb for that — just enough that the re-measured answer is about the
  * page the action produced rather than the one it left. */
 async function settle(session: CdpSession): Promise<void> {
   await sleep(150);
+  if (session.dialogOpen()) return;
   await session.refreshViewport().catch(() => undefined);
 }
 
-async function pressKey(
-  session: CdpSession,
-  key: string,
-  modifiers: number,
-  repeat: number,
-): Promise<void> {
-  const code = key === "Space" ? "Space" : key;
-  for (let i = 0; i < repeat; i += 1) {
-    await session.send("Input.dispatchKeyEvent", {
-      type: "rawKeyDown",
-      key,
-      code,
-      windowsVirtualKeyCode: VIRTUAL_KEYS[key] ?? 0,
-      modifiers,
-    });
-    await session.send("Input.dispatchKeyEvent", {
-      type: "keyUp",
-      key,
-      code,
-      windowsVirtualKeyCode: VIRTUAL_KEYS[key] ?? 0,
-      modifiers,
-    });
+/** After a navigation: until the new document is at least interactive. */
+async function loaded(session: CdpSession): Promise<void> {
+  await sleep(100);
+  for (let i = 0; i < 80; i += 1) {
+    const probe = await session
+      .run<{ ready?: string }>("waitProbe", "")
+      .catch(() => undefined);
+    if (probe?.ready === "complete" || probe?.ready === "interactive") break;
+    await sleep(100);
   }
-}
-
-export const VIRTUAL_KEYS: Record<string, number> = {
-  Enter: 13,
-  Tab: 9,
-  Escape: 27,
-  Backspace: 8,
-  Delete: 46,
-  ArrowUp: 38,
-  ArrowDown: 40,
-  ArrowLeft: 37,
-  ArrowRight: 39,
-  Home: 36,
-  End: 35,
-  PageUp: 33,
-  PageDown: 34,
-  Space: 32,
-};
-
-async function wheel(session: CdpSession, deltaY: number): Promise<void> {
-  const viewport = session.viewport();
-  const x = Math.max(0, Math.round(viewport.width / 2));
-  const y = Math.max(0, Math.round(viewport.height / 2));
-  // Chromium clamps a single wheel event, so a long move is several.
-  let remaining = deltaY;
-  const step = remaining < 0 ? -400 : 400;
-  for (let i = 0; i < 40 && Math.abs(remaining) > 1; i += 1) {
-    const delta = Math.abs(remaining) < Math.abs(step) ? remaining : step;
-    await session.send("Input.dispatchMouseEvent", {
-      type: "mouseWheel",
-      x,
-      y,
-      deltaX: 0,
-      deltaY: delta,
-    });
-    remaining -= delta;
-    await sleep(16);
-  }
+  await session.refreshViewport().catch(() => undefined);
 }
 
 async function history(
@@ -744,13 +572,11 @@ async function history(
   if (!entry) {
     refuse(
       DRIVE_CODES.refused,
-      action === "back"
-        ? "there is nothing to go back to"
-        : "there is nothing to go forward to",
+      action === "back" ? "已经退到最前" : "没有可前进的页面",
     );
   }
   await session.send("Page.navigateToHistoryEntry", { entryId: entry.id });
-  await settle(session);
+  await loaded(session);
   return pageState(session);
 }
 
@@ -759,121 +585,147 @@ function tabList(host: VerbHost): unknown {
   return { tabs, activeTabId: tabs.find((tab) => tab.active)?.id ?? "" };
 }
 
-/* -------------------------------- capture --------------------------------- */
-
-async function capture(session: CdpSession, args: Args): Promise<unknown> {
-  const root = text(args, "workspaceRoot");
-  const requested = text(args, "path");
-  if (!root) refuse(DRIVE_CODES.badArgument, "no workspace to write into");
-  if (!requested) refuse(DRIVE_CODES.badArgument, "capture needs a --path");
-  const format = text(args, "format") === "jpeg" ? "jpeg" : "png";
-  // The directory is created BEFORE the jail check so `realpath` of the parent
-  // has something to resolve — and it is created only under a path that is
-  // already inside the workspace by lexical resolution, which the jail then
-  // re-checks for real.
-  const provisional = jailWritePath(root, requested);
-  if (!provisional.ok && provisional.reason === "missingParent") {
-    const lexical = jailWritePath(root, dirname(requested) || ".");
-    if (lexical.ok) mkdirSync(lexical.path, { recursive: true });
+/** Whether a text is on the page, cross-origin iframes included. */
+async function textOnPage(
+  session: CdpSession,
+  needle: string,
+): Promise<boolean> {
+  const main = await session
+    .run<{ found: boolean }>("hasText", needle)
+    .catch(() => undefined);
+  if (main?.found === true) return true;
+  for (const child of session.childFrames()) {
+    const inner = await session
+      .run<{ found: boolean }>("hasText", needle, child.sessionId)
+      .catch(() => undefined);
+    if (inner?.found === true) return true;
   }
-  const jailed = jailWritePath(root, requested);
-  if (!jailed.ok) refuse(DRIVE_CODES.refused, jailMessage(jailed.reason));
+  return false;
+}
 
-  const metrics = await session.layoutMetrics();
-  const clip = flag(args, "fullPage")
-    ? {
-        // OUR measurement, never anything the caller sent.
-        x: 0,
-        y: 0,
-        width: Math.min(metrics.contentWidth, 16_384),
-        height: Math.min(metrics.contentHeight, 16_384),
-        scale: 1,
-      }
-    : undefined;
-  const shot = (await session.send("Page.captureScreenshot", {
-    format,
-    ...(clip ? { clip, captureBeyondViewport: undefined } : {}),
-  })) as { data: string };
-  const bytes = Buffer.from(shot.data, "base64");
-  writeFileSync(jailed.path, bytes, { mode: 0o600, flag: "w" });
+async function waitFor(session: CdpSession, args: Args): Promise<unknown> {
+  const timeout = Math.max(
+    0,
+    Math.min(num(args, "timeoutMs") ?? 15_000, 30_000),
+  );
+  const selector = text(args, "selector");
+  const urlContains = text(args, "urlContains");
+  const titleContains = text(args, "titleContains");
+  const present = text(args, "text");
+  const gone = text(args, "textGone");
+  const idle = flag(args, "idle");
+  if (
+    !selector &&
+    !urlContains &&
+    !titleContains &&
+    !present &&
+    !gone &&
+    !idle
+  ) {
+    refuse(
+      DRIVE_CODES.badArgument,
+      "wait 需要 --text、--text-gone、--idle、--selector、--url-contains 或 --title-contains",
+    );
+  }
+  const started = Date.now();
+  for (;;) {
+    const probe = await session.run<{
+      invalid: boolean;
+      visible: boolean;
+      title: string;
+      url: string;
+    }>("waitProbe", selector ?? "");
+    if (probe?.invalid)
+      refuse(DRIVE_CODES.badArgument, `${selector} 不是有效的 CSS 选择器`);
+    const matched =
+      (selector ? probe.visible : true) &&
+      (urlContains ? probe.url.includes(urlContains) : true) &&
+      (titleContains ? probe.title.includes(titleContains) : true) &&
+      (present ? await textOnPage(session, present) : true) &&
+      (gone ? !(await textOnPage(session, gone)) : true) &&
+      (idle
+        ? session.devlog.inFlight() === 0 && session.devlog.quietFor() >= 500
+        : true);
+    const waited = Date.now() - started;
+    if (matched || waited >= timeout) {
+      return {
+        matched,
+        waitedMs: waited,
+        url: probe.url,
+        title: probe.title,
+        ...(idle ? { inFlight: session.devlog.inFlight() } : {}),
+      };
+    }
+    await sleep(100);
+  }
+}
+
+/* ------------------------------ the diff ---------------------------------- */
+
+/** What the page is read with for a diff: the same whole-page snapshot a
+ * plain `read` gives, with room enough that a long page is not "changed" just
+ * because its tail fell off. */
+const BASELINE_BYTES = 256 * 1024;
+/** What an action's answer may carry of it. */
+const TAIL_BYTES = 8 * 1024;
+
+function capped(
+  lines: readonly string[],
+  budget: number,
+): { lines: string[]; cut: boolean } {
+  const out: string[] = [];
+  let used = 0;
+  for (const line of lines) {
+    used += Buffer.byteLength(line, "utf8") + 3;
+    if (used > budget) return { lines: out, cut: true };
+    out.push(line);
+  }
+  return { lines: out, cut: false };
+}
+
+/**
+ * `--snapshot`: what the action changed, so the next step does not need a
+ * `read`. Against the previous whole-page snapshot of the same page it is a
+ * diff; after a navigation, or with no previous snapshot, it is the page.
+ */
+async function afterSnapshot(
+  session: CdpSession,
+): Promise<Record<string, unknown>> {
+  const previous = session.lastSnapshot;
+  const shot: Snapshot = await takeSnapshot(session, {
+    interactive: false,
+    maxBytes: BASELINE_BYTES,
+  });
+  if (
+    previous === undefined ||
+    previous.generation !== session.refs.currentGeneration()
+  ) {
+    const tail = capped(shot.lines, TAIL_BYTES);
+    return {
+      snapshot: {
+        kind: "full",
+        lines: tail.lines,
+        truncated: tail.cut || shot.truncated,
+      },
+    };
+  }
+  const { added, removed } = diffLines(previous.lines, shot.lines);
+  const plus = capped(added, TAIL_BYTES / 2);
+  const minus = capped(removed, TAIL_BYTES / 2);
   return {
-    // The file, not the bytes: base64 in a reply is a screenshot pasted into a
-    // model's context window, and it exists here only long enough to be written.
-    path: jailed.path,
-    width: Math.round(clip?.width ?? metrics.viewport.width),
-    height: Math.round(clip?.height ?? metrics.viewport.height),
-    bytes: bytes.length,
-    sha256: createHash("sha256").update(bytes).digest("hex"),
+    snapshot: {
+      kind: "diff",
+      added: plus.lines,
+      removed: minus.lines,
+      truncated: plus.cut || minus.cut || shot.truncated,
+    },
   };
 }
 
-/* -------------------------------- upload ---------------------------------- */
-
-async function upload(host: VerbHost, args: Args): Promise<unknown> {
-  const session = host.session;
-  const root = text(args, "workspaceRoot");
-  if (!root) refuse(DRIVE_CODES.badArgument, "no workspace to read from");
-  const wanted = list(args, "paths");
-  if (wanted.length === 0)
-    refuse(DRIVE_CODES.badArgument, "upload needs at least one --path");
-  if (wanted.length > 20)
-    refuse(DRIVE_CODES.refused, "at most twenty files at a time");
-  const paths: string[] = [];
-  for (const each of wanted) {
-    const jailed = jailReadPath(root, each);
-    // The WHOLE batch is refused, not the offending file: a partial upload is
-    // a form somebody submits believing it carries what they named.
-    if (!jailed.ok) refuse(DRIVE_CODES.refused, jailMessage(jailed.reason));
-    paths.push(jailed.path);
-  }
-
-  // A chooser the page ALREADY opened is answered directly.
-  const open = host.pendingChooser();
-  if (open) return answerChooser(host, open.backendNodeId, paths);
-
-  // Otherwise the input is clicked so the page opens one. This is the only way
-  // in: `DOM.setFileInputFiles` needs the input's backend node id, and the
-  // single read that would hand one over for an arbitrary selector is
-  // `DOM.getDocument(depth: -1)` — the full-DOM read the allowlist exists to
-  // refuse. `Page.fileChooserOpened` carries the id for the element the page
-  // itself asked about, which is a much narrower thing to be given.
-  const target = await locate(session, args);
-  if (target.index !== undefined) {
-    const detail = await session.run<{ found: boolean; accepts: boolean }>(
-      "describeElement",
-      target.index,
-    );
-    if (!detail?.found)
-      refuse(DRIVE_CODES.staleRef, "that element is no longer on the page");
-    if (!detail.accepts)
-      refuse(DRIVE_CODES.refused, "that is not a file input");
-  }
-  await clickAt(session, target);
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const chooser = host.pendingChooser();
-    if (chooser) return answerChooser(host, chooser.backendNodeId, paths);
-    await sleep(100);
-  }
-  refuse(DRIVE_CODES.notFound, "that control did not open a file chooser");
-}
-
-async function answerChooser(
-  host: VerbHost,
-  backendNodeId: number,
-  paths: string[],
-): Promise<unknown> {
-  await host.session.send("DOM.setFileInputFiles", {
-    files: paths,
-    backendNodeId,
-  });
-  host.clearChooser();
-  // File NAMES, never the paths: the reply goes into a model's context, and
-  // the absolute path of somebody's project is not something a page's form
-  // needed in order to be filled in.
-  return { answeredChooser: true, paths: paths.map((each) => basename(each)) };
-}
-
 /* ------------------------------- dispatch --------------------------------- */
+
+/** Verbs that still work while a page holds a JavaScript dialog open. */
+const DURING_DIALOG = new Set(["dialog", "tabs", "download", "lease", "close"]);
 
 /**
  * Runs one verb against one host.
@@ -888,8 +740,29 @@ export async function runVerbOnHost(
   args: Args,
 ): Promise<unknown> {
   const handler = HANDLERS[verb];
-  if (!handler) refuse(DRIVE_CODES.unknownVerb, "that is not a browser verb");
-  return handler(host, args);
+  if (!handler) refuse(DRIVE_CODES.unknownVerb, "没有这个浏览器动词");
+  // A page holding an alert open answers nothing else — every script call
+  // would hang behind the modal — so the verb is refused up front, with the
+  // dialog's own text, instead of timing out forty seconds later.
+  const dialog = host.openDialog();
+  const readsBuffers =
+    verb === "read" && (args.mode === "console" || args.mode === "network");
+  const blocked = dialog !== undefined || host.session.dialogOpen();
+  if (blocked && !DURING_DIALOG.has(verb) && !readsBuffers) {
+    refuse(
+      DRIVE_CODES.dialogPending,
+      dialog === undefined
+        ? "页面弹着对话框；先用 dialog --accept 或 --dismiss 处理"
+        : `页面弹着 ${dialog.kind} 对话框：${dialog.message.slice(0, 300)}；先用 dialog --accept 或 --dismiss 处理`,
+    );
+  }
+  const result = await handler(host, args);
+  if (args.snapshot === true && verbSpec(verb)?.changesPage === true) {
+    if (host.session.dialogOpen()) return result;
+    const extra = await afterSnapshot(host.session).catch(() => ({}));
+    return { ...(result as Record<string, unknown>), ...extra };
+  }
+  return result;
 }
 
-export { CdpRefusal };
+export { CdpRefusal, refName };

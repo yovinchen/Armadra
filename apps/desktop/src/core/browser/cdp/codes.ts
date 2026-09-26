@@ -24,6 +24,8 @@ export const DRIVE_CODES = Object.freeze({
   notDrivable: "browser_not_drivable",
   discarded: "browser_discarded",
   staleRef: "browser_stale_ref",
+  /** The page holds a JavaScript dialog open; only `dialog` gets through. */
+  dialogPending: "browser_dialog_pending",
   notFound: "browser_not_found",
   refused: "browser_refused",
   badArgument: "browser_bad_argument",

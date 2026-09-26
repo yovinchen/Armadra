@@ -134,12 +134,16 @@ export async function runBrowser(args: string[]): Promise<number> {
       `usage: armadra-hook browser <${BROWSER_VERBS.join("|")}> [--flag value]...`,
     );
   }
-  if (!(BROWSER_VERBS as readonly string[]).includes(verb)) {
+  if (!BROWSER_VERBS.includes(verb)) {
     return fail(
       `unknown browser verb \`${verb}\`; expected one of ${BROWSER_VERBS.join(", ")}`,
     );
   }
-  const parsed = parseFlags(args.slice(1));
+  // `-n N` is the one short flag the browser verbs take (`read --limit`); the
+  // rest of the parser only knows `--flags`.
+  const parsed = parseFlags(
+    args.slice(1).map((arg) => (arg === "-n" ? "--limit" : arg)),
+  );
   if ("error" in parsed) return fail(parsed.error);
   return request(`/browser/${percentEncodeSegment(verb)}`, parsed.ok);
 }

@@ -3,7 +3,11 @@ import { readFileSync, readdirSync } from "node:fs";
 import path, { dirname, join, posix, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ALLOWED_METHODS } from "../../core/browser/cdp/allowlist";
+import {
+  ALLOWED_METHODS,
+  FORBIDDEN_METHODS,
+  NETWORK_METHODS,
+} from "../../core/browser/cdp/allowlist";
 
 /**
  * The structural guard on the CDP boundary.
@@ -94,12 +98,48 @@ describe.each([
     ]);
   });
 
-  it("the allowlist offers no reachable way to write a cookie", () => {
-    // No Network method is allowed. A page given a session cookie for
+  it("the allowlist reaches the network only to listen", () => {
+    // `read --mode network` needs the request events, so the Network domain
+    // is in the table — as exactly its two subscriptions. Everything that
+    // RETURNS something (a body, a post payload, a cookie, a certificate) or
+    // changes the traffic stays out: a page given a session cookie for
     // accounts.google.com could turn the next human visit into somebody
-    // else's login.
-    expect(
-      ALLOWED_METHODS.some((method) => method.startsWith("Network.")),
-    ).toBe(false);
+    // else's login, and a response body is where the tokens are.
+    const network = ALLOWED_METHODS.filter((method) =>
+      method.startsWith("Network."),
+    );
+    expect(network).toEqual([...NETWORK_METHODS]);
+    expect(network).toEqual(["Network.enable", "Network.disable"]);
+    for (const reader of [
+      "Network.getResponseBody",
+      "Network.getRequestPostData",
+      "Network.getCookies",
+      "Network.getAllCookies",
+      "Network.setCookie",
+      "Network.setCookies",
+      "Network.deleteCookies",
+      "Network.clearBrowserCookies",
+      "Network.searchInResponseBody",
+      "Network.takeResponseBodyForInterceptionAsStream",
+    ]) {
+      expect(FORBIDDEN_METHODS, reader).toContain(reader);
+      expect(ALLOWED_METHODS, reader).not.toContain(reader);
+    }
+  });
+
+  it("nothing but the ring buffer reads a request event, and it keeps no header", () => {
+    // The events `Network.enable` subscribes to carry request and response
+    // headers (Cookie, Authorization, Set-Cookie). The only reader is
+    // `devlog.ts`, and no header field name appears in it.
+    const readers = files.filter((file) =>
+      readSource(file).includes('"Network.responseReceived"'),
+    );
+    expect(readers).toEqual([
+      pathModule.join("core", "browser", "cdp", "devlog.ts"),
+    ]);
+    const devlog = readSource(readers[0]!);
+    for (const field of [".headers", "postData", "requestHeaders", "cookie"]) {
+      expect(devlog.includes(field), field).toBe(false);
+    }
   });
 });

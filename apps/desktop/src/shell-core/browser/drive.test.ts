@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { VERB_NAMES } from "../../core/browser/verb-spec";
 import { DRIVE_VERBS, parseDriveRequest, tokenMatches } from "./drive";
 import {
   MessageReader,
@@ -10,29 +11,23 @@ import {
 } from "./websocket";
 
 describe("the verb list", () => {
-  it("is the seventeen, and matches the hook's and the Runtime's", () => {
-    expect(DRIVE_VERBS).toHaveLength(17);
-    expect([...DRIVE_VERBS].sort()).toEqual(
-      [
-        "back",
-        "capture",
-        "click",
-        "close",
-        "dialog",
-        "download",
-        "forward",
-        "lease",
-        "navigate",
-        "press",
-        "read",
-        "scroll",
-        "select",
-        "tabs",
-        "type",
-        "upload",
-        "wait",
-      ].sort(),
-    );
+  it("is the one list, and matches the hook's and the Runtime's", () => {
+    expect([...DRIVE_VERBS]).toEqual([...VERB_NAMES]);
+    for (const verb of [
+      "navigate",
+      "read",
+      "click",
+      "hover",
+      "drag",
+      "fill",
+      "pdf",
+      "resize",
+      "lease",
+    ])
+      expect(DRIVE_VERBS, verb).toContain(verb);
+    // Nothing that names a CDP method or an evaluation is a verb.
+    for (const stranger of ["evaluate", "Runtime.evaluate", "eval", "exec"])
+      expect(DRIVE_VERBS, stranger).not.toContain(stranger);
   });
 });
 

@@ -21,7 +21,7 @@ const SHELL_METRICS_EVENT = "shellMetrics";
  * The browser domain's assembly point — authorization, the lease, the URL
  * policy and the drive channel to the shell.
  *
- * The seventeen verbs are published from here rather than registered as
+ * The verbs are published from here rather than registered as
  * routes, because the Hook surface (its own domain, its own credentials, its
  * own body limit) is what receives them from an agent CLI and this is what
  * decides what they may do. The same split the canvas verbs use: nothing in
@@ -48,7 +48,7 @@ export type BrowserOutcome =
 
 /** What the Hook surface hands over once it knows who is calling. */
 export interface BrowserVerbs {
-  /** The verbs this build answers — the seventeen, and nothing else. */
+  /** The verbs this build answers — the list in `verb-spec.ts`, and nothing else. */
   readonly verbs: readonly string[];
   dispatch(
     caller: Caller,

@@ -9,7 +9,7 @@ import { ensureSession } from "./session";
 import { runBrowserVerb } from "./verbs";
 
 /**
- * The three authorization rules and the seventeen verbs.
+ * The three authorization rules and the verbs.
  *
  * Ported from the pre-merge implementation and its capability tests.
  * Nothing here opens a socket: the drive channel is
@@ -137,7 +137,7 @@ describe("the three rules", () => {
   });
 });
 
-describe("the seventeenth verb", () => {
+describe("the lease verb", () => {
   /**
    * The only verb that reads the lease instead of taking it: an agent that has
    * been refused has to be able to find out who is driving, and to hand its
@@ -204,7 +204,7 @@ describe("the seventeenth verb", () => {
 });
 
 describe("with a shell on the other end", () => {
-  it("drives all seventeen verbs and renders each answer", async () => {
+  it("drives every verb and renders each answer", async () => {
     const current = browserFixture({ withShell: true });
     fixture = current;
     // One answer shaped like every verb's: each renderer reads only the fields
@@ -246,6 +246,9 @@ describe("with a shell on the other end", () => {
       dialog: { id: "d1", accept: true },
       download: { id: "d1", accept: true },
       tabs: { switch: "t1" },
+      fill: { field: "e1=x" },
+      drag: { from: "e1", to: "e2" },
+      resize: { width: 800, height: 600 },
     };
     for (const verb of VERBS) {
       const line = await call(current, verb, flags[verb] ?? {});
@@ -255,10 +258,10 @@ describe("with a shell on the other end", () => {
       // own lease; `lease --release` is the verb that exists for exactly this.
       await call(current, "lease", { release: true }).catch(() => "");
     }
-    // Sixteen reached the wire. `lease` is answered here, because there is
+    // All but one reached the wire. `lease` is answered here, because there is
     // nothing on a page for it to do.
     const verbsSent = new Set(current.sent.map((entry) => entry.verb));
-    expect(verbsSent.size).toBe(16);
+    expect(verbsSent.size).toBe(VERBS.length - 1);
     expect(verbsSent.has("lease")).toBe(false);
     // Every payload carried the workspace root, and none carried a method.
     for (const entry of current.sent) {
@@ -358,7 +361,7 @@ describe("the dispatcher the hook surface calls", () => {
     const current = browserFixture();
     fixture = current;
     const verbs = createBrowserVerbs(current.context);
-    expect(verbs.verbs).toHaveLength(17);
+    expect(verbs.verbs).toHaveLength(VERBS.length);
 
     const ok = await verbs.dispatch(
       callerFor(current, current.agentId),

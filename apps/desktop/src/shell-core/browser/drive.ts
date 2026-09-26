@@ -30,6 +30,7 @@ import {
   driveError,
   type DriveError,
 } from "../../core/browser/cdp/codes";
+import { VERB_NAMES } from "../../core/browser/verb-spec";
 
 /** The path the drive server listens on. Nothing else on that port answers. */
 export const DRIVE_PATH = "/browser/drive";
@@ -45,28 +46,11 @@ export const HELLO_TIMEOUT_MS = 5_000;
  * that has lost its page. */
 export const VERB_TIMEOUT_MS = 45_000;
 
-/** The seventeen. Identical to the Runtime's `VERBS` and the hook's
- * `BROWSER_VERBS`; the drive channel checks it again because a verb name is the
- * first thing that decides what happens to somebody's logged-in page. */
-export const DRIVE_VERBS: readonly string[] = Object.freeze([
-  "navigate",
-  "read",
-  "click",
-  "type",
-  "wait",
-  "capture",
-  "select",
-  "press",
-  "scroll",
-  "upload",
-  "download",
-  "back",
-  "forward",
-  "close",
-  "tabs",
-  "dialog",
-  "lease",
-]);
+/** Every verb: the one list in `core/browser/verb-spec.ts`, which the
+ * Runtime's `VERBS` and the hook's `BROWSER_VERBS` are too. The drive channel
+ * checks it again because a verb name is the first thing that decides what
+ * happens to somebody's logged-in page. */
+export const DRIVE_VERBS: readonly string[] = Object.freeze([...VERB_NAMES]);
 
 export interface DriveRequest {
   readonly id: string;

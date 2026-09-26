@@ -15,7 +15,7 @@ import { CdpRefusal } from "../../core/browser/cdp/codes";
  *
  * What is left in this file is exactly the Electron half: a `webContents`
  * debugger, its attach and its events. The allowlist, the ref table, the
- * frozen scripts and the seventeen verbs moved to `core/browser/cdp/` when the
+ * frozen scripts and the verbs moved to `core/browser/cdp/` when the
  * server shell needed the same verbs against a headless Chromium.
  *
  * Attach is LAZY. A guest that nobody drives never has a debugger attached to
@@ -44,10 +44,21 @@ export type DomainListener = (method: string, params: unknown) => void;
 export class GuestSession extends CdpSession {
   private dbg: Debugger;
   private attached = false;
+  /** The debugger's listeners, subscribed once: a re-attach after a
+   * revocation must not deliver every event twice. */
+  private listening = false;
+  private readonly contents: WebContents;
 
   constructor(contents: WebContents) {
-    super((method, params) => contents.debugger.sendCommand(method, params));
+    // A child session (a cross-origin iframe of this guest) is the third
+    // argument; Electron's debugger speaks flat sessions the same way.
+    super((method, params, sessionId) =>
+      sessionId === undefined
+        ? contents.debugger.sendCommand(method, params)
+        : contents.debugger.sendCommand(method, params, sessionId),
+    );
     this.dbg = contents.debugger;
+    this.contents = contents;
   }
 
   isAttached(): boolean {
@@ -55,11 +66,15 @@ export class GuestSession extends CdpSession {
   }
 
   /**
-   * Attaches, once, and subscribes to the two events that expire refs.
+   * Attaches, once, and prepares the page (`CdpSession.prepare`).
    *
-   * `Page.enable` and `Runtime.enable` are part of attaching rather than of
-   * each verb: without them `Page.frameNavigated` never arrives, and a ref
-   * table that never expires is worse than no ref table at all.
+   * While a debugger is attached, Chromium routes JavaScript dialogs and file
+   * choosers to the debugger instead of showing its own. That is the only
+   * reason the shell can answer them at all: Electron's `webContents` has no
+   * JavaScript-dialog event (`will-prevent-unload` covers beforeunload and
+   * nothing else), so CDP is not one of two routes, it is the route. Both
+   * effects last exactly as long as the attach, which lasts exactly as long as
+   * an agent is driving — and so do the console and request buffers.
    */
   async attach(): Promise<void> {
     if (this.attached) return;
@@ -68,23 +83,28 @@ export class GuestSession extends CdpSession {
       attaches += 1;
     }
     this.attached = true;
-    this.dbg.on("message", (_event, method, params) =>
-      this.onEvent(method, params),
-    );
-    this.dbg.on("detach", () => {
-      this.attached = false;
+    if (!this.listening) {
+      this.listening = true;
+      this.dbg.on("message", (_event, method, params, sessionId) =>
+        this.onEvent(method, params, sessionId),
+      );
+      this.dbg.on("detach", () => {
+        this.attached = false;
+      });
+    }
+    await this.prepare();
+  }
+
+  /**
+   * `pdf`. A headed guest has no CDP `Page.printToPDF` (Chromium only has it
+   * headless), so Electron's own printer does it — the page as it is, into
+   * bytes the verb writes inside the workspace.
+   */
+  async printToPdf(options: { landscape: boolean }): Promise<Buffer> {
+    return this.contents.printToPDF({
+      landscape: options.landscape,
+      printBackground: true,
     });
-    await this.send("Page.enable", {});
-    await this.send("Runtime.enable", {});
-    // While a debugger is attached, Chromium routes JavaScript dialogs and
-    // file choosers to the debugger instead of showing its own. That is the
-    // only reason the shell can answer them at all: Electron's `webContents`
-    // has no JavaScript-dialog event (`will-prevent-unload` covers beforeunload
-    // and nothing else), so CDP is not one of two routes, it is the route.
-    // Both effects last exactly as long as the attach, which lasts exactly as
-    // long as an agent is driving.
-    await this.send("Page.setInterceptFileChooserDialog", { enabled: true });
-    await this.refreshViewport();
   }
 
   /**
@@ -106,8 +126,12 @@ export class GuestSession extends CdpSession {
    * a page's dialogs is two answers to one question. */
   listener: DomainListener | null = null;
 
-  private onEvent(method: string, params: unknown): void {
-    this.noteEvent(method, params);
+  private onEvent(method: string, params: unknown, sessionId?: string): void {
+    const child = typeof sessionId === "string" && sessionId !== "";
+    this.noteEvent(method, params, child ? sessionId : "");
+    // What a child session says is for that frame's session; only its dialogs
+    // are the page's business.
+    if (child && !method.startsWith("Page.javascriptDialog")) return;
     this.listener?.(method, params);
   }
 }

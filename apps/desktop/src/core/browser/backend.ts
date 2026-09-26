@@ -12,7 +12,7 @@
  *
  * The seam is here rather than inside the verb surface on purpose: everything
  * that decides WHETHER something may happen — the three authorization rules,
- * the lease, the URL policy, the seventeen verb names — is written once in
+ * the lease, the URL policy, the verb names — is written once in
  * `core/browser` and asks a backend only for the page.
  */
 

@@ -7,7 +7,7 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
   test: {
-    include: ["src/core/browser/headless/live.integration.test.ts"],
+    include: ["src/core/browser/headless/*live.integration.test.ts"],
     environment: "node",
     pool: "forks",
     setupFiles: ["src/core/testing/setup.ts"],

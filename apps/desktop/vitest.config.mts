@@ -21,7 +21,7 @@ export default defineConfig({
       // browser's start-up outran its budget often enough to be a flake, and a
       // flake teaches people to ignore the only test that proves the pipe
       // protocol against the real thing.
-      "**/live.integration.test.ts",
+      "**/*live.integration.test.ts",
     ],
     environment: "node",
     pool: "forks",

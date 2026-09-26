@@ -1,45 +1,45 @@
 import { Args, truncate } from "../collab/refusals";
+import { BROWSER_VERB_SPECS, VERB_NAMES, verbSpec } from "./verb-spec";
 
 /**
  * The hook's flags, as the drive channel's camelCase arguments.
  *
- * Ported from `shell_args` in the pre-merge implementation. Written
- * out per verb rather than forwarded wholesale. A pass-through would mean the
- * shell's verbs taking whatever a caller typed, and the point of a verb
- * interface is that the set of things one can say is closed.
+ * Written out per verb rather than forwarded wholesale. A pass-through would
+ * mean the shell's verbs taking whatever a caller typed, and the point of a
+ * verb interface is that the set of things one can say is closed.
+ *
+ * WHICH verbs and flags exist is not decided here: `verb-spec.ts` is the one
+ * list, and `verb-spec.test.ts` checks that every flag it names is forwarded
+ * by {@link shellArgs}. Other modules (the hook's `--help`, the skill text)
+ * read the list through the re-exports below.
  */
+
+export {
+  BROWSER_NOTES,
+  BROWSER_NOTES_ZH,
+  BROWSER_VERB_SPECS,
+  COMMON_FLAGS,
+  DOCUMENTED_CODES,
+  TARGET_FLAGS,
+  browserUsage,
+  flagsOf,
+  verbSpec,
+} from "./verb-spec";
+export type { BrowserFlagSpec, BrowserVerbSpec } from "./verb-spec";
 
 /**
  * Every verb, and nothing else. `armadra-hook`'s `BROWSER_VERBS` and the
- * shell's `DRIVE_VERBS` are the same list, checked there too so a typo costs a
- * local error line rather than a round trip and a refusal in the model's
- * context.
+ * shell's `DRIVE_VERBS` are this same list.
  */
-export const VERBS: readonly string[] = [
-  "navigate",
-  "read",
-  "click",
-  "type",
-  "wait",
-  "capture",
-  "select",
-  "press",
-  "scroll",
-  "upload",
-  "download",
-  "back",
-  "forward",
-  "close",
-  "tabs",
-  "dialog",
-  "lease",
-];
+export const VERBS: readonly string[] = VERB_NAMES;
 
 /**
  * Default page-text budget for an agent read. Smaller than the API's ceiling
  * because this text goes straight into a model's context window.
  */
 export const DEFAULT_READ_BYTES = 24 * 1024;
+/** A snapshot is denser than prose; its own, smaller budget. */
+export const DEFAULT_SNAPSHOT_BYTES = 16 * 1024;
 export const DEFAULT_ELEMENT_LIMIT = 40;
 
 /** How long `wait` gives a condition before it reports a timeout. */
@@ -50,10 +50,9 @@ export type ShellArgs = Record<string, unknown>;
 /**
  * The loosely typed flag bag a hook call arrives with.
  *
- * The typed reads come from {@link Args}, which every other verb surface in
- * this core already uses; the raw record travels beside it because one read —
- * a repeated flag kept whole — must NOT split on commas, and `Args.list`
- * always does.
+ * The typed reads come from {@link Args}; the raw record travels beside it
+ * because one read — a repeated flag kept whole — must NOT split on commas,
+ * and `Args.list` always does.
  */
 export type ArgSource = Readonly<Record<string, unknown>>;
 
@@ -61,18 +60,29 @@ export function shellArgs(verb: string, source: ArgSource): ShellArgs {
   const args = new Args(source);
   const map: ShellArgs = {};
   const put = (name: string, value: unknown): void => {
-    if (value === undefined || value === null) return;
+    if (value === undefined || value === null || value === false) return;
     map[name] = value;
   };
-  // Targeting, which almost every verb accepts.
-  put("ref", args.text("ref"));
-  put("selector", args.text("selector"));
-  const x = args.count(["x"]);
-  const y = args.count(["y"]);
-  if (x !== undefined && y !== undefined) {
-    put("x", x);
-    put("y", y);
+  const spec = verbSpec(verb);
+
+  // Which tab, and whether to answer with a diff: every verb takes both.
+  put("tab", args.text("tab"));
+  if (spec?.changesPage === true) put("snapshot", args.flag("snapshot"));
+
+  // Targeting.
+  if (spec?.targets === true) {
+    put("ref", args.text("ref") ?? args.text("to-ref"));
+    put("role", args.text("role"));
+    put("name", rawText(source, "name"));
+    put("selector", args.text("selector"));
+    const x = args.count(["x"]);
+    const y = args.count(["y"]);
+    if (x !== undefined && y !== undefined) {
+      put("x", x);
+      put("y", y);
+    }
   }
+
   switch (verb) {
     case "navigate": {
       const url = args.text("url");
@@ -87,35 +97,65 @@ export function shellArgs(verb: string, source: ArgSource): ShellArgs {
     case "forward":
       put("action", verb);
       break;
-    case "read":
-      put("mode", args.text("mode") ?? "text");
-      put("limit", args.count(["n", "limit"]) ?? DEFAULT_ELEMENT_LIMIT);
+    case "read": {
+      const raw = args.text("mode") ?? "snapshot";
+      // `elements` and `map` were the old CSS-built element list. They are the
+      // interactive snapshot now: one enumeration, one kind of ref.
+      const legacy = raw === "elements" || raw === "map";
+      const mode = legacy ? "snapshot" : raw;
+      put("mode", mode);
+      put("interactive", legacy || args.flag("interactive"));
+      put("depth", args.count(["depth"]));
+      put("limit", args.count(["limit", "n"]) ?? DEFAULT_ELEMENT_LIMIT);
       put(
         "maxBytes",
-        args.count(["max-bytes", "maxBytes"]) ?? DEFAULT_READ_BYTES,
+        args.count(["max-bytes", "maxBytes"]) ??
+          (mode === "snapshot" ? DEFAULT_SNAPSHOT_BYTES : DEFAULT_READ_BYTES),
       );
+      put("level", args.text("level"));
+      put("filter", args.text("filter"));
+      put("failed", args.flag("failed"));
+      put("type", args.text("type"));
+      put("clear", args.flag("clear"));
+      break;
+    }
+    case "click":
+      put("double", args.flag("double"));
+      break;
+    case "drag":
+      put("from", args.text("from"));
+      put("to", args.text("to"));
       break;
     case "type":
-      put("text", args.text("text") ?? "");
+      put("text", rawText(source, "text") ?? "");
       put("replace", args.flag("replace"));
       put("submit", args.flag("submit") || args.flag("enter"));
+      break;
+    case "fill":
+      put("fields", repeated(source, "field"));
       break;
     case "press":
       put("key", args.text("key"));
       put("repeat", args.count(["repeat"]) ?? 1);
-      put("modifiers", modifiersOf(source));
+      put("modifiers", modifiersOf(source) || undefined);
       break;
     case "select":
-      put("values", repeated(source, "value"));
-      put("labels", repeated(source, "label"));
+      put("values", nonEmpty(repeated(source, "value")));
+      put("labels", nonEmpty(repeated(source, "label")));
       break;
     case "scroll": {
       put("direction", args.text("direction"));
-      const amount = args.count(["amount"]);
-      if (amount !== undefined) put("amount", amount);
+      put("amount", args.count(["amount"]));
       break;
     }
     case "wait":
+      put("text", rawText(source, "text"));
+      put(
+        "textGone",
+        rawText(source, "text-gone") ?? rawText(source, "textGone"),
+      );
+      put("idle", args.flag("idle"));
+      put("selector", args.text("selector"));
       put("urlContains", args.text("url-contains") ?? args.text("urlContains"));
       put(
         "titleContains",
@@ -126,13 +166,28 @@ export function shellArgs(verb: string, source: ArgSource): ShellArgs {
         args.count(["timeout", "timeout-ms", "timeoutMs"]) ?? DEFAULT_WAIT_MS,
       );
       break;
-    case "capture":
+    case "capture": {
+      const format = args.text("format") === "jpeg" ? "jpeg" : "png";
       // A default inside the workspace rather than a required flag: the jail
       // is what keeps the write safe, so there is nothing to gain from making
       // every caller name a directory.
-      put("path", args.text("path") ?? `.armadra/browser/${Date.now()}.png`);
+      put(
+        "path",
+        args.text("path") ??
+          `.armadra/browser/${Date.now()}.${format === "jpeg" ? "jpg" : "png"}`,
+      );
       put("fullPage", args.flag("full-page") || args.flag("fullPage"));
       put("format", args.text("format"));
+      break;
+    }
+    case "pdf":
+      put("path", args.text("path") ?? `.armadra/browser/${Date.now()}.pdf`);
+      put("landscape", args.flag("landscape"));
+      break;
+    case "resize":
+      put("width", args.count(["width"]));
+      put("height", args.count(["height"]));
+      put("reset", args.flag("reset"));
       break;
     case "upload":
       put("paths", repeated(source, "path"));
@@ -145,37 +200,16 @@ export function shellArgs(verb: string, source: ArgSource): ShellArgs {
       put("switch", args.text("switch"));
       put("new", args.text("new"));
       break;
-    case "close":
-      put("tab", args.text("tab"));
-      break;
     case "dialog":
       put("id", args.text("id"));
       put("accept", args.flag("accept"));
-      put("text", args.text("text"));
+      put("text", rawText(source, "text"));
       break;
     default:
       break;
   }
   return map;
 }
-
-/**
- * Verbs that drive the page rather than read it. `read`, `wait` and `capture`
- * are reads and never take the lease.
- */
-const LEASE_VERBS: readonly string[] = [
-  "navigate",
-  "click",
-  "type",
-  "select",
-  "press",
-  "scroll",
-  "upload",
-  "back",
-  "forward",
-  "close",
-  "dialog",
-];
 
 /**
  * Whether this call takes the control lease.
@@ -187,6 +221,9 @@ const LEASE_VERBS: readonly string[] = [
  */
 export function needsLease(verb: string, source: ArgSource): boolean {
   const args = new Args(source);
+  const spec = verbSpec(verb);
+  if (spec === undefined) return false;
+  if (spec.lease !== "flag") return spec.lease === "always";
   switch (verb) {
     case "tabs":
       return (
@@ -195,8 +232,15 @@ export function needsLease(verb: string, source: ArgSource): boolean {
     case "download":
       return args.flag("accept") || args.flag("reject");
     default:
-      return LEASE_VERBS.includes(verb);
+      return false;
   }
+}
+
+/** Verbs that read: they never take the lease, whatever their flags. */
+export function isReadVerb(verb: string): boolean {
+  return BROWSER_VERB_SPECS.some(
+    (spec) => spec.name === verb && spec.lease === "never",
+  );
 }
 
 /**
@@ -205,12 +249,31 @@ export function needsLease(verb: string, source: ArgSource): boolean {
  */
 export function repeated(source: ArgSource, name: string): string[] {
   const raw = source[name];
-  if (typeof raw === "string") return [raw.trim()];
+  if (typeof raw === "string") return raw.trim() === "" ? [] : [raw.trim()];
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter((entry) => entry !== "");
+}
+
+function nonEmpty(values: string[]): string[] | undefined {
+  return values.length === 0 ? undefined : values;
+}
+
+/**
+ * Text a person typed, kept as typed. `Args.text` trims, which is right for an
+ * id and wrong for `type --text " 2"` or an accessible name with a trailing
+ * space the page really has.
+ */
+function rawText(source: ArgSource, name: string): string | undefined {
+  const value = source[name];
+  if (typeof value === "string") return value === "" ? undefined : value;
+  if (Array.isArray(value)) {
+    const first = value.find((entry) => typeof entry === "string");
+    return typeof first === "string" && first !== "" ? first : undefined;
+  }
+  return undefined;
 }
 
 /** `--modifiers` as a number, or as names a person would actually type. */
@@ -247,7 +310,21 @@ export function modifiersOf(source: ArgSource): number {
 /** A one-line "what was aimed at", for the activity badge. */
 export function describeTarget(source: ArgSource): string {
   const args = new Args(source);
-  for (const name of ["ref", "selector", "url", "key", "tab", "id", "path"]) {
+  const role = args.text("role");
+  if (role !== undefined) {
+    const name = args.text("name");
+    return truncate(name === undefined ? role : `${role} ${name}`, 120);
+  }
+  for (const name of [
+    "ref",
+    "selector",
+    "url",
+    "key",
+    "from",
+    "tab",
+    "id",
+    "path",
+  ]) {
     const value = args.text(name);
     if (value !== undefined) return truncate(value, 120);
   }

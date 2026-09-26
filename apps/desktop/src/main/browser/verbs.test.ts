@@ -2,131 +2,107 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   realpathSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Every verb, against a RECORDING debugger.
+ * The desktop shell's half of the verbs, against RECORDING debuggers.
  *
- * The guest is a stub, but nothing between the verb and `sendCommand` is: the
- * allowlist, the frozen script table, the ref generations, the coordinate
- * bounds and the capture jail are all the real ones. What the stub replaces is
- * Chromium, and what it gives back is the trace — the exact list of methods
- * that reached the wire, which is the evidence the acceptance gate asks for and
- * the one thing a live run produces that a unit test usually cannot.
+ * What a verb does to a page is tested once, for both backends, in
+ * `core/browser/cdp/verbs.test.ts`. What is left here is what only this shell
+ * does: which `<webview>` guest a verb reaches (`--tab` included), attaching
+ * lazily and once, the debugger's events — a dialog, a cross-origin iframe's
+ * child session — reaching the session, and printing through Electron.
  *
- * Three assertions run over that trace for EVERY verb, at the bottom of this
- * file: no page-side evaluation in any spelling, no `Debugger` domain, and no
- * command carrying an `expression` field.
+ * The page behind each debugger is `core/browser/cdp/fake-page.ts`; the
+ * allowlist, the ref table and the frozen script table in between are the real
+ * ones, and the trace at the bottom is checked for page-side evaluation.
  */
 
-/* ------------------------------ the stub guest ----------------------------- */
+/* ------------------------------ the stub guests ---------------------------- */
+
+import { FakePage } from "../../core/browser/cdp/fake-page";
 
 interface Sent {
+  guest: number;
   method: string;
   params: Record<string, unknown>;
+  sessionId?: string;
 }
 
 const sent: Sent[] = [];
-let attached = 0;
-/** What the page "returns" for each script, by name. */
-let scriptAnswers: Record<string, unknown> = {};
-let navigationHistory = {
-  currentIndex: 1,
-  entries: [
-    { id: 10, url: "https://example.test/a" },
-    { id: 11, url: "https://example.test/b" },
-    { id: 12, url: "https://example.test/c" },
-  ],
-};
+const pages = new Map<number, FakePage>();
+const attached = new Map<number, number>();
+const listeners = new Map<
+  number,
+  Map<string, Array<(...args: unknown[]) => void>>
+>();
+let printed = 0;
 
-const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
-
-function emit(event: string, ...args: unknown[]): void {
-  for (const listener of listeners.get(event) ?? []) listener(...args);
+function emit(guest: number, event: string, ...args: unknown[]): void {
+  for (const listener of listeners.get(guest)?.get(event) ?? [])
+    listener(...args);
 }
 
-const fakeDebugger = {
-  isAttached: () => attached > 0,
-  attach: () => {
-    attached += 1;
-  },
-  detach: () => {
-    attached = 0;
-  },
-  on: (event: string, listener: (...args: unknown[]) => void) => {
-    listeners.set(event, [...(listeners.get(event) ?? []), listener]);
-  },
-  sendCommand: async (method: string, params: Record<string, unknown>) => {
-    sent.push({ method, params });
-    return respond(method, params);
-  },
-};
-
-/** What Chromium would have answered. */
-function respond(method: string, params: Record<string, unknown>): unknown {
-  switch (method) {
-    case "DOM.getDocument":
-      return { root: { nodeId: 1 } };
-    case "DOM.resolveNode":
-      return { object: { objectId: "obj-1" } };
-    case "Runtime.callFunctionOn": {
-      const declaration = String(params.functionDeclaration);
-      const name = nameOfScript(declaration);
-      const answer = scriptAnswers[name];
-      // An array is a QUEUE: successive calls to the same reader get
-      // successive answers, which is how a scroll that actually moved is
-      // told apart from one that did not.
-      if (Array.isArray(answer)) return { result: { value: answer.shift() } };
-      return { result: { value: answer } };
-    }
-    case "Page.getLayoutMetrics":
-      return {
-        cssLayoutViewport: { clientWidth: 520, clientHeight: 332 },
-        cssContentSize: { width: 520, height: 4_400 },
-        cssVisualViewport: { pageX: 0, pageY: 0 },
-      };
-    case "Page.getNavigationHistory":
-      return navigationHistory;
-    case "Page.captureScreenshot":
-      // A one-pixel PNG, so the write is a real write of real bytes.
-      return {
-        data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-      };
-    default:
-      return {};
-  }
+function listenerCount(guest: number, event: string): number {
+  return listeners.get(guest)?.get(event)?.length ?? 0;
 }
 
-function nameOfScript(declaration: string): string {
-  for (const [name, body] of Object.entries(SCRIPTS)) {
-    if (body === declaration) return name;
-  }
-  throw new Error(
-    "a declaration that is not in the frozen table reached the page",
-  );
+function fakeContents(id: number) {
+  const debuggerStub = {
+    isAttached: () => (attached.get(id) ?? 0) > 0,
+    attach: () => {
+      attached.set(id, (attached.get(id) ?? 0) + 1);
+    },
+    detach: () => {
+      attached.set(id, 0);
+    },
+    on: (event: string, listener: (...args: unknown[]) => void) => {
+      const own = listeners.get(id) ?? new Map();
+      own.set(event, [...(own.get(event) ?? []), listener]);
+      listeners.set(id, own);
+    },
+    sendCommand: async (
+      method: string,
+      params: Record<string, unknown>,
+      sessionId?: string,
+    ) => {
+      sent.push({
+        guest: id,
+        method,
+        params,
+        ...(sessionId ? { sessionId } : {}),
+      });
+      return pages.get(id)!.dispatch(method, params, sessionId);
+    },
+  };
+  return {
+    id,
+    debugger: debuggerStub,
+    isDestroyed: () => false,
+    getType: () => "webview",
+    getURL: () => pages.get(id)!.url,
+    getTitle: () => pages.get(id)!.title,
+    session: { on: () => undefined },
+    on: () => undefined,
+    once: () => undefined,
+    setWindowOpenHandler: () => undefined,
+    printToPDF: async () => {
+      printed += 1;
+      return Buffer.from("%PDF-1.7\n<< /Type /Page >>\n%%EOF");
+    },
+  };
 }
 
-const fakeContents = {
-  id: 7,
-  debugger: fakeDebugger,
-  isDestroyed: () => false,
-  getType: () => "webview",
-  getURL: () => "https://example.test/c",
-  getTitle: () => "Example",
-  session: { on: () => undefined },
-  on: () => undefined,
-  once: () => undefined,
-  setWindowOpenHandler: () => undefined,
-};
+const contents = new Map<number, ReturnType<typeof fakeContents>>();
 
 vi.mock("electron", () => ({
-  webContents: { fromId: () => fakeContents },
+  webContents: { fromId: (id: number) => contents.get(id) },
   Menu: { buildFromTemplate: () => ({ popup: () => undefined }) },
   clipboard: { writeText: () => undefined },
   session: { fromPartition: () => ({ on: () => undefined }) },
@@ -148,118 +124,38 @@ import { resetTransfers } from "./transfers";
 let workspace = "";
 let temporary = "";
 
-/** The six-element fixture, as the frozen reader would have filtered it.
- *
- * Only three survive: the password element (its STATE, never its value), the
- * filled text input and the empty one. `hidden`, `aria-hidden` and
- * `display:none` never leave the page at all — the filtering is inside the
- * script, which is why no caller here can turn it off. */
-const SIX_ELEMENT_FIXTURE = {
-  elements: [
-    { index: 2, role: "input", name: "", detail: "password, filled" },
-    { index: 4, role: "input", name: "Email", detail: "email, filled" },
-    { index: 5, role: "input", name: "Note", detail: "text, empty" },
-  ],
-  title: "Sign in",
-  url: "https://example.test/in",
-};
-
-function defaults(): Record<string, unknown> {
-  return {
-    readTitle: { title: "Example", url: "https://example.test/c" },
-    readText: {
-      text: "hello",
-      total: 5,
-      truncated: false,
-      title: "Example",
-      url: "https://example.test/c",
-    },
-    readLinks: {
-      links: [{ name: "Next", href: "https://example.test/n" }],
-      title: "",
-      url: "",
-    },
-    readMap: SIX_ELEMENT_FIXTURE,
-    resolveRef: {
-      found: true,
-      role: "input",
-      name: "Email",
-      x: 10,
-      y: 20,
-      w: 100,
-      h: 24,
-      visible: true,
-      disabled: false,
-    },
-    resolveSelector: {
-      found: true,
+function page(guest: number, title: string): FakePage {
+  const fake = new FakePage();
+  fake.title = title;
+  fake.url = `https://example.test/${guest}`;
+  fake.elements = [
+    {
+      id: 11,
       role: "button",
-      name: "Sign in",
-      x: 10,
-      y: 200,
-      w: 80,
-      h: 24,
-      visible: true,
-      disabled: false,
+      name: `${title}按钮`,
+      box: { x: 10, y: 10, w: 80, h: 20 },
     },
-    describeElement: {
-      found: true,
-      tag: "select",
-      type: "",
-      filled: false,
-      multiple: false,
-      options: [
-        { value: "a", label: "Alpha", selected: true },
-        { value: "b", label: "Beta", selected: false },
-      ],
-      accepts: false,
-    },
-    isVisible: { found: true, visible: true, x: 10, y: 20, w: 100, h: 24 },
-    waitProbe: {
-      invalid: false,
-      present: true,
-      visible: true,
-      title: "Example",
-      url: "https://example.test/c",
-      ready: "complete",
-    },
-    activeField: {
-      found: true,
-      tag: "input",
-      type: "email",
-      editable: true,
-      filled: true,
-    },
-    scrollPosition: {
-      top: 0,
-      left: 0,
-      height: 4_400,
-      width: 520,
-      viewportWidth: 520,
-      viewportHeight: 332,
-    },
-  };
+  ];
+  return fake;
 }
 
 beforeEach(() => {
   sent.length = 0;
-  attached = 0;
+  attached.clear();
   listeners.clear();
-  scriptAnswers = defaults();
-  navigationHistory = {
-    currentIndex: 1,
-    entries: [
-      { id: 10, url: "https://example.test/a" },
-      { id: 11, url: "https://example.test/b" },
-      { id: 12, url: "https://example.test/c" },
-    ],
-  };
+  pages.clear();
+  contents.clear();
+  printed = 0;
+  for (const [id, title] of [
+    [7, "一"],
+    [8, "二"],
+  ] as const) {
+    pages.set(id, page(id, title));
+    contents.set(id, fakeContents(id));
+  }
   temporary = realpathSync(mkdtempSync(join(tmpdir(), "armadra-verbs-")));
   workspace = join(temporary, "proj");
-  mkdirSync(join(workspace, ".armadra", "browser"), { recursive: true });
-  mkdirSync(join(temporary, "outside"), { recursive: true });
-  writeFileSync(join(temporary, "outside", "secret.txt"), "s");
-  symlinkSync(join(temporary, "outside"), join(workspace, "escape"));
+  mkdirSync(workspace, { recursive: true });
   resetRegistry();
   resetTransfers();
   registerGuest({
@@ -268,6 +164,13 @@ beforeEach(() => {
     tabId: "tab-1",
     surface: "canvas",
     active: true,
+  });
+  registerGuest({
+    webContentsId: 8,
+    nodeId: "browser-1",
+    tabId: "tab-2",
+    surface: "canvas",
+    active: false,
   });
 });
 
@@ -281,11 +184,12 @@ function run(
   verb: string,
   args: Record<string, unknown> = {},
 ): Promise<unknown> {
-  return runVerb({ id: "r1", nodeId: "browser-1", verb, args });
-}
-
-function methods(): string[] {
-  return sent.map((each) => each.method);
+  return runVerb({
+    id: "r1",
+    nodeId: "browser-1",
+    verb,
+    args: { workspaceRoot: workspace, ...args },
+  });
 }
 
 /* ------------------------------- lazy attach ------------------------------- */
@@ -295,377 +199,167 @@ describe("attach", () => {
     // The whole reason attach is lazy. A guest nobody drives never has a
     // debugger on it, so "the capability is off" is a statement about a
     // counter rather than about intent.
-    expect(attached).toBe(0);
-    expect(methods()).toEqual([]);
+    expect(attached.get(7) ?? 0).toBe(0);
+    expect(sent).toEqual([]);
   });
 
-  it("happens once, however many verbs follow", async () => {
+  it("happens once, however many verbs follow, and prepares the page", async () => {
     const before = attachCount();
     await run("read", { mode: "title" });
-    await run("read", { mode: "text" });
+    await run("read", { mode: "snapshot" });
     expect(attachCount()).toBe(before + 1);
-    expect(attached).toBe(1);
-  });
-
-  it("does not happen for a node that cannot be driven, and says so in one sentence", async () => {
-    const before = attachCount();
-    // A node that was never registered, and a node id nothing has ever had:
-    // byte-for-byte the same refusal but for the name the caller gave.
-    const missing = await run("read").catch((error: Error) => error.message);
-    await expect(
-      runVerb({ id: "r", nodeId: "browser-9", verb: "read", args: {} }),
-    ).rejects.toThrow('no drivable browser node "browser-9"');
-    expect(missing).not.toContain("permission");
-    expect(attachCount()).toBe(before + 1);
-  });
-});
-
-/* ------------------------------ the seventeen ------------------------------ */
-
-describe("the verbs", () => {
-  it("navigate refuses anything that is not http(s), before it reaches the page", async () => {
-    await expect(
-      run("navigate", { url: "file:///etc/passwd", action: "goto" }),
-    ).rejects.toThrow(/http and https/);
-    expect(methods()).not.toContain("Page.navigate");
-  });
-
-  it("navigate goes, and reports the address it re-read afterwards", async () => {
-    const answer = (await run("navigate", {
-      url: "https://example.test/c",
-      action: "goto",
-    })) as { url: string };
-    expect(methods()).toContain("Page.navigate");
-    expect(answer.url).toBe("https://example.test/c");
-  });
-
-  it("back and forward walk the history entries rather than guessing", async () => {
-    await run("back");
-    const back = sent.find(
-      (each) => each.method === "Page.navigateToHistoryEntry",
-    );
-    expect(back?.params.entryId).toBe(10);
-    sent.length = 0;
-    await run("forward");
-    const forward = sent.find(
-      (each) => each.method === "Page.navigateToHistoryEntry",
-    );
-    expect(forward?.params.entryId).toBe(12);
-  });
-
-  it("back refuses at the start of the history", async () => {
-    navigationHistory = {
-      currentIndex: 0,
-      entries: [{ id: 10, url: "https://example.test/a" }],
-    };
-    await expect(run("back")).rejects.toThrow(/nothing to go back to/);
-  });
-
-  it("read --map mints refs and reports only what the reader let through", async () => {
-    const answer = (await run("read", { mode: "map", limit: 40 })) as {
-      elements: Array<{ ref: string; detail: string }>;
-    };
-    // Three of six. The password element is here as a STATE; the hidden,
-    // aria-hidden and display:none ones never left the page.
-    expect(answer.elements).toHaveLength(3);
-    expect(answer.elements.map((each) => each.ref)).toEqual(["@1", "@2", "@3"]);
-    expect(answer.elements[0]!.detail).toBe("password, filled");
-    expect(JSON.stringify(answer)).not.toContain("hunter2");
-  });
-
-  it("click takes a ref, and refuses one the page has navigated away from", async () => {
-    await run("read", { mode: "map" });
-    await run("click", { ref: "@2" });
-    expect(methods()).toContain("Input.dispatchMouseEvent");
-
-    // A main-frame navigation. Every @N the page handed out is now dead.
-    emit("message", {}, "Page.frameNavigated", { frame: { id: "main" } });
-    await expect(run("click", { ref: "@2" })).rejects.toThrow(
-      /no longer on this page/,
-    );
-  });
-
-  it("click refuses a ref whose element is no longer the element it described", async () => {
-    await run("read", { mode: "map" });
-    // Same position, different control. This is the "Next page" that became
-    // "Delete account" — and it is refused rather than clicked.
-    scriptAnswers.resolveRef = {
-      found: true,
-      role: "button",
-      name: "Delete account",
-      x: 10,
-      y: 20,
-      w: 100,
-      h: 24,
-      visible: true,
-      disabled: false,
-    };
-    await expect(run("click", { ref: "@2" })).rejects.toThrow(
-      /no longer on this page/,
-    );
-  });
-
-  it("click refuses a point outside the measured viewport", async () => {
-    await expect(run("click", { x: 9_000, y: 9_000 })).rejects.toThrow(
-      /outside the visible page/,
-    );
-  });
-
-  it("type inserts text and reports a count", async () => {
-    const answer = (await run("type", {
-      selector: "#email",
-      text: "a@b.test",
-      replace: true,
-    })) as {
-      chars: number;
-    };
-    expect(answer.chars).toBe(8);
-    const insert = sent.find((each) => each.method === "Input.insertText");
-    expect(insert?.params.text).toBe("a@b.test");
-    // Clearing is two editing commands, not a key event carrying text.
-    const keys = sent.filter(
-      (each) => each.method === "Input.dispatchKeyEvent",
-    );
-    expect(keys.every((each) => !("text" in each.params))).toBe(true);
-  });
-
-  it("type refuses a target that is not a field", async () => {
-    scriptAnswers.activeField = {
-      found: true,
-      tag: "div",
-      type: "",
-      editable: false,
-    };
-    await expect(run("type", { selector: "#nope", text: "x" })).rejects.toThrow(
-      /not a field text can be typed into/,
-    );
-  });
-
-  it("press only takes keys from the closed list", async () => {
-    await run("press", { key: "Enter", repeat: 2 });
-    expect(
-      sent.filter((each) => each.method === "Input.dispatchKeyEvent"),
-    ).toHaveLength(4);
-    await expect(run("press", { key: "F12" })).rejects.toThrow(
-      /press takes one of/,
-    );
-  });
-
-  it("select steps a dropdown with real key events and never assigns a value", async () => {
-    scriptAnswers.resolveSelector = {
-      found: true,
-      role: "select",
-      name: "Pick",
-      x: 10,
-      y: 40,
-      w: 100,
-      h: 24,
-      visible: true,
-      disabled: false,
-    };
-    const answer = (await run("select", {
-      selector: "#pick",
-      values: ["a"],
-    })) as {
-      chosen: string[];
-    };
-    expect(answer.chosen).toEqual(["Alpha"]);
-    // Nothing wrote to the page: every script that ran is a reader.
-    for (const call of sent.filter(
-      (each) => each.method === "Runtime.callFunctionOn",
-    )) {
-      expect(Object.values(SCRIPTS)).toContain(call.params.functionDeclaration);
+    const methods = sent.map((each) => each.method);
+    for (const method of [
+      "Page.enable",
+      "Runtime.enable",
+      "Page.setInterceptFileChooserDialog",
+      "Log.enable",
+      "Network.enable",
+      "Target.setAutoAttach",
+    ]) {
+      expect(methods, method).toContain(method);
     }
   });
 
-  /**
-   * `describeElement` takes an index into the element enumeration, and a
-   * `--selector` used to carry none: the verb sent `-1`, the page answered
-   * `{ found: false }`, and `select --selector` refused every real dropdown
-   * with «that is not a dropdown». The stub answers by script name rather than
-   * by index, which is why only the ARGUMENT can prove this.
-   */
-  it("select by selector looks the dropdown up at the index the selector resolved to", async () => {
-    scriptAnswers.resolveSelector = {
-      found: true,
-      index: 7,
-      role: "select",
-      name: "Pick",
-      x: 10,
-      y: 40,
-      w: 100,
-      h: 24,
-      visible: true,
-      disabled: false,
-    };
-    await run("select", { selector: "#pick", values: ["a"] });
-    const detail = sent.find(
-      (each) =>
-        each.method === "Runtime.callFunctionOn" &&
-        each.params.functionDeclaration === SCRIPTS.describeElement,
-    );
-    expect(detail).toBeDefined();
-    expect(
-      (detail!.params.arguments as Array<{ value: unknown }>)[0]?.value,
-    ).toBe(7);
+  it("subscribes to the debugger once, even across a revocation and a re-attach", async () => {
+    await run("read", { mode: "title" });
+    const { revokeNode } = await import("./index");
+    revokeNode("browser-1", "the user took this browser back");
+    await run("read", { mode: "title" });
+    expect(listenerCount(7, "message")).toBe(1);
   });
 
-  /**
-   * An element scrolled out of view used to be refused by the allowlist's
-   * coordinate clamp, whose sentence is about a CDP method not being permitted
-   * for agent control — it reads like a verdict on the agent rather than
-   * «scroll to it first».
-   */
-  it("an element below the fold is refused by its real reason", async () => {
-    scriptAnswers.resolveSelector = {
-      found: true,
-      index: 3,
-      role: "button",
-      name: "Send",
-      x: 10,
-      y: 4_000,
-      w: 80,
-      h: 24,
-      visible: true,
-      disabled: false,
-      viewportWidth: 1_280,
-      viewportHeight: 800,
+  it("does not happen for a node that cannot be driven, and says so in one sentence", async () => {
+    await expect(
+      runVerb({ id: "r", nodeId: "browser-9", verb: "read", args: {} }),
+    ).rejects.toThrow('no drivable browser node "browser-9"');
+    expect(sent).toEqual([]);
+  });
+});
+
+/* ---------------------------------- --tab ---------------------------------- */
+
+describe("--tab", () => {
+  it("drives the named tab's guest, leaving the active one alone", async () => {
+    const answer = (await run("read", { mode: "title", tab: "tab-2" })) as {
+      title: string;
     };
-    await expect(run("click", { selector: "#send" })).rejects.toThrow(
-      /outside the visible area/,
+    expect(answer.title).toBe("二");
+    expect(sent.every((each) => each.guest === 8)).toBe(true);
+    expect(attached.get(7) ?? 0).toBe(0);
+  });
+
+  it("refuses a tab this node does not have", async () => {
+    await expect(run("read", { tab: "tab-9" })).rejects.toThrow(
+      "这个节点没有标签页 tab-9",
     );
   });
 
-  it("scroll reports the measured displacement, not the requested one", async () => {
-    const at = (top: number) => ({
-      top,
-      left: 0,
-      height: 4_400,
-      viewportHeight: 332,
-    });
-    scriptAnswers.scrollPosition = [at(0), at(480)];
-    const answer = (await run("scroll", {
-      direction: "down",
-      amount: 600,
-    })) as {
-      moved: number;
-      position: number;
-    };
-    expect(answer.moved).toBe(480);
-    expect(answer.position).toBe(480);
-    expect(methods()).toContain("Input.dispatchMouseEvent");
-  });
-
-  it("wait polls a probe and reports a timeout as a fact rather than an error", async () => {
-    scriptAnswers.waitProbe = {
-      invalid: false,
-      present: false,
-      visible: false,
-      title: "",
-      url: "https://example.test/c",
-      ready: "complete",
-    };
-    const answer = (await run("wait", { selector: "#late", timeoutMs: 0 })) as {
-      matched: boolean;
-    };
-    expect(answer.matched).toBe(false);
-  });
-
-  it("capture writes a file inside the workspace and reports a digest, not bytes", async () => {
-    const answer = (await run("capture", {
-      workspaceRoot: workspace,
-      path: ".armadra/browser/shot.png",
-    })) as { path: string; sha256: string; bytes: number };
-    expect(answer.path).toBe(join(workspace, ".armadra/browser/shot.png"));
-    expect(answer.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(answer.bytes).toBeGreaterThan(0);
-    expect(JSON.stringify(answer)).not.toContain("iVBORw0");
-  });
-
-  it("capture refuses a path that climbs out, and one that is a symlink out", async () => {
-    await expect(
-      run("capture", { workspaceRoot: workspace, path: "../outside/shot.png" }),
-    ).rejects.toThrow(/outside the workspace/);
-    await expect(
-      run("capture", { workspaceRoot: workspace, path: "escape/shot.png" }),
-    ).rejects.toThrow(/outside the workspace/);
-    // The final segment as a symlink: the one hop realpath of the parent does
-    // not cover.
-    symlinkSync(
-      join(temporary, "outside", "secret.txt"),
-      join(workspace, "link.png"),
-    );
-    await expect(
-      run("capture", { workspaceRoot: workspace, path: "link.png" }),
-    ).rejects.toThrow(/symbolic link/);
-  });
-
-  it("capture --full-page clips to OUR measurement", async () => {
-    await run("capture", {
-      workspaceRoot: workspace,
-      path: ".armadra/browser/full.png",
-      fullPage: true,
-      // A caller's idea of the page size, which must be ignored.
-      width: 99_999,
-    });
-    const shot = sent.find((each) => each.method === "Page.captureScreenshot");
-    expect(shot?.params.clip).toMatchObject({ width: 520, height: 4_400 });
-  });
-
-  it("upload refuses the whole batch when one file is outside the workspace", async () => {
-    writeFileSync(join(workspace, "ok.txt"), "x");
-    await expect(
-      run("upload", {
-        workspaceRoot: workspace,
-        selector: "#file",
-        paths: ["ok.txt", "../outside/secret.txt"],
-      }),
-    ).rejects.toThrow(/outside the workspace/);
-    // Nothing was handed to the page: a partial upload is a form somebody
-    // submits believing it carries what they named.
-    expect(methods()).not.toContain("DOM.setFileInputFiles");
-  });
-
-  it("download lists an empty queue rather than inventing one", async () => {
-    const answer = (await run("download", { workspaceRoot: workspace })) as {
-      downloads: unknown[];
-    };
-    expect(answer.downloads).toEqual([]);
-  });
-
-  it("tabs lists what is registered, and close keeps the last tab", async () => {
+  it("close --tab names the tab to close, and keeps the last one", async () => {
     const list = (await run("tabs")) as {
-      tabs: unknown[];
       activeTabId: string;
+      tabs: unknown[];
     };
     expect(list.activeTabId).toBe("tab-1");
-    await expect(run("close", { tab: "tab-1" })).rejects.toThrow(
-      /last tab stays open/,
-    );
+    expect(list.tabs).toHaveLength(2);
     await expect(run("close", { tab: "tab-9" })).rejects.toThrow(
-      /no tab tab-9/,
+      "没有标签页 tab-9",
+    );
+    const { askRenderer } = await import("./renderer");
+    await run("close", { tab: "tab-2" });
+    expect(askRenderer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "tabs",
+        action: "close",
+        tabId: "tab-2",
+      }),
     );
   });
+});
 
-  it("dialog refuses when no dialog is open, and answers the one that is", async () => {
+/* ------------------------------ debugger events ----------------------------- */
+
+describe("what the debugger reports", () => {
+  it("a dialog blocks other verbs until `dialog` answers it", async () => {
     await expect(run("dialog", { accept: true })).rejects.toThrow(
-      /no dialog is open/,
+      "没有打开的对话框",
     );
-    // One verb first, so the session exists and its listener is installed.
     await run("read", { mode: "title" });
-    emit("message", {}, "Page.javascriptDialogOpening", {
+    emit(7, "message", {}, "Page.javascriptDialogOpening", {
       type: "confirm",
-      message: "Delete?",
+      message: "删除？",
     });
+    await expect(run("read")).rejects.toThrow("删除？");
     const answer = (await run("dialog", { accept: false })) as {
       accepted: boolean;
     };
     expect(answer.accepted).toBe(false);
-    expect(methods()).toContain("Page.handleJavaScriptDialog");
+    expect(sent.map((each) => each.method)).toContain(
+      "Page.handleJavaScriptDialog",
+    );
   });
 
-  it("lease is not a shell verb", async () => {
-    await expect(run("lease")).rejects.toThrow(/not a shell verb/);
+  it("a cross-origin iframe's child session is read through its own session id", async () => {
+    await run("read", { mode: "title" });
+    const fake = pages.get(7)!;
+    fake.elements.push(
+      {
+        id: 20,
+        role: "Iframe",
+        name: "",
+        box: { x: 100, y: 100, w: 200, h: 100 },
+      },
+      {
+        id: 21,
+        role: "button",
+        name: "里面",
+        frame: "child-1",
+        box: { x: 5, y: 5, w: 40, h: 20 },
+      },
+    );
+    fake.children.set("child-1", {
+      targetId: "F2",
+      owner: 20,
+      url: "https://other.test/",
+    });
+    emit(7, "message", {}, "Target.attachedToTarget", {
+      sessionId: "child-1",
+      targetInfo: {
+        type: "iframe",
+        targetId: "F2",
+        url: "https://other.test/",
+      },
+    });
+    emit(
+      7,
+      "message",
+      {},
+      "Runtime.consoleAPICalled",
+      { type: "log", args: [{ type: "string", value: "来自 iframe" }] },
+      "child-1",
+    );
+    const snapshot = (await run("read", {})) as { lines: string[] };
+    expect(snapshot.lines.join("\n")).toContain('button "里面"');
+    expect(sent.some((each) => each.sessionId === "child-1")).toBe(true);
+    const log = (await run("read", { mode: "console" })) as {
+      entries: Array<{ text: string; frame: string }>;
+    };
+    expect(log.entries).toEqual([
+      expect.objectContaining({ text: "来自 iframe", frame: "iframe" }),
+    ]);
+  });
+});
+
+/* ---------------------------------- pdf ------------------------------------ */
+
+describe("pdf", () => {
+  it("prints through Electron, which a headed guest needs, into the workspace", async () => {
+    const answer = (await run("pdf", { path: "out/page.pdf" })) as {
+      path: string;
+    };
+    expect(printed).toBe(1);
+    expect(sent.map((each) => each.method)).not.toContain("Page.printToPDF");
+    expect(readFileSync(answer.path).subarray(0, 5).toString()).toBe("%PDF-");
   });
 });
 
@@ -674,20 +368,20 @@ describe("the verbs", () => {
 describe("the trace over every verb", () => {
   it("carries no page-side evaluation, no Debugger domain and no expression", async () => {
     writeFileSync(join(workspace, "ok.txt"), "x");
-    // Every verb that reaches a page, run once. `lease` stays in the Runtime.
     const calls: Array<[string, Record<string, unknown>]> = [
       ["navigate", { url: "https://example.test/c", action: "goto" }],
       ["read", { mode: "title" }],
-      ["read", { mode: "text" }],
-      ["read", { mode: "links" }],
-      ["read", { mode: "map" }],
-      ["click", { ref: "@2" }],
-      ["type", { selector: "#email", text: "a@b.test" }],
+      ["read", { mode: "snapshot" }],
+      ["read", { mode: "console" }],
+      ["read", { mode: "network" }],
+      ["click", { role: "button", name: "一按钮" }],
+      ["hover", { role: "button", name: "一按钮" }],
       ["wait", { selector: "#ok", timeoutMs: 0 }],
-      ["capture", { workspaceRoot: workspace, path: ".armadra/browser/t.png" }],
+      ["capture", { path: ".armadra/browser/t.png" }],
       ["press", { key: "Tab" }],
       ["scroll", { direction: "down" }],
-      ["download", { workspaceRoot: workspace }],
+      ["resize", { width: 800, height: 600 }],
+      ["download", {}],
       ["tabs", {}],
       ["back", {}],
       ["forward", {}],
@@ -696,19 +390,15 @@ describe("the trace over every verb", () => {
       await run(verb, args).catch(() => undefined);
     }
     expect(sent.length).toBeGreaterThan(30);
-
     for (const call of sent) {
       expect(call.method.startsWith("Debugger."), call.method).toBe(false);
       expect(call.method.startsWith("Fetch."), call.method).toBe(false);
       expect(call.method.startsWith("Storage."), call.method).toBe(false);
-      expect(call.method.startsWith("Network."), call.method).toBe(false);
       expect(call.method, call.method).not.toBe("Runtime.evaluate");
       expect(call.method, call.method).not.toBe("DOM.getOuterHTML");
+      expect(call.method, call.method).not.toBe("Network.getResponseBody");
       expect("expression" in call.params, call.method).toBe(false);
     }
-    // And every declaration that reached a page is a member of the frozen
-    // table, byte for byte — checked by the stub itself, which throws on a
-    // stranger.
     const declarations = sent
       .filter((each) => each.method === "Runtime.callFunctionOn")
       .map((each) => each.params.functionDeclaration);

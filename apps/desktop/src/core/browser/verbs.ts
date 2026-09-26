@@ -35,7 +35,7 @@ import { type BrowserSessionHandle, ensureSession } from "./session";
  *   * **The same session as the human.** There is no agent-only browser. The
  *     verb resolves the node's live session and drives that, so a person can
  *     watch what the agent did and take over by clicking.
- *   * **A closed verb list.** Seventeen of them, listed in {@link VERBS}. No
+ *   * **A closed verb list.** One list, `verb-spec.ts`, read through {@link VERBS}. No
  *     `eval`, no CDP method name, no selector that becomes code, and no verb
  *     that ends the session — closing a node is not the same as closing a
  *     page.
@@ -96,7 +96,7 @@ export async function runBrowserVerb(
 }
 
 /**
- * The same seventeen verbs, executed in the desktop shell.
+ * The same verbs, executed in the desktop shell.
  *
  * Everything that decides WHETHER this may happen already happened: the caller
  * is verified, the node is linked, in this workspace, and a browser. What is

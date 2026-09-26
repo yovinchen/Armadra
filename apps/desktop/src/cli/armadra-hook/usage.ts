@@ -1,10 +1,12 @@
 /**
- * The command-surface constants, carried verbatim from the Rust client.
+ * The command-surface constants.
  *
- * `USAGE` is byte-compared against `armadra-hook --help` by
- * `wire.test.ts`, so it is a fixture, not documentation: edit it only
- * together with the Rust text it mirrors.
+ * The browser part of `USAGE` and `BROWSER_VERBS` come from the runtime's verb
+ * list (`core/browser/verb-spec.ts`, which imports nothing, so the hook stays
+ * a small program); the rest is written out here.
  */
+
+import { VERB_NAMES, browserUsage } from "../../core/browser/verb-spec.js";
 
 /** Protocol version carried in every hook body. */
 export const HOOK_PROTOCOL_VERSION = 1;
@@ -35,28 +37,15 @@ export const CONTEXT_VERBS = [
  *
  * The list is checked here as well as in the runtime so a typo costs a local
  * error line instead of a round trip and a refusal in the model's context.
+ * It is the runtime's own list (`core/browser/verb-spec.ts`), not a copy.
  */
-export const BROWSER_VERBS = [
-  "navigate",
-  "read",
-  "click",
-  "type",
-  "wait",
-  "capture",
-  "select",
-  "press",
-  "scroll",
-  "upload",
-  "download",
-  "back",
-  "forward",
-  "close",
-  "tabs",
-  "dialog",
-  "lease",
-] as const;
+export const BROWSER_VERBS: readonly string[] = VERB_NAMES;
 
-/** Text printed by `--help` and by any usage error. */
+/**
+ * Text printed by `--help` and by any usage error. The browser section is
+ * generated from the verb list, so it cannot describe a flag or a verb the
+ * runtime does not have (`verb-spec.test.ts`).
+ */
 export const USAGE = `armadra-hook — Armadra hook client
 
 USAGE:
@@ -111,39 +100,7 @@ CANVAS:
   Repeated flags become arrays; a bare flag is \`true\`. \`--dry-run\` is passed
   through to the runtime, which then validates without mutating the board.
 
-BROWSER VERBS (the browser node linked to this one):
-  navigate --url URL            open an address; --action back|forward|reload|stop
-  back | forward                walk the history of the current tab
-  read [--mode text|elements|links|title|console|network] [-n N]
-  click --selector CSS | --ref REF | --x N --y N
-  type --selector CSS --text TEXT [--replace] [--submit]
-  select --selector CSS|--ref REF --value V [--value V] | --label L
-  press --key Enter|Tab|Escape|ArrowDown|F5|<char> [--modifiers ctrl,shift]
-  scroll --direction up|down|left|right [--amount PX] | --to-ref REF
-  wait --selector CSS | --url-contains TEXT | --title-contains TEXT [--timeout MS]
-  capture [--full-page] [--format png|jpeg]      save a screenshot into .armadra/
-  upload --path REL [--path REL] [--selector CSS | --ref REF]
-  download [--id ID --accept | --id ID --reject]  list or decide the queue
-  tabs [--switch t2 | --new URL]                 list, switch or open a tab
-  close --tab t2                                 close one tab, never the last
-  dialog --accept | --dismiss [--text TEXT]      answer alert/confirm/prompt
-  lease [--status | --release]                   who is driving; give yours back
-
-BROWSER OPTIONS:
-  --node <id|title>         which linked browser node (defaults to the only one)
-  --tab t2 / --frame ID     which tab and frame; defaults to the active tab's
-                            main frame, so most calls need neither
-  Element references from \`read --mode elements\` are only valid until that
-  frame navigates; after that the runtime answers STALE_TARGET and you read
-  again. A reference read inside an iframe looks like \`e3-12@t1/<frameId>\` and
-  carries its own address, so it can be passed straight back.
-  \`upload --path\` only takes workspace-relative paths.
-  While a page is showing a dialog, actions on that tab answer DIALOG_PENDING
-  with the dialog's text; \`read\` still works, and \`dialog\` clears it.
-  Anything that drives the page takes the control lease. A person mid-typing
-  makes it wait briefly and then answers LEASE_HELD_BY_HUMAN; a person who
-  took the browser over makes it answer LEASE_REVOKED at once — do not retry
-  either, read \`lease --status\` and say so instead.
+${browserUsage()}
 
 ENVIRONMENT:
   ARMADRA_NODE_ID          canvas node id; when unset hook mode is a no-op

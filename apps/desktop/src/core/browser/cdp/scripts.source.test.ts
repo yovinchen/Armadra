@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { ELEMENT_QUERY, SCRIPTS, isArmadraScript } from "./scripts";
+import { SCRIPTS, isArmadraScript } from "./scripts";
 
 /**
  * The structural guard on the frozen script table.
@@ -78,42 +78,33 @@ describe("the frozen script table", () => {
     }
   });
 
-  it("every enumerating script carries the same element query, verbatim", () => {
-    const enumerating = [
-      "readMap",
-      "resolveRef",
-      "describeElement",
-      "isVisible",
-    ] as const;
-    for (const name of enumerating) {
-      expect(SCRIPTS[name].includes(ELEMENT_QUERY), name).toBe(true);
-    }
+  it("writes in exactly one member, and that one only picks an option", () => {
+    const writers = Object.entries(SCRIPTS)
+      .filter(([, body]) =>
+        /selectedIndex =|dispatchEvent|\.checked =/.test(body),
+      )
+      .map(([name]) => name);
+    expect(writers).toEqual(["chooseOption"]);
+    const body = SCRIPTS.chooseOption;
+    // Only on an enabled SELECT, only an enabled option of its own, by index.
+    expect(body).toContain('el.tagName !== "SELECT" || el.disabled');
+    expect(body).toContain("!option || option.disabled");
+    expect(body.match(/ = /g)?.length).toBe(3);
+    expect(body).toContain("el.selectedIndex = index;");
   });
 
-  it("the read filters are in the script, where no caller can skip them", () => {
-    // The six-element fixture's whole answer lives in these four clauses.
-    for (const rule of [
-      'st.display === "none"',
-      'st.visibility === "hidden"',
-      'el.hasAttribute("hidden")',
-      'el.closest("[aria-hidden=true]")',
-      'tag === "input" && type === "hidden"',
-    ]) {
-      expect(SCRIPTS.readMap.includes(rule), rule).toBe(true);
-    }
-  });
-
-  it("readMap never returns a field's value, only whether it is filled", () => {
-    // The only use of `.value` in readMap is as a truthiness test.
-    const uses = SCRIPTS.readMap.match(/el\.value/g) ?? [];
+  it("the element reader reports whether a field is filled, never its value", () => {
+    const body = SCRIPTS.elementState;
+    const uses = body.match(/el\.value/g) ?? [];
     expect(uses.length).toBe(1);
-    expect(SCRIPTS.readMap.includes('el.value ? "filled" : "empty"')).toBe(
-      true,
-    );
+    expect(body).toContain("filled: !!(el.value ||");
+    // The options of a native dropdown are the page's text, not the user's.
+    expect(body).toContain("el.options[i].value");
   });
 
-  it("a password field contributes no label of its own", () => {
-    expect(SCRIPTS.readMap.includes('type !== "password"')).toBe(true);
+  it("the focused-field reader reports filled, never the value", () => {
+    expect(SCRIPTS.activeField.match(/el\.value/g)?.length).toBe(1);
+    expect(SCRIPTS.activeField).toContain("filled: !!(el.value ||");
   });
 });
 

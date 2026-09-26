@@ -97,10 +97,35 @@ describe("the drive channel's argument face", () => {
   });
 
   it("carries its own read ceilings rather than trusting the shell to have some", () => {
-    const sent = shellArgs("read", { mode: "map" });
-    expect(sent.mode).toBe("map");
+    const sent = shellArgs("read", {});
+    // The snapshot is the default now, with its own, smaller budget.
+    expect(sent.mode).toBe("snapshot");
     expect(sent.limit).toBe(40);
-    expect(sent.maxBytes).toBe(24 * 1024);
+    expect(sent.maxBytes).toBe(16 * 1024);
+    expect(shellArgs("read", { mode: "text" }).maxBytes).toBe(24 * 1024);
+  });
+
+  it("reads the old element list as the interactive snapshot", () => {
+    for (const mode of ["elements", "map"]) {
+      const sent = shellArgs("read", { mode });
+      expect(sent.mode).toBe("snapshot");
+      expect(sent.interactive).toBe(true);
+    }
+  });
+
+  it("forwards --tab and --snapshot, and --to-ref as a ref", () => {
+    const sent = shellArgs("click", { ref: "e3", tab: "t2", snapshot: true });
+    expect(sent).toMatchObject({ ref: "e3", tab: "t2", snapshot: true });
+    expect(shellArgs("scroll", { "to-ref": "e9" }).ref).toBe("e9");
+    // `--snapshot` only where a verb changes the page.
+    expect(shellArgs("read", { snapshot: true }).snapshot).toBeUndefined();
+  });
+
+  it("keeps typed text and accessible names exactly as given", () => {
+    expect(shellArgs("type", { text: " 2 " }).text).toBe(" 2 ");
+    expect(shellArgs("click", { role: "button", name: "提交 " }).name).toBe(
+      "提交 ",
+    );
   });
 });
 
@@ -122,28 +147,6 @@ describe("the prose a verb answers with", () => {
     // reader that the page ignored them.
     expect(line).toContain("已滚动 0 px");
     expect(line).not.toContain("600");
-  });
-
-  it("reports whether a field is filled and never what is in it", () => {
-    const line = render(
-      "read",
-      {},
-      {
-        mode: "map",
-        url: "https://example.com/in",
-        title: "Sign in",
-        elements: [
-          { ref: "@1", role: "input", name: "", detail: "password, filled" },
-          { ref: "@2", role: "input", name: "Email", detail: "email, filled" },
-          { ref: "@3", role: "input", name: "Note", detail: "text, empty" },
-        ],
-      },
-    );
-    expect(line).toContain("@1 input 「」（password, filled）");
-    expect(line).toContain("@3 input 「Note」（text, empty）");
-    expect(line.split("\n").filter((row) => row.startsWith("@"))).toHaveLength(
-      3,
-    );
   });
 
   it("reports a count for a type and not the text", () => {
@@ -187,9 +190,10 @@ describe("the prose a verb answers with", () => {
         generation: 4,
         role: "button",
         name: "Sign in",
+        target: 'button "Sign in" (e3)',
       },
     );
-    expect(line).toContain("button「Sign in」");
+    expect(line).toContain('已点击 button "Sign in" (e3)');
     expect(line).toContain("https://example.com/next");
     // Never where it was on the screen.
     expect(line).not.toContain("px");
@@ -335,10 +339,9 @@ describe("what a refusal does and does not say", () => {
 describe("the verb list", () => {
   it("is the same list the shell checks", () => {
     // Read as source rather than imported: the core may not import from
-    // `shell-core/` (`no-electron.test.ts`), and the thing worth checking is
-    // that the two lists agree, which is a fact about the text either way.
-    // Every end checks the list locally so a typo costs an error line instead
-    // of a round trip, and that is only true while they agree.
+    // `shell-core/` (`no-electron.test.ts`). The shell's list is DERIVED from
+    // the one in `verb-spec.ts`; what is worth checking here is that it still
+    // is, rather than a copy that can drift.
     const drive = readFileSync(
       resolve(
         dirname(fileURLToPath(import.meta.url)),
@@ -346,17 +349,10 @@ describe("the verb list", () => {
       ),
       "utf8",
     );
-    const listed = [
-      ...(drive
-        .split("DRIVE_VERBS")[1]
-        ?.split("Object.freeze([")[1]
-        ?.split("])")[0]
-        ?.matchAll(/"([a-z]+)"/g) ?? []),
-    ].map((match) => match[1]);
-    expect([...VERBS].sort()).toEqual([...listed].sort());
-    expect(VERBS).toHaveLength(17);
-    // `lease` is the seventeenth, and the whole list survived the move into
-    // the shell untouched: the migration removed an execution path, not a verb.
+    expect(drive).toContain(
+      "export const DRIVE_VERBS: readonly string[] = Object.freeze([...VERB_NAMES]);",
+    );
     expect(VERBS).toContain("lease");
+    expect(VERBS).toContain("hover");
   });
 });

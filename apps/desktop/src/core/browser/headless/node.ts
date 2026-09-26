@@ -30,7 +30,7 @@ import {
  * One canvas node is one Chromium process with one profile directory, and its
  * tabs are that browser's page targets. The mapping is the same one the
  * desktop shell has — a node is a browser, a tab is a page — so everything
- * above this file (the lease, the three authorization rules, the seventeen
+ * above this file (the lease, the three authorization rules, the
  * verbs, the events the canvas draws) is unchanged, and the only new thing is
  * that the page is somewhere nobody can see unless they ask for the stream.
  *
@@ -182,19 +182,19 @@ export class HeadlessNode {
         "the browser would not attach to that tab",
       );
     }
-    const session = new CdpSession((method, params) =>
-      connection.send(method, params, sessionId),
+    // A cross-origin iframe of this tab is its own flat session on the same
+    // connection; the verb names it, and it is still this tab's page.
+    const session = new CdpSession((method, params, child) =>
+      connection.send(method, params, child ?? sessionId),
     );
     const tab: Tab = { targetId, sessionId, url, title: "", session };
     this.tabs.set(targetId, tab);
     this.bySession.set(sessionId, tab);
-    // The same three the desktop shell sends on attach, for the same reasons:
-    // without them no `Page.frameNavigated` arrives and the ref table never
-    // expires, and the dialogs and file choosers Chromium would have drawn
-    // come here instead — which is the only way a verb can answer one.
-    await session.send("Page.enable", {});
-    await session.send("Runtime.enable", {});
-    await session.send("Page.setInterceptFileChooserDialog", { enabled: true });
+    // The same preparation the desktop shell does on attach, for the same
+    // reasons (`CdpSession.prepare`): refs that expire, dialogs and file
+    // choosers that come here instead of to a window nobody sees, iframes
+    // brought in as child sessions, console and request buffers.
+    await session.prepare();
     await this.applyViewport(tab);
     await session.refreshViewport().catch(() => undefined);
     return tab;
@@ -251,8 +251,22 @@ export class HeadlessNode {
   /* ------------------------------- events -------------------------------- */
 
   private onEvent(method: string, params: unknown, sessionId: string): void {
-    const tab = this.bySession.get(sessionId);
-    if (tab !== undefined) tab.session.noteEvent(method, params);
+    const own = this.bySession.get(sessionId);
+    // An event on a child session belongs to the tab whose iframe that is.
+    const child =
+      own === undefined
+        ? [...this.tabs.values()].find((each) =>
+            each.session.hasChild(sessionId),
+          )
+        : undefined;
+    if (own !== undefined) own.session.noteEvent(method, params);
+    else if (child !== undefined) {
+      child.session.noteEvent(method, params, sessionId);
+      // A dialog raised inside an iframe is still this page's dialog; the rest
+      // of what a child says was for its session alone.
+      if (!method.startsWith("Page.javascriptDialog")) return;
+    }
+    const tab = own ?? child;
     switch (method) {
       case "Page.frameNavigated": {
         const frame = (
@@ -546,9 +560,18 @@ export class HeadlessNode {
 
   /* ----------------------------- the verb host --------------------------- */
 
-  /** The {@link VerbHost} for this node, for the length of one verb. */
-  host(): VerbHost {
-    const tab = this.activeTab();
+  /**
+   * The {@link VerbHost} for this node, for the length of one verb: around the
+   * tab `--tab` named, or the active one.
+   */
+  host(tabId?: string): VerbHost {
+    if (tabId !== undefined && tabId !== "" && !this.tabs.has(tabId)) {
+      throw new CdpRefusal(DRIVE_CODES.notFound, `这个节点没有标签页 ${tabId}`);
+    }
+    const tab =
+      tabId !== undefined && tabId !== ""
+        ? this.tabs.get(tabId)
+        : this.activeTab();
     if (tab === undefined) {
       throw new CdpRefusal(
         DRIVE_CODES.discarded,
@@ -559,6 +582,19 @@ export class HeadlessNode {
       nodeId: this.nodeId,
       tabId: tab.targetId,
       session: tab.session,
+      // The viewport here is this process's own setting, which the viewer
+      // also follows; an agent's resize moves both, and `--reset` goes back
+      // to the default rather than to "no override", which headless does not
+      // have.
+      resize: async (size) => {
+        this.viewport =
+          size === null
+            ? DEFAULT_VIEWPORT
+            : clampViewport(size.width, size.height);
+        for (const each of this.tabs.values()) await this.applyViewport(each);
+        // Every frame header carries the viewport, so the viewer follows.
+        if (this.viewer !== undefined) await this.startScreencast();
+      },
       listTabs: () => this.listTabs(),
       requestTab: async (action, tabId, url) => {
         if (action === "new") await this.openTab(url);

@@ -115,7 +115,13 @@ export class HeadlessBackend implements DriveBackend {
       // revocation ends the verbs that were in flight when a person took the
       // page back, not the next one the lease allowed.
       node.clearRevocation();
-      return await runVerbOnHost(node.host(), verb, shaped);
+      // `close --tab` names the tab to close, which the verb looks up itself;
+      // every other verb's `--tab` says which page it acts on.
+      const tab =
+        verb === "close" || typeof shaped.tab !== "string"
+          ? undefined
+          : shaped.tab;
+      return await runVerbOnHost(node.host(tab), verb, shaped);
     } catch (error) {
       throw asDriveRefusal(error);
     }

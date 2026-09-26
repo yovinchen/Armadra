@@ -1,106 +1,151 @@
 /**
- * `@N` handles, and the one rule that makes them safe.
+ * `e12` handles, and the rules that make them safe to hand a model.
  *
- * A ref is scoped twice: to a node, and to a GENERATION of that node's
- * navigation. `readMap` mints refs and stamps the current generation on them;
- * a main-frame `Page.frameNavigated` or a `Runtime.executionContextsCleared`
- * bumps it, and every ref minted before that is dead.
+ * A ref names ONE element: a backend DOM node id in one CDP session (the page,
+ * or one out-of-process iframe). Three properties, each a check rather than a
+ * convention:
  *
- * A dead ref is REFUSED. It is never silently re-resolved, and that is the
- * whole point of the type: a ref that quietly re-resolves after a navigation is
- * how an agent clicks "Delete account" while meaning "Next page".
- *
- * A live ref is still checked on use — the resolver returns the element's role
- * and name, and `verifyIdentity` compares them with what was minted. The page
- * can move things around without navigating; a ref whose element is no longer
- * the element it described is stale too.
+ *   1. **Stable.** The same element keeps the same ref across snapshots, for
+ *      as long as the page does not navigate. That is what lets a snapshot
+ *      after an action be a DIFF: a line that did not change keeps its ref.
+ *   2. **Never reused.** Ordinals only grow, for the life of the session. `e7`
+ *      from before a navigation can never quietly come to mean whatever the
+ *      next page's seventh element is — the number is simply not handed out
+ *      again, and the old record says which generation it belonged to.
+ *   3. **Re-resolved once, by what it described, or refused.** A ref whose
+ *      node is gone (a re-render, a navigation) is looked up again by its role
+ *      and accessible name, on the same origin only. Exactly one match is used
+ *      and the answer says so; zero or several is a refusal that says which.
+ *      The name is what a person reading the snapshot saw, so "the button
+ *      called Next page" still means that button — and never a "Delete
+ *      account" that happens to sit where it was.
  */
 
 export interface RefRecord {
-  /** The number a person and an agent both see: `@1`, `@2`. */
+  /** The number both a person and an agent see: `e1`, `e2`. */
   readonly ordinal: number;
-  /** Position in the shared element enumeration (`scripts.ELEMENT_QUERY`). */
-  readonly index: number;
-  readonly role: string;
-  readonly name: string;
+  /** `""` for the page itself, else the flat session of an iframe target. */
+  readonly session: string;
+  readonly backendNodeId: number;
+  role: string;
+  name: string;
   readonly generation: number;
-}
-
-export interface MintedElement {
-  readonly index: number;
-  readonly role: string;
-  readonly name: string;
+  /** The page origin when this was minted; re-resolution stays on it. */
+  readonly origin: string;
 }
 
 export type RefLookup =
   | { readonly ok: true; readonly record: RefRecord }
-  | { readonly ok: false; readonly reason: "unknown" | "stale" };
+  | {
+      readonly ok: false;
+      readonly reason: "unknown" | "stale";
+      readonly record?: RefRecord;
+    };
 
-/** The `@N` syntax, and only that. Anything else was never a ref. */
+/**
+ * The ref syntax. `e12` is canonical; `@e12`, `ref=e12`, `[ref=e12]` and the
+ * old `@12` are all read as the same thing, because a model copying a ref out
+ * of a snapshot line should not fail on the brackets around it.
+ */
 export function parseRef(value: string): number | null {
-  const match = /^@(\d{1,4})$/.exec(value.trim());
+  const match = /^\[?(?:ref=)?@?e?(\d{1,6})\]?$/i.exec(value.trim());
   if (!match) return null;
   const ordinal = Number.parseInt(match[1] ?? "", 10);
   return ordinal >= 1 ? ordinal : null;
 }
 
+export function refName(ordinal: number): string {
+  return `e${ordinal}`;
+}
+
+/** Records kept, current and stale together. Old ones go first. */
+const KEEP = 5_000;
+
 /**
- * One node's refs. There is one of these per registered node, held in main's
- * memory only — like every other fact about who may drive what.
+ * One page's refs. Held in memory only — like every other fact about who may
+ * drive what.
  */
 export class RefTable {
   private generation = 1;
-  private records = new Map<number, RefRecord>();
+  private next = 1;
+  private readonly records = new Map<number, RefRecord>();
+  /** `session|backendNodeId` → ordinal, for the current generation only. */
+  private readonly byNode = new Map<string, number>();
 
-  /** The generation refs minted right now belong to. */
   currentGeneration(): number {
     return this.generation;
   }
 
   /**
-   * A navigation happened. Every outstanding ref is now dead.
+   * The main frame navigated, or its execution contexts were wiped. Every
+   * outstanding ref now belongs to an older page.
    *
-   * Called for a MAIN-frame `Page.frameNavigated` and for
-   * `Runtime.executionContextsCleared`. A subframe navigating is not a new
-   * document for the refs the map described, and bumping on it would make refs
-   * expire whenever an advert reloaded.
+   * The records are KEPT: `e7` then answers "the page changed" rather than
+   * "never heard of it", and the difference is the whole message — one tells
+   * the reader to read again, the other that they typed something wrong.
    */
   bumpGeneration(): number {
     this.generation += 1;
-    // The records are KEPT, stamped with the generation they were minted in.
-    // Clearing them would be simpler and worse: `@7` would then come back as
-    // "not a ref this page handed out", when what actually happened is that
-    // the page navigated. The distinction is the whole message — one tells the
-    // reader to read the page again, the other tells them they typed something
-    // wrong. They are replaced wholesale by the next mint either way.
+    this.byNode.clear();
     return this.generation;
   }
 
-  /** Replaces the table with the refs a fresh `readMap` produced. */
-  mint(elements: readonly MintedElement[]): RefRecord[] {
-    this.records.clear();
-    const minted = elements.map((element, position) => ({
-      ordinal: position + 1,
-      index: element.index,
-      role: element.role,
-      name: element.name,
+  /**
+   * The ref for one element, minting one if it has none yet. An element that
+   * already has a ref keeps it; its role and name are refreshed, because a
+   * button whose label changed from "Save" to "Saved" is still that button.
+   */
+  mint(
+    session: string,
+    backendNodeId: number,
+    role: string,
+    name: string,
+    origin: string,
+  ): RefRecord {
+    const key = `${session}|${backendNodeId}`;
+    const known = this.byNode.get(key);
+    const existing = known === undefined ? undefined : this.records.get(known);
+    if (existing !== undefined && existing.generation === this.generation) {
+      existing.role = role;
+      existing.name = name;
+      return existing;
+    }
+    const record: RefRecord = {
+      ordinal: this.next,
+      session,
+      backendNodeId,
+      role,
+      name,
       generation: this.generation,
-    }));
-    for (const record of minted) this.records.set(record.ordinal, record);
-    return minted;
+      origin,
+    };
+    this.next += 1;
+    this.records.set(record.ordinal, record);
+    this.byNode.set(key, record.ordinal);
+    while (this.records.size > KEEP) {
+      const oldest = this.records.keys().next().value;
+      if (oldest === undefined) break;
+      this.records.delete(oldest);
+    }
+    return record;
+  }
+
+  /** Forgets one element's ref, when its node turned out to be gone. */
+  forget(record: RefRecord): void {
+    const key = `${record.session}|${record.backendNodeId}`;
+    if (this.byNode.get(key) === record.ordinal) this.byNode.delete(key);
   }
 
   lookup(ordinal: number): RefLookup {
     const record = this.records.get(ordinal);
     if (record === undefined) return { ok: false, reason: "unknown" };
     if (record.generation !== this.generation) {
-      return { ok: false, reason: "stale" };
+      return { ok: false, reason: "stale", record };
     }
     return { ok: true, record };
   }
 
-  /** Refs that are still usable. A stale record is still in the table, and is
-   * still refused; it is here so the refusal can say which thing happened. */
+  /** Refs that are still usable. */
   size(): number {
     let live = 0;
     for (const record of this.records.values()) {
@@ -111,27 +156,44 @@ export class RefTable {
 }
 
 /**
- * Whether the element the resolver just found is still the one the ref
- * described. Role must match exactly; the name is compared after collapsing
- * whitespace, because a page that re-renders the same button may reflow its
- * label without changing it.
+ * Whether the element found now is still the one the ref described. Role must
+ * match exactly; the name is compared after collapsing whitespace, because a
+ * page that re-renders the same button may reflow its label without changing
+ * it.
  */
 export function verifyIdentity(
-  record: RefRecord,
+  record: { readonly role: string; readonly name: string },
   found: { readonly role: string; readonly name: string },
 ): boolean {
-  const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
   return (
     record.role === found.role &&
-    normalize(record.name) === normalize(found.name)
+    normalizeName(record.name) === normalizeName(found.name)
   );
 }
 
-/** What a caller is told about a ref that is no longer usable. */
-export function staleRefMessage(ordinal: number): string {
-  return `@${ordinal} is no longer on this page; read the page again to get fresh refs`;
+export function normalizeName(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+/** What a caller is told about a ref that could not be found again. */
+export function staleRefMessage(
+  ordinal: number,
+  why: "gone" | "none" | "many" | "moved",
+  count = 0,
+): string {
+  const ref = refName(ordinal);
+  switch (why) {
+    case "none":
+      return `${ref} 已不在页面上，按角色与名称也没找到同样的元素；请重新 read`;
+    case "many":
+      return `${ref} 已不在页面上，按角色与名称找到 ${count} 个同样的元素，无法确定是哪个；请重新 read`;
+    case "moved":
+      return `${ref} 属于之前的页面（已跳到另一个站点）；请重新 read`;
+    default:
+      return `${ref} 已不在页面上；请重新 read`;
+  }
 }
 
 export function unknownRefMessage(ordinal: number): string {
-  return `@${ordinal} is not a ref this page handed out; read the page first`;
+  return `${refName(ordinal)} 不是这个页面给出的引用；请先 read`;
 }

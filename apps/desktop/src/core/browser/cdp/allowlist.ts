@@ -18,44 +18,47 @@
  *   * `Security`, which can switch off certificate errors;
  *   * `Storage`, `IndexedDB` and `DOMStorage`, the token stores this entire
  *     design exists to keep out;
- *   * `DOM.getOuterHTML` and `DOM.getAttributes`, the full-DOM read arriving
- *     by another door — hidden inputs and inline scripts are exactly where
- *     sites keep tokens;
+ *   * `DOM.getOuterHTML`, `DOM.getAttributes` and `DOM.describeNode`, the
+ *     full-DOM read arriving by another door — hidden inputs and inline
+ *     scripts are exactly where sites keep tokens;
  *   * `Page.bringToFront`, because a page that can raise itself can steal a
  *     click the user aimed somewhere else;
- *   * `Network.getAllCookies`, one call that empties the jar for every site.
+ *   * every cookie method, and every Network method that returns a body.
+ *
+ * What the developer surface (`read --mode console|network`, `wait --idle`)
+ * needed, and why it is safe to have:
+ *
+ *   * `Log.enable` and `Network.enable` are SUBSCRIPTIONS. What they deliver
+ *     are events, and the only reader of those events is `devlog.ts`, which
+ *     keeps a method, an address with its secrets blanked, a status, a type, a
+ *     size, a duration and a failure reason — never a header, never a body.
+ *     `Network.enable` is further pinned to `maxPostDataSize: 0`, so a request
+ *     body is not even carried on the event.
+ *   * Every Network method that RETURNS something — a body, a post payload, a
+ *     cookie, a certificate — or that changes the traffic stays out, named one
+ *     by one in {@link FORBIDDEN_METHODS} so that adding one is a failing test.
+ *     {@link NETWORK_METHODS} is the whole of that domain here.
+ *
+ * And for the snapshot: `Accessibility.getFullAXTree` hands back what a screen
+ * reader sees, which includes the value of a text field. The renderer
+ * (`snapshot.ts`) drops it and says filled or empty, the same rule the frozen
+ * readers keep.
  *
  * A refusal deliberately does not say why. An allowlist that explains itself is
  * a probing aid.
  */
 
+import { BROWSER_COMMANDS, NAMED_KEYS, isAllowedChord } from "./keys";
 import { isArmadraScript } from "./scripts";
 
-/** Keys `press` may send. Anything else is not a key as far as this shell is
- * concerned — including every printable character, which goes through
- * `Input.insertText` instead, where it is text and can never be a chord. */
-export const BROWSER_KEYS: readonly string[] = Object.freeze([
-  "Enter",
-  "Tab",
-  "Escape",
-  "Backspace",
-  "Delete",
-  "ArrowUp",
-  "ArrowDown",
-  "ArrowLeft",
-  "ArrowRight",
-  "Home",
-  "End",
-  "PageUp",
-  "PageDown",
-  "Space",
-]);
+/**
+ * Keys `press` may send without a modifier. Letters and digits are keys only
+ * inside a chord (`keys.ts` decides which chords); a bare printable character
+ * goes through `Input.insertText`, where it is text and can never be a chord.
+ */
+export const BROWSER_KEYS: readonly string[] = NAMED_KEYS;
 
-/** The only two editing commands. Neither carries text. */
-export const BROWSER_COMMANDS: readonly string[] = Object.freeze([
-  "selectAll",
-  "deleteBackward",
-]);
+export { BROWSER_COMMANDS };
 
 /** Longest single `Input.insertText`. A verb that wants more sends more calls,
  * which is bounded by the verb, not by this. */
@@ -70,6 +73,24 @@ function isObject(value: unknown): value is Params {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+/** Exactly these keys and nothing else. */
+function only(p: Params, keys: readonly string[]): boolean {
+  return Object.keys(p).every((key) => keys.includes(key));
+}
+
+/** One node, named by `nodeId` or `backendNodeId` — never by an `objectId`,
+ * which could name anything the page ever handed out. */
+function oneNode(p: Params, extra: readonly string[] = []): boolean {
+  const byId = isFiniteNumber(p.nodeId);
+  const byBackend = isFiniteNumber(p.backendNodeId);
+  if (byId === byBackend) return false;
+  return only(p, ["nodeId", "backendNodeId", ...extra]);
+}
+
+function isFrameId(value: unknown): boolean {
+  return typeof value === "string" && value.length > 0 && value.length <= 64;
 }
 
 /** http(s) only, and parseable. The same gate the navigation rules apply, kept
@@ -115,6 +136,24 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
   ["Page.enable", (p) => Object.keys(p).length === 0],
   ["Runtime.enable", (p) => Object.keys(p).length === 0],
   ["DOM.enable", (p) => Object.keys(p).length === 0],
+  // Subscriptions for the developer surface; see the file header.
+  ["Log.enable", (p) => Object.keys(p).length === 0],
+  ["Log.disable", (p) => Object.keys(p).length === 0],
+  [
+    "Network.enable",
+    (p) => only(p, ["maxPostDataSize"]) && p.maxPostDataSize === 0,
+  ],
+  ["Network.disable", (p) => Object.keys(p).length === 0],
+  // Out-of-process iframes. Auto-attach hands back one flat session per frame
+  // target; nothing waits for a debugger, so no page is ever paused by it.
+  [
+    "Target.setAutoAttach",
+    (p) =>
+      typeof p.autoAttach === "boolean" &&
+      p.waitForDebuggerOnStart === false &&
+      p.flatten === true &&
+      only(p, ["autoAttach", "waitForDebuggerOnStart", "flatten"]),
+  ],
 
   /* ------------------------------ reading -------------------------------- */
   [
@@ -134,6 +173,36 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
     "DOM.resolveNode",
     (p) => isFiniteNumber(p.nodeId) || typeof p.backendNodeId === "number",
   ],
+  // Node ids only: where an element is, not what it says.
+  [
+    "DOM.querySelector",
+    (p) =>
+      isFiniteNumber(p.nodeId) &&
+      typeof p.selector === "string" &&
+      p.selector.length <= 1_000 &&
+      only(p, ["nodeId", "selector"]),
+  ],
+  ["DOM.getContentQuads", (p) => oneNode(p)],
+  ["DOM.getBoxModel", (p) => oneNode(p)],
+  ["DOM.scrollIntoViewIfNeeded", (p) => oneNode(p)],
+  // Focus without a click: a native dropdown clicked open is an OS popup that
+  // swallows synthesized keys, so `select` focuses it and steps it closed.
+  ["DOM.focus", (p) => oneNode(p)],
+  ["DOM.getFrameOwner", (p) => isFrameId(p.frameId) && only(p, ["frameId"])],
+  ["Page.getFrameTree", (p) => Object.keys(p).length === 0],
+  [
+    "Accessibility.getFullAXTree",
+    (p) =>
+      (p.frameId === undefined || isFrameId(p.frameId)) &&
+      (p.depth === undefined || isFiniteNumber(p.depth)) &&
+      only(p, ["frameId", "depth"]),
+  ],
+  [
+    "Accessibility.getPartialAXTree",
+    (p) =>
+      oneNode(p, ["fetchRelatives"]) &&
+      (p.fetchRelatives === undefined || p.fetchRelatives === false),
+  ],
   ["Runtime.releaseObject", (p) => typeof p.objectId === "string"],
   [
     "Runtime.callFunctionOn",
@@ -150,7 +219,8 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
 
   /* ----------------------------- navigation ------------------------------ */
   ["Page.navigate", (p) => isNavigableUrl(p.url)],
-  ["Page.reload", (p) => p.scriptToEvaluateOnLoad === undefined],
+  ["Page.reload", (p) => only(p, ["ignoreCache"])],
+  ["Page.stopLoading", (p) => Object.keys(p).length === 0],
   [
     "Page.navigateToHistoryEntry",
     (p) => isFiniteNumber(p.entryId) && Object.keys(p).length === 1,
@@ -169,9 +239,19 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
       if (typeof p.type !== "string" || !types.includes(p.type)) return false;
       if (!isFiniteNumber(p.x) || !isFiniteNumber(p.y)) return false;
       // Coordinates must land inside a viewport this shell measured itself.
-      // The bound is supplied by the caller through `withViewport`, which is
-      // the only way a coordinate is ever accepted.
-      return true;
+      // The bound is applied by `isAllowed` below, from the viewport the
+      // session measured — never from anything a caller claimed.
+      return only(p, [
+        "type",
+        "x",
+        "y",
+        "button",
+        "buttons",
+        "clickCount",
+        "modifiers",
+        "deltaX",
+        "deltaY",
+      ]);
     },
   ],
   [
@@ -179,17 +259,70 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
     (p) => {
       const types = ["keyDown", "keyUp", "rawKeyDown", "char"];
       if (typeof p.type !== "string" || !types.includes(p.type)) return false;
+      // One exception to "no text": a lone `char` event carrying ONE
+      // character, no key, no modifier, no command. That is exactly one
+      // character of `Input.insertText`, which is allowed anyway — and it is
+      // the only input a closed native dropdown answers on every platform
+      // (type-ahead), where arrow keys on macOS open an OS menu instead.
+      if (p.type === "char" && "text" in p) {
+        return (
+          typeof p.text === "string" &&
+          [...p.text].length === 1 &&
+          only(p, ["type", "text"])
+        );
+      }
       // The one field that would turn a key event into arbitrary typing.
       if ("text" in p) return false;
       if ("unmodifiedText" in p) return false;
-      if (p.key !== undefined && !BROWSER_KEYS.includes(String(p.key)))
+      // Key AND modifiers, as one pair: `keys.ts` decides which chords exist.
+      const modifiers = p.modifiers === undefined ? 0 : p.modifiers;
+      if (typeof modifiers !== "number") return false;
+      if (p.key !== undefined && !isAllowedChord(String(p.key), modifiers))
         return false;
       if (p.commands !== undefined) {
         if (!Array.isArray(p.commands)) return false;
         if (!p.commands.every((c) => BROWSER_COMMANDS.includes(String(c))))
           return false;
       }
-      return true;
+      return only(p, [
+        "type",
+        "key",
+        "code",
+        "windowsVirtualKeyCode",
+        "modifiers",
+        "commands",
+      ]);
+    },
+  ],
+  // `drag`: an HTML5 drag the page started comes back as its own drag data
+  // and is dropped with it. Never with `files`, which would hand a page files
+  // from this machine that nobody chose.
+  [
+    "Input.setInterceptDrags",
+    (p) => typeof p.enabled === "boolean" && only(p, ["enabled"]),
+  ],
+  [
+    "Input.dispatchDragEvent",
+    (p) => {
+      if (
+        !["dragEnter", "dragOver", "drop", "dragCancel"].includes(
+          String(p.type),
+        )
+      )
+        return false;
+      if (!isFiniteNumber(p.x) || !isFiniteNumber(p.y)) return false;
+      if (!isObject(p.data)) return false;
+      const data = p.data;
+      if (
+        data.files !== undefined &&
+        !(Array.isArray(data.files) && data.files.length === 0)
+      )
+        return false;
+      if (!Array.isArray(data.items) || data.items.length > 32) return false;
+      return (
+        only(data, ["items", "files", "dragOperationsMask"]) &&
+        only(p, ["type", "x", "y", "data", "modifiers"])
+      );
     },
   ],
   [
@@ -207,6 +340,11 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
       const format = p.format;
       if (format !== undefined && format !== "png" && format !== "jpeg")
         return false;
+      if (
+        p.captureBeyondViewport !== undefined &&
+        typeof p.captureBeyondViewport !== "boolean"
+      )
+        return false;
       if (p.clip !== undefined) {
         if (!isObject(p.clip)) return false;
         const clip = p.clip;
@@ -216,9 +354,51 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
         if (!fields.slice(0, 4).every((key) => isFiniteNumber(clip[key])))
           return false;
       }
-      return true;
+      return only(p, [
+        "format",
+        "quality",
+        "clip",
+        "captureBeyondViewport",
+        "fromSurface",
+      ]);
     },
   ],
+  // A PDF comes back inline. `transferMode: ReturnAsStream` would need
+  // `IO.read`, and the header / footer templates are markup the printer
+  // renders — neither is something a verb needs.
+  [
+    "Page.printToPDF",
+    (p) =>
+      only(p, [
+        "landscape",
+        "printBackground",
+        "scale",
+        "paperWidth",
+        "paperHeight",
+        "marginTop",
+        "marginBottom",
+        "marginLeft",
+        "marginRight",
+        "pageRanges",
+        "preferCSSPageSize",
+      ]),
+  ],
+  // `resize`. Bounded, desktop-shaped, and gone the moment the debugger
+  // detaches — which is the moment a person takes the page back.
+  [
+    "Emulation.setDeviceMetricsOverride",
+    (p) =>
+      isFiniteNumber(p.width) &&
+      isFiniteNumber(p.height) &&
+      p.width >= 200 &&
+      p.width <= 3_840 &&
+      p.height >= 200 &&
+      p.height <= 2_160 &&
+      p.deviceScaleFactor === 0 &&
+      p.mobile === false &&
+      only(p, ["width", "height", "deviceScaleFactor", "mobile"]),
+  ],
+  ["Emulation.clearDeviceMetricsOverride", (p) => Object.keys(p).length === 0],
 
   /* ------------------------- dialogs and choosers ------------------------ */
   [
@@ -252,12 +432,51 @@ export const FORBIDDEN_METHODS: readonly string[] = Object.freeze([
   "Runtime.compileScript",
   "Runtime.runScript",
   "Runtime.addBinding",
+  "Runtime.getProperties",
   "DOM.getOuterHTML",
   "DOM.getAttributes",
+  "DOM.describeNode",
+  "DOM.getFlattenedDocument",
+  "DOM.setAttributeValue",
+  "DOM.setOuterHTML",
+  "DOM.setNodeValue",
+  "DOM.removeNode",
   "Page.bringToFront",
+  "Page.getResourceContent",
+  "Page.searchInResource",
+  "Page.addScriptToEvaluateOnNewDocument",
+  "Page.setDocumentContent",
+  "Target.attachToTarget",
+  "Target.createTarget",
+  "Target.sendMessageToTarget",
   "Network.getAllCookies",
+  "Network.getCookies",
   "Network.setCookie",
+  "Network.setCookies",
   "Network.deleteCookies",
+  "Network.clearBrowserCookies",
+  "Network.getResponseBody",
+  "Network.getRequestPostData",
+  "Network.getResponseBodyForInterception",
+  "Network.takeResponseBodyForInterceptionAsStream",
+  "Network.searchInResponseBody",
+  "Network.loadNetworkResource",
+  "Network.replayXHR",
+  "Network.setExtraHTTPHeaders",
+  "Network.setRequestInterception",
+  "Network.setUserAgentOverride",
+  "Network.setBlockedURLs",
+  "Network.emulateNetworkConditions",
+  "Network.getCertificate",
+]);
+
+/**
+ * The whole of the `Network` domain an agent may reach: two subscriptions.
+ * `sole-call-site.test.ts` pins the table to exactly these.
+ */
+export const NETWORK_METHODS: readonly string[] = Object.freeze([
+  "Network.enable",
+  "Network.disable",
 ]);
 
 export const FORBIDDEN_DOMAINS: readonly string[] = Object.freeze([
@@ -267,6 +486,9 @@ export const FORBIDDEN_DOMAINS: readonly string[] = Object.freeze([
   "Storage",
   "IndexedDB",
   "DOMStorage",
+  "IO",
+  "CacheStorage",
+  "ServiceWorker",
 ]);
 
 /** What a refused command is told. It does not say which rule refused it. */
@@ -298,7 +520,11 @@ export function isAllowed(
   const shaped = params === undefined ? {} : params;
   if (!isObject(shaped)) return false;
   if (!validator(shaped)) return false;
-  if (method === "Input.dispatchMouseEvent" && viewport) {
+  if (
+    (method === "Input.dispatchMouseEvent" ||
+      method === "Input.dispatchDragEvent") &&
+    viewport
+  ) {
     const x = shaped.x as number;
     const y = shaped.y as number;
     if (x < 0 || y < 0 || x > viewport.width || y > viewport.height)

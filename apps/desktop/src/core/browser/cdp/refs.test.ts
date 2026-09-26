@@ -1,79 +1,95 @@
 import { describe, expect, it } from "vitest";
 
-import { RefTable, parseRef, verifyIdentity } from "./refs";
+import { RefTable, parseRef, refName, verifyIdentity } from "./refs";
 
-const PAGE = [
-  { index: 0, role: "link", name: "Home" },
-  { index: 4, role: "button", name: "Sign in" },
-  { index: 9, role: "input", name: "Email" },
-];
+describe("the ref syntax", () => {
+  it("takes e12 and the spellings a model copies out of a snapshot line", () => {
+    for (const spelling of [
+      "e12",
+      "@e12",
+      "ref=e12",
+      "[ref=e12]",
+      "@12",
+      " e12 ",
+    ])
+      expect(parseRef(spelling), spelling).toBe(12);
+  });
 
-describe("parseRef", () => {
-  it("takes the @N form and nothing else", () => {
-    expect(parseRef("@1")).toBe(1);
-    expect(parseRef(" @42 ")).toBe(42);
-    for (const bad of ["@0", "@", "1", "@-1", "@1x", "@99999", "button"]) {
-      expect(parseRef(bad), bad).toBeNull();
-    }
+  it("takes nothing else", () => {
+    for (const spelling of [
+      "",
+      "e",
+      "e0",
+      "12x",
+      "button",
+      "e1-2",
+      "#e1",
+      "e1234567",
+    ])
+      expect(parseRef(spelling), spelling).toBeNull();
+  });
+
+  it("prints as e<N>", () => {
+    expect(refName(7)).toBe("e7");
   });
 });
 
-describe("a ref is scoped to a navigation generation", () => {
-  it("resolves a ref minted in the current generation", () => {
+describe("a ref table", () => {
+  it("gives the same element the same ref across snapshots", () => {
     const table = new RefTable();
-    table.mint(PAGE);
-    const found = table.lookup(2);
-    expect(found.ok).toBe(true);
-    if (found.ok) {
-      expect(found.record.index).toBe(4);
-      expect(found.record.name).toBe("Sign in");
-    }
+    const first = table.mint("", 40, "button", "保存", "https://a.test");
+    const again = table.mint("", 40, "button", "已保存", "https://a.test");
+    expect(again.ordinal).toBe(first.ordinal);
+    // The label moved on; the element is the same one.
+    expect(again.name).toBe("已保存");
   });
 
-  it("refuses every ref after a navigation, and re-resolves nothing", () => {
+  it("tells two sessions' nodes apart even with the same backend id", () => {
     const table = new RefTable();
-    table.mint(PAGE);
+    const page = table.mint("", 5, "button", "a", "");
+    const frame = table.mint("child-1", 5, "button", "a", "");
+    expect(frame.ordinal).not.toBe(page.ordinal);
+  });
+
+  it("never hands a number out twice, not even after a navigation", () => {
+    const table = new RefTable();
+    const before = table.mint("", 1, "link", "下一页", "https://a.test");
     table.bumpGeneration();
-    const found = table.lookup(2);
-    // STALE, not unknown: the reader is told the page navigated, which tells
-    // them to read it again, rather than that they typed something wrong.
-    expect(found).toEqual({ ok: false, reason: "stale" });
-    // And nothing live is left, so no later call can find the old element.
+    const after = table.mint("", 1, "link", "下一页", "https://a.test");
+    expect(after.ordinal).toBeGreaterThan(before.ordinal);
+    // The old one is STALE — the page changed — not unknown.
+    expect(table.lookup(before.ordinal)).toMatchObject({
+      ok: false,
+      reason: "stale",
+    });
+    expect(table.lookup(after.ordinal).ok).toBe(true);
+  });
+
+  it("calls a ref it never minted unknown", () => {
+    expect(new RefTable().lookup(99)).toEqual({ ok: false, reason: "unknown" });
+  });
+
+  it("forgets a node that turned out to be gone, so its next mint is new", () => {
+    const table = new RefTable();
+    const first = table.mint("", 3, "button", "x", "");
+    table.forget(first);
+    expect(table.mint("", 3, "button", "x", "").ordinal).not.toBe(
+      first.ordinal,
+    );
+  });
+
+  it("counts only live refs", () => {
+    const table = new RefTable();
+    table.mint("", 1, "button", "a", "");
+    table.mint("", 2, "button", "b", "");
+    expect(table.size()).toBe(2);
+    table.bumpGeneration();
     expect(table.size()).toBe(0);
-  });
-
-  it("calls a ref it never minted unknown, not stale", () => {
-    const table = new RefTable();
-    table.mint(PAGE);
-    const found = table.lookup(99);
-    expect(found).toEqual({ ok: false, reason: "unknown" });
-  });
-
-  it("re-minting replaces the table rather than appending to it", () => {
-    const table = new RefTable();
-    table.mint(PAGE);
-    table.mint([{ index: 3, role: "button", name: "Only" }]);
-    expect(table.size()).toBe(1);
-    expect(table.lookup(2).ok).toBe(false);
-  });
-
-  it("counts generations up, never back", () => {
-    const table = new RefTable();
-    const first = table.currentGeneration();
-    table.bumpGeneration();
-    table.bumpGeneration();
-    expect(table.currentGeneration()).toBe(first + 2);
   });
 });
 
 describe("verifyIdentity", () => {
-  const record = {
-    ordinal: 1,
-    index: 4,
-    role: "button",
-    name: "Sign in",
-    generation: 1,
-  };
+  const record = { role: "button", name: "Sign in" };
 
   it("accepts the same element after a reflow", () => {
     expect(verifyIdentity(record, { role: "button", name: "Sign  in" })).toBe(
@@ -84,7 +100,7 @@ describe("verifyIdentity", () => {
     );
   });
 
-  it("refuses an element that merely sits at the same position", () => {
+  it("refuses an element that merely sits where it was", () => {
     expect(
       verifyIdentity(record, { role: "button", name: "Delete account" }),
     ).toBe(false);
