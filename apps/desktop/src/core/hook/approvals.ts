@@ -42,8 +42,13 @@ export const PERM_WAIT_SECONDS = 45;
 export function permissionWaitEnvironment(
   agentId: string,
   replyApprovals: boolean,
+  /**
+   * The built-in an id borrows its adapter from. A custom entry over Claude
+   * (`custom:…`) waits for the canvas' answer exactly like Claude does.
+   */
+  baseOf: (agentId: string) => string = (id) => id,
 ): readonly (readonly [string, string])[] {
-  if (agentId !== "claude" || !replyApprovals) return [];
+  if (baseOf(agentId) !== "claude" || !replyApprovals) return [];
   return [["ARMADRA_PERM_WAIT_SECS", String(PERM_WAIT_SECONDS)]];
 }
 

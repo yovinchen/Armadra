@@ -18,6 +18,7 @@ import { collab, setTerminalBridge } from "../agent";
 import { canvasEnvironment, nodeDialect } from "../agent/canvas-launch";
 import type { ShellDialect } from "./shell";
 import { listAgents } from "../agent/list";
+import { baseAgent } from "../agent/registry";
 import { parseCustomAgents } from "../settings/custom-agents";
 import {
   HIBERNATE_INTERVAL_MS,
@@ -287,6 +288,7 @@ export function install(
       ...permissionWaitEnvironment(
         agentId,
         settingsDomain()?.settings.get("hooks.replyApprovals") !== false,
+        (id) => baseAgent(agentSettings(), id),
       ),
       // 画布注入的环境半边（OpenCode 的配置目录、Copilot 的说明目录）；也是
       // 注入产物确保为最新的时刻——这个终端就要起这个 CLI 了。
