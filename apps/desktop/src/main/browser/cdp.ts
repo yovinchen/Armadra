@@ -18,9 +18,12 @@ import { CdpRefusal } from "../../core/browser/cdp/codes";
  * frozen scripts and the verbs moved to `core/browser/cdp/` when the
  * server shell needed the same verbs against a headless Chromium.
  *
- * Attach is LAZY. A guest that nobody drives never has a debugger attached to
- * it, which is what makes "capability off means zero attaches" an assertion
- * about a counter rather than a hope. `attachCount()` is that counter.
+ * Attach is LAZY. A guest no Agent is linked to never has a debugger attached
+ * to it, which is what makes "capability off means zero attaches" an
+ * assertion about a counter rather than a hope. `attachCount()` is that
+ * counter. A linked one is attached PASSIVELY (`observe`: three subscriptions
+ * and nothing else) so its console and requests are buffered before the first
+ * verb; the first verb completes the attach (`attach`).
  */
 
 /** Every attach this process has performed, ever. The acceptance gate reads
@@ -65,6 +68,60 @@ export class GuestSession extends CdpSession {
     return this.attached;
   }
 
+  /** 这个节点被某个 Agent 连着：调试器以被动方式旁听（`observe`）。 */
+  private observing = false;
+
+  isObserving(): boolean {
+    return this.observing;
+  }
+
+  /**
+   * 被动接上：只为控制台与请求的缓冲。与驱动时的 `attach` 是两回事——
+   *
+   *   * 只发 `CdpSession.listen` 的三条订阅，不开 `Page` 域，所以对话框、文件
+   *     选择框照旧由页面自己弹，不会被调试器截走；
+   *   * 不算租约：`isAttached()` 仍是 false，下载照旧归人（`transfers.ts` 把
+   *     「接着调试器」当成租约来问）；
+   *   * 不产生任何输入，`before-input-event` 与人工接管的判定不受影响。
+   *
+   * Agent 第一次驱动时 `attach` 在同一个调试器上补上其余的准备。
+   */
+  async observe(): Promise<void> {
+    // 每次连线变化 core 都会整份重发，已经接着的不再订一遍。
+    if (this.observing && this.dbg.isAttached()) return;
+    this.observing = true;
+    if (this.attached) return;
+    if (this.contents.isDestroyed()) return;
+    if (!this.dbg.isAttached()) {
+      this.dbg.attach("1.3");
+      attaches += 1;
+    }
+    this.subscribe();
+    await this.listen();
+  }
+
+  /** 最后一条连线断了。正在驱动时不摘：租约结束时 `detach` 会摘。 */
+  stopObserving(): void {
+    this.observing = false;
+    if (this.attached) return;
+    try {
+      if (this.dbg.isAttached()) this.dbg.detach();
+    } catch {
+      // A guest that is already gone is already detached.
+    }
+  }
+
+  private subscribe(): void {
+    if (this.listening) return;
+    this.listening = true;
+    this.dbg.on("message", (_event, method, params, sessionId) =>
+      this.onEvent(method, params, sessionId),
+    );
+    this.dbg.on("detach", () => {
+      this.attached = false;
+    });
+  }
+
   /**
    * Attaches, once, and prepares the page (`CdpSession.prepare`).
    *
@@ -83,15 +140,7 @@ export class GuestSession extends CdpSession {
       attaches += 1;
     }
     this.attached = true;
-    if (!this.listening) {
-      this.listening = true;
-      this.dbg.on("message", (_event, method, params, sessionId) =>
-        this.onEvent(method, params, sessionId),
-      );
-      this.dbg.on("detach", () => {
-        this.attached = false;
-      });
-    }
+    this.subscribe();
     await this.prepare();
   }
 
@@ -120,6 +169,17 @@ export class GuestSession extends CdpSession {
     } catch {
       // A guest that is already gone is already detached.
     }
+    // 还连着 Agent：整个摘掉之后重新被动接上。摘这一下不能省——设备尺寸模拟、
+    // 对话框与文件选择框的接管都跟着那次调试会话走，人收回页面就要全部复原；
+    // 重新接上的新会话只订阅三路事件，缓冲（在这个对象上）原样留着。
+    if (this.observing && !this.contents.isDestroyed())
+      void this.observe().catch(() => undefined);
+  }
+
+  /** The guest is going away for good: no passive re-attach after this. */
+  dispose(reason: string): void {
+    this.observing = false;
+    this.detach(reason);
   }
 
   /** Set by the drive assembly. One listener, never a list: two subscribers to

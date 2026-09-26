@@ -26,6 +26,7 @@ import {
   registerGuest,
   unregisterGuest,
 } from "./registry";
+import { observeNode, parseObserved, setObservedNodes } from "./observe";
 import { tellRenderer } from "./renderer";
 import {
   clearChooser,
@@ -72,6 +73,11 @@ export async function installBrowser(
       // holds a lease and does not cache one; it carries the Runtime's answer
       // to the only process that can draw it.
       tellRenderer({ kind: "lease", nodeId, lease: detail });
+      return;
+    }
+    if (notice === "observe") {
+      // 被 Agent 连着的浏览器节点，整份（`./observe`）。
+      setObservedNodes(parseObserved(detail));
       return;
     }
     if (notice !== "revoke") return;
@@ -148,6 +154,8 @@ export function handleRegister(raw: unknown): { ok: boolean; reason?: string } {
     registration.hostY,
   );
   if (entry) wireGuest(entry.contents, outcome.nodeId);
+  // 节点连着 Agent 时，新挂上的 guest 也从这一刻开始记控制台与请求。
+  observeNode(outcome.nodeId);
   publishEvent({
     type: "event",
     event: "registered",

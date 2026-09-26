@@ -81,7 +81,7 @@ export function onGuestLost(hook: RevokeHook): void {
 export function unregisterGuest(webContentsId: number, reason: string): void {
   const entry = guests.get(webContentsId);
   if (!entry) return;
-  entry.session?.detach(reason);
+  entry.session?.dispose(reason);
   guests.delete(webContentsId);
   revoke(entry.nodeId, reason);
 }
@@ -133,8 +133,22 @@ export function drivableSession(
   return { entry, session: entry.session };
 }
 
+/** 这个节点在画布上的每个 guest（每个标签页）及其会话，会话按需建。 */
+export function canvasSessionsOf(
+  nodeId: string,
+): Array<{ entry: Entry; session: GuestSession }> {
+  return guestsOfNode(nodeId)
+    .filter((entry) => entry.surface === "canvas")
+    .filter((entry) => !entry.contents.isDestroyed())
+    .map((entry) => {
+      if (entry.session === null)
+        entry.session = new GuestSession(entry.contents);
+      return { entry, session: entry.session };
+    });
+}
+
 /** Only for tests: forget everything. */
 export function resetRegistry(): void {
-  for (const entry of guests.values()) entry.session?.detach("reset");
+  for (const entry of guests.values()) entry.session?.dispose("reset");
   guests.clear();
 }

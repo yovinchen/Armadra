@@ -6,7 +6,9 @@ import type { CoreContext } from "../main";
 import type { ArgSource } from "./args";
 import { VERBS } from "./args";
 import type { DriveBackend } from "./backend";
-import { DriveClient } from "./client";
+import { CHANNEL_READY, DriveClient } from "./client";
+import { BrowserObservation } from "./observe";
+import { onContextLinksChanged } from "../canvas/context-links";
 import { HeadlessBackend } from "./headless";
 import { BROWSER_STREAM_PATH, attachStream, streamGuard } from "./stream";
 import { type BrowserContext, browserContext } from "./context";
@@ -145,11 +147,30 @@ export function install(context: CoreContext): BrowserContext {
   });
   assembled = state;
   setBrowserVerbs(createBrowserVerbs(state));
+  // 桌面壳：被 Agent 连着的浏览器节点由壳被动接上调试器（`./observe`）。
+  // headless 后端从开标签页起就在记，不需要这一套。
+  const observation =
+    client?.kind === "shell"
+      ? new BrowserObservation(context.db.database, (nodeIds) => {
+          client.notify("*", "observe", { nodeIds });
+        })
+      : undefined;
+  if (observation !== undefined) {
+    onContextLinksChanged(() => observation.changed());
+    // 节点被删时链接文档跟着删，那一步只有 `board.changed` 看得见。
+    context.bus.on("workspace.event", ({ event }) => {
+      if (event.type === "board.changed") observation.changed();
+    });
+  }
   client?.connect((event) => {
     // 壳自身的进程占用走同一条 drive 通道过来（`main/browser/metrics.ts`），
     // 它不属于任何节点，交给资源域，不进浏览器会话的事件处理。
     if (event.event === SHELL_METRICS_EVENT) {
       reportShellProcesses(event.processes);
+      return;
+    }
+    if (event.event === CHANNEL_READY) {
+      observation?.resync();
       return;
     }
     onShellEvent(state, event);

@@ -119,6 +119,32 @@ export class CdpSession {
     if (this.revoked !== null) {
       throw new CdpRefusal("browser_lease_revoked", this.revoked);
     }
+    return this.gate(method, params, frame);
+  }
+
+  /**
+   * 被动旁听：浏览器节点一被 Agent 连线，桌面壳就接上调试器，只订阅这三路
+   * 事件，让控制台与请求在第一次驱动之前就开始进环形缓冲。
+   *
+   * 三条都是订阅，不改页面：不开 `Page` 域（开了之后对话框与文件选择框会改由
+   * 调试器接手），不拦文件选择框，不自动附加 iframe，不发任何输入。与 `send`
+   * 走同一道白名单；唯一的差别是不看撤销标记——人接管之后租约没了，旁听仍在，
+   * 它本来就不驱动任何东西。
+   */
+  async listen(): Promise<void> {
+    await this.gate("Runtime.enable", {}, "").catch(() => undefined);
+    await this.gate("Log.enable", {}, "").catch(() => undefined);
+    await this.gate("Network.enable", { maxPostDataSize: 0 }, "").catch(
+      () => undefined,
+    );
+  }
+
+  /** The allowlist, the frame check and the wire: everything but the lease. */
+  private async gate(
+    method: string,
+    params: Record<string, unknown>,
+    frame: string,
+  ): Promise<unknown> {
     if (frame !== "" && !this.children.has(frame)) {
       throw new CdpRefusal("browser_refused", refusalMessage(method));
     }

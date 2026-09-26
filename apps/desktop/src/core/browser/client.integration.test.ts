@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer, type WebSocket } from "ws";
-import { DriveClient, UNAVAILABLE } from "./client";
+import { CHANNEL_READY, DriveClient, UNAVAILABLE } from "./client";
 
 /**
  * The drive channel over a real loopback socket.
@@ -161,8 +161,10 @@ describe("the drive channel on a real socket", () => {
       url: "https://example.com/",
     });
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ event: "navigated" });
+    // 先是通道接通那一帧（不属于任何节点），再是壳的事件。
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ event: CHANNEL_READY });
+    expect(events[1]).toMatchObject({ event: "navigated" });
   });
 
   it("pushes a notice without waiting for an answer", async () => {

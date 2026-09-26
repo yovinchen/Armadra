@@ -115,7 +115,23 @@ export function putContextLinks(
         "links_json = excluded.links_json, updated_at = excluded.updated_at",
     )
     .run(nodeId, workspaceId, JSON.stringify(merged), now);
+  for (const listener of changeListeners) listener(workspaceId, nodeId);
   return getContextLinks(database, nodeId);
+}
+
+type ChangeListener = (workspaceId: string, nodeId: string) => void;
+const changeListeners = new Set<ChangeListener>();
+
+/**
+ * 某个节点的链接文档刚被写过。浏览器域用它决定哪些浏览器节点此刻被 Agent
+ * 连着（被动旁听，`core/browser/observe.ts`）；节点被删时链接文档随之删掉，
+ * 那一步由 `board.changed` 带到。返回退订函数。
+ */
+export function onContextLinksChanged(listener: ChangeListener): () => void {
+  changeListeners.add(listener);
+  return () => {
+    changeListeners.delete(listener);
+  };
 }
 
 /**

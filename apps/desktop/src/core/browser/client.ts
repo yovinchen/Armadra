@@ -29,6 +29,9 @@ export const TOKEN_ENV = "ARMADRA_SHELL_DRIVE_TOKEN";
  */
 export const UNAVAILABLE = "browser_unavailable";
 
+/** 通道接通（含重连）时交给事件接收处的那一帧的 `event`。 */
+export const CHANNEL_READY = "channelReady";
+
 /**
  * Longest one verb may wait for the shell. Slightly longer than the shell's
  * own per-verb bound, so a timeout is normally reported by the side that knows
@@ -206,6 +209,9 @@ export class DriveClient implements DriveBackend {
         this.ready = true;
         this.backoff = RECONNECT_MIN_MS;
         this.log("browser drive channel ready");
+        // 不属于任何节点：告诉装配处壳刚接上（或重连上），壳那边的状态是
+        // 空的，要整份重推的东西（被动旁听的节点表）现在推。
+        this.events({ type: "event", event: CHANNEL_READY });
         return;
       case "event":
         this.events(envelope);
