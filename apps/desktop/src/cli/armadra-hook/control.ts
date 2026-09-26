@@ -14,7 +14,7 @@ import { envVar } from "./endpoint.js";
 import { percentEncodeSegment } from "./hook.js";
 import { canonicalJsonBytes, tryParseJson } from "./json.js";
 import type { JsonValue } from "./json.js";
-import { isSuccess, postJsonRequest } from "./http.js";
+import { isSuccess, postJsonRequest, totalTimeoutMs } from "./http.js";
 import type { HookResponse } from "./http.js";
 import { headersFor, loadSession, send } from "./session.js";
 import { BROWSER_VERBS, CONTEXT_VERBS } from "./usage.js";
@@ -127,6 +127,26 @@ export async function runCanvas(args: string[]): Promise<number> {
  * Drives a browser node this node is linked to on the canvas. The same session
  * a person is looking at — there is no separate agent browser.
  */
+/**
+ * How long one browser verb may take, per endpoint candidate.
+ *
+ * NOT the hook's 1.5 s. That budget is for a hook event, which must never
+ * hold up the CLI that fired it; a browser verb is deliberately long — `wait`
+ * waits up to 30 s, a navigation waits for the page, the shell gives a verb
+ * 45 s — and a request that runs out of budget here does not fail cleanly: the
+ * client moves on to the next candidate and sends the verb AGAIN, which for a
+ * click means clicking twice. So the budget covers the longest verb the
+ * runtime allows plus its own timeout. `ARMADRA_HOOK_TIMEOUT_MS` still
+ * overrides it when set.
+ */
+export const BROWSER_TIMEOUT_MS = 70_000;
+
+export function browserTimeoutMs(): number {
+  return envVar("ARMADRA_HOOK_TIMEOUT_MS") === undefined
+    ? BROWSER_TIMEOUT_MS
+    : totalTimeoutMs();
+}
+
 export async function runBrowser(args: string[]): Promise<number> {
   const verb = args[0];
   if (verb === undefined) {
@@ -145,7 +165,11 @@ export async function runBrowser(args: string[]): Promise<number> {
     args.slice(1).map((arg) => (arg === "-n" ? "--limit" : arg)),
   );
   if ("error" in parsed) return fail(parsed.error);
-  return request(`/browser/${percentEncodeSegment(verb)}`, parsed.ok);
+  return request(
+    `/browser/${percentEncodeSegment(verb)}`,
+    parsed.ok,
+    browserTimeoutMs(),
+  );
 }
 
 /**
@@ -229,13 +253,20 @@ export function controlBody(nodeId: string, args: Args): Buffer {
   return canonicalJsonBytes({ nodeId, args });
 }
 
-async function request(path: string, args: Args): Promise<number> {
+async function request(
+  path: string,
+  args: Args,
+  total?: number,
+): Promise<number> {
   const loaded = loadSession();
   if ("error" in loaded) return fail(loaded.error);
   const session = loaded.ok;
   const body = controlBody(session.nodeId, args);
-  const outcome = await send(session, (current, candidate) =>
-    postJsonRequest(path, headersFor(current, candidate), body),
+  const outcome = await send(
+    session,
+    (current, candidate) =>
+      postJsonRequest(path, headersFor(current, candidate), body),
+    total,
   );
   if ("error" in outcome) return fail(outcome.error);
   if (!isSuccess(outcome.ok)) return fail(renderError(outcome.ok));

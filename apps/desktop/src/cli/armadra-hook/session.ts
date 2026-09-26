@@ -76,10 +76,12 @@ export function headersFor(
 export async function send(
   session: Session,
   build: (session: Session, candidate: Endpoint) => HookRequest,
+  /** Per-candidate budget; the hook default when absent. */
+  total?: number,
 ): Promise<{ ok: HookResponse; candidate: Endpoint } | { error: string }> {
   let lastError = "";
   for (const candidate of session.candidates) {
-    const outcome = await httpSend(candidate, build(session, candidate));
+    const outcome = await httpSend(candidate, build(session, candidate), total);
     if ("ok" in outcome) return { ok: outcome.ok, candidate };
     lastError = outcome.error;
   }

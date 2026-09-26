@@ -2,7 +2,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { controlBody, parseFlags, render, renderError } from "./control.js";
+import {
+  BROWSER_TIMEOUT_MS,
+  browserTimeoutMs,
+  controlBody,
+  parseFlags,
+  render,
+  renderError,
+} from "./control.js";
 import type { Args } from "./control.js";
 import type { HookResponse } from "./http.js";
 
@@ -102,5 +109,24 @@ describe("rendering", () => {
     expect(renderError(response(502, undefined, ""))).toBe(
       "hook endpoint answered 502",
     );
+  });
+});
+
+describe("a browser verb's budget", () => {
+  it("outlasts the longest verb, not the hook's 1.5 s", () => {
+    // A verb that runs out of budget is re-sent to the next candidate: with
+    // the hook budget, a 3-second `wait` became a second request (and a slow
+    // click a second click) and then an unrelated 404.
+    const saved = process.env.ARMADRA_HOOK_TIMEOUT_MS;
+    delete process.env.ARMADRA_HOOK_TIMEOUT_MS;
+    try {
+      expect(browserTimeoutMs()).toBe(BROWSER_TIMEOUT_MS);
+      expect(BROWSER_TIMEOUT_MS).toBeGreaterThan(45_000 + 15_000);
+      process.env.ARMADRA_HOOK_TIMEOUT_MS = "90000";
+      expect(browserTimeoutMs()).toBe(90_000);
+    } finally {
+      if (saved === undefined) delete process.env.ARMADRA_HOOK_TIMEOUT_MS;
+      else process.env.ARMADRA_HOOK_TIMEOUT_MS = saved;
+    }
   });
 });
