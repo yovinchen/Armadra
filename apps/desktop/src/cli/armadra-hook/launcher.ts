@@ -22,20 +22,39 @@
  * ELECTRON_RUN_AS_NODE=1 exec "<electron>" "<resources>/cli/armadra-hook.js" "$@"
  * ```
  *
- * The file is named `armadra-hook` (POSIX) or `armadra-hook.cmd` (Windows), so
- * the installer's "did we write this entry?" check — a substring test for
- * `armadra-hook` — keeps working, and a person reading their own
- * `settings.json` still sees a recognisable command.
+ * On Windows a script launcher is a `.cmd`, and every `.cmd` runs through
+ * `cmd.exe`, which reads the command line a second time: `&`, `|`, `%`, `^`
+ * and an escaped `"` inside `canvas send --body …` become command separators,
+ * variable expansions or a shifted quote state — from Git Bash and PowerShell
+ * alike, since both hand a `.cmd` to `cmd.exe`. So on Windows the installed
+ * command is `armadra-hook.exe`, a few-kilobyte console program
+ * (`windows-launcher.cs`, built by `scripts/hook-launcher.mjs`) that reads
+ * `armadra-hook.launch` beside it — runner on the first line, bundle on the
+ * second — and passes the caller's command line to the runner untouched. The
+ * `.cmd` is still written next to it: configurations installed before the
+ * `.exe` existed name it until their next install, and a build without the
+ * `.exe` (packaged off Windows, or an unpackaged development tree) falls back
+ * to it.
+ *
+ * Every name contains `armadra-hook`, so the installer's "did we write this
+ * entry?" check — a substring test — keeps working, and a person reading their
+ * own `settings.json` still sees a recognisable command.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-/** File name of the launcher for a platform. */
+/** The Windows launcher program and the configuration it reads. */
+export const WINDOWS_EXE_NAME = "armadra-hook.exe";
+export const WINDOWS_LAUNCH_NAME = "armadra-hook.launch";
+/** The `cmd.exe` fallback. */
+export const WINDOWS_CMD_NAME = "armadra-hook.cmd";
+
+/** File name of the preferred launcher for a platform. */
 export function launcherFileName(
   platform: NodeJS.Platform = process.platform,
 ): string {
-  return platform === "win32" ? "armadra-hook.cmd" : "armadra-hook";
+  return platform === "win32" ? WINDOWS_EXE_NAME : "armadra-hook";
 }
 
 export interface LauncherTarget {
@@ -43,6 +62,11 @@ export interface LauncherTarget {
   runner: string;
   /** Absolute path of the built `armadra-hook.js` bundle. */
   bundle: string;
+  /**
+   * The built `armadra-hook.exe` (Windows only). Copied into the launcher
+   * directory when it exists; absent, the `.cmd` is the installed command.
+   */
+  windowsExe?: string;
 }
 
 /** Quotes a value for a POSIX `sh` double-quoted string. */
@@ -76,7 +100,20 @@ export function posixLauncher(target: LauncherTarget): string {
   ].join("\n");
 }
 
-/** The Windows launcher. */
+/**
+ * What `armadra-hook.exe` reads: the runner, then the bundle, one per line.
+ * Neither can contain a line break (Windows file names cannot), and neither a
+ * quote — refused for the same reason as in {@link cmdQuote}.
+ */
+export function windowsLaunchConfig(target: LauncherTarget): string {
+  for (const value of [target.runner, target.bundle]) {
+    if (/["\r\n]/.test(value))
+      throw new Error(`path cannot contain a quote or a line break: ${value}`);
+  }
+  return `${target.runner}\r\n${target.bundle}\r\n`;
+}
+
+/** The Windows `cmd.exe` fallback launcher. */
 export function windowsLauncher(target: LauncherTarget): string {
   return [
     "@echo off",
@@ -109,9 +146,63 @@ export function writeLauncher(
   target: LauncherTarget,
   platform: NodeJS.Platform = process.platform,
 ): string {
-  const file = path.join(directory, launcherFileName(platform));
   fs.mkdirSync(directory, { recursive: true });
-  fs.writeFileSync(file, launcherScript(target, platform), { mode: 0o755 });
-  if (platform !== "win32") fs.chmodSync(file, 0o755);
-  return file;
+  if (platform !== "win32") {
+    const file = path.join(directory, launcherFileName(platform));
+    fs.writeFileSync(file, posixLauncher(target), { mode: 0o755 });
+    fs.chmodSync(file, 0o755);
+    return file;
+  }
+  const cmd = path.join(directory, WINDOWS_CMD_NAME);
+  fs.writeFileSync(cmd, windowsLauncher(target));
+  if (target.windowsExe === undefined || !isFile(target.windowsExe)) return cmd;
+  const exe = path.join(directory, WINDOWS_EXE_NAME);
+  fs.writeFileSync(
+    path.join(directory, WINDOWS_LAUNCH_NAME),
+    windowsLaunchConfig(target),
+  );
+  placeExe(target.windowsExe, exe);
+  return exe;
+}
+
+function isFile(file: string): boolean {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Copies the launcher program into place. A hook that is running right now
+ * keeps its `.exe` open, and Windows refuses to overwrite a running image but
+ * lets it be renamed — so an unchanged file is left alone, and a changed one
+ * that is busy is moved aside first. Leftovers from an earlier move are
+ * removed on the way (they fail quietly while still running).
+ */
+function placeExe(source: string, destination: string): void {
+  const wanted = fs.readFileSync(source);
+  const directory = path.dirname(destination);
+  const aside = `${path.basename(destination)}.old-`;
+  for (const name of fs.readdirSync(directory)) {
+    if (!name.startsWith(aside)) continue;
+    try {
+      fs.rmSync(path.join(directory, name), { force: true });
+    } catch {
+      // Still running; the next install gets it.
+    }
+  }
+  try {
+    if (wanted.equals(fs.readFileSync(destination))) return;
+  } catch {
+    // Not there yet.
+  }
+  try {
+    fs.writeFileSync(destination, wanted);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EBUSY" && code !== "EPERM") throw error;
+    fs.renameSync(destination, `${destination}.old-${process.pid}`);
+    fs.writeFileSync(destination, wanted);
+  }
 }

@@ -22,7 +22,12 @@ import {
 } from "./hook.js";
 import { asObject, parseJson } from "./json.js";
 import type { JsonValue } from "./json.js";
-import { launcherFileName, launcherScript } from "./launcher.js";
+import {
+  launcherFileName,
+  launcherScript,
+  windowsLaunchConfig,
+  writeLauncher,
+} from "./launcher.js";
 import { CLIENT_VERSION, MAX_PAYLOAD_BYTES } from "./usage.js";
 
 const temporaries: string[] = [];
@@ -195,7 +200,58 @@ describe("launcher", () => {
   it("names the file so the installer still recognises its own entries", () => {
     expect(launcherFileName("darwin")).toBe("armadra-hook");
     expect(launcherFileName("linux")).toBe("armadra-hook");
-    expect(launcherFileName("win32")).toBe("armadra-hook.cmd");
+    expect(launcherFileName("win32")).toBe("armadra-hook.exe");
+  });
+
+  it("installs the .exe with its config on Windows, keeping the .cmd beside it", () => {
+    const directory = path.join(tempdir(), "bin");
+    const built = path.join(tempdir(), "armadra-hook.exe");
+    fs.writeFileSync(built, "MZ launcher");
+    const target = {
+      runner: "C:\\Program Files\\Armadra\\armadra.exe",
+      bundle: "C:\\Program Files\\Armadra\\resources\\cli\\armadra-hook.js",
+      windowsExe: built,
+    };
+    const installed = writeLauncher(directory, target, "win32");
+    expect(installed).toBe(path.join(directory, "armadra-hook.exe"));
+    expect(fs.readFileSync(installed, "utf8")).toBe("MZ launcher");
+    expect(
+      fs.readFileSync(path.join(directory, "armadra-hook.launch"), "utf8"),
+    ).toBe(`${target.runner}\r\n${target.bundle}\r\n`);
+    expect(
+      fs.readFileSync(path.join(directory, "armadra-hook.cmd"), "utf8"),
+    ).toContain("%*");
+    // Reinstalling the same bytes leaves the file alone (a running hook holds it).
+    const before = fs.statSync(installed).mtimeMs;
+    expect(writeLauncher(directory, target, "win32")).toBe(installed);
+    expect(fs.statSync(installed).mtimeMs).toBe(before);
+    // A new build replaces it.
+    fs.writeFileSync(built, "MZ launcher v2");
+    writeLauncher(directory, target, "win32");
+    expect(fs.readFileSync(installed, "utf8")).toBe("MZ launcher v2");
+  });
+
+  it("falls back to the .cmd on Windows when no .exe was built", () => {
+    const directory = path.join(tempdir(), "bin");
+    const installed = writeLauncher(
+      directory,
+      {
+        runner: "C:\\A\\armadra.exe",
+        bundle: "C:\\A\\armadra-hook.js",
+        windowsExe: path.join(directory, "missing.exe"),
+      },
+      "win32",
+    );
+    expect(installed).toBe(path.join(directory, "armadra-hook.cmd"));
+    expect(fs.existsSync(path.join(directory, "armadra-hook.launch"))).toBe(
+      false,
+    );
+  });
+
+  it("refuses a launch config the .exe would misread", () => {
+    expect(() =>
+      windowsLaunchConfig({ runner: "C:\\a\nb.exe", bundle: "C:\\b.js" }),
+    ).toThrow(/line break/);
   });
 
   it("re-enters Electron as a Node interpreter", () => {

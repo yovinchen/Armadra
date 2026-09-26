@@ -28,6 +28,10 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  HOOK_LAUNCHER_RESOURCE,
+  compileHookLauncher,
+} from "./hook-launcher.mjs";
 
 const app = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -204,4 +208,35 @@ export default async function afterPack(context) {
       chmodSync(destination, 0o755);
     console.log(`after-pack: placed ${placement.to}`);
   }
+  placeHookLauncher(platformName, resourcesDir);
+}
+
+/**
+ * Builds `cli/armadra-hook.exe` for a Windows target (see hook-launcher.mjs).
+ *
+ * Only a Windows host has the compiler. A Windows target packaged elsewhere
+ * gets no `.exe`, and its core falls back to the `.cmd` launcher — the one
+ * that breaks on `&` and `%` in a message body — so that is said out loud
+ * rather than left for someone to discover on a user's machine. On a Windows
+ * host a failed compile fails the build.
+ */
+export function placeHookLauncher(
+  platformName,
+  resourcesDir,
+  {
+    host = process.platform,
+    compile = compileHookLauncher,
+    log = console.log,
+  } = {},
+) {
+  if (platformName !== "win32") return undefined;
+  if (host !== "win32") {
+    log(
+      `after-pack: WARNING ${HOOK_LAUNCHER_RESOURCE} not built (needs a Windows host); this build falls back to armadra-hook.cmd`,
+    );
+    return undefined;
+  }
+  const output = compile(join(resourcesDir, HOOK_LAUNCHER_RESOURCE));
+  log(`after-pack: built ${HOOK_LAUNCHER_RESOURCE}`);
+  return output;
 }

@@ -104,6 +104,10 @@ export interface ClientLauncher {
   readonly bundleCandidates?: readonly string[];
   /** The runner the launcher execs; defaults to this process' executable. */
   readonly runner?: string;
+  /** The built `armadra-hook.exe`; defaults to the one beside the bundle. */
+  readonly windowsExe?: string;
+  /** Which launcher to write; defaults to this process' platform (tests). */
+  readonly platform?: NodeJS.Platform;
 }
 
 /** The places a built `armadra-hook.js` can be, in the order they are tried. */
@@ -130,23 +134,36 @@ export function launcherClientBinary(
     isFile,
   );
   if (bundle === undefined) return undefined;
-  return writeLauncher(join(launcher.dataDir, "bin"), {
-    runner: launcher.runner ?? process.execPath,
-    bundle,
-  });
+  const platform = launcher.platform ?? process.platform;
+  return writeLauncher(
+    join(launcher.dataDir, "bin"),
+    {
+      runner: launcher.runner ?? process.execPath,
+      bundle,
+      // after-pack builds `armadra-hook.exe` beside the bundle; without it the
+      // launcher is the `.cmd`, which `cmd.exe` re-parses (launcher.ts).
+      ...(platform === "win32"
+        ? {
+            windowsExe:
+              launcher.windowsExe ??
+              join(dirname(bundle), `${CLIENT_NAME}.exe`),
+          }
+        : {}),
+    },
+    platform,
+  );
 }
 
 /**
- * The sidecar's file name. On Windows the TS client is a `.cmd` launcher, not
- * the `.exe` the Rust sidecar was: the bundle is JavaScript and the only
- * interpreter a packaged machine is guaranteed to have is the shell's own
- * Electron binary, so the installed entry point is a two-line script that
- * execs it. The `armadra-hook` substring is preserved either way, which is
- * what {@link isManagedCommand} recognises.
+ * The sidecar's file names. On Windows the launcher is `armadra-hook.exe`
+ * (a console program that runs the bundle on the shell's own Electron without
+ * going through `cmd.exe`), with the `.cmd` as the fallback a build without
+ * the `.exe` installs. The `armadra-hook` substring is preserved either way,
+ * which is what {@link isManagedCommand} recognises.
  */
 function clientFileNames(): string[] {
   return process.platform === "win32"
-    ? [`${CLIENT_NAME}.cmd`, `${CLIENT_NAME}.exe`]
+    ? [`${CLIENT_NAME}.exe`, `${CLIENT_NAME}.cmd`]
     : [CLIENT_NAME];
 }
 

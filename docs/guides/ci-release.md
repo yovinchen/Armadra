@@ -159,7 +159,11 @@ electron-builder 的 AppImage 由 app-builder 自己打，不经 linuxdeploy，�
   §2.1 的基线校验要 `objdump`，runner 镜像自带 binutils。
 - **Windows**：NSIS 由 electron-builder 自己下载，不需要预装。实时扫描会把刚写出的
   文件占住几秒到几十秒，所以 `apps/desktop/out` 与 `apps/desktop/release` 排除出扫描
-  范围，`after-pack.mjs` 的复制另有重试兜底。
+  范围，`after-pack.mjs` 的复制另有重试兜底。`after-pack.mjs` 还会用系统自带的
+  .NET Framework 4 `csc.exe` 编出 `resources/cli/armadra-hook.exe`（hook 客户端的
+  Windows 启动器，几 KB，anycpu，x64 与 arm64 通用；`scripts/hook-launcher.mjs`），
+  不需要另装工具链；编不出来就让构建失败。非 Windows 宿主打 Windows 目标时跳过并打
+  警告，那样的包退回 `armadra-hook.cmd`。
 - **macOS**：不需要额外依赖。签名与公证见 §2.6。
 
 缓存：只有 `actions/setup-node` 的 `cache: pnpm`。

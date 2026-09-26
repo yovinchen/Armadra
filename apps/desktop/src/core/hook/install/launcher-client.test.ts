@@ -52,6 +52,24 @@ describe("the TypeScript client's launcher", () => {
       expect(script).toContain("ELECTRON_RUN_AS_NODE=1");
   });
 
+  it("installs the .exe built beside the bundle on Windows, not the .cmd", () => {
+    const dataDir = temporary();
+    const resources = temporary();
+    const bundle = join(resources, "armadra-hook.js");
+    writeFileSync(bundle, "// bundle\n");
+    writeFileSync(join(resources, "armadra-hook.exe"), "MZ");
+    const launcher = launcherClientBinary({
+      dataDir,
+      bundleCandidates: [bundle],
+      runner: "C:\\Armadra\\armadra.exe",
+      platform: "win32",
+    });
+    expect(launcher).toBe(join(dataDir, "bin", "armadra-hook.exe"));
+    expect(
+      readFileSync(join(dataDir, "bin", "armadra-hook.launch"), "utf8"),
+    ).toBe(`C:\\Armadra\\armadra.exe\r\n${bundle}\r\n`);
+  });
+
   it("is absent when no bundle exists, so the sidecar and PATH are tried instead", () => {
     const dataDir = temporary();
     expect(
