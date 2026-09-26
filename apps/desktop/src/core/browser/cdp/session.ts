@@ -400,8 +400,12 @@ export class CdpSession {
     if (child && method === "Page.frameNavigated") {
       const frame = (params as { frame?: { url?: string } } | undefined)?.frame;
       const known = this.children.get(sessionId);
-      if (known !== undefined && typeof frame?.url === "string")
+      if (known !== undefined && typeof frame?.url === "string") {
         known.url = frame.url;
+        // An iframe usually attaches before it has an address; its document
+        // request, seen from the page, ends here.
+        this.devlog.documentMoved(frame.url);
+      }
     }
     this.devlog.note(method, params, child);
   }
