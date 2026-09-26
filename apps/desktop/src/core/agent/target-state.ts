@@ -122,6 +122,11 @@ export interface ObservedActivity {
   readonly lastInputAt: number | undefined;
   /** 最后一次吐出来的时刻（毫秒）；从没吐过是 `undefined`。 */
   readonly lastOutputAt: number | undefined;
+  /**
+   * 这一代进程起来的时刻（毫秒）。回收与节能唤醒在同一行上起下一代，行的
+   * `created_at` 说的是第一代；不知道时缺席，调用方退回行的年龄。
+   */
+  readonly startedAt?: number;
 }
 
 /**

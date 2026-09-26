@@ -177,6 +177,11 @@ export interface SessionRecord {
   inputSafety: InputSafety;
   /** When this session last had input written in, or output come back out. */
   lastActivity: number | undefined;
+  /**
+   * 这一代进程起来（或重启后被接管）的时刻。行上的 `created_at` 是第一代的：
+   * 回收、节能唤醒都在同一行上起下一代，首投放行门要的「会话够老」得从这里算。
+   */
+  startedAt: number;
 }
 
 /** What one socket needs to serve a terminal. */
@@ -375,6 +380,7 @@ export class TerminalManager {
       // An adopted session has been running without us watching it; the first
       // byte after adoption is the first thing worth an opinion.
       lastActivity: undefined,
+      startedAt: this.clock(),
       spec: {
         sessionKey: key,
         workspaceId: String(row.workspace_id),
@@ -489,6 +495,7 @@ export class TerminalManager {
         inputRevision: 0,
         inputSafety: new InputSafety(),
         lastActivity: undefined,
+        startedAt: this.clock(),
         spec,
       });
 
@@ -589,6 +596,7 @@ export class TerminalManager {
         inputRevision: 0,
         inputSafety: new InputSafety(),
         lastActivity: undefined,
+        startedAt: this.clock(),
         spec,
       });
       return this.session(sessionId);
@@ -706,6 +714,7 @@ export class TerminalManager {
         inputRevision: 0,
         inputSafety: new InputSafety(),
         lastActivity: undefined,
+        startedAt: this.clock(),
         spec,
       });
       return this.session(sessionId);
@@ -1095,6 +1104,7 @@ export class TerminalManager {
       pending: record.inputSafety.pending,
       lastInputAt: record.lastActivity,
       lastOutputAt: record.lastActivity,
+      startedAt: record.startedAt,
     };
   }
 

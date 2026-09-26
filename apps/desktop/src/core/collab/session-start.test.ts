@@ -118,6 +118,32 @@ describe("a CLI that has only reported its session start", () => {
     });
   });
 
+  /**
+   * 节能休眠接回来的会话：行还是原来那一行（`created_at` 是几分钟前），进程是
+   * 刚起来的下一代。开场事件在界面铺开之前就到，按行的年龄算「够老」就当场放
+   * 行，正文打进了还没铺开的输入框，回车丢了——2026-09-26 direct 后端端到端
+   * 实测：`send` 唤醒的 Claude 投递记成 delivered，正文停在输入框里没提交。
+   * 年龄要从这一代进程起来的时刻算。
+   */
+  it("接回来的下一代按它自己起来的时刻算年龄", async () => {
+    const claude = claudeNode();
+    opened(claude.id);
+    age(claude.sessionId, 10 * 60_000);
+    fixture.terminal.activity.set(claude.sessionId, {
+      pending: false,
+      lastInputAt: undefined,
+      lastOutputAt: Date.now() - 500,
+      startedAt: Date.now() - 1_000,
+    });
+
+    const queued = await run("send", { to: claude.id, body: "做这件事" });
+    expect(queued).toMatchObject({
+      outcome: "queued",
+      reason: "TARGET_STARTING",
+    });
+    expect(fixture.terminal.submits).toHaveLength(0);
+  });
+
   it("会话刚起来先排队，由快探在够老之后投出去", async () => {
     const claude = claudeNode();
     opened(claude.id);

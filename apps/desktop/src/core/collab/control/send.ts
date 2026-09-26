@@ -997,14 +997,12 @@ function silentStart(
   const agentId = live.target.agentId;
   if (agentId === null) return false;
   const session = live.session;
+  const observed = context.terminals?.observed?.(session.sessionId);
   return silentStartIdle({
     startsSilently: startsSilently(baseAgent(context.settings, agentId)),
     reported: stateSourceIsReported(live.stateSource),
-    observed: context.terminals?.observed?.(session.sessionId),
-    sessionAgeMs:
-      session.createdAtMs === undefined
-        ? undefined
-        : nowMs - session.createdAtMs,
+    observed,
+    sessionAgeMs: generationAge(session, observed, nowMs),
     nowMs,
   });
 }
@@ -1020,14 +1018,27 @@ function sessionStart(
   nowMs: number,
 ): boolean {
   const session = live.session;
+  const observed = context.terminals?.observed?.(session.sessionId);
   return sessionStartIdle({
     status: getAgentStatus(context.database, live.target.id),
-    observed: context.terminals?.observed?.(session.sessionId),
-    sessionAgeMs:
-      session.createdAtMs === undefined
-        ? undefined
-        : nowMs - session.createdAtMs,
+    observed,
+    sessionAgeMs: generationAge(session, observed, nowMs),
   });
+}
+
+/**
+ * 这一代进程起来多久了。回收与节能唤醒在同一行上起下一代，行的 `created_at`
+ * 是第一代的：按它算，接回来的 CLI 一报开场就「够老」，正文打进还没铺开的输
+ * 入框、回车丢了（2026-09-26 direct 后端端到端实测）。终端域知道这一代的起点
+ * 就用它，不知道才退回行的年龄。
+ */
+function generationAge(
+  session: LiveTarget["session"],
+  observed: { readonly startedAt?: number } | undefined,
+  nowMs: number,
+): number | undefined {
+  const startedAt = observed?.startedAt ?? session.createdAtMs;
+  return startedAt === undefined ? undefined : nowMs - startedAt;
 }
 
 /** 演练用：门链跑不过就当作「看不见」，不抛。 */
