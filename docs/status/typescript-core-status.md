@@ -2293,3 +2293,41 @@ H04 的前置（设计 `design/canvas-platform-design.md` §3 H04、`design/serv
 - `pnpm --filter @armadra/desktop test`：267 文件通过、3 跳过（3149 条通过、15 跳过），live 2 条通过；`windows-launch.test.ts` 在 macOS 上 2 条跳过、能编译。
 - `pnpm --filter @armadra/web test`：284 文件 2780 条通过；`typecheck` 通过。
 - `pnpm check`、`pnpm format:check` 通过。Windows 上的两条集成用例待 CI 确认。
+
+## 57. Windows 启动：绕过 npm 的 `.cmd` 包装、Windows PowerShell 5.1 用 `--%`；节能休眠先敲 CLI 的退出命令（2026-09-26）
+
+接 §54 的两条已知限制，以及 §43.2 里「友好退出只是结束会话」。
+
+### 57.1 绕过 npm 的 `.cmd` 包装
+
+- 批处理用 `%*` 把参数交给真正的程序，这一步 `cmd.exe` 会把参数文本再读一遍：值里的 `"` 让引号翻面，被它护着的 `&`、`|` 当成命令执行，敲进去的那一行怎么引用都挡不住。所以不去引用它，而是绕过它。
+- `core/agent/windows-shim.ts`：读 npm / pnpm 写的包装脚本，找出最后那条命令。认 npm 7–10（cmd-shim 的 `SET "_prog=…"` 两支加 `endLocal & goto … & "%_prog%" "<脚本>" %*`，以及目标是原生程序时的 `"%dp0%\…\claude.exe" %*`）、npm 6 与 pnpm 的 `IF EXIST "%~dp0\node.exe" ( … ) ELSE ( node … )` 块、同一套生成器写的 `.ps1`（`& "$basedir/node$exe" "…" $args`）。`.cmd` 读不出来再试同名 `.ps1`。包旁边有 `node.exe` 用它，否则按 CLI 的 PATH 找 `node`；目标脚本不存在、程序是变量、先 `call` 别的批处理这类都答「读不出来」。
+- 注册表：`GET /api/agents` 每行多一个可选的 `launchTarget: { program, args }`（`resolvedPath` 仍是包装本身，设置页照旧显示它）。页面 `agent/launch.ts` 有它就用 `program` 当程序、`args` 接在最前（`assembleLaunchCommand` 新增 `programArgs`，只进敲出来的行，不进冻结的计划 argv）；用户在设置里写了自定义启动命令时不用它。core 这边在唯一出口 `canvasLaunch` 里做同一件事，Windows 上调用方没给程序时先在 PATH 上解析，免得 shell 自己找到 `.cmd`。依赖编排、休眠唤醒、计划冷启动因此都不用改。
+- 读不出来的包装留作程序：`shell.ts::shellCommandLine` 遇到 `.cmd` / `.bat` 程序时，词里有 `" % ^ & | < > ( )` 或换行就拒绝拼行（抛错，这次启动不发生），而不是敲一行会被拆开的命令。环境变量引用只看前缀；它的值由写的一方保证——`canvas-launch.ts::startsThroughBatch` 为真时 Codex 的两个环境变量不管节点跑什么 shell 都按 `cmd.exe` 的形状写（`codexTomlString` 的 `\"` 与 `\uXXXX`），两遍都读不坏。
+- 任务里提到「有危险字符就把长值改走环境变量」，这里没这么做：`cmd.exe` 第一遍就把变量的值贴进行里，批处理的第二遍读到的还是那段文本，挪进环境变量挡不住任何东西；只有 CLI 自己能解码的写法（Codex 的 TOML `\uXXXX`）才有用，所以只对 Codex 这么写，其余拒绝。
+
+### 57.2 Windows PowerShell 5.1
+
+- 方言多一种：`shellDialect("powershell.exe")` 现在答 `windows-powershell`，`pwsh` 仍是 `powershell`。单个词的写法两者相同；整行上，5.1 在第一个它传不好的词（含 `"`、空串、带空白又以 `\` 结尾、环境变量引用）前面放停止解析符 `--%`，之后的词按 C 运行库的规则引用，变量写 `%NAME%`（`--%` 仍会展开的唯一一种）。`--%` 之前的词照旧是 PowerShell 的单引号词。
+- 二选一选了 `--%`，理由：5.1 丢引号发生在它把参数交给原生程序的那一步，字符串从哪来都一样，值挪进环境变量再 `"${env:X}"` 引用照样被剥；`--%` 之后的文本原样交给程序，写成 C 运行库的引用就是程序看到的参数，而且变量正好是 `%NAME%` 这种展开，Codex 的值用 `cmd.exe` 那套现成的写法。代价：`--%` 之后带不了 `%`（会和后面的 `%` 配对吞掉变量）与 `|`（到那里就结束），这样的值拒绝拼行。
+- 缺省 shell（`terminal/environment.ts::defaultShell`）：Windows 上仍是 `COMSPEC`；没有它时，PATH 上有 `pwsh.exe` 就用 PowerShell 7，再没有才是 `powershell.exe`。
+- 顺手：`codexTomlString` 在 `windows-powershell` 下也写 `cmd.exe` 形状。
+
+### 57.3 节能休眠先礼后兵
+
+- 注册表加 `exitCommand`（`packages/shared` 的 `AGENT_REGISTRY` 与 core `agent/launch.ts` 的镜像各一份，两边用例逐个比对）：Claude、OpenCode、Oh My Pi、Copilot `/exit`，Codex、Pi `/quit`。Pi、Oh My Pi、Codex 从本机装的包里核对过命令表；自定义条目用 base 的。
+- `Hibernator.hibernate`：判定该睡之后先敲退出命令，命令与回车分两次写（中间 150 ms，一口气写进去的回车有的 TUI 当成粘贴里的换行），然后每 200 ms 看一次前台，变回 shell 就接着结束会话，最多等 5 秒；敲不进去或等不到都照旧结束。CLI 自己退出时会写完会话状态，resume 接得更全。日志里记 `quit: quit | timeout | none`。
+- 退出命令只在判据全过（空闲、没有半截输入、租约空闲、没人附着）之后敲，所以不会打进人正在用的输入框。
+
+### 57.4 技能与说明
+
+- 技能正文（`collab/skill.ts`）与各 help 里没有 Windows 专门的说明，无须改。设计文档同步：`canvas-only-integration.md` 的方言一段（五种方言、`--%`、绕过包装），`terminal-host-design.md` §7.4（退出命令，删掉「没先发退出命令」一条）。
+- 发现但不在本任务的文件范围内：Agent 按技能调用的 `armadra-hook` 在 Windows 上也是 `.cmd` 启动器（`cli/armadra-hook/launcher.ts`），`canvas send --body '…'` 这类带正文的调用同样会被批处理再读一遍，正文里的 `&`、`"` 有同样的问题。
+
+### 57.5 验证
+
+- `core/agent/windows-shim.test.ts`：15 个样本表驱动（npm 7–10 的 node 脚本 / 包内 `node.exe` / shebang 参数 / 原生程序，npm 6 两支，pnpm 两种目录，`.ps1` 三种，读不出来的四种），加分派、`.cmd` 退到 `.ps1`、PATH 上没有 node。
+- `packages/shared/test/shell.test.ts`：五种方言；模拟 5.1 的读法（单引号词、不转义地传参、`--%` 之后原样并展开 `%NAME%`、C 运行库切参数），断言值原样到达、不加 `--%` 时 `"` 会丢、`--%` 带不了的拒绝；批处理程序后各方言拒绝危险词、放行安全词并经模拟的 `cmd.exe` 读回。`agents.test.ts` 补 `programArgs` 与退出命令。
+- `core/agent/canvas-launch.test.ts`：5.1 下 Codex 行的 `--%` 与环境变量形状；读不出来的包装（真文件）下 `startsThroughBatch`、环境变量按 `cmd.exe` 写、危险词拒绝。`web/agent/launch.test.ts`：有 `launchTarget` 时绕过 `.cmd`、带 `&` 与 `"` 的提示词照常引用，没有时拒绝；5.1 的 `--%`。
+- `core/agent/windows-launch.test.ts`（`it.runIf(win32)`）新增三条：真 `powershell.exe` 5.1 跑 `--%` 行；照 cmd-shim 格式造一个包装指向回显 argv 的 node 脚本，`launchTargetOf` 读出 `node <脚本>`，整行交给 `cmd.exe`，§54 那十八个值与两个环境变量原样到达；读不出来的包装只放行安全词并真的经批处理到达。macOS 上跳过、能编译，待 Windows CI 确认。
+- `core/terminal/hibernator.test.ts`：收到 `/exit` 自己退的假 CLI 不等满宽限期就结束、不退的等满 5 秒后被结束、Codex 敲 `/quit`；`hibernator.pty.test.ts`：真 PTY 上读输入的假 `claude` 收到 `/exit` 先写「saved」再退、5 秒内结束，原来那个不读输入的等满宽限期后被结束，接回照旧 `--resume`。`terminal/environment.test.ts` 补缺省 shell。
