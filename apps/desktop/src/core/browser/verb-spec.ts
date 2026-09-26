@@ -79,8 +79,9 @@ export const TARGET_FLAGS: readonly BrowserFlagSpec[] = [
   {
     name: "selector",
     value: "CSS",
-    help: "a CSS selector in the main frame",
-    helpZh: "主框架里的 CSS 选择器",
+    help: "a CSS selector in the main frame; `host >>> inner` steps into the host's open shadow root (a closed one cannot be reached)",
+    helpZh:
+      "主框架里的 CSS 选择器；`宿主 >>> 里面` 进入宿主开放的 shadow root（闭合的进不去）",
     sample: "#go",
   },
   {

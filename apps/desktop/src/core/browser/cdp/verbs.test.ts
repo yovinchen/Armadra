@@ -408,6 +408,45 @@ describe("click and targeting", () => {
     );
   });
 
+  it("pierces open shadow roots with >>>, and says so when one is closed", async () => {
+    page.shadow["x-card >>> button"] = 11;
+    expect(await run("click", { selector: "x-card >>> button" })).toContain(
+      'button "提交"',
+    );
+    // The handle came back by reference, became a node id, and was let go.
+    const call = page.sent.find(
+      (each) =>
+        each.method === "Runtime.callFunctionOn" &&
+        each.params.returnByValue === false,
+    );
+    expect(call?.params.arguments).toEqual([{ value: "x-card >>> button" }]);
+    expect(page.methods()).toContain("DOM.requestNode");
+    expect(
+      page.sent
+        .filter((each) => each.method === "Runtime.releaseObject")
+        .map((each) => each.params.objectId),
+    ).toEqual(expect.arrayContaining(["document", "node-11"]));
+
+    page.shadow["x-lock >>> button"] = "closed:0";
+    const closed = await refused("click", { selector: "x-lock >>> button" });
+    expect(closed.code).toBe("browser_not_found");
+    expect(closed.message).toContain("x-lock 没有开放的 shadow root");
+    expect(closed.message).toContain("闭合");
+
+    page.shadow["x-card >>> .nope"] = "none:1";
+    expect(
+      (await refused("click", { selector: "x-card >>> .nope" })).message,
+    ).toContain("x-card 的 shadow root 里没有匹配 .nope");
+    page.shadow["x-card >>> "] = "bad";
+    expect((await refused("click", { selector: "x-card >>> " })).code).toBe(
+      "browser_bad_argument",
+    );
+    // A plain selector that misses points at the spelling.
+    expect(
+      (await refused("click", { selector: "#inside-shadow" })).message,
+    ).toContain(">>>");
+  });
+
   it("re-finds a ref whose node is gone by role and name, exactly once", async () => {
     const ref = refIn(await run("read"), '"提交"');
     page.elements = page.elements.map((each) =>

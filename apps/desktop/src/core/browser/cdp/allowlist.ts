@@ -49,7 +49,7 @@
  */
 
 import { BROWSER_COMMANDS, NAMED_KEYS, isAllowedChord } from "./keys";
-import { isArmadraScript } from "./scripts";
+import { SCRIPTS, isArmadraScript } from "./scripts";
 
 /**
  * Keys `press` may send without a modifier. Letters and digits are keys only
@@ -209,10 +209,22 @@ const ALLOWED: ReadonlyMap<string, Validator> = new Map<string, Validator>([
     (p) =>
       isArmadraScript(p.functionDeclaration) &&
       typeof p.objectId === "string" &&
-      p.returnByValue === true &&
+      // By value, always — but for the one frozen reader whose answer IS an
+      // element (`--selector a >>> b` into an open shadow root). What comes
+      // back is a handle, and the only thing that reads it is
+      // `DOM.requestNode`, which answers with a node id.
+      (p.returnByValue === true ||
+        (p.returnByValue === false &&
+          p.functionDeclaration === SCRIPTS.shadowQuery)) &&
       p.awaitPromise !== true &&
       p.userGesture !== true &&
       scalarArguments(p.arguments),
+  ],
+  // A handle the shadow reader answered with, as a node id. The id is all
+  // that comes back: not the element's attributes, not its markup.
+  [
+    "DOM.requestNode",
+    (p) => typeof p.objectId === "string" && only(p, ["objectId"]),
   ],
   ["Page.getLayoutMetrics", (p) => Object.keys(p).length === 0],
   ["Page.getNavigationHistory", (p) => Object.keys(p).length === 0],

@@ -261,11 +261,32 @@ async function byRole(
   };
 }
 
-/** A CSS selector, in the main frame's document. */
+/** The separator that steps into an open shadow root. */
+export const SHADOW_PIERCE = ">>>";
+
+/**
+ * A CSS selector, in the main frame's document.
+ *
+ * `DOM.querySelector` stops at shadow roots, so `host >>> inner` goes through
+ * the frozen `shadowQuery` reader instead: each level runs in the OPEN shadow
+ * root of what the level before it found. A closed shadow root is out of
+ * reach — of page script and of this protocol alike — and the refusal says
+ * that is why, instead of claiming the element does not exist.
+ */
 async function bySelector(
   session: CdpSession,
   selector: string,
 ): Promise<Target> {
+  const nodeId = selector.includes(SHADOW_PIERCE)
+    ? await throughShadow(session, selector)
+    : await inDocument(session, selector);
+  return targetOfNode(session, nodeId);
+}
+
+async function inDocument(
+  session: CdpSession,
+  selector: string,
+): Promise<number> {
   const document = (await session.send("DOM.getDocument", { depth: 0 })) as {
     root?: { nodeId?: number };
   };
@@ -282,7 +303,44 @@ async function bySelector(
     refuse(DRIVE_CODES.badArgument, `${selector} 不是有效的 CSS 选择器`);
   }
   if (nodeId === 0)
-    refuse(DRIVE_CODES.notFound, `页面上没有匹配 ${selector} 的元素`);
+    refuse(
+      DRIVE_CODES.notFound,
+      `页面上没有匹配 ${selector} 的元素（在 Shadow DOM 里的元素用「宿主 ${SHADOW_PIERCE} 里面」的写法）`,
+    );
+  return nodeId;
+}
+
+async function throughShadow(
+  session: CdpSession,
+  selector: string,
+): Promise<number> {
+  const levels = selector.split(SHADOW_PIERCE).map((each) => each.trim());
+  const found = await session.locateDeep(selector);
+  if ("nodeId" in found) return found.nodeId;
+  const [kind, at] = found.failure.split(":");
+  const level = levels[Number(at)] ?? "";
+  if (kind === "closed")
+    refuse(
+      DRIVE_CODES.notFound,
+      `${level} 没有开放的 shadow root（闭合的 shadow root 从页面脚本与调试协议都进不去），找不到 ${selector}`,
+    );
+  if (kind === "none")
+    refuse(
+      DRIVE_CODES.notFound,
+      Number(at) === 0
+        ? `页面上没有匹配 ${level} 的元素`
+        : `${levels[Number(at) - 1]} 的 shadow root 里没有匹配 ${level} 的元素`,
+    );
+  return refuse(
+    DRIVE_CODES.badArgument,
+    `${selector} 不是有效的选择器：${SHADOW_PIERCE} 两边都要是 CSS 选择器`,
+  );
+}
+
+async function targetOfNode(
+  session: CdpSession,
+  nodeId: number,
+): Promise<Target> {
   const now = await describeNode(session, "", { nodeId });
   // Held as the BACKEND id: a `nodeId` lives only until the next
   // `DOM.getDocument`, which every frozen read begins with.

@@ -22,7 +22,9 @@
  * Arbitrary page-side evaluation is not in the CDP allowlist at all, in any of
  * its spellings. These functions reach a page only through the allowlist entry
  * for Runtime.callFunctionOn, which requires isArmadraScript(functionDeclaration),
- * returnByValue === true, and at most one scalar argument.
+ * returnByValue === true, and at most one scalar argument. The one entry
+ * allowed an answer by reference is shadowQuery, whose answer is an element
+ * handle that only DOM.requestNode ever reads (see where it is defined).
  *
  * This file contains no backtick and no interpolation marker anywhere,
  * including in its prose, so the source scan can be a flat search rather than a
@@ -47,8 +49,11 @@ const READ_TEXT =
 const READ_LINKS =
   'function (limit) { var out = []; var all = document.querySelectorAll("a[href]"); for (var i = 0; i < all.length && out.length < limit; i++) { var el = all[i]; var st = getComputedStyle(el); if (st.display === "none" || st.visibility === "hidden") continue; if (el.closest("[aria-hidden=true]")) continue; var href = el.href || ""; if (href.indexOf("http:") !== 0 && href.indexOf("https:") !== 0) continue; var name = (el.getAttribute("aria-label") || el.textContent || "").replace(/\\s+/g, " ").trim(); out.push({ name: name.slice(0, 120), href: href.slice(0, 500) }); } return { links: out, title: document.title, url: location.href }; }';
 
+/* A selector may pierce open shadow roots with >>> (host >>> inner), the
+ * same spelling shadowQuery below reads. A closed shadow root is simply not
+ * there: the element is absent, which is what wait keeps waiting on. */
 const WAIT_PROBE =
-  'function (selector) { var el = null; if (selector) { try { el = document.querySelector(selector); } catch (e) { return { invalid: true, present: false, visible: false, title: document.title, url: location.href }; } } var visible = false; if (el) { var st = getComputedStyle(el); var r = el.getBoundingClientRect(); visible = st.display !== "none" && st.visibility !== "hidden" && r.width > 0 && r.height > 0; } return { invalid: false, present: !!el, visible: visible, title: document.title, url: location.href, ready: document.readyState }; }';
+  'function (selector) { var el = null; if (selector) { var parts = String(selector).split(">>>"); var scope = document; for (var i = 0; i < parts.length && scope; i++) { if (parts[i].trim() === "") return { invalid: true, present: false, visible: false, title: document.title, url: location.href }; try { el = scope.querySelector(parts[i].trim()); } catch (e) { return { invalid: true, present: false, visible: false, title: document.title, url: location.href }; } if (!el) break; if (i < parts.length - 1) { scope = el.shadowRoot; el = null; } } } var visible = false; if (el) { var st = getComputedStyle(el); var r = el.getBoundingClientRect(); visible = st.display !== "none" && st.visibility !== "hidden" && r.width > 0 && r.height > 0; } return { invalid: false, present: !!el, visible: visible, title: document.title, url: location.href, ready: document.readyState }; }';
 
 /* The focused field, following focus down through same-origin frames. A
  * cross-origin frame stops the walk at its iframe element, which is not
@@ -62,16 +67,31 @@ const SCROLL_POSITION =
 
 /* Called ON an element. What a verb needs to know before it acts: can this be
  * clicked (visible, enabled, and actually the thing under its own centre —
- * not covered by a cookie banner), can it be typed into, is it filled, is it
+ * not covered by a cookie banner; asked of the element's own root, so that
+ * inside a shadow root the answer is not just the host), can it be typed
+ * into, is it filled, is it
  * checked, and for a native dropdown its options. A field reports whether it
  * is filled, never what is in it; an option is the page's own text. */
 const ELEMENT_STATE =
-  'function () { var el = this; if (!el || el.nodeType !== 1) return { found: false }; var doc = el.ownerDocument; var view = doc.defaultView; var tag = el.tagName.toLowerCase(); var type = (el.getAttribute("type") || "").toLowerCase(); var st = view.getComputedStyle(el); var r = el.getBoundingClientRect(); var visible = st.display !== "none" && st.visibility !== "hidden" && r.width > 0 && r.height > 0; var hit = visible ? doc.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) : null; var label = hit && hit.closest ? hit.closest("label") : null; var receives = !!hit && (hit === el || el.contains(hit) || (label !== null && label.control === el)); var blocker = ""; if (visible && hit && !receives) { var what = (hit.getAttribute("aria-label") || hit.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 60); blocker = hit.tagName.toLowerCase() + (what ? " " + JSON.stringify(what) : ""); } var textual = ["", "text", "search", "email", "url", "tel", "password", "number", "date", "datetime-local", "month", "time", "week"]; var editable = !el.readOnly && ((tag === "input" && textual.indexOf(type) >= 0) || tag === "textarea" || el.isContentEditable === true); var checkable = (tag === "input" && (type === "checkbox" || type === "radio")) || el.getAttribute("aria-checked") !== null; var checked = tag === "input" ? !!el.checked : el.getAttribute("aria-checked") === "true"; var options = []; if (tag === "select") { for (var i = 0; i < el.options.length && i < 200; i++) { options.push({ value: el.options[i].value, label: (el.options[i].textContent || "").replace(/\\s+/g, " ").trim().slice(0, 120), selected: el.options[i].selected }); } } return { found: true, tag: tag, type: type, visible: visible, receives: receives, blocker: blocker, disabled: !!el.disabled || el.getAttribute("aria-disabled") === "true", editable: editable, filled: !!(el.value || (el.isContentEditable && el.textContent)), checkable: checkable, checked: checked, isSelect: tag === "select", multiple: !!el.multiple, options: options, accepts: tag === "input" && type === "file", focused: doc.activeElement === el }; }';
+  'function () { var el = this; if (!el || el.nodeType !== 1) return { found: false }; var doc = el.ownerDocument; var view = doc.defaultView; var tag = el.tagName.toLowerCase(); var type = (el.getAttribute("type") || "").toLowerCase(); var st = view.getComputedStyle(el); var r = el.getBoundingClientRect(); var visible = st.display !== "none" && st.visibility !== "hidden" && r.width > 0 && r.height > 0; var home = el.getRootNode && el.getRootNode().elementFromPoint ? el.getRootNode() : doc; var hit = visible ? home.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) : null; var label = hit && hit.closest ? hit.closest("label") : null; var receives = !!hit && (hit === el || el.contains(hit) || (label !== null && label.control === el)); var blocker = ""; if (visible && hit && !receives) { var what = (hit.getAttribute("aria-label") || hit.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 60); blocker = hit.tagName.toLowerCase() + (what ? " " + JSON.stringify(what) : ""); } var textual = ["", "text", "search", "email", "url", "tel", "password", "number", "date", "datetime-local", "month", "time", "week"]; var editable = !el.readOnly && ((tag === "input" && textual.indexOf(type) >= 0) || tag === "textarea" || el.isContentEditable === true); var checkable = (tag === "input" && (type === "checkbox" || type === "radio")) || el.getAttribute("aria-checked") !== null; var checked = tag === "input" ? !!el.checked : el.getAttribute("aria-checked") === "true"; var options = []; if (tag === "select") { for (var i = 0; i < el.options.length && i < 200; i++) { options.push({ value: el.options[i].value, label: (el.options[i].textContent || "").replace(/\\s+/g, " ").trim().slice(0, 120), selected: el.options[i].selected }); } } return { found: true, tag: tag, type: type, visible: visible, receives: receives, blocker: blocker, disabled: !!el.disabled || el.getAttribute("aria-disabled") === "true", editable: editable, filled: !!(el.value || (el.isContentEditable && el.textContent)), checkable: checkable, checked: checked, isSelect: tag === "select", multiple: !!el.multiple, options: options, accepts: tag === "input" && type === "file", focused: home.activeElement === el }; }';
 
 /* Whether a piece of text is on the page, same-origin frames included. A
  * cross-origin frame is asked through its own session. */
 const HAS_TEXT =
   'function (needle) { var docs = [document]; var found = false; for (var i = 0; i < docs.length && i < 50; i++) { var d = docs[i]; if (d.body && (d.body.innerText || "").indexOf(needle) >= 0) { found = true; break; } var frames = d.querySelectorAll("iframe,frame"); for (var j = 0; j < frames.length; j++) { var inner = null; try { inner = frames[j].contentDocument; } catch (e) { inner = null; } if (inner) docs.push(inner); } } return { found: found, title: document.title, url: location.href }; }';
+
+/* --selector host >>> inner: a CSS selector per level, each one run in the
+ * open shadow root of what the previous one found. The one entry whose
+ * answer is NOT copied by value: what it returns is the element itself, and
+ * the verb turns that handle into a DOM node id (DOM.requestNode) and lets
+ * it go, the same node a plain selector gets from DOM.querySelector — which
+ * cannot enter a shadow root. When there is no element it returns a short
+ * string instead: bad for a level that is empty or not CSS, none:N for a
+ * level that matched nothing, closed:N for a host without an OPEN shadow
+ * root (a closed one is out of reach of page script and of this protocol
+ * alike, and the answer says so rather than pretend it looked). */
+const SHADOW_QUERY =
+  'function (chain) { var parts = String(chain).split(">>>"); var scope = this; var el = null; for (var i = 0; i < parts.length; i++) { var css = parts[i].trim(); if (css === "") return "bad"; try { el = scope.querySelector(css); } catch (e) { return "bad"; } if (!el) return "none:" + i; if (i < parts.length - 1) { if (!el.shadowRoot) return "closed:" + i; scope = el.shadowRoot; } } return el; }';
 
 /* The ONE writer, and why it exists. A closed native dropdown is the one
  * control synthesized input cannot always operate: on macOS an arrow key
@@ -104,6 +124,7 @@ export const SCRIPTS = Object.freeze({
   scrollPosition: SCROLL_POSITION,
   elementState: ELEMENT_STATE,
   hasText: HAS_TEXT,
+  shadowQuery: SHADOW_QUERY,
   chooseOption: CHOOSE_OPTION,
 });
 

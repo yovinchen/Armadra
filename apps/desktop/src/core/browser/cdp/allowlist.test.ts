@@ -112,6 +112,25 @@ describe("Runtime.callFunctionOn", () => {
     expect(isAllowed("Runtime.callFunctionOn", without)).toBe(false);
   });
 
+  it("answers by reference only for the shadow reader, and only into requestNode", () => {
+    const shadow = {
+      ...base,
+      functionDeclaration: SCRIPTS.shadowQuery,
+      arguments: [{ value: "x-card >>> button" }],
+    };
+    expect(
+      isAllowed("Runtime.callFunctionOn", { ...shadow, returnByValue: false }),
+    ).toBe(true);
+    expect(isAllowed("Runtime.callFunctionOn", shadow)).toBe(true);
+    const { returnByValue: _drop, ...without } = shadow;
+    expect(isAllowed("Runtime.callFunctionOn", without)).toBe(false);
+    expect(isAllowed("DOM.requestNode", { objectId: "1.2.3" })).toBe(true);
+    expect(isAllowed("DOM.requestNode", { objectId: "1.2.3", depth: -1 })).toBe(
+      false,
+    );
+    expect(isAllowed("DOM.requestNode", {})).toBe(false);
+  });
+
   it("takes at most one scalar argument", () => {
     expect(
       isAllowed("Runtime.callFunctionOn", {

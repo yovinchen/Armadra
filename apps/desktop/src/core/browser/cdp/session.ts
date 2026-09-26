@@ -355,6 +355,88 @@ export class CdpSession {
   }
 
   /**
+   * `--selector host >>> inner`: the frozen `shadowQuery` reader, called on
+   * the document, answers with the element itself; that handle becomes a DOM
+   * node id through `DOM.requestNode` and is released at once. Either a
+   * `{ nodeId }` or the reader's own short failure (`bad`, `none:N`,
+   * `closed:N`).
+   */
+  async locateDeep(
+    chain: string,
+    frame = "",
+  ): Promise<{ nodeId: number } | { failure: string }> {
+    if (this.dialogShowing)
+      throw new CdpRefusal(
+        "browser_dialog_pending",
+        "页面弹着对话框；先用 dialog 处理",
+      );
+    const document = (await this.send(
+      "DOM.getDocument",
+      { depth: 0 },
+      frame,
+    )) as { root?: { nodeId?: number } };
+    const root = document.root?.nodeId;
+    if (typeof root !== "number")
+      throw new CdpRefusal("browser_failed", "页面此刻没有文档");
+    const resolved = (await this.send(
+      "DOM.resolveNode",
+      { nodeId: root },
+      frame,
+    )) as { object?: { objectId?: string } };
+    const documentId = resolved.object?.objectId;
+    if (typeof documentId !== "string")
+      throw new CdpRefusal("browser_failed", "页面此刻没有文档");
+    let found: string | undefined;
+    try {
+      const answer = (await this.send(
+        "Runtime.callFunctionOn",
+        {
+          functionDeclaration: SCRIPTS.shadowQuery,
+          objectId: documentId,
+          returnByValue: false,
+          arguments: [{ value: chain }],
+        },
+        frame,
+      )) as {
+        result?: {
+          type?: string;
+          subtype?: string;
+          value?: unknown;
+          objectId?: string;
+        };
+        exceptionDetails?: unknown;
+      };
+      if (answer.exceptionDetails)
+        throw new CdpRefusal("browser_failed", "页面读不出来");
+      const result = answer.result;
+      if (result?.type === "string") return { failure: String(result.value) };
+      if (result?.subtype !== "node" || typeof result.objectId !== "string")
+        return { failure: "none:0" };
+      found = result.objectId;
+      const node = (await this.send(
+        "DOM.requestNode",
+        { objectId: found },
+        frame,
+      )) as { nodeId?: number };
+      if (typeof node.nodeId !== "number" || node.nodeId === 0)
+        return { failure: "none:0" };
+      return { nodeId: node.nodeId };
+    } finally {
+      await this.send(
+        "Runtime.releaseObject",
+        { objectId: documentId },
+        frame,
+      ).catch(() => undefined);
+      if (found !== undefined)
+        await this.send(
+          "Runtime.releaseObject",
+          { objectId: found },
+          frame,
+        ).catch(() => undefined);
+    }
+  }
+
+  /**
    * Notices the events that change what refs and frames mean, and hands the
    * developer ones to the ring buffers.
    *

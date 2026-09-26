@@ -68,6 +68,15 @@ export class FakePage {
   scripts: Record<string, unknown> = {};
   /** `selector` → backend node id, for `DOM.querySelector`. */
   selectors: Record<string, number> = {};
+  /** `host >>> inner` → backend node id, or the shadow reader's failure
+   * string (`none:N`, `closed:N`, `bad`). */
+  shadow: Record<string, number | string> = {};
+  /** When set, a clipped screenshot is painted from this, in document
+   * coordinates, at `deviceScale` pixels per CSS pixel. */
+  paint?: (x: number, y: number) => [number, number, number, number];
+  deviceScale = 1;
+  /** Whether a wheel event moves `scroll` (clamped to the content). */
+  wheelScrolls = false;
   /** Methods that throw, as Chromium would for an unknown node, etc. */
   failing = new Set<string>();
   /** Called after each command, to let a test mutate the page. */
@@ -177,8 +186,30 @@ export class FakePage {
         const node = this.nodeOf(params);
         return { object: { objectId: `node-${node.id}` } };
       }
-      case "Runtime.callFunctionOn":
+      case "Runtime.callFunctionOn": {
+        if (params.functionDeclaration === SCRIPTS.shadowQuery) {
+          // The one answer by reference: an element handle, or the reader's
+          // own short failure string.
+          const chain = String(
+            (params.arguments as Array<{ value: unknown }>)[0]?.value,
+          );
+          const hit = this.shadow[chain] ?? "none:0";
+          return typeof hit === "number"
+            ? {
+                result: {
+                  type: "object",
+                  subtype: "node",
+                  objectId: `node-${hit}`,
+                },
+              }
+            : { result: { type: "string", value: hit } };
+        }
         return { result: { value: this.script(params) } };
+      }
+      case "DOM.requestNode":
+        return {
+          nodeId: Number(String(params.objectId).replace("node-", "")),
+        };
       case "Page.navigate":
         this.url = String(params.url);
         return { frameId: "main" };
